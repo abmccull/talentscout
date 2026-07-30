@@ -12,6 +12,7 @@
     "dev": "next dev",
     "clean:build": "node scripts/clean-build-output.mjs",
     "build": "node scripts/build-production.mjs",
+    "test:bundle-budget": "node scripts/assert-shipping-bundle-budget.mjs",
     "build:e2e": "node scripts/build-e2e.mjs",
     "start": "next start",
     "lint": "next lint",
@@ -50,7 +51,7 @@
     "test:e2e:soak": "playwright test e2e/regression/long-career-invariants.spec.ts --workers=1"
   },
   "dependencies": {
-    "@sentry/nextjs": "^10.40.0",
+    "@sentry/nextjs": "^10.69.0",
     "@supabase/supabase-js": "^2.97.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -58,7 +59,7 @@
     "framer-motion": "^12.34.3",
     "howler": "^2.2.4",
     "lucide-react": "^0.575.0",
-    "next": "^15.5.12",
+    "next": "^15.5.22",
     "next-intl": "^4.8.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -77,11 +78,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.10",
-    "concurrently": "^9.2.1",
+    "concurrently": "^9.2.4",
     "electron": "^40.6.0",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^15.5.12",
+    "eslint-config-next": "^15.5.22",
     "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "typescript": "^5.9.3",
@@ -89,6 +90,10 @@
     "wait-on": "^9.0.4"
   },
   "overrides": {
-    "postcss": "8.5.16"
+    "brace-expansion": "5.0.8",
+    "fast-uri": "4.1.1",
+    "postcss": "8.5.25",
+    "sharp": "0.35.3",
+    "tar": "7.5.22"
   }
 }

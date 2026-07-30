@@ -20,6 +20,7 @@ import type {
   WeeklyWorkerMessage,
   WeeklyWorkerWireRequest,
 } from "@/stores/actions/weeklyWorkerTypes";
+import { getSeasonLength } from "@/engine/core/gameDate";
 
 /**
  * A worker is an optimization, never a reason to strand the player on the
@@ -28,6 +29,15 @@ import type {
  * transaction while the result is still contextually immediate.
  */
 export const WEEKLY_WORKER_TIMEOUT_MS = 8_000;
+export const WEEKLY_WORKER_ROLLOVER_TIMEOUT_MS = 30_000;
+
+export function getWeeklyWorkerTimeoutMs(input: WeeklyWorkerInput): number {
+  const state = input.gameState;
+  const seasonLength = getSeasonLength(state.fixtures, state.currentSeason);
+  return state.currentWeek >= seasonLength
+    ? WEEKLY_WORKER_ROLLOVER_TIMEOUT_MS
+    : WEEKLY_WORKER_TIMEOUT_MS;
+}
 
 function monotonicNow(): number {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -113,11 +123,12 @@ const dispatcher: WeeklyTransactionWorkerDispatcher<WeeklyWorkerInput, WeeklyWor
     }
 
     return new Promise((resolve, reject) => {
+      const timeoutMs = getWeeklyWorkerTimeoutMs(request.state);
       const timeoutId = setTimeout(() => {
         pendingTransactions.delete(request.job.id);
         reject(new Error("Weekly simulation worker timed out."));
         disposeWorker();
-      }, WEEKLY_WORKER_TIMEOUT_MS);
+      }, timeoutMs);
       pendingTransactions.set(request.job.id, { resolve, reject, timeoutId });
       const wireRequest: WeeklyWorkerWireRequest = {
         kind: request.kind,

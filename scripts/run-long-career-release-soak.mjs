@@ -361,6 +361,10 @@ async function runWorker(seedIndex, suffix = "run") {
     ].filter((state) => state === "Active").length}`,
   );
   try {
+    let workerStdout = "";
+    let workerStderr = "";
+    const retainDiagnosticTail = (current, chunk) =>
+      `${current}${chunk}`.slice(-32_768);
     await new Promise((resolveWorker, rejectWorker) => {
       const child = spawn(
         process.execPath,
@@ -382,13 +386,28 @@ async function runWorker(seedIndex, suffix = "run") {
             SOAK_WORKER_MODE: "true",
             SOAK_DIAGNOSTIC_ONLY: "false",
           },
-          stdio: "inherit",
+          stdio: ["ignore", "pipe", "pipe"],
         },
       );
+      child.stdout?.on("data", (chunk) => {
+        const text = chunk.toString();
+        workerStdout = retainDiagnosticTail(workerStdout, text);
+        process.stdout.write(text);
+      });
+      child.stderr?.on("data", (chunk) => {
+        const text = chunk.toString();
+        workerStderr = retainDiagnosticTail(workerStderr, text);
+        process.stderr.write(text);
+      });
       child.once("error", rejectWorker);
       child.once("exit", (code, signal) => {
         if (code === 0) resolveWorker();
-        else rejectWorker(new Error(`Soak worker ${seedIndex} failed (${signal ?? code})`));
+        else {
+          const diagnostic = (workerStderr || workerStdout).trim();
+          rejectWorker(new Error(
+            `Soak worker ${seedIndex} failed (${signal ?? code})${diagnostic ? `\n${diagnostic}` : ""}`,
+          ));
+        }
       });
     });
     const result = JSON.parse(await readFile(temporaryWorkerOutput, "utf8"));

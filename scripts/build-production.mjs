@@ -56,3 +56,4 @@ runNode(resolve(repositoryRoot, "node_modules/next/dist/bin/next"), ["build"]);
 runNode(resolve(repositoryRoot, "scripts/assert-shipping-provenance.mjs"), [
   `--expected=${configuredBuildVersion}`,
 ]);
+runNode(resolve(repositoryRoot, "scripts/assert-shipping-bundle-budget.mjs"));

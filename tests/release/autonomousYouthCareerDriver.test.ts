@@ -8,6 +8,7 @@ import {
   chooseAutonomousDecisionOption,
   collectAutonomousCareerPresentationSignals,
   createAutonomousCareerTelemetry,
+  ensureCourseStudyScheduled,
   stabilizeAutonomousCareerState,
 } from "./autonomousYouthCareerDriver";
 
@@ -250,6 +251,39 @@ describe("autonomous youth career driver profiles", () => {
       selectedDecision: "exploit",
       activeEnrollment: "fa_level_1",
     });
+  });
+
+  it("reserves a real planner slot for an active course", () => {
+    const schedule = {
+      activities: Array.from({ length: 7 }, (_, index) => ({
+        type: "rest",
+        slots: 1,
+        description: `Rest ${index}`,
+      })),
+    };
+    const store = {
+      gameState: {
+        finances: {
+          activeEnrollment: { courseId: "fa_level_1" },
+        },
+        schedule,
+      },
+      unscheduleActivity: vi.fn((dayIndex: number) => {
+        schedule.activities[dayIndex] = null as never;
+      }),
+      scheduleActivity: vi.fn((activity: GameState["schedule"]["activities"][number], dayIndex: number) => {
+        schedule.activities[dayIndex] = activity as never;
+      }),
+    };
+    vi.spyOn(useGameStore, "getState").mockImplementation(() => store as never);
+
+    ensureCourseStudyScheduled();
+
+    expect(store.unscheduleActivity).toHaveBeenCalledWith(6);
+    expect(store.scheduleActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "study", slots: 1 }),
+      6,
+    );
   });
 });
 

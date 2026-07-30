@@ -195,6 +195,8 @@ test.describe("Academy case rendered evidence", () => {
       }))).toEqual({ document: 0, workspace: 0 });
       await gamePage.page.getByRole("tab", { name: /^Brief\b/ }).click();
       await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toBeVisible();
+      await expect(gamePage.page.getByTestId("recruitment-identity-briefing")).toBeVisible();
+      await gamePage.page.getByRole("tab", { name: /^Build the case\b/ }).click();
       await expect(gamePage.page.getByTestId("report-presentation-room")).toBeVisible();
       await capture(gamePage, viewport.name, "report-writer");
       await capture(gamePage, viewport.name, "report-writer", true);

@@ -68,6 +68,10 @@ function matchesBrief(entry: YouthDeskProspectEntry, brief: YouthDeskBriefSummar
   );
 }
 
+function humanizeBriefPriority(priority: string): string {
+  return priority.replace(/([A-Z])/g, " $1").trim().toLowerCase();
+}
+
 export function buildYouthActiveCaseModel(args: {
   decisionReadyYouth: YouthDeskProspectEntry[];
   evidenceQueue: YouthDeskProspectEntry[];
@@ -169,7 +173,7 @@ export function buildYouthActiveCaseModel(args: {
       ? "The evidence bar is high enough to support a recommendation if the fit and timing are believable."
       : "The desk still needs another context before the recommendation can be trusted.",
     briefLine: linkedBrief
-      ? `${linkedBrief.requiredPositions.join("/")} pathway expires in S${linkedBrief.expiresSeason} W${linkedBrief.expiresWeek} with ${linkedBrief.competitionPressure} pressure.`
+      ? `This brief weights ${humanizeBriefPriority(linkedBrief.developmentPriority)} most heavily for the ${linkedBrief.requiredPositions.join("/")} pathway. It expires in S${linkedBrief.expiresSeason} W${linkedBrief.expiresWeek} with ${linkedBrief.competitionPressure} pressure.`
       : "No live academy brief currently sharpens this case.",
   };
 }

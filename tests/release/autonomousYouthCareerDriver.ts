@@ -463,6 +463,21 @@ function ensureScheduledWork(): void {
   }
 }
 
+export function ensureCourseStudyScheduled(): void {
+  const store = useGameStore.getState();
+  const state = store.gameState;
+  if (!state?.finances?.activeEnrollment) return;
+  if (state.schedule.activities.some((activity) => activity?.type === "study")) return;
+
+  const studyDay = state.schedule.activities.length - 1;
+  store.unscheduleActivity(studyDay);
+  store.scheduleActivity({
+    type: "study",
+    slots: 1,
+    description: "Autonomous course study",
+  }, studyDay);
+}
+
 function chooseDayInteraction(
   activity: Activity | null,
   observations: Array<{ playerId: string }>,
@@ -843,6 +858,7 @@ export async function driveAutonomousYouthCareerWeek(
   store.setWeeklyIntent(chooseWeeklyIntent(state, telemetry));
   store.setDelegationPolicy(chooseDelegationPolicy(state, telemetry));
   store.autoSchedule(buildPriorities(state, telemetry));
+  ensureCourseStudyScheduled();
   ensureScheduledWork();
 
   const sourceSeason = useGameStore.getState().gameState?.currentSeason;

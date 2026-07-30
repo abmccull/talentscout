@@ -1,75 +1,41 @@
 {
-  "audit_date": "2026-07-21",
+  "audit_date": "2026-07-29",
+  "candidate_sha": "a99b5849c8fa0d7efa873ef0124e37c109b093bd",
   "product": "TalentScout Youth Scout Early Access",
-  "product_type": "Football scouting and career simulation",
+  "product_type": "Scout-centered football career simulation",
   "scores": {
-    "overall_design": 8.7,
-    "base_design": 8.71,
-    "system_cohesion": 9.2,
+    "overall_design": 8.6,
+    "base_design": 8.7,
+    "system_cohesion": 9.1,
     "dimensions": {
-      "visual_hierarchy": 8.9,
-      "layout_and_spacing": 8.5,
-      "typography": 8.4,
-      "color_and_contrast": 8.2,
-      "components_and_states": 8.6,
-      "interaction_and_feedback": 8.8,
+      "visual_hierarchy": 9.0,
+      "layout_and_spacing": 8.3,
+      "typography": 8.7,
+      "color_and_contrast": 8.5,
+      "components_and_states": 8.7,
+      "interaction_and_feedback": 8.6,
       "information_architecture_and_navigation": 9.0,
       "conversion_or_task_flow_design": 8.8,
-      "accessibility_and_inclusive_ux": 9.0,
-      "imagery_and_iconography": 8.5,
+      "accessibility_and_inclusive_ux": 8.8,
+      "imagery_and_iconography": 8.3,
       "brand_visual_system": 9.0,
-      "emotional_trust_and_polish": 8.8
+      "emotional_trust_and_polish": 8.7
     }
   },
   "caps_applied": [],
-  "evidence": {
-    "root": "artifacts/release/generated/visual-evidence/head-8c51e872056e__base-tree-549dc94512a3__dirty-4b359de37893/core-workspace-polish",
-    "current_screenshot_count": 8,
-    "focused_visual_journey_status": "pass in 20 seconds with responsive-width and blocking Axe gates",
-    "broader_visual_journey_status": "target workspaces captured; later political-meeting step timed out before its hidden inventory dependency and capture budget were repaired",
-    "representative_files": [
-      "desktop-desk.png",
-      "mobile-desk.png",
-      "desktop-planner.png",
-      "mobile-planner.png",
-      "desktop-reports.png",
-      "mobile-reports.png",
-      "desktop-career.png",
-      "mobile-career.png"
-    ],
-    "mobile_height_comparison": {
-      "desk": { "before": 3184, "after": 2587, "reduction_percent": 18.7 },
-      "planner": { "before": 844, "after": 844, "reduction_percent": 0.0 },
-      "reports": { "before": 2171, "after": 1760, "reduction_percent": 18.9 },
-      "career": { "before": 3556, "after": 2363, "reduction_percent": 33.5 }
-    }
+  "fresh_evidence": {
+    "core_workspace_visual": "1/1 passed; 8 desktop/mobile screenshots",
+    "scouting_ecology_visual": "1/1 passed; 6 desktop/mobile screenshots",
+    "academy_case_visual": "1/1 passed; desktop/mobile flow, Axe, and overflow checks",
+    "automated_accessibility": "6/6 passed",
+    "low_end_emulation": "2/2 passed",
+    "packaged_worker": "passed; packaged worker active with zero CSP policy errors"
   },
-  "verification": {
-    "typecheck": "pass",
-    "lint": "pass with zero warnings or errors",
-    "unit_tests": "1215/1215 pass across 231 files",
-    "architecture": "617 modules, 2912 internal edges, zero cycles",
-    "production_build": "pass; /play 886 kB, first-load JavaScript 993 kB",
-    "workspace_browser": "16/16 pass",
-    "focused_visual_accessibility": "1/1 pass across eight desktop/mobile captures; no serious or critical Axe findings and no horizontal overflow",
-    "manual_screen_reader": "not completed",
-    "moderated_replayability": "protocol prepared; study not completed"
-  },
-  "implemented_polish": [
-    "decision-first Desk with quiet-state consequence compression",
-    "ghost-style passive Planner days",
-    "canonical scheduling audio and announced visual receipts",
-    "deduplicated blank professional report artifact",
-    "player-safe Career fingerprint and compressed mobile context",
-    "keyboard-accessible horizontal Desk rails",
-    "fast focused responsive and Axe evidence gate"
+  "top_recommendations": [
+    "Reduce mobile page length and tertiary card density",
+    "Complete manual NVDA and VoiceOver",
+    "Complete moderated usability and late-career density validation",
+    "Reduce the shipping JavaScript bundle"
   ],
-  "remaining_recommendations": [
-    "Run moderated paired-career and first-hour studies",
-    "Complete manual NVDA and VoiceOver certification",
-    "Validate audiovisual feel on packaged physical-hardware builds",
-    "Observe populated Reports and multi-season Career task flow with expert players",
-    "Reduce the /play first-load bundle below 993 kB"
-  ],
-  "final_judgment": "The requested gaps are materially improved and regression-gated. The interface is not honestly 10/10 until human replayability, manual screen-reader, packaged audiovisual, and maximum-density usability evidence are complete."
+  "final_judgment": "Strong and distinctive design, not release-certified under the project's strict evidence standard."
 }
