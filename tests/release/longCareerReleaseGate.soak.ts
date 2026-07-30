@@ -68,7 +68,7 @@ const MAX_SERIALIZED_BYTES = Number.parseInt(
   10,
 );
 const MAX_GROWTH_MULTIPLIER = 64;
-const MAX_SINGLE_BATCH_PHASE_MS = 30_000;
+const MAX_SINGLE_BATCH_CPU_MS = 30_000;
 // Three isolated release careers intentionally share the host. Scheduler
 // contention can add wall time between instrumented simulation phases without
 // indicating a game-loop hang, so retain a separate bounded wall-clock guard.
@@ -728,8 +728,11 @@ async function simulateCareer(
     const before = useGameStore.getState().gameState;
     if (!before) throw new Error(`Seed ${seed} lost game state`);
     const started = performance.now();
+    const cpuStarted = process.cpuUsage();
     await driveAutonomousYouthCareerWeek(careerTelemetry);
     const elapsed = performance.now() - started;
+    const cpuUsage = process.cpuUsage(cpuStarted);
+    const cpuElapsed = (cpuUsage.user + cpuUsage.system) / 1_000;
     // The real UI yields after every command. Without this yield, mocked
     // checkpoint/autosave promises retain every prior serialized state and the
     // soak measures its own synchronous harness rather than game heap.
@@ -767,12 +770,10 @@ async function simulateCareer(
       elapsed,
       `seed ${seed} batch wall latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
     ).toBeLessThan(MAX_SINGLE_BATCH_WALL_MS);
-    if (phaseElapsed !== undefined) {
-      expect(
-        phaseElapsed,
-        `seed ${seed} instrumented simulation phases exceed the release budget at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
-      ).toBeLessThan(MAX_SINGLE_BATCH_PHASE_MS);
-    }
+    expect(
+      cpuElapsed,
+      `seed ${seed} batch CPU latency indicates excessive work at S${before.currentSeason} W${before.currentWeek}; wall=${elapsed.toFixed(1)}ms; phases=${phaseElapsed?.toFixed(1) ?? "unavailable"}ms (${phaseBreakdown})`,
+    ).toBeLessThan(MAX_SINGLE_BATCH_CPU_MS);
 
     if (after.currentSeason !== lastCheckedSeason) {
       stabilizeAutonomousCareerState(careerTelemetry);

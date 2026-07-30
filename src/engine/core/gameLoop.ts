@@ -3116,6 +3116,7 @@ export function advanceWeek(
     youthPool,
     tickResult.youthAgingResult?.autoSigned ?? [],
     lifecycleResolution.applied,
+    tickResult.endOfSeasonTriggered ? state.currentSeason : undefined,
   );
   const rejectedFreeAgentSigningIds = new Set(
     lifecycleResolution.rejected

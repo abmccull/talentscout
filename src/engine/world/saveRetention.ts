@@ -288,6 +288,32 @@ function compactPlayerRecord(
   };
 }
 
+function compactRetiredPlayerRecord(
+  player: Player,
+  currentSeason: number,
+  preserveFullDossierHistory: boolean,
+): Player {
+  const compacted = compactPlayerRecord(
+    player,
+    currentSeason,
+    preserveFullDossierHistory,
+  );
+  if (preserveFullDossierHistory) return compacted;
+
+  // Completed-season performance and public career history already live in
+  // WorldHistory. A recent background retirement needs a resolvable identity,
+  // not duplicate fixture-level history for every match in the career.
+  return {
+    ...compacted,
+    recentMatchRatings: [],
+    seasonRatings: (compacted.seasonRatings ?? []).slice(-3),
+    currentInjury: undefined,
+    injured: false,
+    injuryWeeksRemaining: 0,
+    disciplinaryRecord: undefined,
+  };
+}
+
 export function collectCausallyReferencedPlayerIds(state: GameState): Set<string> {
   const ids = new Set<string>([
     ...(state.watchlist ?? []),
@@ -931,7 +957,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
       .filter(([playerId]) => retainedRetiredPlayerIds.has(playerId))
       .map(([playerId, player]) => [
         playerId,
-        compactPlayerRecord(
+        compactRetiredPlayerRecord(
           player,
           state.currentSeason,
           causalPlayerIds.has(playerId),

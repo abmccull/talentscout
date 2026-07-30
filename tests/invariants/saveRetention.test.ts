@@ -471,6 +471,8 @@ describe("long-career save retention", () => {
 
     expect(Object.keys(compacted.retiredPlayers).sort()).toEqual(["causal", "recent"]);
     expect(compacted.retiredPlayerIds.sort()).toEqual(["causal", "recent"]);
+    expect(compacted.retiredPlayers.recent.recentMatchRatings).toEqual([]);
+    expect(compacted.retiredPlayers.causal).toEqual(legacy.retiredPlayers.causal);
   });
 
   it("compacts terminal youth immediately while preserving active and malformed causal records", () => {
