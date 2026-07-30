@@ -698,20 +698,39 @@ function chooseBestPendingBid(
   return null;
 }
 
-function resolveCommercialInbox(telemetry: AutonomousCareerTelemetry): void {
+export function resolveCommercialInbox(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   const state = store.gameState;
   if (!state || !state.finances) return;
 
-  for (const listing of state.finances.reportListings) {
-    const choice = chooseBestPendingBid(listing, telemetry);
-    if (!choice) continue;
-    if (choice.exclusiveUpgrade) {
-      store.acceptExclusiveUpgradeBid(choice.bid.id);
-      recordMeaningfulDecision(telemetry, "acceptedExclusiveUpgradeBids");
-    } else {
-      store.acceptMarketplaceBid(choice.bid.id);
-      recordMeaningfulDecision(telemetry, "acceptedMarketplaceBids");
+  for (const listingId of state.finances.reportListings.map((listing) => listing.id)) {
+    // Non-exclusive listings can receive several simultaneously valid buyers.
+    // Refresh after each store action and drain the bounded queue; accepting
+    // only one bid per listing allowed supply to outpace the certification
+    // player's weekly inbox review.
+    for (let decisionCount = 0; decisionCount < 64; decisionCount += 1) {
+      const currentState = useGameStore.getState().gameState;
+      const currentListing = currentState?.finances?.reportListings.find(
+        (listing) => listing.id === listingId,
+      );
+      if (!currentListing) break;
+      const pendingBefore = currentListing.bids.filter((bid) => bid.status === "pending").length;
+      const choice = chooseBestPendingBid(currentListing, telemetry);
+      if (!choice) break;
+      if (choice.exclusiveUpgrade) {
+        store.acceptExclusiveUpgradeBid(choice.bid.id);
+        recordMeaningfulDecision(telemetry, "acceptedExclusiveUpgradeBids");
+      } else {
+        store.acceptMarketplaceBid(choice.bid.id);
+        recordMeaningfulDecision(telemetry, "acceptedMarketplaceBids");
+      }
+      const refreshedListing = useGameStore.getState().gameState?.finances?.reportListings.find(
+        (listing) => listing.id === listingId,
+      );
+      const pendingAfter = refreshedListing?.bids.filter(
+        (bid) => bid.status === "pending",
+      ).length ?? 0;
+      if (pendingAfter >= pendingBefore) break;
     }
   }
 }

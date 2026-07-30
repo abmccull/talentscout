@@ -10,6 +10,7 @@ import {
   createAutonomousCareerTelemetry,
   ensureCourseStudyScheduled,
   reviewActionableInbox,
+  resolveCommercialInbox,
   stabilizeAutonomousCareerState,
 } from "./autonomousYouthCareerDriver";
 
@@ -333,6 +334,32 @@ describe("autonomous youth career driver profiles", () => {
     expect(store.markMessageRead).toHaveBeenCalledWith("directive-1");
     expect(inbox[0].read).toBe(true);
     expect(inbox[0].actionRequired).toBe(true);
+  });
+
+  it("drains every pending non-exclusive marketplace bid during weekly review", () => {
+    const bids = [
+      { id: "bid-1", status: "pending", amount: 500, isExclusiveUpgrade: false },
+      { id: "bid-2", status: "pending", amount: 450, isExclusiveUpgrade: false },
+    ];
+    const state = {
+      finances: {
+        reportListings: [{ id: "listing-1", bids }],
+      },
+    } as unknown as GameState;
+    const store = {
+      gameState: state,
+      acceptMarketplaceBid: vi.fn((bidId: string) => {
+        const bid = bids.find((candidate) => candidate.id === bidId);
+        if (bid) bid.status = "accepted";
+      }),
+      acceptExclusiveUpgradeBid: vi.fn(),
+    };
+    vi.spyOn(useGameStore, "getState").mockImplementation(() => store as never);
+
+    resolveCommercialInbox(createAutonomousCareerTelemetry());
+
+    expect(store.acceptMarketplaceBid).toHaveBeenCalledTimes(2);
+    expect(bids.map((bid) => bid.status)).toEqual(["accepted", "accepted"]);
   });
 });
 
