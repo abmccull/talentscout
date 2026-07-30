@@ -165,6 +165,7 @@ import { selectLatestReportsByCaseOpenedInRange } from "../reports/reportAccount
 import { recordCompletedSeasonWorldHistory } from "../world/worldHistory";
 import {
   collectCausallyReferencedPlayerIds,
+  compactLongCareerHistory,
   retainMatchRatingsForFixtures,
   retainRequiredFixtureHistory,
 } from "../world/saveRetention";
@@ -3464,9 +3465,15 @@ export function advanceWeek(
     const seasonOpenedState = applyClubPhilosophySeasonStart(
       applyWorldConditionSeasonStart(seasonStartState),
     );
+    // Apply the same bounded archive policy during live play that save
+    // migration applies on load. Without this boundary, a continuously open
+    // career retains every full retired-player dossier until restart and can
+    // exceed the release save budget even though reloading immediately
+    // compacts it.
+    const retainedSeasonOpenedState = compactLongCareerHistory(seasonOpenedState);
     return {
-      ...seasonOpenedState,
-      culturalCalendarState: refreshCulturalCalendarState(seasonOpenedState),
+      ...retainedSeasonOpenedState,
+      culturalCalendarState: refreshCulturalCalendarState(retainedSeasonOpenedState),
     };
   }
   const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);

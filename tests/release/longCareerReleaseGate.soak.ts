@@ -68,7 +68,11 @@ const MAX_SERIALIZED_BYTES = Number.parseInt(
   10,
 );
 const MAX_GROWTH_MULTIPLIER = 64;
-const MAX_SINGLE_BATCH_MS = 30_000;
+const MAX_SINGLE_BATCH_PHASE_MS = 30_000;
+// Three isolated release careers intentionally share the host. Scheduler
+// contention can add wall time between instrumented simulation phases without
+// indicating a game-loop hang, so retain a separate bounded wall-clock guard.
+const MAX_SINGLE_BATCH_WALL_MS = 45_000;
 const DIAGNOSTIC_ONLY = process.env.SOAK_DIAGNOSTIC_ONLY === "true";
 const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
 const MAX_HEAP_USED_BYTES = 1536 * 1024 * 1024;
@@ -745,17 +749,30 @@ async function simulateCareer(
     canonicalTicks++;
     calendarWeeksSpanned += 1;
     weeklyLatency.push(elapsed);
-    const phaseBreakdown = latestWeeklyTelemetry
+    const matchingWeeklyTelemetry = latestWeeklyTelemetry
       && latestWeeklyTelemetry.sourceSeason === before.currentSeason
       && latestWeeklyTelemetry.sourceWeek === before.currentWeek
-      ? latestWeeklyTelemetry.phases
+      ? latestWeeklyTelemetry
+      : undefined;
+    const phaseElapsed = matchingWeeklyTelemetry?.phases.reduce(
+      (sum, phase) => sum + phase.elapsedMs,
+      0,
+    );
+    const phaseBreakdown = matchingWeeklyTelemetry
+      ? matchingWeeklyTelemetry.phases
         .map((phase) => `${phase.phase}=${phase.elapsedMs.toFixed(1)}ms`)
         .join(", ")
       : "unavailable";
     expect(
       elapsed,
-      `seed ${seed} batch latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
-    ).toBeLessThan(MAX_SINGLE_BATCH_MS);
+      `seed ${seed} batch wall latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
+    ).toBeLessThan(MAX_SINGLE_BATCH_WALL_MS);
+    if (phaseElapsed !== undefined) {
+      expect(
+        phaseElapsed,
+        `seed ${seed} instrumented simulation phases exceed the release budget at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
+      ).toBeLessThan(MAX_SINGLE_BATCH_PHASE_MS);
+    }
 
     if (after.currentSeason !== lastCheckedSeason) {
       stabilizeAutonomousCareerState(careerTelemetry);
