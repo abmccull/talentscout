@@ -745,6 +745,21 @@ function resolveAgencyOffers(telemetry: AutonomousCareerTelemetry): void {
   }
 }
 
+export function reviewActionableInbox(): void {
+  const store = useGameStore.getState();
+  const state = store.gameState;
+  if (!state?.inbox?.length) return;
+
+  // The autonomous career represents a player who reviews their inbox every
+  // week. Resolvable decisions are handled first; remaining live notices
+  // (directives, assignments, access windows, and negotiations) are read and
+  // deliberately carried forward instead of accumulating as unseen work.
+  for (const message of reconcileInboxActionRequirements(state)
+    .filter((candidate) => candidate.actionRequired && !candidate.read)) {
+    store.markMessageRead(message.id);
+  }
+}
+
 function chooseCareerPathIfReady(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   const state = store.gameState;
@@ -909,6 +924,7 @@ export function stabilizeAutonomousCareerState(
   resolveCommercialInbox(telemetry);
   resolveAgencyOffers(telemetry);
   enrollCourseIfAffordable(telemetry);
+  reviewActionableInbox();
 }
 
 function countPendingMarketplaceBids(state: GameState): number {

@@ -9,6 +9,7 @@ import {
   collectAutonomousCareerPresentationSignals,
   createAutonomousCareerTelemetry,
   ensureCourseStudyScheduled,
+  reviewActionableInbox,
   stabilizeAutonomousCareerState,
 } from "./autonomousYouthCareerDriver";
 
@@ -219,6 +220,7 @@ describe("autonomous youth career driver profiles", () => {
             requiredStudyWeeks: 4,
           };
         }),
+        markMessageRead: vi.fn(),
       };
 
       vi.spyOn(useGameStore, "getState").mockImplementation(() => store as never);
@@ -284,6 +286,53 @@ describe("autonomous youth career driver profiles", () => {
       expect.objectContaining({ type: "study", slots: 1 }),
       6,
     );
+  });
+
+  it("reviews live actionable inbox notices instead of accumulating unseen work", () => {
+    const inbox = [{
+      id: "directive-1",
+      week: 3,
+      season: 2,
+      type: "assignment",
+      title: "Review the academy",
+      body: "A live directive still needs work.",
+      read: false,
+      actionRequired: true,
+      relatedId: "directive-1",
+      relatedEntityType: "directive",
+    }];
+    const state = {
+      currentSeason: 2,
+      currentWeek: 3,
+      fixtures: {},
+      inbox,
+      managerDirectives: [{ id: "directive-1", fulfilled: false }],
+      scout: { boardDirectives: [] },
+      consequenceState: { decisions: {} },
+      jobOffers: [],
+      narrativeEvents: [],
+      seasonEvents: [],
+      internationalAssignments: [],
+      activeInternationalAssignment: null,
+      contacts: {},
+      activeNegotiations: [],
+      freeAgentNegotiations: [],
+      finances: { reportListings: [] },
+    } as unknown as GameState;
+    const store = {
+      gameState: state,
+      markMessageRead: vi.fn((messageId: string) => {
+        const message = inbox.find((candidate) => candidate.id === messageId);
+        if (message) message.read = true;
+      }),
+    };
+    vi.spyOn(useGameStore, "getState").mockImplementation(() => store as never);
+
+    reviewActionableInbox();
+
+    expect(store.markMessageRead).toHaveBeenCalledWith("directive-1");
+    expect(inbox[0].read).toBe(true);
+    expect(inbox[0].actionRequired).toBe(true);
   });
 });
 
