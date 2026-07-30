@@ -392,6 +392,36 @@ describe("youth perk authority", () => {
     expect(perkChance / baselineChance).toBeGreaterThan(1.35);
   });
 
+  it("[youth_gut_feeling_probability] bounds stacked long-career trigger modifiers", () => {
+    const youth = makeUnsignedYouth();
+    let sampledChance = 0;
+
+    rollGutFeeling(
+      chanceRecorder((value) => {
+        sampledChance = value;
+      }, false),
+      makeScout("youth", 100, {
+        attributes: {
+          intuition: 100,
+          endurance: 12,
+          adaptability: 10,
+          networking: 10,
+          persuasion: 10,
+          memory: 10,
+        },
+      }),
+      youth,
+      "followUpSession",
+      {
+        gutFeelingMultiplier: 4,
+        gutFeelingMaxAge: 21,
+      },
+      2,
+    );
+
+    expect(sampledChance).toBe(1);
+  });
+
   it("[youth_network_expansion] makes Youth Network tips appear only after the perk unlocks", () => {
     const withoutPerk = maybeGenerateYouthTip(
       makeYouthTipState(6),

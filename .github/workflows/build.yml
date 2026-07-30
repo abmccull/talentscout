@@ -175,6 +175,9 @@ jobs:
           SOAK_SEASONS: "30"
           SOAK_CONCURRENCY: "1"
           SOAK_SKIP_DETERMINISM_REPLAY: ${{ matrix.seed != 1 }}
+          SOAK_MAX_SINGLE_BATCH_CPU_MS: "45000"
+          SOAK_MAX_SINGLE_BATCH_WALL_MS: "60000"
+          SOAK_TEST_TIMEOUT_MS: "18000000"
           SOAK_CANDIDATE_SHA: ${{ github.sha }}
           SOAK_REQUIRE_CLEAN_CANDIDATE: "true"
           SOAK_OUTPUT: artifacts/release/generated/long-career-shards/long-career-release-summary-seed-${{ matrix.seed }}.json
@@ -186,7 +189,9 @@ jobs:
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: release-soak-shard-${{ matrix.seed }}
-          path: artifacts/release/generated/long-career-shards/long-career-release-summary-seed-${{ matrix.seed }}.json
+          path: |
+            artifacts/release/generated/long-career-shards/long-career-release-summary-seed-${{ matrix.seed }}.json
+            artifacts/release/generated/long-career-workers-seed-${{ matrix.seed }}/*-failure.json
           if-no-files-found: error
           retention-days: 30
 

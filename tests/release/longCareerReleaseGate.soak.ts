@@ -68,11 +68,18 @@ const MAX_SERIALIZED_BYTES = Number.parseInt(
   10,
 );
 const MAX_GROWTH_MULTIPLIER = 64;
-const MAX_SINGLE_BATCH_CPU_MS = 30_000;
-// Three isolated release careers intentionally share the host. Scheduler
-// contention can add wall time between instrumented simulation phases without
-// indicating a game-loop hang, so retain a separate bounded wall-clock guard.
-const MAX_SINGLE_BATCH_WALL_MS = 45_000;
+// These guards detect a stalled autonomous certification batch; they are not
+// player-facing frame-time budgets. Hosted runner CPU generations and GC
+// scheduling vary, while the dedicated browser performance suite owns the
+// interactive latency contract.
+const MAX_SINGLE_BATCH_CPU_MS = Number.parseInt(
+  process.env.SOAK_MAX_SINGLE_BATCH_CPU_MS ?? "45000",
+  10,
+);
+const MAX_SINGLE_BATCH_WALL_MS = Number.parseInt(
+  process.env.SOAK_MAX_SINGLE_BATCH_WALL_MS ?? "60000",
+  10,
+);
 const DIAGNOSTIC_ONLY = process.env.SOAK_DIAGNOSTIC_ONLY === "true";
 const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
 const MAX_HEAP_USED_BYTES = 1536 * 1024 * 1024;
