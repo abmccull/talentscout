@@ -13,6 +13,11 @@ on:
         required: false
         default: "false"
         type: boolean
+      run_release_soak:
+        description: "Run the exact-candidate 20x30 soak without publishing"
+        required: false
+        default: "false"
+        type: boolean
 
 # Cancel in-progress runs for the same ref
 concurrency:
@@ -144,11 +149,15 @@ jobs:
   # concurrently, but the aggregate remains deterministically seed-ordered.
   # ------------------------------------------------------------------
   release-soak:
-    name: Exact candidate 20x30 career soak
+    name: Exact candidate seed ${{ matrix.seed }} x 30 seasons
     needs: quality
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.run_release_soak == true)
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -159,23 +168,60 @@ jobs:
 
       - run: npm ci
 
-      - name: Run isolated 20-seed x 30-season release profile
+      - name: Run isolated seed through 30 canonical seasons
         env:
-          SOAK_SEEDS: "20"
+          SOAK_SEEDS: "1"
+          SOAK_SEED_START: ${{ matrix.seed }}
           SOAK_SEASONS: "30"
-          SOAK_CONCURRENCY: "3"
+          SOAK_CONCURRENCY: "1"
+          SOAK_SKIP_DETERMINISM_REPLAY: ${{ matrix.seed != 1 }}
           SOAK_CANDIDATE_SHA: ${{ github.sha }}
           SOAK_REQUIRE_CLEAN_CANDIDATE: "true"
+          SOAK_OUTPUT: artifacts/release/generated/long-career-shards/long-career-release-summary-seed-${{ matrix.seed }}.json
+          SOAK_WORKER_DIRECTORY: artifacts/release/generated/long-career-workers-seed-${{ matrix.seed }}
         run: npm run test:release-soak
 
-      - name: Upload exact-candidate soak evidence
+      - name: Upload exact-candidate seed evidence
         if: always()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
+          name: release-soak-shard-${{ matrix.seed }}
+          path: artifacts/release/generated/long-career-shards/long-career-release-summary-seed-${{ matrix.seed }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  release-soak-aggregate:
+    name: Aggregate exact candidate 20x30 soak
+    needs: release-soak
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.run_release_soak == true)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Download every seed shard
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-soak-shard-*
+          path: artifacts/release/generated/long-career-shards
+          merge-multiple: true
+
+      - name: Aggregate and verify candidate-bound soak evidence
+        env:
+          SOAK_SEEDS: "20"
+          SOAK_SEASONS: "30"
+          SOAK_SHARD_DIRECTORY: artifacts/release/generated/long-career-shards
+        run: node scripts/aggregate-release-soak-shards.mjs
+
+      - name: Upload exact-candidate soak evidence
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
           name: release-soak-evidence
-          path: |
-            artifacts/release/generated/long-career-release-summary.json
-            artifacts/release/generated/long-career-workers/
+          path: artifacts/release/generated/long-career-release-summary.json
           if-no-files-found: error
           retention-days: 30
 
@@ -425,7 +471,7 @@ jobs:
   # ------------------------------------------------------------------
   candidate-bundle:
     name: Stage exact candidate bundle
-    needs: [build-windows, build-macos, build-linux, release-soak]
+    needs: [build-windows, build-macos, build-linux, release-soak-aggregate]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
