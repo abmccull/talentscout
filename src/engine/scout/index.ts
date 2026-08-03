@@ -48,5 +48,6 @@ export {
 
 export {
   calibrateEvidenceClaimFromReview,
+  calibrateSourceEvidenceFromReviews,
   calibrateSourceEvidenceFromReview,
 } from './sourceCalibration';

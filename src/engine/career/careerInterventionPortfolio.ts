@@ -1,7 +1,13 @@
 import type { GameState, Player } from "@/engine/core/types";
 import type { GameDate, JsonValue } from "@/engine/consequences";
-import { gameWeeksBetween } from "@/engine/core/gameDate";
-import { projectCurrentPlayerCareerEnvironment } from "@/engine/world/developmentEnvironment";
+import {
+  createGameCalendarIndex,
+  gameWeeksBetweenWithCalendar,
+} from "@/engine/core/gameDate";
+import {
+  createDevelopmentEnvironmentIndex,
+  projectCurrentPlayerCareerEnvironment,
+} from "@/engine/world/developmentEnvironment";
 
 export type CareerInterventionOutcome =
   | "monitoring"
@@ -35,6 +41,15 @@ export interface CareerInterventionPortfolio {
   summary: string;
 }
 
+type PlayerMovementRecord = NonNullable<GameState["playerMovementHistory"]>[number];
+type CareerInterventionPlayerFilter = string | ReadonlySet<string>;
+
+interface CareerInterventionIndexes {
+  callbackObservedByDecision: ReadonlySet<string>;
+  factIdsByDecision: ReadonlyMap<string, readonly string[]>;
+  movementsByPlayer: ReadonlyMap<string, readonly PlayerMovementRecord[]>;
+}
+
 function metadataString(
   metadata: Record<string, JsonValue> | undefined,
   key: string,
@@ -51,6 +66,16 @@ function metadataNumber(
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function matchesPlayerFilter(
+  filter: CareerInterventionPlayerFilter | undefined,
+  candidatePlayerId: string,
+): boolean {
+  if (filter === undefined) return true;
+  return typeof filter === "string"
+    ? filter === candidatePlayerId
+    : filter.has(candidatePlayerId);
+}
+
 function humanizeOption(optionId: string): string {
   return optionId
     .replace(/[_-]+/g, " ")
@@ -61,28 +86,86 @@ function playerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim() || "A placed player";
 }
 
-function currentEnvironment(state: GameState, player: Player): {
-  score: number;
-  headline: string;
-  summary: string;
-} {
-  const projection = projectCurrentPlayerCareerEnvironment(state, player);
+function createCareerInterventionIndexes(
+  state: GameState,
+  playerFilter?: CareerInterventionPlayerFilter,
+): CareerInterventionIndexes {
+  const callbackObservedByDecision = new Set<string>();
+  const factIdsByDecision = new Map<string, string[]>();
+  for (const fact of Object.values(state.consequenceState.facts ?? {})) {
+    if (fact.sourceDecisionId) {
+      let factIds = factIdsByDecision.get(fact.sourceDecisionId);
+      if (!factIds) {
+        factIds = [];
+        factIdsByDecision.set(fact.sourceDecisionId, factIds);
+      }
+      factIds.push(fact.id);
+      if (fact.kind === "activeCareerFrontReviewDue") {
+        callbackObservedByDecision.add(fact.sourceDecisionId);
+      }
+    }
+  }
+  for (const consequence of Object.values(state.consequenceState.consequences ?? {})) {
+    if (
+      consequence.decisionId
+      && consequence.tags.includes("active-career-front")
+      && consequence.status === "applied"
+    ) {
+      callbackObservedByDecision.add(consequence.decisionId);
+    }
+  }
+
+  const movementsByPlayer = new Map<string, PlayerMovementRecord[]>();
+  for (const movement of state.playerMovementHistory ?? []) {
+    if (!matchesPlayerFilter(playerFilter, movement.playerId)) continue;
+    let movements = movementsByPlayer.get(movement.playerId);
+    if (!movements) {
+      movements = [];
+      movementsByPlayer.set(movement.playerId, movements);
+    }
+    movements.push(movement);
+  }
+  for (const movements of movementsByPlayer.values()) {
+    movements.sort((left, right) =>
+      right.season - left.season
+      || right.week - left.week
+      || right.id.localeCompare(left.id),
+    );
+  }
+
   return {
-    score: projection.score,
-    headline: projection.headline,
-    summary: projection.summary,
+    callbackObservedByDecision,
+    factIdsByDecision,
+    movementsByPlayer,
   };
 }
 
-function callbackObserved(state: GameState, decisionId: string): boolean {
-  return Object.values(state.consequenceState.facts ?? {}).some((fact) =>
-    fact.sourceDecisionId === decisionId
-    && fact.kind === "activeCareerFrontReviewDue",
-  ) || Object.values(state.consequenceState.consequences ?? {}).some((consequence) =>
-    consequence.decisionId === decisionId
-    && consequence.tags.includes("active-career-front")
-    && consequence.status === "applied",
-  );
+function createCurrentEnvironmentResolver(state: GameState) {
+  const cache = new Map<string, {
+    score: number;
+    headline: string;
+    summary: string;
+  }>();
+  let developmentEnvironmentIndex:
+    | ReturnType<typeof createDevelopmentEnvironmentIndex>
+    | undefined;
+
+  return (player: Player) => {
+    const cached = cache.get(player.id);
+    if (cached) return cached;
+    const projection = player.clubId
+      ? projectCurrentPlayerCareerEnvironment(state, player, {
+          index: developmentEnvironmentIndex ??= createDevelopmentEnvironmentIndex(state),
+        })
+      : projectCurrentPlayerCareerEnvironment(state, player);
+    const resolved = {
+      score: projection.score,
+      headline: projection.headline,
+      summary: projection.summary,
+    };
+    cache.set(player.id, resolved);
+    return resolved;
+  };
 }
 
 function outcomeFor(
@@ -97,23 +180,17 @@ function outcomeFor(
 }
 
 function latestMovementId(
-  state: GameState,
+  indexes: CareerInterventionIndexes,
   playerId: string,
   selectedAt: GameDate,
 ): string | undefined {
-  return [...(state.playerMovementHistory ?? [])]
-    .filter((movement) =>
+  return indexes.movementsByPlayer.get(playerId)?.find((movement) =>
       movement.playerId === playerId
       && (
         movement.season > selectedAt.season
         || (movement.season === selectedAt.season && movement.week >= selectedAt.week)
       ),
-    )
-    .sort((left, right) =>
-      right.season - left.season
-      || right.week - left.week
-      || right.id.localeCompare(left.id),
-    )[0]?.id;
+    )?.id;
 }
 
 /**
@@ -123,9 +200,12 @@ function latestMovementId(
  */
 export function collectCareerInterventionEvidence(
   state: GameState,
-  playerId?: string,
+  playerFilter?: CareerInterventionPlayerFilter,
 ): CareerInterventionEvidence[] {
   const now = { week: state.currentWeek, season: state.currentSeason };
+  const indexes = createCareerInterventionIndexes(state, playerFilter);
+  const resolveCurrentEnvironment = createCurrentEnvironmentResolver(state);
+  let gameCalendar: ReturnType<typeof createGameCalendarIndex> | undefined;
   const activeById = new Map(
     Object.values(state.consequenceState.decisions ?? {})
       .filter((decision) =>
@@ -168,17 +248,21 @@ export function collectCareerInterventionEvidence(
 
   return rows.flatMap((row): CareerInterventionEvidence[] => {
     if (!row.relatedPlayerId || !row.selectedOptionId) return [];
-    if (playerId && row.relatedPlayerId !== playerId) return [];
+    if (!matchesPlayerFilter(playerFilter, row.relatedPlayerId)) return [];
     const player = state.players[row.relatedPlayerId]
       ?? state.retiredPlayers?.[row.relatedPlayerId];
     if (!player) return [];
-    const environment = currentEnvironment(state, player);
+    const environment = resolveCurrentEnvironment(player);
     const originalScore = metadataNumber(row.metadata, "originalEnvironmentScore")
       ?? environment.score;
     const scoreDelta = environment.score - originalScore;
-    const observed = callbackObserved(state, row.decisionId);
-    const elapsedWeeks = gameWeeksBetween(state.fixtures, row.selectedAt, now);
-    const movementId = latestMovementId(state, row.relatedPlayerId, row.selectedAt);
+    const observed = indexes.callbackObservedByDecision.has(row.decisionId);
+    const elapsedWeeks = gameWeeksBetweenWithCalendar(
+      gameCalendar ??= createGameCalendarIndex(state.fixtures),
+      row.selectedAt,
+      now,
+    );
+    const movementId = latestMovementId(indexes, row.relatedPlayerId, row.selectedAt);
     const alumniRecordId = metadataString(row.metadata, "alumniRecordId");
     const caseId = metadataString(row.metadata, "caseId");
     const reportId = metadataString(row.metadata, "reportId");
@@ -203,9 +287,7 @@ export function collectCareerInterventionEvidence(
         ...(caseId ? [caseId] : []),
         ...(reportId ? [reportId] : []),
         ...(movementId ? [movementId] : []),
-        ...Object.values(state.consequenceState.facts ?? {})
-          .filter((fact) => fact.sourceDecisionId === row.decisionId)
-          .map((fact) => fact.id),
+        ...(indexes.factIdsByDecision.get(row.decisionId) ?? []),
       ],
     }];
   }).sort((left, right) =>
@@ -220,11 +302,14 @@ export function projectCareerInterventionPortfolio(
 ): CareerInterventionPortfolio {
   const interventions = collectCareerInterventionEvidence(state);
   const counts = {
-    monitoring: interventions.filter((item) => item.outcome === "monitoring").length,
-    improved: interventions.filter((item) => item.outcome === "improved").length,
-    unchanged: interventions.filter((item) => item.outcome === "unchanged").length,
-    worsened: interventions.filter((item) => item.outcome === "worsened").length,
+    monitoring: 0,
+    improved: 0,
+    unchanged: 0,
+    worsened: 0,
   };
+  for (const intervention of interventions) {
+    counts[intervention.outcome] += 1;
+  }
   const summary = interventions.length === 0
     ? "No placed-player pathway has required a recorded intervention yet."
     : `${interventions.length} pathway intervention${interventions.length === 1 ? "" : "s"}: ${counts.improved} improved, ${counts.unchanged} still unsettled, ${counts.worsened} worsened, and ${counts.monitoring} awaiting review.`;

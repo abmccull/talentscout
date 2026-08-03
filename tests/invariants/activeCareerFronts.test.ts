@@ -12,7 +12,10 @@ import {
   selectDecisionOption,
 } from "@/engine/consequences";
 import { buildDashboardActiveFronts } from "@/engine/dashboard/activeFronts";
-import { projectCareerInterventionPortfolio } from "@/engine/career/careerInterventionPortfolio";
+import {
+  collectCareerInterventionEvidence,
+  projectCareerInterventionPortfolio,
+} from "@/engine/career/careerInterventionPortfolio";
 import { createRunManifest } from "@/engine/run";
 import { createActiveCareerFrontCallbackMessage } from "@/stores/actions/weeklyNarrativeConsequences";
 import {
@@ -396,6 +399,26 @@ describe("active career fronts", () => {
       currentEnvironmentScore: 15,
     });
     expect(first.summary).toContain("awaiting review");
+  });
+
+  it("supports deterministic intervention filtering by player set", () => {
+    const initial = state();
+    const prepared = prepareWeeklyActiveCareerFrontCandidate(initial)!;
+    const applied = applyPreparedActiveCareerFront(initial, prepared).state;
+    const selected = selectDecisionOption(
+      applied.consequenceState,
+      prepared.decision.id,
+      "reopen-route",
+      { week: applied.currentWeek, season: applied.currentSeason },
+      "player",
+      38,
+    );
+    const selectedState = { ...applied, consequenceState: selected.state };
+
+    expect(collectCareerInterventionEvidence(selectedState, new Set(["player-front"])))
+      .toEqual(collectCareerInterventionEvidence(selectedState, "player-front"));
+    expect(collectCareerInterventionEvidence(selectedState, new Set(["missing-player"])))
+      .toEqual([]);
   });
 
   it("does not re-offer a late-season front until the prior pathway arc fully clears", () => {

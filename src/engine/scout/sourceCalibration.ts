@@ -21,6 +21,12 @@ export interface SourceEvidenceCalibrationResult {
   npcReports: Record<string, NPCScoutReport>;
   contactIntel: Record<string, HiddenIntel[]>;
   calibratedClaimIds: string[];
+  calibratedClaimIdsByReviewId: Record<string, string[]>;
+}
+
+interface SourceEvidenceCalibrationInput {
+  npcReports: Record<string, NPCScoutReport>;
+  contactIntel: Record<string, HiddenIntel[]>;
 }
 
 interface ObservableDirection {
@@ -156,26 +162,66 @@ export function calibrateEvidenceClaimFromReview(
   };
 }
 
+function indexReviewsByPlayer(
+  reviews: readonly RecommendationReview[],
+): Map<string, RecommendationReview[]> {
+  const reviewsByPlayer = new Map<string, RecommendationReview[]>();
+  for (const review of reviews) {
+    const existing = reviewsByPlayer.get(review.playerId);
+    if (existing) {
+      existing.push(review);
+      continue;
+    }
+    reviewsByPlayer.set(review.playerId, [review]);
+  }
+  return reviewsByPlayer;
+}
+
+function calibrateEvidenceClaimFromOrderedReviews(
+  claim: ScoutEvidenceClaim,
+  reviews: readonly RecommendationReview[],
+): { claim: ScoutEvidenceClaim; reviewId?: string } {
+  let calibratedClaim = claim;
+  for (const review of reviews) {
+    const nextClaim = calibrateEvidenceClaimFromReview(calibratedClaim, review);
+    if (nextClaim !== calibratedClaim) {
+      return { claim: nextClaim, reviewId: review.id };
+    }
+    calibratedClaim = nextClaim;
+  }
+  return { claim };
+}
+
 /**
  * Calibrate only persisted, player-visible source claims against a completed
  * observable review. The first valid checkpoint is immutable: save/reload or a
  * later review cannot rewrite a source's historical record.
  */
-export function calibrateSourceEvidenceFromReview(input: {
-  npcReports: Record<string, NPCScoutReport>;
-  contactIntel: Record<string, HiddenIntel[]>;
-  review: RecommendationReview;
-}): SourceEvidenceCalibrationResult {
+export function calibrateSourceEvidenceFromReviews(
+  input: SourceEvidenceCalibrationInput & {
+    reviews: readonly RecommendationReview[];
+  },
+): SourceEvidenceCalibrationResult {
   const calibratedClaimIds: string[] = [];
+  const calibratedClaimIdsByReviewId: Record<string, string[]> = {};
+  const reviewsByPlayer = indexReviewsByPlayer(input.reviews);
+
   const npcReports = Object.fromEntries(
     Object.entries(input.npcReports).map(([id, report]) => {
-      if (report.playerId !== input.review.playerId || !report.evidenceClaims?.length) {
+      const reviews = reviewsByPlayer.get(report.playerId);
+      if (!reviews?.length || !report.evidenceClaims?.length) {
         return [id, report];
       }
       const evidenceClaims = report.evidenceClaims.map((claim) => {
-        const calibrated = calibrateEvidenceClaimFromReview(claim, input.review);
-        if (calibrated !== claim) calibratedClaimIds.push(claim.id);
-        return calibrated;
+        const result = calibrateEvidenceClaimFromOrderedReviews(claim, reviews);
+        if (result.claim !== claim) {
+          calibratedClaimIds.push(claim.id);
+          if (result.reviewId) {
+            calibratedClaimIdsByReviewId[result.reviewId] ??= [];
+            calibratedClaimIdsByReviewId[result.reviewId].push(claim.id);
+          }
+        }
+        return result.claim;
       });
       return [id, evidenceClaims.some((claim, index) => claim !== report.evidenceClaims![index])
         ? { ...report, evidenceClaims }
@@ -185,13 +231,18 @@ export function calibrateSourceEvidenceFromReview(input: {
 
   const contactIntel = Object.fromEntries(
     Object.entries(input.contactIntel).map(([playerId, entries]) => {
-      if (playerId !== input.review.playerId) return [playerId, entries];
+      const reviews = reviewsByPlayer.get(playerId);
+      if (!reviews?.length) return [playerId, entries];
       const calibratedEntries = entries.map((entry) => {
         if (!entry.evidenceClaim) return entry;
-        const calibrated = calibrateEvidenceClaimFromReview(entry.evidenceClaim, input.review);
-        if (calibrated === entry.evidenceClaim) return entry;
+        const result = calibrateEvidenceClaimFromOrderedReviews(entry.evidenceClaim, reviews);
+        if (result.claim === entry.evidenceClaim) return entry;
         calibratedClaimIds.push(entry.evidenceClaim.id);
-        return { ...entry, evidenceClaim: calibrated };
+        if (result.reviewId) {
+          calibratedClaimIdsByReviewId[result.reviewId] ??= [];
+          calibratedClaimIdsByReviewId[result.reviewId].push(entry.evidenceClaim.id);
+        }
+        return { ...entry, evidenceClaim: result.claim };
       });
       return [playerId, calibratedEntries.some((entry, index) => entry !== entries[index])
         ? calibratedEntries
@@ -203,5 +254,23 @@ export function calibrateSourceEvidenceFromReview(input: {
     npcReports,
     contactIntel,
     calibratedClaimIds: [...new Set(calibratedClaimIds)],
+    calibratedClaimIdsByReviewId: Object.fromEntries(
+      Object.entries(calibratedClaimIdsByReviewId).map(([reviewId, claimIds]) => [
+        reviewId,
+        [...new Set(claimIds)],
+      ]),
+    ),
   };
+}
+
+export function calibrateSourceEvidenceFromReview(
+  input: SourceEvidenceCalibrationInput & {
+    review: RecommendationReview;
+  },
+): SourceEvidenceCalibrationResult {
+  return calibrateSourceEvidenceFromReviews({
+    npcReports: input.npcReports,
+    contactIntel: input.contactIntel,
+    reviews: [input.review],
+  });
 }

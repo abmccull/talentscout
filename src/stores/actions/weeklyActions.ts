@@ -133,7 +133,7 @@ import {
 import {
   completeAcademyRecommendationReview,
 } from "@/engine/youth/recommendationReviews";
-import { calibrateSourceEvidenceFromReview } from "@/engine/scout/sourceCalibration";
+import { calibrateSourceEvidenceFromReviews } from "@/engine/scout/sourceCalibration";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
 import { getCountryDataSync, getAvailableCountries } from "@/data/index";
 import {
@@ -859,10 +859,12 @@ export function createWeeklyActions(
     // Complete due one- and two-season reviews from canonical movement,
     // appearance/rating, and injury history. Hidden ability is never read.
     let recommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
-    let calibratedNPCReports = stateWithScheduleApplied.npcReports;
-    let calibratedContactIntel = stateWithScheduleApplied.contactIntel;
     let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
+    const completedReviewNotifications: Array<{
+      review: GameState["recommendationReviews"][string];
+      player: Player;
+    }> = [];
     const dueRecommendationReviews = Object.values(recommendationReviews).filter((review) => {
       if (review.status !== "scheduled") return false;
       return stateWithScheduleApplied.currentSeason > review.dueSeason
@@ -880,12 +882,19 @@ export function createWeeklyActions(
       ReturnType<typeof collectCareerInterventionEvidence>
     >();
     if (dueRecommendationReviews.length > 0) {
+      const dueReviewPlayerIds = new Set(
+        dueRecommendationReviews.map((review) => review.playerId),
+      );
       for (const movement of stateWithScheduleApplied.playerMovementHistory) {
+        if (!dueReviewPlayerIds.has(movement.playerId)) continue;
         const movements = movementHistoryByPlayerId.get(movement.playerId) ?? [];
         movements.push(movement);
         movementHistoryByPlayerId.set(movement.playerId, movements);
       }
-      for (const intervention of collectCareerInterventionEvidence(stateWithScheduleApplied)) {
+      for (const intervention of collectCareerInterventionEvidence(
+        stateWithScheduleApplied,
+        dueReviewPlayerIds,
+      )) {
         const interventions = careerInterventionsByPlayerId.get(intervention.playerId) ?? [];
         interventions.push(intervention);
         careerInterventionsByPlayerId.set(intervention.playerId, interventions);
@@ -927,25 +936,37 @@ export function createWeeklyActions(
       });
       if (result.status !== "completed") continue;
       recommendationReviews[result.review.id] = result.review;
-      const sourceCalibration = calibrateSourceEvidenceFromReview({
-        npcReports: calibratedNPCReports,
-        contactIntel: calibratedContactIntel,
-        review: result.review,
-      });
-      calibratedNPCReports = sourceCalibration.npcReports;
-      calibratedContactIntel = sourceCalibration.contactIntel;
       recommendationCalibrationXp += result.review.confidenceCalibration === undefined
         ? 1
         : result.review.confidenceCalibration >= 75
           ? 5
           : 3;
+      completedReviewNotifications.push({
+        review: result.review,
+        player: reviewedPlayer,
+      });
+    }
+    const sourceCalibration = completedReviewNotifications.length > 0
+      ? calibrateSourceEvidenceFromReviews({
+          npcReports: stateWithScheduleApplied.npcReports,
+          contactIntel: stateWithScheduleApplied.contactIntel,
+          reviews: completedReviewNotifications.map(({ review }) => review),
+        })
+      : {
+          npcReports: stateWithScheduleApplied.npcReports,
+          contactIntel: stateWithScheduleApplied.contactIntel,
+          calibratedClaimIds: [],
+          calibratedClaimIdsByReviewId: {},
+        };
+    for (const { review, player: reviewedPlayer } of completedReviewNotifications) {
+      const calibratedClaimIds = sourceCalibration.calibratedClaimIdsByReviewId[review.id] ?? [];
       reviewMessages.push({
-        id: `recommendation-review-${result.review.id}`,
+        id: `recommendation-review-${review.id}`,
         week: stateWithScheduleApplied.currentWeek,
         season: stateWithScheduleApplied.currentSeason,
         type: "feedback",
         title: `${review.checkpoint === "oneSeason" ? "One-Season" : "Two-Season"} Recommendation Review`,
-        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} scored ${result.review.overallScore ?? "unresolved"}/100. ${(result.review.findings ?? []).join(" ")}${sourceCalibration.calibratedClaimIds.length > 0 ? ` ${sourceCalibration.calibratedClaimIds.length} attributed source claim${sourceCalibration.calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
+        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} scored ${review.overallScore ?? "unresolved"}/100. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
         read: false,
         actionRequired: false,
         relatedId: reviewedPlayer.id,
@@ -955,8 +976,8 @@ export function createWeeklyActions(
     stateWithScheduleApplied = {
       ...stateWithScheduleApplied,
       recommendationReviews,
-      npcReports: calibratedNPCReports,
-      contactIntel: calibratedContactIntel,
+      npcReports: sourceCalibration.npcReports,
+      contactIntel: sourceCalibration.contactIntel,
       scout: recommendationCalibrationXp > 0
         ? applyScoutSkillXp(stateWithScheduleApplied.scout, {
             playerJudgment: recommendationCalibrationXp,
