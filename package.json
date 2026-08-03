@@ -90,8 +90,11 @@
     "wait-on": "^9.0.4"
   },
   "overrides": {
+    "@electron/get@5.0.0": {
+      "undici": "7.29.0"
+    },
     "brace-expansion": "5.0.9",
-    "fast-uri": "4.1.1",
+    "fast-uri": "4.1.2",
     "postcss": "8.5.25",
     "sharp": "0.35.3",
     "tar": "7.5.22"
