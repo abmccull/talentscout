@@ -103,28 +103,40 @@ export class GamePage {
     // acknowledgements after their first simulated week. Drain the full stack
     // so a late Week Summary cannot strand the canonical advancement helper.
     for (let attempt = 0; attempt < 32; attempt++) {
-      const dialogs = this.page.getByRole("dialog");
-      const dialogCount = await dialogs.count();
-      let dismissed = false;
-      for (let index = dialogCount - 1; index >= 0; index--) {
-        const dialog = dialogs.nth(index);
-        if (!(await dialog.isVisible({ timeout: 250 }).catch(() => false))) continue;
-        const dismissButton = dialog.getByRole("button", {
-          name: /^(Incredible!|Continue|Close week summary|Continue to promotion|Continue to milestone)$/,
-        });
-        if (!(await dismissButton.isVisible({ timeout: 250 }).catch(() => false))) continue;
-        // A milestone acknowledgement can replace the entire dialog on the
-        // same render turn. Bound the click so Playwright cannot keep retrying
-        // a control that already dispatched and detached.
-        const clicked = await dismissButton.click({ timeout: 1_500 })
-          .then(() => true)
-          .catch(() => false);
-        if (!clicked) continue;
-        await this.page.waitForTimeout(150);
-        dismissed = true;
-        break;
-      }
+      // Resolve the live control in one browser turn. Role-locator actionability
+      // retries are counterproductive here because a successful acknowledgement
+      // intentionally replaces the dialog immediately.
+      const dismissed = await this.page.evaluate(() => {
+        const allowedLabels = new Set([
+          "Incredible!",
+          "Continue",
+          "Close week summary",
+          "Continue to promotion",
+          "Continue to milestone",
+        ]);
+        const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')];
+        for (let index = dialogs.length - 1; index >= 0; index--) {
+          const dialog = dialogs[index];
+          const style = window.getComputedStyle(dialog);
+          if (
+            style.display === "none"
+            || style.visibility === "hidden"
+            || dialog.getClientRects().length === 0
+          ) {
+            continue;
+          }
+          const button = [...dialog.querySelectorAll<HTMLButtonElement>("button")]
+            .find((candidate) =>
+              !candidate.disabled
+              && allowedLabels.has(candidate.textContent?.trim() ?? ""));
+          if (!button) continue;
+          button.click();
+          return true;
+        }
+        return false;
+      }).catch(() => false);
       if (!dismissed) return;
+      await this.page.waitForTimeout(150);
     }
   }
 
