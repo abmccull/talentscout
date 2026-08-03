@@ -39,6 +39,7 @@ interface ObservationContextResolutionInput {
   player: Pick<Player, "id" | "position" | "secondaryPositions" | "naturalRole">;
   context: ObservationContext;
   existingObservations: readonly Observation[];
+  playerObservations?: readonly Observation[];
   situation?: ObservationSituationSnapshot;
 }
 
@@ -268,14 +269,12 @@ function normalizedHash(seed: string): number {
 
 function countSameSituation(
   observations: readonly Observation[],
-  playerId: string,
   repetitionKey: string | undefined,
 ): number {
   if (!repetitionKey) return 0;
   return observations.filter(
     (observation) =>
-      observation.playerId === playerId
-      && observation.situation?.repetitionKey === repetitionKey,
+      observation.situation?.repetitionKey === repetitionKey,
   ).length;
 }
 
@@ -308,15 +307,15 @@ export function deriveObservationContextResolution(
   input: ObservationContextResolutionInput,
 ): ObservationContextResolution {
   const template = CONTEXT_TEMPLATES[input.context];
-  const playerObservations = input.existingObservations.filter(
-    (observation) => observation.playerId === input.player.id,
-  );
+  const playerObservations = input.playerObservations
+    ?? input.existingObservations.filter(
+      (observation) => observation.playerId === input.player.id,
+    );
   const sameContextCount = playerObservations.filter(
     (observation) => observation.context === input.context,
   ).length;
   const sameSituationCount = countSameSituation(
     playerObservations,
-    input.player.id,
     input.situation?.repetitionKey,
   );
   const changedContext = playerObservations.length > 0 && sameContextCount === 0;

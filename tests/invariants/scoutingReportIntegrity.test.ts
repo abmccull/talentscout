@@ -13,6 +13,7 @@ import { RNG } from "@/engine/rng";
 import { createScout } from "@/engine/scout/creation";
 import {
   createObservationEvidenceIndex,
+  createObservationEvidenceIndexFromRecord,
   getPlayerObservationEvidence,
   observePlayer,
   observePlayerLight,
@@ -171,6 +172,154 @@ describe("scouting evidence invariants", () => {
     upsertObservationEvidence(index, replacement);
 
     expect(getPlayerObservationEvidence(index, player.id)).toEqual([replacement]);
+  });
+
+  it("builds record-backed evidence indexes in insertion order and tracks observed players through moves", () => {
+    const player = makePlayer();
+    const teammate = generatePlayer(new RNG("record-index-teammate"), {
+      position: "CB",
+      ageRange: [18, 18],
+      abilityRange: [86, 86],
+      nationality: "English",
+      clubId: "",
+    });
+    const scout = makeScout();
+    const playerFirst = withDate(observePlayerLight(
+      new RNG("record-index-player-first"),
+      player,
+      scout,
+      "academyVisit",
+      [],
+    ), 0);
+    const teammateFirst = withDate(observePlayerLight(
+      new RNG("record-index-teammate-first"),
+      teammate,
+      scout,
+      "trainingGround",
+      [],
+    ), 0);
+    const playerSecond = withDate(observePlayerLight(
+      new RNG("record-index-player-second"),
+      player,
+      scout,
+      "videoAnalysis",
+      [playerFirst],
+    ), 1);
+    const teammateSecond = withDate(observePlayerLight(
+      new RNG("record-index-teammate-second"),
+      teammate,
+      scout,
+      "statsBriefing",
+      [teammateFirst],
+    ), 1);
+
+    const record = {
+      [playerFirst.id]: playerFirst,
+      [teammateFirst.id]: teammateFirst,
+      [playerSecond.id]: playerSecond,
+      [teammateSecond.id]: teammateSecond,
+    };
+    const index = createObservationEvidenceIndexFromRecord(record);
+
+    expect(getPlayerObservationEvidence(index, player.id)).toEqual([playerFirst, playerSecond]);
+    expect(getPlayerObservationEvidence(index, teammate.id)).toEqual([teammateFirst, teammateSecond]);
+    expect(Array.from(index.observedPlayerIds)).toEqual([player.id, teammate.id]);
+
+    upsertObservationEvidence(index, { ...teammateFirst, playerId: player.id });
+    expect(Array.from(index.observedPlayerIds)).toEqual([player.id, teammate.id]);
+    expect(getPlayerObservationEvidence(index, teammate.id)).toEqual([teammateSecond]);
+
+    upsertObservationEvidence(index, { ...teammateSecond, playerId: player.id });
+    expect(Array.from(index.observedPlayerIds)).toEqual([player.id]);
+    expect(getPlayerObservationEvidence(index, teammate.id)).toEqual([]);
+  });
+
+  it("keeps mature mixed-history light observations outcome- and RNG-equivalent", () => {
+    const player = makePlayer();
+    const otherPlayer = generatePlayer(new RNG("mature-history-other"), {
+      position: "RW",
+      ageRange: [18, 18],
+      abilityRange: [88, 88],
+      nationality: "English",
+      clubId: "",
+    });
+    const scout = makeScout();
+    const history: Observation[] = [];
+    const targetContexts = [
+      "academyVisit",
+      "trainingGround",
+      "videoAnalysis",
+      "schoolMatch",
+      "followUpSession",
+    ] as const;
+    const otherContexts = [
+      "statsBriefing",
+      "academyTrialDay",
+      "deepVideoAnalysis",
+      "youthFestival",
+      "grassrootsTournament",
+    ] as const;
+
+    for (let index = 0; index < targetContexts.length; index++) {
+      const targetObservation = withDate(observePlayerLight(
+        new RNG(`mature-target-${index}`),
+        player,
+        scout,
+        targetContexts[index],
+        history,
+        index % 2,
+        {
+          evidenceAttributes: index % 2 === 0 ? ["passing", "vision"] : ["agility", "teamwork"],
+          focusLens: index % 2 === 0 ? "tactical" : "technical",
+          confidenceBonus: 0.03,
+        },
+      ), history.length);
+      history.push(targetObservation);
+
+      const otherObservation = withDate(observePlayerLight(
+        new RNG(`mature-other-${index}`),
+        otherPlayer,
+        scout,
+        otherContexts[index],
+        history,
+      ), history.length);
+      history.push(otherObservation);
+    }
+
+    const index = createObservationEvidenceIndex(history);
+    const legacyRng = new RNG("mature-indexed-equivalence");
+    const indexedRng = new RNG("mature-indexed-equivalence");
+    const legacyObservation = observePlayerLight(
+      legacyRng,
+      player,
+      scout,
+      "youthTournament",
+      history,
+      2,
+      {
+        evidenceAttributes: ["passing", "vision", "anticipation"],
+        focusLens: "tactical",
+        confidenceBonus: 0.04,
+        evidencePasses: 2,
+      },
+    );
+    const indexedObservation = observePlayerLight(
+      indexedRng,
+      player,
+      scout,
+      "youthTournament",
+      getPlayerObservationEvidence(index, player.id),
+      2,
+      {
+        evidenceAttributes: ["passing", "vision", "anticipation"],
+        focusLens: "tactical",
+        confidenceBonus: 0.04,
+        evidencePasses: 2,
+      },
+    );
+
+    expect(indexedObservation).toEqual(legacyObservation);
+    expect(indexedRng.nextFloat(0, 1)).toBe(legacyRng.nextFloat(0, 1));
   });
 
   it("increments light-observation depth linearly from distinct records", () => {

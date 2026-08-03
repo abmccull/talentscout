@@ -836,6 +836,9 @@ export function createWeeklyActions(
         focusDepthByType: choiceFocusDepthByType,
         focusedPlayersByType: choiceFocusedPlayersByType,
         weekSimulation: simChoices,
+        noteDiagnostic: (key, value) => {
+          noteActivityDiagnostic(`observation.${key}`, value);
+        },
       }),
     );
     stateWithScheduleApplied = observationActivities.state;

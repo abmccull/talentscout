@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Activity, GameState } from "@/engine/core/types";
+import type { Activity, GameState, Observation } from "@/engine/core/types";
+import type { WeeklySimulationDiagnosticValue } from "@/engine/core/weeklySimulationTelemetry";
 import { addActivity, createWeekSchedule, processCompletedWeek } from "@/engine/core/calendar";
 import { createRNG } from "@/engine/rng";
+import {
+  createObservationEvidenceIndex,
+  getPlayerObservationEvidence,
+  upsertObservationEvidence,
+} from "@/engine/scout/perception";
 import { processWeeklyObservationActivities } from "@/stores/actions/weeklyObservationActivities";
 import { processWeeklyPlacementResolution } from "@/stores/actions/weeklyPlacementResolution";
+import { processWeeklyProfessionalObservationActivities } from "@/stores/actions/weeklyProfessionalObservationActivities";
+import { resolveScoutEffectiveCountry } from "@/stores/actions/weeklySimulationSupport";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import { buildProfessionalCaseOpportunityLockMetadata } from "@/engine/youth/professionalCaseOpportunities";
 
@@ -80,6 +88,30 @@ function scheduleFollowUpSession(state: GameState, targetId: string): GameState 
   };
 }
 
+function scheduleVideoAnalysis(state: GameState): GameState {
+  const initialSchedule = createWeekSchedule(state.currentWeek, state.currentSeason);
+  const schoolVideo: Activity = {
+    type: "watchVideo",
+    slots: 1,
+    targetId: "video-school",
+    description: "Review school match footage",
+  };
+  const grassrootsVideo: Activity = {
+    type: "watchVideo",
+    slots: 1,
+    targetId: "video-grassroots",
+    description: "Review grassroots highlights",
+  };
+  return {
+    ...state,
+    schedule: addActivity(
+      addActivity(initialSchedule, schoolVideo, 0),
+      grassrootsVideo,
+      1,
+    ),
+  };
+}
+
 function resolveObservationWeek(state: GameState) {
   const weekResult = processCompletedWeek(
     state.schedule,
@@ -102,6 +134,92 @@ function resolveObservationWeek(state: GameState) {
     focusedPlayersByType: new Map(),
     weekSimulation: null,
   });
+}
+
+function resolveProfessionalVideoWeek(
+  state: GameState,
+  options: {
+    noteDiagnostic?: (
+      key: string,
+      value: WeeklySimulationDiagnosticValue | undefined,
+    ) => void;
+  } = {},
+) {
+  const weekResult = processCompletedWeek(
+    state.schedule,
+    state.scout,
+    createRNG(`${state.seed}-week-${state.currentWeek}-${state.currentSeason}`),
+  );
+  const observations = { ...state.observations };
+  const observationEvidenceIndex = createObservationEvidenceIndex(
+    Object.values(observations),
+  );
+  const playerEvidence = (playerId: string): Observation[] =>
+    getPlayerObservationEvidence(observationEvidenceIndex, playerId);
+  const recordObservation = (observation: Observation): void => {
+    observations[observation.id] = observation;
+    upsertObservationEvidence(observationEvidenceIndex, observation);
+  };
+  const focusedYouth = Object.values(state.unsignedYouth).find(
+    (youth) => !youth.placed && !youth.retired,
+  );
+  const focusTargetId = focusedYouth?.player.id;
+
+  const result = processWeeklyProfessionalObservationActivities({
+    sourceState: state,
+    state,
+    weekResult,
+    qualityByType: new Map(),
+    scout: state.scout,
+    effectiveScoutCountry: resolveScoutEffectiveCountry(
+      state.scout,
+      state.regionalKnowledge,
+      state.currentWeek,
+    ),
+    rng: createRNG(`${state.seed}-actobs-${state.currentWeek}-${state.currentSeason}`),
+    discoveries: state.discoveryRecords ?? [],
+    messages: [],
+    playersDiscovered: 0,
+    observationsGenerated: 0,
+    allPlayers: Object.values(state.players),
+    extraAttributesPerSession: 0,
+    playerEvidence,
+    recordObservation,
+    observedPlayerIds: new Set(Object.values(observations).map((observation) => observation.playerId)),
+    adjustedRange: (minimum, maximum, modifier) => [
+      Math.max(1, minimum + modifier),
+      Math.max(1, maximum + modifier),
+    ],
+    discoveryModifier: () => 0,
+    relationshipModifier: () => 0,
+    reportQualityModifier: () => 0,
+    focusDepth: (activityType) => (
+      activityType === "watchVideo" && focusTargetId ? 2 : 0
+    ),
+    focusPlayers: (activityType) => (
+      activityType === "watchVideo" && focusTargetId ? [focusTargetId] : []
+    ),
+    prioritizeYouth: (pool, activityType) => {
+      if (activityType !== "watchVideo" || !focusTargetId) return pool;
+      const focused = pool.filter((youth) => youth.player.id === focusTargetId);
+      const rest = pool.filter((youth) => youth.player.id !== focusTargetId);
+      return [...focused, ...rest];
+    },
+    prioritizePlayers: (pool) => pool,
+    tierLabels: {
+      poor: "Poor",
+      average: "Average",
+      good: "Good",
+      excellent: "Excellent",
+      exceptional: "Exceptional",
+    },
+    noteDiagnostic: options.noteDiagnostic,
+  });
+
+  return {
+    ...result,
+    observations,
+  };
 }
 
 describe("weekly observation transaction", () => {
@@ -150,6 +268,32 @@ describe("weekly observation transaction", () => {
     expect(result.playersDiscovered).toBe(0);
     expect(result.state.observations).toEqual(empty.observations);
     expect(result.state.observations).toBe(empty.observations);
+  }, 30_000);
+
+  it("keeps youth watchVideo output stable when optional diagnostics are enabled", async () => {
+    const state = scheduleVideoAnalysis(await createObservationState("observation-video-diagnostics"));
+    const before = JSON.stringify(state);
+    const diagnostics = new Map<string, WeeklySimulationDiagnosticValue>();
+
+    const baseline = resolveProfessionalVideoWeek(state);
+    const withDiagnostics = resolveProfessionalVideoWeek(state, {
+      noteDiagnostic: (key, value) => {
+        diagnostics.set(key, value ?? null);
+      },
+    });
+
+    expect(withDiagnostics).toEqual(baseline);
+    expect(withDiagnostics.observationsGenerated).toBeGreaterThan(0);
+    expect(Object.keys(withDiagnostics.observations).length)
+      .toBeGreaterThan(Object.keys(state.observations).length);
+    expect(JSON.stringify(state)).toBe(before);
+    expect(diagnostics.get("professionalObservation.watchVideoYouth.scheduledActivities")).toBe(2);
+    expect(diagnostics.get("professionalObservation.watchVideoYouth.selectedYouthCount"))
+      .toBe(withDiagnostics.observationsGenerated - 2);
+    expect(diagnostics.get("professionalObservation.watchVideoYouth.focusObservationCount")).toBe(2);
+    expect(typeof diagnostics.get("professionalObservation.watchVideoYouth.poolSelectionMs")).toBe("number");
+    expect(typeof diagnostics.get("professionalObservation.watchVideoYouth.venueObservationMs")).toBe("number");
+    expect(typeof diagnostics.get("professionalObservation.watchVideoYouth.updateMessageMs")).toBe("number");
   }, 30_000);
 
   it("consumes a matching professional-case lock once through weekly completion and does not replay it", async () => {

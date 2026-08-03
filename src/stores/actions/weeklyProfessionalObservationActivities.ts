@@ -10,6 +10,7 @@ import type {
   UnsignedYouth,
 } from "@/engine/core/types";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
+import type { WeeklySimulationDiagnosticValue } from "@/engine/core/weeklySimulationTelemetry";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
 import { createRNG, type RNG } from "@/engine/rng";
 import { getScheduledActivityInstances, processCompletedWeek } from "@/engine/core/calendar";
@@ -24,6 +25,12 @@ import {
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
+
+function readDiagnosticNow(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
 
 export interface WeeklyProfessionalObservationInput {
   sourceState: GameState;
@@ -52,6 +59,10 @@ export interface WeeklyProfessionalObservationInput {
   prioritizeYouth: (pool: UnsignedYouth[], activityType: Activity["type"]) => UnsignedYouth[];
   prioritizePlayers: (pool: Player[], activityType: Activity["type"]) => Player[];
   tierLabels: Readonly<Record<string, string>>;
+  noteDiagnostic?: (
+    key: string,
+    value: WeeklySimulationDiagnosticValue | undefined,
+  ) => void;
 }
 export interface WeeklyProfessionalObservationResult {
   state: GameState;
@@ -92,6 +103,7 @@ export function processWeeklyProfessionalObservationActivities(
   const prioritizeFocusedYouth = input.prioritizeYouth;
   const prioritizeFocusedPlayers = input.prioritizePlayers;
   const TIER_LABELS = input.tierLabels;
+  const noteDiagnostic = input.noteDiagnostic;
 
   // Every automatic observation is routed through the shared deterministic
   // situation producer before perception runs. Keep these positional adapters
@@ -560,10 +572,31 @@ export function processWeeklyProfessionalObservationActivities(
         "video-grassroots": "grassrootsTournament",
         "video-school": "schoolMatch",
       };
+      const scoutQualityData = buildScoutQualityDataForState(
+        stateWithScheduleApplied,
+        effectiveScoutCountry,
+      );
       let updatedUnsignedYouthVideo = { ...stateWithScheduleApplied.unsignedYouth };
+      const unsignedYouthByPlayerId = new Map(
+        Object.values(updatedUnsignedYouthVideo).map((youth) => [youth.player.id, youth]),
+      );
+      const discoveredPlayerIds = new Set(actDiscoveries.map((record) => record.playerId));
+      let poolSelectionMs = 0;
+      let venueObservationMs = 0;
+      let updateMessageMs = 0;
+      let selectedYouthCount = 0;
+      let observedYouthCount = 0;
+      let discoveredYouthCount = 0;
+      let focusObservationCount = 0;
+
+      noteDiagnostic?.(
+        "professionalObservation.watchVideoYouth.scheduledActivities",
+        scheduledVideoActivities.length,
+      );
       scheduledVideoActivities.forEach((videoActivity, videoIdx) => {
         const venueType = (venueMapping[videoActivity.targetId ?? ""] ?? "youthFestival") as
           "academyTrialDay" | "grassrootsTournament" | "schoolMatch" | "youthFestival";
+        const poolSelectionStartedAt = readDiagnosticNow();
         const venuePool = getYouthVenuePool(
           actObsRng,
           venueType,
@@ -574,17 +607,17 @@ export function processWeeklyProfessionalObservationActivities(
           undefined,
           stateWithScheduleApplied.currentWeek,
           undefined,
-          buildScoutQualityDataForState(
-            stateWithScheduleApplied,
-            effectiveScoutCountry,
-          ),
+          scoutQualityData,
         );
         const prioritizedPool = prioritizeFocusedYouth([...venuePool], "watchVideo");
         const count = Math.min(prioritizedPool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        poolSelectionMs += Math.max(0, readDiagnosticNow() - poolSelectionStartedAt);
+        selectedYouthCount += count;
 
         for (let i = 0; i < count; i++) {
           const youth = prioritizedPool[i];
           const existingObsForYouth = playerEvidence(youth.player.id);
+          const venueObservationStartedAt = readDiagnosticNow();
           const result = processVenueObservation(
             actObsRng, currentScout, youth, "videoAnalysis",
             existingObsForYouth, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason,
@@ -596,27 +629,31 @@ export function processWeeklyProfessionalObservationActivities(
               confidence: Math.min(1, r.confidence + videoConfBoost),
             }));
           }
+          venueObservationMs += Math.max(0, readDiagnosticNow() - venueObservationStartedAt);
+
+          const updateMessageStartedAt = readDiagnosticNow();
           recordObservation(result.observation);
           weekObservationsGenerated++;
-          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === youth.player.id);
-          if (!alreadyDiscovered) {
+          observedYouthCount++;
+          if (!discoveredPlayerIds.has(youth.player.id)) {
+            discoveredPlayerIds.add(youth.player.id);
             actDiscoveries = [...actDiscoveries, recordDiscovery(youth.player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
             weekPlayersDiscovered++;
+            discoveredYouthCount++;
           }
           // Smaller visibility/buzz boost for video vs physical venue
           const updatedYouth = updatedUnsignedYouthVideo[youth.id];
           if (updatedYouth) {
-            updatedUnsignedYouthVideo = {
-              ...updatedUnsignedYouthVideo,
-              [youth.id]: {
-                ...updatedYouth,
-                visibility: Math.min(100, updatedYouth.visibility + 2),
-                buzzLevel: Math.min(100, updatedYouth.buzzLevel + 2),
-                discoveredBy: updatedYouth.discoveredBy.includes(currentScout.id)
-                  ? updatedYouth.discoveredBy
-                  : [...updatedYouth.discoveredBy, currentScout.id],
-              },
+            const nextYouth = {
+              ...updatedYouth,
+              visibility: Math.min(100, updatedYouth.visibility + 2),
+              buzzLevel: Math.min(100, updatedYouth.buzzLevel + 2),
+              discoveredBy: updatedYouth.discoveredBy.includes(currentScout.id)
+                ? updatedYouth.discoveredBy
+                : [...updatedYouth.discoveredBy, currentScout.id],
             };
+            updatedUnsignedYouthVideo[youth.id] = nextYouth;
+            unsignedYouthByPlayerId.set(nextYouth.player.id, nextYouth);
           }
           const topAttrs = result.observation.attributeReadings
             .sort((a, b) => b.perceivedValue - a.perceivedValue)
@@ -636,6 +673,7 @@ export function processWeeklyProfessionalObservationActivities(
             relatedId: youth.player.id,
             relatedEntityType: "player" as const,
           });
+          updateMessageMs += Math.max(0, readDiagnosticNow() - updateMessageStartedAt);
         }
       });
 
@@ -643,7 +681,7 @@ export function processWeeklyProfessionalObservationActivities(
       const focusRepeats = focusDepth("watchVideo");
       if (focusTargetIds.length > 0 && focusRepeats > 0) {
         const focusedYouthList = focusTargetIds
-          .map((id) => Object.values(updatedUnsignedYouthVideo).find((y) => y.player.id === id))
+          .map((id) => unsignedYouthByPlayerId.get(id))
           .filter((y): y is UnsignedYouth => !!y);
 
         if (focusedYouthList.length > 0) {
@@ -661,9 +699,17 @@ export function processWeeklyProfessionalObservationActivities(
             );
             recordObservation(focusResult.observation);
             weekObservationsGenerated++;
+            focusObservationCount++;
           }
         }
       }
+      noteDiagnostic?.("professionalObservation.watchVideoYouth.poolSelectionMs", poolSelectionMs);
+      noteDiagnostic?.("professionalObservation.watchVideoYouth.venueObservationMs", venueObservationMs);
+      noteDiagnostic?.("professionalObservation.watchVideoYouth.updateMessageMs", updateMessageMs);
+      noteDiagnostic?.("professionalObservation.watchVideoYouth.selectedYouthCount", selectedYouthCount);
+      noteDiagnostic?.("professionalObservation.watchVideoYouth.observedYouthCount", observedYouthCount);
+      noteDiagnostic?.("professionalObservation.watchVideoYouth.discoveredYouthCount", discoveredYouthCount);
+      noteDiagnostic?.("professionalObservation.watchVideoYouth.focusObservationCount", focusObservationCount);
       stateWithScheduleApplied = {
         ...stateWithScheduleApplied,
         unsignedYouth: updatedUnsignedYouthVideo,

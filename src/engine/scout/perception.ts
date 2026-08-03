@@ -46,6 +46,7 @@ import {
 export interface ObservationEvidenceIndex {
   readonly byPlayerId: Map<string, Observation[]>;
   readonly byObservationId: Map<string, Observation>;
+  readonly observedPlayerIds: Set<string>;
 }
 
 export function createObservationEvidenceIndex(
@@ -54,11 +55,33 @@ export function createObservationEvidenceIndex(
   const index: ObservationEvidenceIndex = {
     byPlayerId: new Map<string, Observation[]>(),
     byObservationId: new Map<string, Observation>(),
+    observedPlayerIds: new Set<string>(),
   };
 
   for (const observation of observations) {
     upsertObservationEvidence(index, observation);
   }
+  return index;
+}
+
+export function createObservationEvidenceIndexFromRecord(
+  observations: Record<string, Observation>,
+): ObservationEvidenceIndex {
+  const index: ObservationEvidenceIndex = {
+    byPlayerId: new Map<string, Observation[]>(),
+    byObservationId: new Map<string, Observation>(),
+    observedPlayerIds: new Set<string>(),
+  };
+
+  for (const observationId in observations) {
+    if (Object.prototype.hasOwnProperty.call(observations, observationId)) {
+      const observation = observations[observationId];
+      if (observation) {
+        upsertObservationEvidence(index, observation);
+      }
+    }
+  }
+
   return index;
 }
 
@@ -100,6 +123,7 @@ export function upsertObservationEvidence(
       existingPlayerEvidence.splice(existingIndex, 1);
       if (existingPlayerEvidence.length === 0) {
         index.byPlayerId.delete(existing.playerId);
+        index.observedPlayerIds.delete(existing.playerId);
       }
     }
   }
@@ -108,6 +132,7 @@ export function upsertObservationEvidence(
   playerEvidence.push(observation);
   index.byPlayerId.set(observation.playerId, playerEvidence);
   index.byObservationId.set(observation.id, observation);
+  index.observedPlayerIds.add(observation.playerId);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,8 +334,10 @@ export function computeScoutingBreakthroughBonus(
   playerId: string,
   currentContext: ObservationContext,
   currentFocusLens?: string,
+  playerObservations?: readonly Observation[],
 ): { bonus: number; isBreakthrough: boolean; previousMaxConfidence: number } {
-  const playerObs = existingObservations.filter((o) => o.playerId === playerId);
+  const playerObs = playerObservations ?? getPlayerObservations(existingObservations, playerId);
+  const history = summarizePlayerObservationHistory(playerObs);
 
   // ── Context diversity ──────────────────────────────────────────────
   // Count unique context types across all existing observations + the current one
@@ -328,7 +355,7 @@ export function computeScoutingBreakthroughBonus(
 
   // ── Focused lens breakthrough ──────────────────────────────────────
   // Count how many existing observations used a focused (non-general) lens
-  let focusedLensCount = playerObs.filter((o) => o.focusLens != null).length;
+  let focusedLensCount = history.focusedLensCount;
   if (currentFocusLens && currentFocusLens !== "general") {
     focusedLensCount += 1;
   }
@@ -338,14 +365,7 @@ export function computeScoutingBreakthroughBonus(
 
   // ── Determine if this is a breakthrough moment ─────────────────────
   // Check the previous max confidence across all readings for this player
-  let previousMaxConfidence = 0;
-  for (const obs of playerObs) {
-    for (const reading of obs.attributeReadings) {
-      if (reading.confidence > previousMaxConfidence) {
-        previousMaxConfidence = reading.confidence;
-      }
-    }
-  }
+  const previousMaxConfidence = history.previousMaxConfidence;
 
   // A breakthrough occurs when:
   // 1. The player's previous max confidence was below the plateau (0.65)
@@ -430,34 +450,66 @@ export interface LightObservationEvidenceOptions {
   difficulty?: DifficultyLevel;
 }
 
+interface PlayerObservationHistorySummary {
+  observationCount: number;
+  uniqueContextCount: number;
+  focusedLensCount: number;
+  previousMaxConfidence: number;
+  priorAttributeCounts: Map<PlayerAttribute, number>;
+}
+
+function getPlayerObservations(
+  observations: readonly Observation[],
+  playerId: string,
+): Observation[] {
+  return observations.filter((observation) => observation.playerId === playerId);
+}
+
 /**
  * Count distinct prior observation records that contain a reading for each
  * attribute. AttributeReading.observationCount is cumulative display state,
  * so summing it would compound history (1, 2, 4, 8...) instead of counting
  * the underlying evidence records (1, 2, 3, 4...).
  */
-function countPriorAttributeObservations(
-  observations: Observation[],
-  playerId: string,
-): Map<PlayerAttribute, number> {
+function summarizePlayerObservationHistory(
+  observations: readonly Observation[],
+): PlayerObservationHistorySummary {
   const counts = new Map<PlayerAttribute, number>();
+  const contexts = new Set<ObservationContext>();
   const seenObservationIds = new Set<string>();
+  let focusedLensCount = 0;
+  let previousMaxConfidence = 0;
 
   for (const observation of observations) {
-    if (observation.playerId !== playerId || seenObservationIds.has(observation.id)) {
-      continue;
+    contexts.add(observation.context);
+    if (observation.focusLens != null) {
+      focusedLensCount += 1;
     }
-    seenObservationIds.add(observation.id);
 
-    const attributesInObservation = new Set(
-      observation.attributeReadings.map((reading) => reading.attribute),
-    );
-    for (const attribute of attributesInObservation) {
-      counts.set(attribute, (counts.get(attribute) ?? 0) + 1);
+    for (const reading of observation.attributeReadings) {
+      if (reading.confidence > previousMaxConfidence) {
+        previousMaxConfidence = reading.confidence;
+      }
+    }
+
+    if (!seenObservationIds.has(observation.id)) {
+      seenObservationIds.add(observation.id);
+      const attributesInObservation = new Set(
+        observation.attributeReadings.map((reading) => reading.attribute),
+      );
+      for (const attribute of attributesInObservation) {
+        counts.set(attribute, (counts.get(attribute) ?? 0) + 1);
+      }
     }
   }
 
-  return counts;
+  return {
+    observationCount: observations.length,
+    uniqueContextCount: contexts.size,
+    focusedLensCount,
+    previousMaxConfidence,
+    priorAttributeCounts: counts,
+  };
 }
 
 /**
@@ -475,11 +527,13 @@ export function observePlayerLight(
   extraAttributes?: number,
   evidenceOptions?: LightObservationEvidenceOptions,
 ): Observation {
+  const playerObservations = getPlayerObservations(existingObservations, player.id);
+  const history = summarizePlayerObservationHistory(playerObservations);
   // Count distinct prior evidence records, never cumulative display values.
-  const priorCounts = countPriorAttributeObservations(existingObservations, player.id);
+  const priorCounts = history.priorAttributeCounts;
 
   // Context diversity: count distinct context types seen for this player
-  const contextDiversity = new Set(existingObservations.filter((o) => o.playerId === player.id).map((o) => o.context)).size / 6;
+  const contextDiversity = history.uniqueContextCount / 6;
   const contextResolution = deriveObservationContextResolution({
     player: {
       id: player.id,
@@ -489,6 +543,7 @@ export function observePlayerLight(
     },
     context,
     existingObservations,
+    playerObservations,
     situation: evidenceOptions?.situation,
   });
 
@@ -674,6 +729,7 @@ export function observePlayerLight(
     scout,
     existingObservations,
     context,
+    playerObservations,
   );
 
   // Personality reveal check — uses scout skills as raw numbers (Record<ScoutSkill, number>)
@@ -692,7 +748,7 @@ export function observePlayerLight(
   }
 
   // Progressive personality profile reveal
-  const playerObsCount = existingObservations.filter((o) => o.playerId === player.id).length + 1;
+  const playerObsCount = history.observationCount + 1;
   const psychoSkill = scout.skills.psychologicalRead;
   let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
   if (player.personalityProfile) {
@@ -742,11 +798,12 @@ export function observePlayer(
   focusLens?: string,
 ): Observation {
   // Count distinct prior evidence records, never cumulative display values.
-  const priorCounts = countPriorAttributeObservations(existingObservations, player.id);
+  const playerObservations = getPlayerObservations(existingObservations, player.id);
+  const history = summarizePlayerObservationHistory(playerObservations);
+  const priorCounts = history.priorAttributeCounts;
 
   // Context diversity: normalized count of unique context types for this player (0–1)
-  const playerObs = existingObservations.filter((o) => o.playerId === player.id);
-  const uniqueContextTypes = new Set<ObservationContext>(playerObs.map((o) => o.context));
+  const uniqueContextTypes = new Set<ObservationContext>(playerObservations.map((o) => o.context));
   uniqueContextTypes.add(context);
   const contextDiversity = Math.min(1, uniqueContextTypes.size / 5); // 5 possible context types
 
@@ -756,6 +813,7 @@ export function observePlayer(
     player.id,
     context,
     focusLens,
+    playerObservations,
   );
 
   // Accumulate readings
@@ -833,6 +891,7 @@ export function observePlayer(
     scout,
     existingObservations,
     context,
+    playerObservations,
   );
 
   // Personality reveal check — match contexts expose character under pressure
@@ -851,7 +910,7 @@ export function observePlayer(
   }
 
   // Progressive personality profile reveal
-  const matchObsCount = existingObservations.filter((o) => o.playerId === player.id).length + 1;
+  const matchObsCount = history.observationCount + 1;
   const matchPsychoSkill = scout.skills.psychologicalRead;
   let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
   if (player.personalityProfile) {

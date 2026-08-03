@@ -35,6 +35,7 @@ export interface BackgroundObservationSituationInput {
   observationContext: ObservationContext;
   player: Player;
   existingObservations: readonly Observation[];
+  playerObservationCount?: number;
   countryId?: string;
   venueType?: string;
   activityInstanceId?: string;
@@ -140,9 +141,10 @@ export function createBackgroundObservationSituation(
   const travelPosture = countryId && activeTravelCountry === countryId
     ? input.state.scout.travelBooking?.posture
     : undefined;
-  const observationOrdinal = input.existingObservations.filter(
-    (observation) => observation.playerId === input.player.id,
-  ).length;
+  const observationOrdinal = input.playerObservationCount
+    ?? input.existingObservations.filter(
+      (observation) => observation.playerId === input.player.id,
+    ).length;
   const activityInstanceId = resolveActivityInstanceId(
     input.state,
     input.activityType,

@@ -26,6 +26,13 @@ import {
   getMasteryPerkModifiers,
 } from "@/engine/specializations/masteryPerks";
 
+function getPlayerObservationHistory(
+  observations: readonly Observation[],
+  playerId: string,
+): Observation[] {
+  return observations.filter((observation) => observation.playerId === playerId);
+}
+
 function getMasteryObservationEffect(scout: Scout, context: ObservationContext): {
   extraAttributes: number;
   notes: string[];
@@ -74,6 +81,10 @@ export function produceWeeklyPlayerObservation(
 ): Observation {
   const memoryDetailBonus = input.scout.attributes.memory >= 15 ? 1 : 0;
   const masteryEffect = getMasteryObservationEffect(input.scout, input.context);
+  const playerObservations = getPlayerObservationHistory(
+    input.existingObservations,
+    input.player.id,
+  );
   const activityType = input.activityType
     ?? getBackgroundActivityTypeForContext(input.context);
   const evidence = createBackgroundObservationSituation({
@@ -82,6 +93,7 @@ export function produceWeeklyPlayerObservation(
     observationContext: input.context,
     player: input.player,
     existingObservations: input.existingObservations,
+    playerObservationCount: playerObservations.length,
     countryId: input.countryId,
     venueType: input.venueType,
     activityInstanceId: input.activityInstanceId,
@@ -92,7 +104,7 @@ export function produceWeeklyPlayerObservation(
     input.player,
     input.scout,
     input.context,
-    input.existingObservations,
+    playerObservations,
     (input.extraAttributes ?? 0) + memoryDetailBonus + masteryEffect.extraAttributes,
     {
       situation: evidence.situation,
@@ -119,6 +131,10 @@ export function produceWeeklyVenueObservation(
 ): ReturnType<typeof processVenueObservation> {
   const memoryDetailBonus = input.scout.attributes.memory >= 15 ? 1 : 0;
   const masteryEffect = getMasteryObservationEffect(input.scout, input.context);
+  const playerObservations = getPlayerObservationHistory(
+    input.existingObservations,
+    input.youth.player.id,
+  );
   const activityType = input.activityType
     ?? getBackgroundActivityTypeForContext(input.context);
   const evidence = createBackgroundObservationSituation({
@@ -127,6 +143,7 @@ export function produceWeeklyVenueObservation(
     observationContext: input.context,
     player: input.youth.player,
     existingObservations: input.existingObservations,
+    playerObservationCount: playerObservations.length,
     countryId: input.countryId ?? input.tournament?.country ?? input.youth.country,
     venueType: input.venueType ?? input.tournament?.id ?? input.context,
     activityInstanceId: input.activityInstanceId,
@@ -137,7 +154,7 @@ export function produceWeeklyVenueObservation(
     input.scout,
     input.youth,
     input.context,
-    input.existingObservations,
+    playerObservations,
     input.state.currentWeek,
     input.state.currentSeason,
     (input.extraAttributes ?? 0) + memoryDetailBonus + masteryEffect.extraAttributes,
