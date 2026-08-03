@@ -71,6 +71,7 @@ import { evaluateBoardDirectives } from "../career/management";
 import {
   processYouthAging,
   reconcileYouthSigningPlacements,
+  UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS,
 } from "../youth/generation";
 import { processAlumniWeek, generateAlumniSeasonSummary } from "../youth/alumni";
 import { generateSeasonEvents, getActiveSeasonEvents } from "./seasonEvents";
@@ -2758,8 +2759,10 @@ export function advanceWeek(
   const youthSigningIdentityCollisions = new Set<string>();
   const stagedYouthSigningPlayerIds = new Set<string>();
   const causallyLinkedYouthExitPlayerIds = new Set<string>();
+  const causallyReferencedPlayerIds = tickResult.youthAgingResult
+    ? collectCausallyReferencedPlayerIds(state)
+    : new Set<string>();
   if (tickResult.youthAgingResult) {
-    const causallyReferencedPlayerIds = collectCausallyReferencedPlayerIds(state);
     for (const { youthId, clubId } of tickResult.youthAgingResult.autoSigned) {
       const youth = state.unsignedYouth[youthId] ?? tickResult.youthAgingResult.updatedUnsignedYouth[youthId];
       if (youth) {
@@ -3073,7 +3076,7 @@ export function advanceWeek(
     });
   }
 
-  const lifecycleResolution = resolvePlayerMovements(
+  let lifecycleResolution = resolvePlayerMovements(
     {
       ...getLifecycleWorld(state),
       players: updatedPlayers,
@@ -3086,6 +3089,44 @@ export function advanceWeek(
     state.currentSeason,
     getSeasonLength(state.fixtures, state.currentSeason),
   );
+  const committedYouthSigningPlayerIds = new Set(
+    lifecycleResolution.applied
+      .filter((movement) => movement.type === "youthSigning")
+      .map((movement) => movement.playerId),
+  );
+  const rejectedStagedYouthPlayerIds = [...stagedYouthSigningPlayerIds].filter(
+    (playerId) => !committedYouthSigningPlayerIds.has(playerId),
+  );
+  const expiredCausalYouthFallbackIds = new Set(
+    (tickResult.youthAgingResult?.autoSigned ?? [])
+      .map(({ youthId }) => tickResult.youthAgingResult?.updatedUnsignedYouth[youthId]
+        ?? state.unsignedYouth[youthId])
+      .filter((youth): youth is UnsignedYouth => Boolean(youth))
+      .filter((youth) =>
+        rejectedStagedYouthPlayerIds.includes(youth.player.id)
+        && causallyReferencedPlayerIds.has(youth.player.id)
+        && state.currentSeason - youth.generatedSeason + 1
+          >= UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS)
+      .map((youth) => youth.player.id),
+  );
+  if (expiredCausalYouthFallbackIds.size > 0) {
+    const fallbackResolution = resolvePlayerMovements(
+      lifecycleResolution.state,
+      [...expiredCausalYouthFallbackIds].map((playerId) => ({
+        type: "footballExit" as const,
+        playerId,
+        reason: "Unsigned prospect left football after a final signing was rejected",
+      })),
+      state.currentWeek,
+      state.currentSeason,
+      getSeasonLength(state.fixtures, state.currentSeason),
+    );
+    lifecycleResolution = {
+      state: fallbackResolution.state,
+      applied: [...lifecycleResolution.applied, ...fallbackResolution.applied],
+      rejected: [...lifecycleResolution.rejected, ...fallbackResolution.rejected],
+    };
+  }
 
   updatedPlayers = lifecycleResolution.state.players;
   updatedClubs = lifecycleResolution.state.clubs;
@@ -3095,17 +3136,10 @@ export function advanceWeek(
   let updatedRetiredPlayerIds = lifecycleResolution.state.retiredPlayerIds;
   const updatedPlayerMovementHistory = lifecycleResolution.state.playerMovementHistory;
   let lifecycleFreeAgentPool = lifecycleResolution.state.freeAgentPool;
-  const committedYouthSigningPlayerIds = new Set(
-    lifecycleResolution.applied
-      .filter((movement) => movement.type === "youthSigning")
-      .map((movement) => movement.playerId),
-  );
-  const rejectedStagedYouthPlayerIds = [...stagedYouthSigningPlayerIds].filter(
-    (playerId) => !committedYouthSigningPlayerIds.has(playerId),
-  );
   if (rejectedStagedYouthPlayerIds.length > 0) {
     updatedPlayers = { ...updatedPlayers };
     for (const playerId of rejectedStagedYouthPlayerIds) {
+      if (expiredCausalYouthFallbackIds.has(playerId)) continue;
       // The unsigned dossier remains authoritative when financial or roster
       // approval rejects the proposed signing. Do not leave the temporary
       // detached Player in the active world under the same identity.

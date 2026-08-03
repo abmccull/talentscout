@@ -42,6 +42,7 @@ import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
 import { PlannerCompareTray } from "./calendar/PlannerCompareTray";
 import { PlannerOpportunitySheet } from "./calendar/PlannerOpportunitySheet";
+import { resolvePendingFeaturedActivity } from "./calendar/pendingFocus";
 import { PlannerWeekStrip } from "./calendar/PlannerWeekStrip";
 import { PlannerWeeklyStanceCard } from "./calendar/PlannerWeeklyStanceCard";
 import { buildPlannerCareerPressure } from "./calendar/plannerCareerPressure";
@@ -89,7 +90,6 @@ function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {
   if (fatigue >= 50) return "warn";
   return "ok";
 }
-
 
 export function CalendarScreen() {
   const {
@@ -472,12 +472,7 @@ export function CalendarScreen() {
 
   const openDayCount = countOpenScheduleDays(gameState.schedule);
   const weeklyIntent = WEEKLY_INTENTS.find((entry) => entry.id === weeklyStrategy.intentId);
-  const pendingFeaturedActivity = pendingCalendarActivity
-    ? engineActivities.find((activity) => (
-      activity.targetId === pendingCalendarActivity.targetId
-      || activity.targetPool?.some((target) => target.id === pendingCalendarActivity.targetId) === true
-    )) ?? null
-    : null;
+  const pendingFeaturedActivity = resolvePendingFeaturedActivity(engineActivities, pendingCalendarActivity);
   const featuredPlannerActivity = selectedActivity ?? pendingFeaturedActivity ?? engineActivities[0] ?? null;
   const featuredPlannerActivityLabel = selectedActivity
     ? ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Live opportunity"

@@ -329,6 +329,14 @@ export function CareerYouthWorkspace({
                             <p className="mt-2 text-xs leading-5 text-zinc-400">
                               {review.reportsSubmitted} reports · {Math.round(review.averageQuality)} average craft · {review.successfulRecommendations} successful recommendations
                             </p>
+                            {review.developmentSummary && (
+                              <p className="mt-2 text-xs leading-5 text-amber-200">
+                                Development pressure: -{review.developmentSummary.pressurePenalty} review points
+                                {review.developmentSummary.youthPayoffOffset > 0
+                                  ? ` after ${review.developmentSummary.youthPayoffOffset} points of youth-outcome relief`
+                                  : ""}. {review.developmentSummary.reasons[0]}
+                              </p>
+                            )}
                           </div>
                         ))
                       )}

@@ -198,6 +198,7 @@ import {
   readLegacyProfile,
   writeLegacyProfile,
 } from "@/engine/career/legacy";
+import { getLatestCareerSignatureSummary } from "@/engine/career/legacySignature";
 import {
   getResolvedPlayerIds,
   resolvePlayerEntity,
@@ -378,6 +379,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Cross-screen calendar pre-fill
   pendingCalendarActivity: null,
+  pendingNetworkContactId: null,
+  pendingRivalOpportunityId: null,
   pendingInternationalCountry: null,
 
   // Post-submit listing prompt (transient — not persisted)
@@ -452,6 +455,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       originId: effectiveConfig.originId,
       flawId: effectiveConfig.flawId,
       doctrineIds: effectiveConfig.doctrineIds,
+      legacyUnlockIds: effectiveConfig.legacyUnlockIds,
       contentDefinitionIds: [
         ...getRunContentDefinitionIds(
           getGameModeIdForSpecialization(effectiveConfig.specialization),
@@ -1518,10 +1522,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Apply legacy perks to config
     const perkResult = applyLegacyPerksEngine(config, profile, selectedPerkIds);
-    const modifiedConfig = perkResult.config;
+    const appliedPerkCount = (perkResult.config.legacyUnlockIds ?? [])
+      .filter((id) => id.startsWith("legacy-perk:"))
+      .length;
+    const signatureSummary = getLatestCareerSignatureSummary(profile);
 
-    // Start the game with the modified config (uses the existing startNewGame flow)
-    await get().startNewGame(modifiedConfig);
+    // Start the game with perk-only carryover using the existing startNewGame flow.
+    await get().startNewGame(perkResult.config);
 
     // Now apply post-generation bonuses that can't be expressed in NewGameConfig
     const { gameState } = get();
@@ -1624,9 +1631,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         "Your legacy carries forward into this new career.",
         "",
         `Career #${profile.completedCareers.length + 1} begins with the wisdom of your past.`,
-        selectedPerkIds.length > 0
-          ? `Active perks: ${selectedPerkIds.length} legacy bonus${selectedPerkIds.length > 1 ? "es" : ""} applied.`
-          : "No legacy perks selected — starting fresh with your earned knowledge.",
+        appliedPerkCount > 0
+          ? `Active perks: ${appliedPerkCount} legacy bonus${appliedPerkCount > 1 ? "es" : ""} applied.`
+          : "No legacy perks selected — starting fresh on mechanics.",
+        ...(signatureSummary
+          ? [
+              "",
+              `Latest legacy identity: ${signatureSummary.signatureTitle}.`,
+              signatureSummary.finalChapterTitle,
+              signatureSummary.finalChapterSummary,
+              "Career signatures remain narrative only; gameplay carryover comes from selected perks.",
+            ]
+          : []),
         "",
         "Prove yourself once more. The scouting world awaits.",
       ].join("\n"),

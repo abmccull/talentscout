@@ -306,6 +306,9 @@ export function classifyCareerAdaptiveTrack(
   if (candidate.sourceSystem === "relationships") {
     return "relationship";
   }
+  if (candidate.sourceSystem === "agency") {
+    return "agency";
+  }
   if (candidate.category === "career_story") {
     return "legacy";
   }

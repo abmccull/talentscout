@@ -1,5 +1,10 @@
 import type { GameState } from "@/engine/core/types";
 import {
+  applyPreparedActiveCareerFront,
+  prepareWeeklyActiveCareerFrontCandidate,
+  type PreparedActiveCareerFront,
+} from "@/engine/career/activeCareerFronts";
+import {
   applyPreparedRelationshipConflict,
   prepareWeeklyRelationshipConflictCandidate,
   type PreparedRelationshipConflictCandidate,
@@ -23,6 +28,7 @@ export interface PreparedRivalOpportunityPresentation {
 }
 
 export interface PreparedWeeklyScoutingEcology {
+  activeCareerFront?: PreparedActiveCareerFront;
   agencyDilemma?: PreparedAgencyDilemmaCandidate;
   relationshipConflict?: PreparedRelationshipConflictCandidate;
   rivalOpportunity?: PreparedRivalOpportunityPresentation;
@@ -69,6 +75,9 @@ function selectUnpresentedRivalOpportunity(
   state: GameState,
   newlyCreated: RivalOrganizationOpportunity | undefined,
 ): RivalOrganizationOpportunity | undefined {
+  const presentedMessageIds = new Set(
+    state.inbox.map((message) => message.id),
+  );
   const opportunities = new Map(
     Object.values(state.rivalOrganizationState.opportunities ?? {})
       .map((opportunity) => [opportunity.id, opportunity]),
@@ -78,8 +87,8 @@ function selectUnpresentedRivalOpportunity(
   return [...opportunities.values()]
     .filter((opportunity) =>
       opportunity.status === "open"
-      && !state.inbox.some(
-        (message) => message.id === `rival-organization-opportunity-${opportunity.id}`,
+      && !presentedMessageIds.has(
+        `rival-organization-opportunity-${opportunity.id}`,
       )
     )
     .sort((left, right) =>
@@ -99,6 +108,7 @@ export function prepareWeeklyScoutingEcology(input: {
   state: GameState;
   rivalOpportunity?: RivalOrganizationOpportunity;
 }): PreparedWeeklyScoutingEcology {
+  const activeCareerFront = prepareWeeklyActiveCareerFrontCandidate(input.state);
   const agencyDilemma = prepareWeeklyAgencyDilemmaCandidate({
     state: input.state,
   }).prepared;
@@ -110,10 +120,12 @@ export function prepareWeeklyScoutingEcology(input: {
     selectUnpresentedRivalOpportunity(input.state, input.rivalOpportunity),
   );
   return {
+    activeCareerFront,
     agencyDilemma,
     relationshipConflict,
     rivalOpportunity,
     candidates: [
+      ...(activeCareerFront ? [activeCareerFront.candidate] : []),
       ...(agencyDilemma ? [agencyDilemma.candidate] : []),
       ...(relationshipConflict ? [relationshipConflict.candidate] : []),
       ...(rivalOpportunity ? [rivalOpportunity.candidate] : []),
@@ -128,6 +140,13 @@ export function applyDirectedWeeklyScoutingEcology(input: {
   acceptedCandidateIds: ReadonlySet<string>;
 }): GameState {
   let state = input.state;
+  const activeCareerFront = input.prepared.activeCareerFront;
+  if (
+    activeCareerFront
+    && input.acceptedCandidateIds.has(activeCareerFront.candidate.id)
+  ) {
+    state = applyPreparedActiveCareerFront(state, activeCareerFront).state;
+  }
   const agencyDilemma = input.prepared.agencyDilemma;
   if (
     agencyDilemma

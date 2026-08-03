@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import type { LegacyScore, Scout, GameState } from "@/engine/core/types";
 import {
@@ -27,6 +27,7 @@ import {
   getPlayerFacingDiscoverySummaries,
 } from "@/engine/career/playerFacingDiscovery";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
+import { deriveCareerSignature } from "@/engine/career/legacySignature";
 
 interface HallOfFameProps {
   legacyScore: LegacyScore;
@@ -172,6 +173,7 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
   const [confirmingRetirement, setConfirmingRetirement] = useState(false);
   const canCompleteCareer = hasRepresentedCareerCompletionState(gameState);
   const canRetire = canVoluntarilyRetire(gameState);
+  const careerEnding = useMemo(() => deriveCareerSignature(gameState), [gameState]);
 
   const totalReports =
     selectLatestReportsByCase(Object.values(gameState.reports)).length +
@@ -270,6 +272,39 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
 
         <div className="mb-6">
           <LegacyBreakdown score={legacyScore} />
+        </div>
+
+        <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-400/80">
+            {canCompleteCareer ? "What this career became" : "What this career is becoming"}
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-white">
+            {careerEnding.signature.title}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-300">
+            {careerEnding.signature.summary}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {careerEnding.signature.pillars.map((pillar) => (
+              <span
+                key={pillar}
+                className="rounded-full border border-amber-500/20 bg-black/20 px-2.5 py-1 text-xs text-amber-200"
+              >
+                {pillar.replace(/([a-z])([A-Z])/g, "$1 $2")}
+              </span>
+            ))}
+          </div>
+          {canCompleteCareer && (
+            <div className="mt-4 border-t border-amber-500/15 pt-4">
+              <p className="text-xs font-semibold text-zinc-400">Final chapter</p>
+              <p className="mt-1 text-sm font-medium text-zinc-100">
+                {careerEnding.finalChapter.title}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                {careerEnding.finalChapter.summary}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="mb-8">

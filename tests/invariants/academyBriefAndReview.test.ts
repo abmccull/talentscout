@@ -595,6 +595,22 @@ describe("academy recommendation reviews", () => {
       ],
       player: prospect,
       movementHistory: movements,
+      careerInterventions: [{
+        decisionId: "active-career-front:player-1",
+        playerId: prospect.id,
+        playerName: "Review Prospect",
+        optionId: "reopen-route",
+        optionLabel: "Push for a new route",
+        selectedAt: { week: 10, season: 1 },
+        originalEnvironmentScore: 30,
+        currentEnvironmentScore: 60,
+        currentEnvironmentHeadline: "Supportive environment",
+        currentEnvironmentSummary: "A credible loan route opened senior minutes.",
+        scoreDelta: 30,
+        outcome: "improved",
+        callbackObserved: true,
+        evidenceIds: ["active-career-front:player-1", "move-loan-start"],
+      }],
       currentWeek: 5,
       currentSeason: 2,
       brief: brief({ status: "fulfilled", fulfilledPlayerAge: 16 }),
@@ -632,7 +648,17 @@ describe("academy recommendation reviews", () => {
         key: "revisionQuality",
         status: "insufficientEvidence",
       }),
+      expect.objectContaining({
+        key: "interventionFollowThrough",
+        status: "positive",
+        evidenceLevel: "full",
+      }),
     ]));
+    expect(oneSeason.review.evidence).toContainEqual(expect.objectContaining({
+      source: "intervention",
+      sourceId: "active-career-front:player-1",
+    }));
+    expect(oneSeason.review.findings?.join(" ")).toContain("follow-through, not proof");
 
     const revisedReport: ScoutReport = {
       ...causal.report,

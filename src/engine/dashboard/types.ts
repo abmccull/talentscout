@@ -12,6 +12,7 @@ export type DashboardPrioritySourceSystem =
   | "planner"
   | "reports"
   | "career"
+  | "agency"
   | "relationships"
   | "rivals"
   | "scouting";
@@ -45,6 +46,7 @@ export type DashboardActionTarget =
       week: number;
       season: number;
       playerId?: string;
+      contactId?: string;
       briefId?: string;
       focusActivityType?: string;
     }
@@ -173,6 +175,8 @@ export type DashboardPriorityCollector =
   | "inbox"
   | "offered_decision"
   | "narrative_event"
+  | "relationships"
+  | "career"
   | "reports"
   | "planner"
   | "rivals";

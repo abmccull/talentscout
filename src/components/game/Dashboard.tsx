@@ -77,6 +77,7 @@ export function Dashboard() {
   const {
     gameState,
     setScreen,
+    openDashboardTarget,
     getUpcomingFixtures,
     getLeagueStandings,
     requestWeekAdvance,
@@ -95,6 +96,7 @@ export function Dashboard() {
   } = useGameStore(useShallow((state) => ({
     gameState: state.gameState,
     setScreen: state.setScreen,
+    openDashboardTarget: state.openDashboardTarget,
     getUpcomingFixtures: state.getUpcomingFixtures,
     getLeagueStandings: state.getLeagueStandings,
     requestWeekAdvance: state.requestWeekAdvance,
@@ -388,10 +390,7 @@ export function Dashboard() {
   }
 
   function openDashboardAction(target: DashboardActionTarget): void {
-    if ("playerId" in target && target.playerId) {
-      selectPlayer(target.playerId);
-    }
-    setScreen(target.screen);
+    openDashboardTarget(target);
   }
 
   if (IS_YOUTH_EARLY_ACCESS && specialization === "youth") {

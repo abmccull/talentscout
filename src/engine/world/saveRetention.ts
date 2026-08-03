@@ -21,11 +21,11 @@ import type {
  */
 export const FIXTURE_DETAIL_RETENTION_SEASONS = 1;
 /** Global public archive rows per season, plus every scout-causal player. */
-export const WORLD_HISTORY_PLAYER_LIMIT = 500;
+export const WORLD_HISTORY_PLAYER_LIMIT = 400;
 /** Recent seasons retain the broad comparison field used by expert workflows. */
 export const WORLD_HISTORY_DETAILED_PLAYER_SEASONS = 5;
 /** Older seasons retain elite public careers plus every scout-causal player. */
-export const WORLD_HISTORY_ARCHIVE_PLAYER_LIMIT = 100;
+export const WORLD_HISTORY_ARCHIVE_PLAYER_LIMIT = 80;
 /**
  * Recent raw moves power the detailed dossier and consequence surfaces.
  * Older non-causal movements remain visible through the compact season
@@ -204,7 +204,7 @@ function projectWorldHistoryMovementSummaries(
       }
     }
 
-    // A summary must not depend on a player making the public top-500
+    // A summary must not depend on a player making the public top-400
     // archive. This pass lets raw movement rows graduate safely regardless of
     // comparison-row selection.
     for (const movement of materialMovementsBySeason.get(season.season) ?? []) {

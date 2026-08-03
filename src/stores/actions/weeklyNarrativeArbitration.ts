@@ -156,6 +156,7 @@ export function runWeeklyNarrativeArbitration({
     state,
     rivalOpportunity,
   });
+  const openDecisionCount = countOpenDecisions(state);
 
   const emissions: WeeklyNarrativeEmissionV2[] = [];
   if (narrativeEvent) {
@@ -194,7 +195,7 @@ export function runWeeklyNarrativeArbitration({
   };
   const quietFallbackTarget = !blockedByAuthoredActivity
     && (state.eventDirector?.quietWeeks ?? 0) >= 4
-    && countOpenDecisions(state) === 0
+    && openDecisionCount === 0
     ? selectQuietFallbackTarget(state)
     : undefined;
   const quietRelationshipConflict = quietFallbackTarget
@@ -224,7 +225,7 @@ export function runWeeklyNarrativeArbitration({
     ],
     candidateTransform: (candidate) =>
       applyCareerEraDirection([candidate], careerEraWeek.state.current)[0],
-    activeChoiceCount: countOpenDecisions(state),
+    activeChoiceCount: openDecisionCount,
     seasonLength,
   });
   const quietFallbackAccepted = Boolean(
@@ -247,7 +248,7 @@ export function runWeeklyNarrativeArbitration({
       ],
       candidateTransform: (candidate) =>
         applyCareerEraDirection([candidate], careerEraWeek.state.current)[0],
-      activeChoiceCount: countOpenDecisions(state),
+      activeChoiceCount: openDecisionCount,
       seasonLength,
     })
     : undefined;

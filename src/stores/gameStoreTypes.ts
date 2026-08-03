@@ -52,6 +52,7 @@ import type {
 import type { WeeklyWorkerTelemetry } from "@/engine/core/weeklyTransactionProtocol";
 import type { LeadershipResponsibilityChoice } from "@/engine/career/leadership";
 import type { CareerRecoveryPlanId } from "@/engine/career/recovery";
+import type { DashboardActionTarget } from "@/engine/dashboard/types";
 import type { EquipmentItemId } from "@/engine/finance";
 import type { InsightActionId, InsightActionResult } from "@/engine/insight/types";
 import type {
@@ -182,6 +183,7 @@ export interface ClubStanding {
 export interface GameStoreState {
   currentScreen: GameScreen;
   setScreen: (screen: GameScreen) => void;
+  openDashboardTarget: (target: DashboardActionTarget) => void;
 
   gameState: GameState | null;
   isLoaded: boolean;
@@ -487,6 +489,10 @@ export interface GameStoreState {
   setPendingCalendarActivity: (
     pending: { type: string; targetId: string; label: string } | null,
   ) => void;
+  pendingNetworkContactId: string | null;
+  setPendingNetworkContactId: (contactId: string | null) => void;
+  pendingRivalOpportunityId: string | null;
+  setPendingRivalOpportunityId: (opportunityId: string | null) => void;
   pendingInternationalCountry: string | null;
   setPendingInternationalCountry: (country: string | null) => void;
   pendingListingReportId: string | null;

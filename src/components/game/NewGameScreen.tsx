@@ -32,6 +32,7 @@ import {
   hasCompletedCareer,
   MAX_ACTIVE_PERKS,
 } from "@/engine/career/legacy";
+import { getLatestCareerSignatureSummary } from "@/engine/career/legacySignature";
 import {
   DEFAULT_SCOUT_DOCTRINE_ID,
   DEFAULT_SCOUT_FLAW_ID,
@@ -448,6 +449,10 @@ export function NewGameScreen() {
   const legacyProfile = useMemo(() => readLegacyProfile(), []);
   const isNewGamePlusAvailable = hasCompletedCareer(legacyProfile);
   const availablePerks = useMemo(() => getAvailablePerks(legacyProfile), [legacyProfile]);
+  const signatureSummary = useMemo(
+    () => getLatestCareerSignatureSummary(legacyProfile),
+    [legacyProfile],
+  );
 
   // New Game+ state
   const [isNewGamePlusMode, setIsNewGamePlusMode] = useState(false);
@@ -873,6 +878,12 @@ export function NewGameScreen() {
                               ? `${legacyProfile.completedCareers.length} career${legacyProfile.completedCareers.length > 1 ? "s" : ""} completed. ${legacyProfile.legacyPerks.length} perk${legacyProfile.legacyPerks.length !== 1 ? "s" : ""} unlocked.`
                               : "Complete a career to unlock legacy perks."}
                           </p>
+                          {signatureSummary && (
+                            <p className="mt-2 text-xs leading-relaxed text-amber-200/80">
+                              Most recent identity: <span className="font-semibold">{signatureSummary.signatureTitle}</span>.
+                              {" "}This is narrative only. Perks remain the only gameplay carryover into New Game+.
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -936,11 +947,24 @@ export function NewGameScreen() {
                               <p className="text-xs font-semibold text-zinc-400 mb-2">Career History</p>
                               <div className="space-y-1.5">
                                 {legacyProfile.completedCareers.slice(0, 5).map((career, i) => (
-                                  <div key={`career-${i}`} className="flex items-center justify-between text-xs">
-                                    <span className="text-zinc-300">{career.scoutName}</span>
-                                    <span className="text-zinc-500">
-                                      Tier {career.finalTier} &middot; {career.seasonsPlayed}s &middot; {career.specialization} &middot; Score {career.legacyScoreTotal}
-                                    </span>
+                                  <div
+                                    key={`career-${i}`}
+                                    className="rounded-md border border-zinc-800/70 bg-black/10 px-3 py-2 text-xs"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <span className="text-zinc-300">{career.scoutName}</span>
+                                      <span className="text-zinc-500">
+                                        Tier {career.finalTier} &middot; {career.seasonsPlayed}s &middot; {career.specialization} &middot; Score {career.legacyScoreTotal}
+                                      </span>
+                                    </div>
+                                    {career.signature && (
+                                      <div className="mt-1.5">
+                                        <p className="font-medium text-amber-300/90">{career.signature.title}</p>
+                                        <p className="mt-0.5 leading-relaxed text-zinc-500">
+                                          {career.signature.summary}
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -2055,27 +2079,40 @@ export function NewGameScreen() {
                     </Card>
                   )}
 
-                  {/* New Game+ Perks (only shown when NG+ mode is active) */}
-                  {isNewGamePlusMode && selectedPerkIds.length > 0 && (
+                  {/* New Game+ carryover (only shown when NG+ mode is active) */}
+                  {isNewGamePlusMode && (selectedPerkIds.length > 0 || signatureSummary) && (
                     <Card className="sm:col-span-2 border-amber-800/40 bg-amber-950/20">
                       <CardContent className="pt-5">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-semibold text-amber-300">New Game+ Perks</h3>
+                          <h3 className="text-sm font-semibold text-amber-300">New Game+ Carryover</h3>
                           <button onClick={() => goToStep(1)} className="min-h-11 min-w-11 text-xs text-amber-300 hover:text-amber-200 cursor-pointer">Edit</button>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedPerkIds.map((perkId) => {
-                            const perk = availablePerks.find((p) => p.id === perkId);
-                            return perk ? (
-                              <span
-                                key={perkId}
-                                className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300"
-                              >
-                                {perk.name}
-                              </span>
-                            ) : null;
-                          })}
-                        </div>
+                        {signatureSummary && (
+                          <div className="mb-3 rounded-lg border border-amber-500/20 bg-black/15 p-3">
+                            <p className="text-xs font-semibold text-amber-200">
+                              Latest legacy identity &middot; {signatureSummary.signatureTitle}
+                            </p>
+                            <p className="mt-1 text-sm text-zinc-200">{signatureSummary.finalChapterTitle}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                              {signatureSummary.finalChapterSummary} This does not use a perk slot or change starting mechanics.
+                            </p>
+                          </div>
+                        )}
+                        {selectedPerkIds.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedPerkIds.map((perkId) => {
+                              const perk = availablePerks.find((p) => p.id === perkId);
+                              return perk ? (
+                                <span
+                                  key={perkId}
+                                  className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300"
+                                >
+                                  {perk.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   )}

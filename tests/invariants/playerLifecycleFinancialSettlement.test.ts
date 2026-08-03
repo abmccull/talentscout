@@ -619,4 +619,135 @@ describe("player lifecycle financial settlement", () => {
       }),
     );
   }, 60_000);
+
+  it("archives a causally linked unsigned youth when the opportunity window closes", async () => {
+    const { useGameStore } = await import("@/stores/gameStore");
+    await useGameStore.getState().startNewGame({
+      scoutFirstName: "Retention",
+      scoutLastName: "Scout",
+      scoutAge: 32,
+      specialization: "youth",
+      difficulty: "normal",
+      worldSeed: "causal-youth-football-exit",
+      selectedCountries: ["england"],
+      startingCountry: "england",
+      nationality: "English",
+      skillAllocations: {
+        technicalEye: 2,
+        psychologicalRead: 2,
+        playerJudgment: 2,
+        potentialAssessment: 2,
+      },
+      originId: "academy-apprentice",
+      flawId: "fragile-network",
+      doctrineIds: ["evidence-first"],
+    });
+
+    const generated = useGameStore.getState().gameState!;
+    const [youthId, youth] = Object.entries(generated.unsignedYouth)[0];
+    const state = {
+      ...generated,
+      watchlist: [...generated.watchlist, youth.player.id],
+    };
+    const tick: TickResult = {
+      ...emptyTick(),
+      youthAgingResult: {
+        autoSigned: [],
+        retired: [youthId],
+        updatedUnsignedYouth: {
+          ...generated.unsignedYouth,
+          [youthId]: { ...youth, retired: true },
+        },
+      },
+    };
+
+    const advanced = advanceWeek(state, tick);
+
+    expect(advanced.unsignedYouth[youthId]).toBeUndefined();
+    expect(advanced.players[youth.player.id]).toBeUndefined();
+    expect(advanced.retiredPlayers[youth.player.id]).toMatchObject({
+      id: youth.player.id,
+      firstName: youth.player.firstName,
+      lastName: youth.player.lastName,
+    });
+    expect(advanced.retiredPlayerIds).toContain(youth.player.id);
+    expect(advanced.playerMovementHistory).toContainEqual(
+      expect.objectContaining({
+        playerId: youth.player.id,
+        type: "footballExit",
+      }),
+    );
+  }, 60_000);
+
+  it("archives an expired causal youth when a last-chance signing is rejected", async () => {
+    const { useGameStore } = await import("@/stores/gameStore");
+    await useGameStore.getState().startNewGame({
+      scoutFirstName: "Fallback",
+      scoutLastName: "Archive",
+      scoutAge: 32,
+      specialization: "youth",
+      difficulty: "normal",
+      worldSeed: "rejected-expired-causal-youth",
+      selectedCountries: ["england"],
+      startingCountry: "england",
+      nationality: "English",
+      skillAllocations: {
+        technicalEye: 2,
+        psychologicalRead: 2,
+        playerJudgment: 2,
+        potentialAssessment: 2,
+      },
+      originId: "academy-apprentice",
+      flawId: "fragile-network",
+      doctrineIds: ["evidence-first"],
+    });
+
+    const generated = useGameStore.getState().gameState!;
+    const [youthId, youth] = Object.entries(generated.unsignedYouth)[0];
+    const targetClub = Object.values(generated.clubs)[0];
+    const currentSeason = youth.generatedSeason + 3;
+    const proposedYouth = {
+      ...youth,
+      placed: true,
+      placedClubId: targetClub.id,
+    };
+    const state = {
+      ...generated,
+      currentSeason,
+      watchlist: [...generated.watchlist, youth.player.id],
+      clubs: {
+        ...generated.clubs,
+        [targetClub.id]: {
+          ...targetClub,
+          budget: 0,
+          weeklyWageBudget: 1,
+        },
+      },
+    };
+    const tick: TickResult = {
+      ...emptyTick(),
+      endOfSeasonTriggered: true,
+      youthAgingResult: {
+        autoSigned: [{ youthId, clubId: targetClub.id }],
+        retired: [],
+        updatedUnsignedYouth: {
+          ...generated.unsignedYouth,
+          [youthId]: proposedYouth,
+        },
+      },
+    };
+
+    const advanced = advanceWeek(state, tick);
+
+    expect(advanced.unsignedYouth[youthId]).toBeUndefined();
+    expect(advanced.players[youth.player.id]).toBeUndefined();
+    expect(advanced.retiredPlayers[youth.player.id]).toBeDefined();
+    expect(advanced.retiredPlayerIds).toContain(youth.player.id);
+    expect(advanced.playerMovementHistory).toContainEqual(
+      expect.objectContaining({
+        playerId: youth.player.id,
+        type: "footballExit",
+      }),
+    );
+  }, 60_000);
 });

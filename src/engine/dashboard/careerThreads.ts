@@ -1,5 +1,7 @@
 import type { AlumniRecord, GameState, RecommendationReview } from "@/engine/core/types";
 import type { DashboardCareerThread } from "./types";
+import { buildDashboardActiveFrontThreads } from "./activeFronts";
+import { buildDashboardSocialFrontThreads } from "./socialFronts";
 
 function playerName(state: GameState, playerId: string): string {
   const player = state.players[playerId] ?? state.retiredPlayers?.[playerId];
@@ -84,13 +86,15 @@ function reviewThread(state: GameState, review: RecommendationReview): Dashboard
 }
 
 export function buildDashboardCareerThreads(state: GameState): DashboardCareerThread[] {
+  const activeFrontThreads = buildDashboardActiveFrontThreads(state);
+  const socialFrontThreads = buildDashboardSocialFrontThreads(state);
   const alumniThreads = (state.alumniRecords ?? [])
     .map((record) => latestAlumniThread(state, record))
     .filter((thread): thread is DashboardCareerThread => thread !== null);
   const reviewThreads = Object.values(state.recommendationReviews ?? {})
     .map((review) => reviewThread(state, review))
     .filter((thread): thread is DashboardCareerThread => thread !== null);
-  return [...alumniThreads, ...reviewThreads].sort((left, right) =>
+  return [...activeFrontThreads, ...socialFrontThreads, ...alumniThreads, ...reviewThreads].sort((left, right) =>
     right.lastUpdatedAt.season - left.lastUpdatedAt.season
     || right.lastUpdatedAt.week - left.lastUpdatedAt.week
     || (right.significance ?? 0) - (left.significance ?? 0)

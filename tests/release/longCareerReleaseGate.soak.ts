@@ -98,7 +98,7 @@ const PROFILE_MATRIX_OUTPUT_PATH = resolve(
 );
 const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
   players: 32 * 1024 * 1024,
-  // Five recent seasons keep broad 500-player comparison detail; older
+  // Five recent seasons keep broad 400-player comparison detail; older
   // seasons keep an elite public archive plus every scout-causal career.
   worldHistory: 24 * 1024 * 1024,
   fixtures: 8 * 1024 * 1024,

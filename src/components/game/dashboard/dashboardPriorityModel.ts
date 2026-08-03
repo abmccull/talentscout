@@ -37,6 +37,10 @@ import {
   getOpenRivalOrganizationOpportunities,
 } from "@/engine/rivals/organizations";
 import type { RivalCampaign } from "@/engine/rivals/campaigns";
+import { buildDashboardActiveFronts } from "@/engine/dashboard/activeFronts";
+import { buildDashboardSocialFronts } from "@/engine/dashboard/socialFronts";
+import { projectDevelopmentPressureForState } from "@/engine/career/developmentPressure";
+import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
 import * as inboxActionAuthority from "@/engine/world/inboxActionAuthority";
 import { getResolvedPlayerIds, resolvePlayerEntity } from "@/lib/playerResolution";
 export type {
@@ -62,9 +66,11 @@ const COLLECTOR_PRECEDENCE: Record<DashboardPriorityCollector, number> = {
   inbox: 0,
   offered_decision: 1,
   narrative_event: 2,
-  reports: 3,
-  planner: 4,
-  rivals: 5,
+  relationships: 3,
+  career: 4,
+  reports: 5,
+  planner: 6,
+  rivals: 7,
 };
 
 const CATEGORY_BASE_SCORE: Record<DashboardPriorityCategory, number> = {
@@ -369,6 +375,22 @@ function getScheduledPlayerIds(
   return scheduled;
 }
 
+function findScheduledActivityFocus(
+  schedule: WeekSchedule,
+  options: {
+    preferredTargetIds: string[];
+    allowedTypes?: ReadonlySet<ActivityType>;
+  },
+): { targetId: string; type: ActivityType } | null {
+  for (const instance of getScheduledActivityInstances(schedule)) {
+    const targetId = instance.activity.targetId;
+    if (!targetId || !options.preferredTargetIds.includes(targetId)) continue;
+    if (options.allowedTypes && !options.allowedTypes.has(instance.activity.type)) continue;
+    return { targetId, type: instance.activity.type };
+  }
+  return null;
+}
+
 function findPlacementReportByDecisionId(
   state: GameState,
   decisionId: string,
@@ -502,7 +524,10 @@ function inferSourceSystemFromDecision(decision: DecisionRecord): DashboardPrior
   }
 }
 
-function parseInboxDedupKey(message: InboxMessage): { canonicalKey: string; aliasKeys: string[] } {
+function parseInboxDedupKey(
+  state: GameState,
+  message: InboxMessage,
+): { canonicalKey: string; aliasKeys: string[] } {
   if (message.id.startsWith("report-work-ready-") && message.relatedId) {
     return {
       canonicalKey: `report-work:${message.relatedId}`,
@@ -531,6 +556,19 @@ function parseInboxDedupKey(message: InboxMessage): { canonicalKey: string; alia
       aliasKeys: uniqueIds([`decision-source:narrative:${message.relatedId}`]),
     };
   }
+  if (
+    message.relatedEntityType === "narrative"
+    && message.relatedId
+    && state.consequenceState?.decisions?.[message.relatedId]
+  ) {
+    return {
+      canonicalKey: `decision:${message.relatedId}`,
+      aliasKeys: uniqueIds([
+        `decision-source:narrative:${message.relatedId}`,
+        `narrative:${message.relatedId}`,
+      ]),
+    };
+  }
   if (message.relatedEntityType === "narrative" && message.relatedId) {
     return {
       canonicalKey: `decision-source:narrative:${message.relatedId}`,
@@ -553,7 +591,7 @@ function collectInboxCandidates(state: GameState): DashboardPriorityCandidate[] 
       const decision = findInboxLinkedDecision(state, message);
       const due = decision?.deadlineAt;
       const dueInWeeks = weeksUntil(state, due);
-      const dedupe = parseInboxDedupKey(message);
+      const dedupe = parseInboxDedupKey(state, message);
       return normalizeCandidate({
         id: `dashboard-inbox-${message.id}`,
         collector: "inbox",
@@ -613,6 +651,127 @@ function collectOfferedDecisionCandidates(state: GameState): DashboardPriorityCa
         decision.source.id ? `${decision.source.kind}:${decision.source.id}` : null,
       ]),
       mustResolveBeforeAdvance: true,
+    });
+  });
+}
+
+function collectRelationshipCandidates(state: GameState): DashboardPriorityCandidate[] {
+  return buildDashboardSocialFronts(state).map((front) => {
+    const scheduledFocus = findScheduledActivityFocus(state.schedule, {
+      preferredTargetIds: [front.contactId, front.playerId].filter((id): id is string => Boolean(id)),
+      allowedTypes: front.actionTarget.screen === "network"
+        ? new Set<ActivityType>(["networkMeeting"])
+        : new Set<ActivityType>(["followUpSession", "trainingVisit", "parentCoachMeeting"]),
+    });
+    const alreadyScheduled = Boolean(scheduledFocus);
+    const dueInWeeks = front.dueAt ? weeksUntil(state, front.dueAt) : null;
+    const category = dueInWeeks != null && dueInWeeks <= 1
+      ? "required_action"
+      : "risk";
+    const plannerTarget: DashboardActionTarget = scheduledFocus && front.actionTarget.screen === "network" && front.contactId
+      ? {
+          screen: "calendar",
+          week: state.currentWeek,
+          season: state.currentSeason,
+          contactId: scheduledFocus.targetId,
+          focusActivityType: scheduledFocus.type,
+        }
+      : scheduledFocus
+        ? {
+            screen: "calendar",
+            week: state.currentWeek,
+            season: state.currentSeason,
+            playerId: scheduledFocus.targetId,
+            focusActivityType: scheduledFocus.type,
+          }
+        : {
+            screen: "calendar",
+            week: state.currentWeek,
+            season: state.currentSeason,
+          };
+    return normalizeCandidate({
+      id: `dashboard-${front.id}`,
+      collector: front.sourceSystem === "rivals" ? "rivals" : "relationships",
+      category,
+      title: front.title,
+      explanation: `${front.summary} ${front.explanation}`,
+      consequence: front.consequence,
+      deadlineWeek: front.dueAt?.week,
+      deadlineSeason: front.dueAt?.season,
+      dueInWeeks,
+      relatedEntityIds: uniqueIds([
+        front.id,
+        front.decisionId,
+        front.playerId,
+        front.caseId,
+        front.reportId,
+        front.contactId,
+        ...front.evidenceIds,
+      ]),
+      sourceSystem: front.sourceSystem,
+      actionLabel: alreadyScheduled ? "Review planner" : front.actionLabel,
+      actionTarget: alreadyScheduled ? plannerTarget : front.actionTarget,
+      canonicalKey: front.id,
+      aliasKeys: uniqueIds([
+        `decision:${front.decisionId}`,
+        front.caseId ? `case:${front.caseId}` : null,
+        front.playerId ? `player:${front.playerId}` : null,
+      ]),
+      alreadyScheduled,
+      rivalActive: front.sourceSystem === "rivals",
+      scarceOpening: dueInWeeks != null && dueInWeeks <= 1,
+    });
+  });
+}
+
+function collectDevelopmentPressureCandidates(state: GameState): DashboardPriorityCandidate[] {
+  const canProjectSeasonPayoff = Array.isArray(state.discoveryRecords)
+    && Array.isArray(state.alumniRecords)
+    && Boolean(state.placementReports)
+    && Boolean(state.observations)
+    && Boolean(state.unsignedYouth)
+    && Boolean(state.subRegions)
+    && Boolean(state.clubs)
+    && Boolean(state.leagues);
+  const projection = projectDevelopmentPressureForState(
+    state,
+    getSeasonLength(state.fixtures, state.currentSeason),
+    canProjectSeasonPayoff
+      ? deriveSeasonReviewMetrics(state, state.currentSeason)
+      : undefined,
+  );
+  return projection.fronts.slice(0, 2).map((front) => {
+    const dueInWeeks = front.dueWeek !== undefined && front.dueSeason !== undefined
+      ? weeksUntil(state, { week: front.dueWeek, season: front.dueSeason })
+      : null;
+    const actionTarget: DashboardActionTarget = front.action === "scheduleStudy"
+      ? {
+          screen: "calendar",
+          week: state.currentWeek,
+          season: state.currentSeason,
+          focusActivityType: "study",
+        }
+      : front.action === "reviewStaffWork"
+        ? { screen: "reportHistory" }
+        : { screen: "agency", focus: "strategy" };
+    const highPressure = front.severity === "critical" || front.severity === "high";
+    return normalizeCandidate({
+      id: `dashboard-${front.id}`,
+      collector: front.action === "scheduleStudy" ? "planner" : "career",
+      category: highPressure ? "required_action" : "risk",
+      title: front.title,
+      explanation: [front.cause, projection.youthPayoffSummary].filter(Boolean).join(" "),
+      consequence: front.consequence,
+      deadlineWeek: front.dueWeek,
+      deadlineSeason: front.dueSeason,
+      dueInWeeks,
+      relatedEntityIds: uniqueIds([front.id, ...front.evidenceIds]),
+      sourceSystem: front.family === "courseStudy" ? "career" : "agency",
+      actionLabel: front.actionLabel,
+      actionTarget,
+      canonicalKey: front.id,
+      aliasKeys: front.evidenceIds.map((id) => `development-evidence:${id}`),
+      scarceOpening: highPressure,
     });
   });
 }
@@ -847,6 +1006,58 @@ function collectReportCandidates(
     }));
   }
 
+  for (const front of buildDashboardActiveFronts(state)) {
+    const scheduledFocus = findScheduledActivityFocus(state.schedule, {
+      preferredTargetIds: [front.playerId],
+      allowedTypes: new Set<ActivityType>(["followUpSession", "trainingVisit", "parentCoachMeeting"]),
+    });
+    const alreadyScheduled = Boolean(scheduledFocus);
+    const plannerTarget: DashboardActionTarget = scheduledFocus
+      ? {
+          screen: "calendar",
+          week: state.currentWeek,
+          season: state.currentSeason,
+          playerId: scheduledFocus.targetId,
+          focusActivityType: scheduledFocus.type,
+        }
+        : {
+          screen: "calendar",
+          week: state.currentWeek,
+          season: state.currentSeason,
+          playerId: front.playerId,
+          focusActivityType: front.beat?.suggestedActivity
+            ?? (front.careerFront?.trigger === "released" ? "followUpSession" : "trainingVisit"),
+        };
+    candidates.push(normalizeCandidate({
+      id: `dashboard-${front.id}`,
+      collector: "reports",
+      category: "required_action",
+      title: front.title,
+      explanation: `${front.summary} ${front.explanation}`,
+      consequence: front.consequence,
+      relatedEntityIds: uniqueIds([
+        front.id,
+        front.caseId,
+        front.playerId,
+        front.reportId,
+        ...front.evidenceIds,
+      ]),
+      sourceSystem: "scouting",
+      actionLabel: alreadyScheduled ? "Review planner" : front.actionLabel,
+      actionTarget: alreadyScheduled ? plannerTarget : front.actionTarget,
+      canonicalKey: front.id,
+      aliasKeys: uniqueIds([
+        front.careerFront?.decisionId ? `decision:${front.careerFront.decisionId}` : null,
+        `case:${front.caseId}`,
+        front.reportId ? `report:${front.reportId}` : null,
+      ]),
+      alreadyScheduled,
+      scarceOpening:
+        front.urgency === "critical"
+        || front.beat?.stage === "accountability",
+    }));
+  }
+
   return candidates;
 }
 
@@ -1025,6 +1236,8 @@ export function buildDashboardPriorityCandidates(
     ...collectInboxCandidates(input.gameState),
     ...collectOfferedDecisionCandidates(input.gameState),
     ...collectNarrativeEventCandidates(input.gameState),
+    ...collectRelationshipCandidates(input.gameState),
+    ...collectDevelopmentPressureCandidates(input.gameState),
     ...collectReportCandidates(input.gameState, input.pendingListingReportId),
     ...collectPlannerCandidate(input.gameState),
     ...collectRivalCandidates(input.gameState),

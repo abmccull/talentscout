@@ -34,6 +34,7 @@ import {
   reconcileWorldConditionArcDecisions,
 } from "@/engine/world/worldConditionArcs";
 import { reconcileRivalCampaignDecisions } from "./weeklyRivalCampaigns";
+import { projectCurrentPlayerCareerEnvironment } from "@/engine/world/developmentEnvironment";
 
 export function registerNarrativeDecisions(
   state: GameState,
@@ -181,6 +182,53 @@ export function createRelationshipCallbackMessage(
     actionRequired: false,
     relatedId: playerId ?? consequence.decisionId,
     relatedEntityType: playerId ? "player" : "narrative",
+  };
+}
+
+/** Compare a chosen pathway intervention with the player's live world state. */
+export function createActiveCareerFrontCallbackMessage(
+  state: GameState,
+  consequence: ConsequenceRecord,
+): InboxMessage | undefined {
+  if (!consequence.tags.includes("active-career-front")) return undefined;
+  const decision = state.consequenceState.decisions[consequence.decisionId];
+  if (!decision || decision.source.kind !== "activeCareerFront") return undefined;
+  const playerId = typeof decision.metadata?.playerId === "string"
+    ? decision.metadata.playerId
+    : undefined;
+  const player = playerId
+    ? state.players[playerId] ?? state.retiredPlayers?.[playerId]
+    : undefined;
+  if (!player || !playerId) return undefined;
+
+  const projection = projectCurrentPlayerCareerEnvironment(state, player);
+  const originalScore = typeof decision.metadata?.originalEnvironmentScore === "number"
+    ? decision.metadata.originalEnvironmentScore
+    : projection.score;
+  const scoreDelta = projection.score - originalScore;
+  const selected = decision.options.find((option) => option.id === decision.selectedOptionId);
+  const statusLine = scoreDelta >= 8
+    ? `The route has opened: the visible environment improved from ${originalScore}/100 to ${projection.score}/100 (${projection.headline.toLowerCase()}).`
+    : scoreDelta <= -8
+      ? `The pressure deepened: the visible environment fell from ${originalScore}/100 to ${projection.score}/100 (${projection.headline.toLowerCase()}).`
+      : `The route remains unsettled at ${projection.score}/100 (${projection.headline.toLowerCase()}); the original pressure has not materially moved.`;
+  const name = `${player.firstName} ${player.lastName}`.trim() || "The player";
+  return {
+    id: `active-career-front-callback-${consequence.id}`,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "feedback",
+    title: `${name}: pathway review`,
+    body: [
+      `Remembered response: "${selected?.label ?? "No response recorded"}."`,
+      statusLine,
+      `Current evidence: ${projection.summary}`,
+      "The result now sits beside your original placement and will inform its later recommendation review.",
+    ].join("\n\n"),
+    read: false,
+    actionRequired: false,
+    relatedId: playerId,
+    relatedEntityType: "player",
   };
 }
 
@@ -439,6 +487,8 @@ export function processWeeklyConsequenceLifecycle(state: GameState): GameState {
     (consequenceId) => {
       const consequence = processed.state.consequences[consequenceId];
       if (!consequence) return [];
+      const activeFrontMessage = createActiveCareerFrontCallbackMessage(updated, consequence);
+      if (activeFrontMessage) return [activeFrontMessage];
       const relationshipMessage = createRelationshipCallbackMessage(updated, consequence);
       if (relationshipMessage) return [relationshipMessage];
       if (!consequence.tags.includes("turning-point")) return [];

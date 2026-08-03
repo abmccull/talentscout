@@ -73,6 +73,26 @@ export function processWeeklyPlacementResolution(
     (report) => report.clubResponse === "pending",
   );
   if (weekResult.writePlacementReportsExecuted > 0 || hasPendingPlacement) {
+    const seasonLength = getSeasonLength(
+      stateWithScheduleApplied.fixtures,
+      stateWithScheduleApplied.currentSeason,
+    );
+    const observationsByPlayerId = new Map<
+      string,
+      Array<GameState["observations"][string]>
+    >();
+    for (const observation of Object.values(stateWithScheduleApplied.observations)) {
+      const observations = observationsByPlayerId.get(observation.playerId) ?? [];
+      observations.push(observation);
+      observationsByPlayerId.set(observation.playerId, observations);
+    }
+    const clubRelationshipScoreByOrganization = new Map<string, number>();
+    for (const contact of Object.values(stateWithScheduleApplied.contacts)) {
+      const prior = clubRelationshipScoreByOrganization.get(contact.organization) ?? 0;
+      if (contact.relationship > prior) {
+        clubRelationshipScoreByOrganization.set(contact.organization, contact.relationship);
+      }
+    }
     const placementRng = createRNG(
       `${gameState.seed}-placement-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
@@ -80,6 +100,35 @@ export function processWeeklyPlacementResolution(
     let preparedReports = { ...stateWithScheduleApplied.reports };
     let preparedScoutingCases = { ...(stateWithScheduleApplied.scoutingCases ?? {}) };
     let preparedReportDeliveries = { ...(stateWithScheduleApplied.reportDeliveries ?? {}) };
+    const pendingPlacementYouthIds = new Set(
+      Object.values(preparedPlacementReports)
+        .filter((report) => report.clubResponse === "pending")
+        .map((report) => report.unsignedYouthId),
+    );
+    const latestReportByPlayerId = new Map<
+      string,
+      GameState["reports"][string]
+    >();
+    for (const report of Object.values(preparedReports)) {
+      if (report.scoutId !== stateWithScheduleApplied.scout.id) continue;
+      const current = latestReportByPlayerId.get(report.playerId);
+      if (
+        !current
+        || report.submittedSeason > current.submittedSeason
+        || (
+          report.submittedSeason === current.submittedSeason
+          && report.submittedWeek > current.submittedWeek
+        )
+        || (
+          report.submittedSeason === current.submittedSeason
+          && report.submittedWeek === current.submittedWeek
+          && report.id.localeCompare(current.id) > 0
+        )
+      ) {
+        latestReportByPlayerId.set(report.playerId, report);
+      }
+    }
+    const placementClubs = Object.values(stateWithScheduleApplied.clubs);
     const submissionMessages: InboxMessage[] = [];
     const scheduledPlacementActivities = weekResult.writePlacementReportsExecuted > 0
       ? getScheduledActivityInstances(stateWithScheduleApplied.schedule)
@@ -91,26 +140,12 @@ export function processWeeklyPlacementResolution(
       if (!placementActivity.targetId) continue;
       const youth = resolveUnsignedYouth(stateWithScheduleApplied, placementActivity.targetId);
       if (!youth || youth.placed || youth.retired) continue;
-      const existingPending = Object.values(preparedPlacementReports).some(
-        (r) => r.unsignedYouthId === youth.id && r.clubResponse === "pending",
-      );
-      if (existingPending) continue;
+      if (pendingPlacementYouthIds.has(youth.id)) continue;
 
-      const youthObservations = Object.values(stateWithScheduleApplied.observations).filter(
-        (o) => o.playerId === youth.player.id,
-      );
+      const youthObservations = observationsByPlayerId.get(youth.player.id) ?? [];
       if (youthObservations.length === 0) continue;
 
-      const sourceReport = Object.values(preparedReports)
-        .filter((report) =>
-          report.playerId === youth.player.id
-          && report.scoutId === stateWithScheduleApplied.scout.id
-        )
-        .sort((left, right) =>
-          right.submittedSeason - left.submittedSeason
-          || right.submittedWeek - left.submittedWeek
-          || right.id.localeCompare(left.id)
-        )[0];
+      const sourceReport = latestReportByPlayerId.get(youth.player.id);
       if (!sourceReport) {
         submissionMessages.push({
           id: `placement-report-required-${youth.id}-${stateWithScheduleApplied.currentSeason}-${stateWithScheduleApplied.currentWeek}`,
@@ -146,7 +181,7 @@ export function processWeeklyPlacementResolution(
       }
       const eligibleClubs = getEligibleClubsForPlacement(
         youth,
-        Object.values(stateWithScheduleApplied.clubs),
+        placementClubs,
         stateWithScheduleApplied.scout,
         stateWithScheduleApplied.leagues,
         { preferredClubId: targetClubId },
@@ -193,15 +228,13 @@ export function processWeeklyPlacementResolution(
         reportDeliveries: preparedReportDeliveries,
         report: linked.report,
         placementReport: generatedReport,
-        seasonLength: getSeasonLength(
-          stateWithScheduleApplied.fixtures,
-          stateWithScheduleApplied.currentSeason,
-        ),
+        seasonLength,
       });
       preparedReports[sourceReport.id] = recorded.report;
       preparedScoutingCases = recorded.scoutingCases;
       preparedReportDeliveries = recorded.reportDeliveries;
       preparedPlacementReports[recorded.placementReport.id] = recorded.placementReport;
+      pendingPlacementYouthIds.add(youth.id);
     }
 
     stateWithScheduleApplied = {
@@ -236,6 +269,7 @@ export function processWeeklyPlacementResolution(
       let updatedConsequenceState = stateWithScheduleApplied.consequenceState;
       let updatedRecruitmentBriefs = { ...stateWithScheduleApplied.youthRecruitmentBriefs };
       let updatedRecommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
+      const existingRecommendationReviews = Object.values(updatedRecommendationReviews);
       let updatedFinances = stateWithScheduleApplied.finances;
       const placementMessages: InboxMessage[] = [];
       let updatedScout = stateWithScheduleApplied.scout;
@@ -253,12 +287,7 @@ export function processWeeklyPlacementResolution(
         const brief = sourceReport?.briefId
           ? updatedRecruitmentBriefs[sourceReport.briefId]
           : undefined;
-        const relationshipScore = Math.max(
-          0,
-          ...Object.values(stateWithScheduleApplied.contacts)
-            .filter((contact) => contact.organization === club.name)
-            .map((contact) => contact.relationship),
-        );
+        const relationshipScore = clubRelationshipScoreByOrganization.get(club.name) ?? 0;
         const targetLeague = stateWithScheduleApplied.leagues[club.leagueId];
         const targetCountryKey = normalizeCountryKey(targetLeague?.country);
         const targetRegionalKnowledge = targetCountryKey
@@ -290,9 +319,7 @@ export function processWeeklyPlacementResolution(
               report: sourceReport,
               brief: brief as AcademyRecruitmentBrief,
               player: youth.player,
-              observations: Object.values(stateWithScheduleApplied.observations).filter(
-                (observation) => observation.playerId === youth.player.id,
-              ),
+              observations: observationsByPlayerId.get(youth.player.id) ?? [],
               scout: currentScoutForPlacement,
               club,
               relationshipScore,
@@ -307,10 +334,7 @@ export function processWeeklyPlacementResolution(
                   week: stateWithScheduleApplied.currentWeek,
                   season: stateWithScheduleApplied.currentSeason,
                 },
-                seasonLength: getSeasonLength(
-                  stateWithScheduleApplied.fixtures,
-                  stateWithScheduleApplied.currentSeason,
-                ),
+                seasonLength,
               },
               worldConditionContext: {
                 scoreAdjustment: getWorldConditionModifiers(
@@ -381,10 +405,7 @@ export function processWeeklyPlacementResolution(
             }],
             stateWithScheduleApplied.currentWeek,
             stateWithScheduleApplied.currentSeason,
-            getSeasonLength(
-              stateWithScheduleApplied.fixtures,
-              stateWithScheduleApplied.currentSeason,
-            ),
+            seasonLength,
           );
           if (resolution.applied.length > 0) {
             placementLifecycle = resolution.state;
@@ -475,10 +496,7 @@ export function processWeeklyPlacementResolution(
               movementHistory: placementLifecycle.playerMovementHistory,
               currentWeek: stateWithScheduleApplied.currentWeek,
               currentSeason: stateWithScheduleApplied.currentSeason,
-              seasonLength: getSeasonLength(
-                stateWithScheduleApplied.fixtures,
-                stateWithScheduleApplied.currentSeason,
-              ),
+              seasonLength,
             });
             updatedRecruitmentBriefs[brief.id] = fulfilled.fulfilled
               ? { ...fulfilled.brief, fulfillmentFailures: undefined }
@@ -527,14 +545,12 @@ export function processWeeklyPlacementResolution(
               placementReport: acceptedPlacement,
               clubDecision: resolved.decision,
               movementHistory: placementLifecycle.playerMovementHistory,
-              existingReviews: Object.values(updatedRecommendationReviews),
-              seasonLength: getSeasonLength(
-                stateWithScheduleApplied.fixtures,
-                stateWithScheduleApplied.currentSeason,
-              ),
+              existingReviews: existingRecommendationReviews,
+              seasonLength,
             });
             for (const review of reviewSchedule.created) {
               updatedRecommendationReviews[review.id] = review;
+              existingRecommendationReviews.push(review);
             }
             if (reviewSchedule.created.length > 0) {
               updatedScoutingCases[placedCase.id] = {
@@ -563,10 +579,7 @@ export function processWeeklyPlacementResolution(
           const followUpDue = nextGameWeek(
             stateWithScheduleApplied.currentWeek,
             stateWithScheduleApplied.currentSeason,
-            getSeasonLength(
-              stateWithScheduleApplied.fixtures,
-              stateWithScheduleApplied.currentSeason,
-            ),
+            seasonLength,
           );
           const resolved = resolveClubDecision({
             scoutingCases: updatedScoutingCases,

@@ -844,7 +844,8 @@ export type RecommendationReviewDimensionKey =
   | "priceValueCalibration"
   | "supportAdaptationFit"
   | "pathwayQuality"
-  | "revisionQuality";
+  | "revisionQuality"
+  | "interventionFollowThrough";
 
 export type RecommendationReviewDimensionStatus =
   | "positive"
@@ -883,7 +884,7 @@ export interface RecommendationReview {
   playerFacingDimensions?: RecommendationReviewDimension[];
   findings?: string[];
   evidence?: Array<{
-    source: "movement" | "seasonRating" | "injury" | "minutes" | "contract";
+    source: "movement" | "seasonRating" | "injury" | "minutes" | "contract" | "intervention";
     description: string;
     sourceId?: string;
   }>;
@@ -965,6 +966,12 @@ export interface PerformanceReview {
     unsignedYouthDiscovered: number;
     successfulPlacements: number;
     alumniMilestones: number;
+  };
+  /** Unresolved training/agency commitments that materially shaped the verdict. */
+  developmentSummary?: {
+    pressurePenalty: number;
+    youthPayoffOffset: number;
+    reasons: string[];
   };
 }
 
@@ -2168,6 +2175,8 @@ export interface NewGameConfig {
   flawId?: string;
   /** Career philosophies that modify ongoing simulation pacing and pressure. */
   doctrineIds?: string[];
+  /** Applied New Game+ perks and signature hook, retained in the immutable run manifest. */
+  legacyUnlockIds?: string[];
   /**
    * Opening experience for Youth freeplay. `auto` launches the authored
    * tutorial only for a new profile and otherwise prefers a dynamic prologue.
@@ -4428,6 +4437,12 @@ export interface LegacyPerk {
 /**
  * Summary of a single completed career, stored in the legacy profile.
  */
+export interface CompletedCareerLegacyEvidence {
+  version: 1;
+  /** Countries with at least one submitted report, bounded during archival. */
+  scoutedCountryIds: string[];
+}
+
 export interface CompletedCareer {
   /** Scout display name for the career history. */
   scoutName: string;
@@ -4445,8 +4460,28 @@ export interface CompletedCareer {
   completedScenarios: string[];
   /** The legacy score achieved at career end. */
   legacyScoreTotal: number;
+  /** Bounded public milestone evidence used to rederive New Game+ entitlements. */
+  legacyEvidence?: CompletedCareerLegacyEvidence;
+  /** Public-evidence identity earned by this career. Optional for legacy profiles. */
+  signature?: import("../career/legacySignature").CareerSignature;
+  /** Bounded closing chapter assembled from this career's visible record. */
+  finalChapter?: import("../career/legacySignature").CareerFinalChapter;
   /** Unix timestamp when this career was completed. */
   completedAt: number;
+}
+
+/**
+ * Bounded proof created while migrating profiles that predate per-career
+ * entitlement evidence. Only Regional Memory ever used information that the
+ * old completed-career archive did not retain.
+ */
+export interface LegacyEntitlementMigrationEvidence {
+  version: 1;
+  grandfatheredPerkIds: ["regional_memory"];
+  /** Number of oldest archived careers covered by the one-time migration. */
+  migratedCareerCount: number;
+  /** Stable checksum of the profile identity and sanitized pre-migration careers. */
+  careerFingerprint: string;
 }
 
 /**
@@ -4457,6 +4492,10 @@ export interface CompletedCareer {
 export interface LegacyProfile {
   /** Unique profile identifier. */
   id: string;
+  /** Present on profiles processed by the evidence-backed entitlement system. */
+  entitlementSchemaVersion?: 1;
+  /** One-time, narrowly scoped compatibility proof for pre-evidence profiles. */
+  entitlementMigrationEvidence?: LegacyEntitlementMigrationEvidence;
   /** All completed careers, newest first. */
   completedCareers: CompletedCareer[];
   /** Scenario IDs unlocked for future playthroughs. */

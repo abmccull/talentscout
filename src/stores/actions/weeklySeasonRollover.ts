@@ -29,6 +29,7 @@ import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
 import {
   attemptCareerTierAdvancement,
   generateBoardDirectives,
+  projectDevelopmentPressureForState,
   processSeasonDiscoveries,
 } from "@/engine/career";
 import { applyCareerPathTransition } from "@/engine/career/transitions";
@@ -389,6 +390,21 @@ export function processWeeklySeasonRollover(
         newState,
         completedSeason,
       );
+      // Core rollover has already opened next season and reset the planner.
+      // Review the completed season against the week the player actually
+      // planned, while keeping the post-tick finances/course progress that
+      // the rest of the review uses.
+      const completedWeekPressureState: GameState = {
+        ...newState,
+        currentSeason: completedSeason,
+        currentWeek: stateWithPhase2.currentWeek,
+        schedule: stateWithPhase2.schedule,
+      };
+      const developmentPressure = projectDevelopmentPressureForState(
+        completedWeekPressureState,
+        getSeasonLength(newState.fixtures, completedSeason),
+        seasonReviewMetrics,
+      );
 
       // ── Issue 3: Performance review ──────────────────────────────────────
       const seasonReports = selectLatestReportsByCaseOpenedInRange(
@@ -412,6 +428,12 @@ export function processWeeklySeasonRollover(
         successfulPlacements: seasonReviewMetrics.successfulPlacements,
         alumniMilestonesThisSeason:
           seasonReviewMetrics.alumniMilestonesThisSeason,
+        developmentPressurePenalty:
+          developmentPressure.seasonReviewPenalty,
+        developmentPressureReasons:
+          developmentPressure.fronts.map((front) => `${front.title}: ${front.cause}`),
+        developmentPayoffOffset:
+          developmentPressure.youthPayoffOffset,
       };
       const review = calculatePerformanceReview(
         newState.scout,
@@ -423,6 +445,24 @@ export function processWeeklySeasonRollover(
         ...newState,
         performanceReviews: [...newState.performanceReviews, review],
       };
+      if (review.developmentSummary) {
+        seasonEndMessages.push({
+          id: `development-pressure-review-s${completedSeason}`,
+          week: newState.currentWeek,
+          season: newState.currentSeason,
+          type: "feedback",
+          title: "Development commitments shaped your review",
+          body: [
+            `Unresolved training, staff-review, or agency pressure reduced the review by ${review.developmentSummary.pressurePenalty} points.`,
+            ...review.developmentSummary.reasons,
+            ...(developmentPressure.youthPayoffSummary
+              ? [`Youth payoff: ${developmentPressure.youthPayoffSummary}`]
+              : []),
+          ].join("\n\n"),
+          read: false,
+          actionRequired: false,
+        });
+      }
 
       // An independent scout cannot be "fired" by a non-existent employer.
       // The same score becomes a formal career warning and opens a recovery

@@ -64,6 +64,7 @@ import {
 import {
   expireJobOffersAtWeekEnd,
 } from "@/engine/career/progression";
+import { collectCareerInterventionEvidence } from "@/engine/career/careerInterventionPortfolio";
 import { generateContactForType } from "@/engine/network/contacts";
 import {
   createWeekSchedule,
@@ -862,14 +863,35 @@ export function createWeeklyActions(
     let calibratedContactIntel = stateWithScheduleApplied.contactIntel;
     let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
-    for (const review of Object.values(recommendationReviews)) {
-      if (review.status !== "scheduled") continue;
-      const due = stateWithScheduleApplied.currentSeason > review.dueSeason
+    const dueRecommendationReviews = Object.values(recommendationReviews).filter((review) => {
+      if (review.status !== "scheduled") return false;
+      return stateWithScheduleApplied.currentSeason > review.dueSeason
         || (
           stateWithScheduleApplied.currentSeason === review.dueSeason
           && stateWithScheduleApplied.currentWeek >= review.dueWeek
         );
-      if (!due) continue;
+    });
+    const movementHistoryByPlayerId = new Map<
+      string,
+      typeof stateWithScheduleApplied.playerMovementHistory
+    >();
+    const careerInterventionsByPlayerId = new Map<
+      string,
+      ReturnType<typeof collectCareerInterventionEvidence>
+    >();
+    if (dueRecommendationReviews.length > 0) {
+      for (const movement of stateWithScheduleApplied.playerMovementHistory) {
+        const movements = movementHistoryByPlayerId.get(movement.playerId) ?? [];
+        movements.push(movement);
+        movementHistoryByPlayerId.set(movement.playerId, movements);
+      }
+      for (const intervention of collectCareerInterventionEvidence(stateWithScheduleApplied)) {
+        const interventions = careerInterventionsByPlayerId.get(intervention.playerId) ?? [];
+        interventions.push(intervention);
+        careerInterventionsByPlayerId.set(intervention.playerId, interventions);
+      }
+    }
+    for (const review of dueRecommendationReviews) {
       const scoutingCase = stateWithScheduleApplied.scoutingCases[review.caseId];
       const sourceReport = stateWithScheduleApplied.reports[review.reportId];
       const placementReport = scoutingCase?.placementReportIds
@@ -897,13 +919,11 @@ export function createWeeklyActions(
         placementReport,
         clubDecision,
         player: reviewedPlayer,
-        movementHistory: stateWithScheduleApplied.playerMovementHistory,
+        movementHistory: movementHistoryByPlayerId.get(review.playerId) ?? [],
+        careerInterventions: careerInterventionsByPlayerId.get(review.playerId) ?? [],
         currentWeek: stateWithScheduleApplied.currentWeek,
         currentSeason: stateWithScheduleApplied.currentSeason,
-        seasonLength: getSeasonLength(
-          stateWithScheduleApplied.fixtures,
-          stateWithScheduleApplied.currentSeason,
-        ),
+        seasonLength: academyBriefSeasonLength,
       });
       if (result.status !== "completed") continue;
       recommendationReviews[result.review.id] = result.review;

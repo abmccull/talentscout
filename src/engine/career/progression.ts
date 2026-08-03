@@ -260,6 +260,14 @@ export interface TierReviewContext {
   successfulPlacements?: number;
   /** Number of career-impact alumni milestones achieved this season. */
   alumniMilestonesThisSeason?: number;
+
+  // Shared professional-development / agency pressure loop
+  /** Bounded review-point cost derived from unresolved canonical pressures. */
+  developmentPressurePenalty?: number;
+  /** Player-facing reasons behind the bounded penalty. */
+  developmentPressureReasons?: string[];
+  /** Youth outcomes that reduced, but did not erase, operational pressure. */
+  developmentPayoffOffset?: number;
 }
 
 /**
@@ -402,8 +410,14 @@ export function calculatePerformanceReview(
     total += youthBonus;
   }
 
+  const developmentPressurePenalty = Math.max(
+    0,
+    Math.min(12, Math.round(tierContext?.developmentPressurePenalty ?? 0)),
+  );
+  total -= developmentPressurePenalty;
+
   // Cap total to 100 so stacking tier bonuses does not trivialise the outcome
-  total = Math.min(100, total);
+  total = Math.max(0, Math.min(100, total));
 
   const outcome =
     total >= 85 ? "promoted" :
@@ -461,6 +475,16 @@ export function calculatePerformanceReview(
               tierContext.alumniMilestonesThisSeason ?? 0,
           }
         : undefined,
+    developmentSummary: developmentPressurePenalty > 0
+      ? {
+          pressurePenalty: developmentPressurePenalty,
+          youthPayoffOffset: Math.max(
+            0,
+            Math.round(tierContext?.developmentPayoffOffset ?? 0),
+          ),
+          reasons: [...new Set(tierContext?.developmentPressureReasons ?? [])].slice(0, 3),
+        }
+      : undefined,
   };
 }
 

@@ -441,14 +441,28 @@ describe("long-career save retention", () => {
     });
   });
 
-  it("compacts unreferenced retired records but preserves causal and recent careers", () => {
+  it("compacts unreferenced retired records but preserves causal dossiers", () => {
     const retired = (id: string): Player => ({
       id,
       firstName: "Retired",
       lastName: id,
       clubId: "",
       contractClubId: undefined,
-      recentMatchRatings: [],
+      recentMatchRatings: [
+        { fixtureId: `${id}-fixture`, week: 1, season: 4, rating: 7 },
+      ],
+      seasonRatings: Array.from({ length: 6 }, (_, index) => ({
+        season: index + 1,
+        avgRating: 7,
+        appearances: 20,
+        goals: 1,
+        assists: 1,
+        cleanSheets: 0,
+      })),
+      injured: true,
+      injuryWeeksRemaining: 3,
+      currentInjury: { id: `${id}-injury` },
+      disciplinaryRecord: { playerId: id },
     } as unknown as Player);
     const legacy = state({
       currentSeason: 5,
@@ -472,6 +486,11 @@ describe("long-career save retention", () => {
     expect(Object.keys(compacted.retiredPlayers).sort()).toEqual(["causal", "recent"]);
     expect(compacted.retiredPlayerIds.sort()).toEqual(["causal", "recent"]);
     expect(compacted.retiredPlayers.recent.recentMatchRatings).toEqual([]);
+    expect(compacted.retiredPlayers.recent.seasonRatings?.map((rating) => rating.season)).toEqual([4, 5, 6]);
+    expect(compacted.retiredPlayers.recent.currentInjury).toBeUndefined();
+    expect(compacted.retiredPlayers.recent.injured).toBe(false);
+    expect(compacted.retiredPlayers.recent.injuryWeeksRemaining).toBe(0);
+    expect(compacted.retiredPlayers.recent.disciplinaryRecord).toBeUndefined();
     expect(compacted.retiredPlayers.causal).toEqual(legacy.retiredPlayers.causal);
   });
 

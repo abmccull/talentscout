@@ -43,6 +43,7 @@ const SOURCE_LABELS: Record<DashboardPriorityItem["sourceSystem"], string> = {
   planner: "Planner",
   reports: "Reports",
   career: "Career",
+  agency: "Agency",
   relationships: "Relationships",
   rivals: "Rivals",
   scouting: "Scouting",

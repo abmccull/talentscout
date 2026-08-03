@@ -14,12 +14,20 @@ import type {
   GameState,
   LegacyProfile,
   CompletedCareer,
+  CompletedCareerLegacyEvidence,
+  LegacyEntitlementMigrationEvidence,
   LegacyPerk,
   NewGameConfig,
   Specialization,
 } from "../core/types";
+import { stableFingerprint } from "../run/runManifest";
 import { SCENARIOS } from "../scenarios";
 import { selectLatestReportsByCase } from "../reports/reportAccountability";
+import {
+  deriveCareerSignature,
+  sanitizeCareerFinalChapter,
+  sanitizeCareerSignature,
+} from "./legacySignature";
 
 // =============================================================================
 // CONSTANTS
@@ -32,6 +40,10 @@ export const MAX_ACTIVE_PERKS = 3;
 export const LEGACY_PROFILE_STORAGE_KEY = "talentscout_legacy_profile";
 /** Durable save marker for a player-chosen career ending. */
 export const VOLUNTARY_RETIREMENT_MARKER = "career_retired_voluntarily";
+const COMPLETED_CAREER_LEGACY_EVIDENCE_VERSION = 1 as const;
+const LEGACY_ENTITLEMENT_SCHEMA_VERSION = 1 as const;
+const LEGACY_ENTITLEMENT_MIGRATION_VERSION = 1 as const;
+const MAX_ARCHIVED_SCOUTED_COUNTRIES = 64;
 
 // =============================================================================
 // PERK DEFINITIONS
@@ -135,6 +147,10 @@ export const LEGACY_PERK_DEFINITIONS: Readonly<LegacyPerk[]> = [
     unlockedBy: "legacy_score_100",
   },
 ] as const;
+
+const LEGACY_PERK_DEFINITION_BY_ID = new Map(
+  LEGACY_PERK_DEFINITIONS.map((perk) => [perk.id, perk] as const),
+);
 
 // =============================================================================
 // SCENARIO UNLOCK DEFINITIONS
@@ -269,6 +285,21 @@ function areCompletedCareersEquivalent(
     return false;
   }
 
+  if (
+    left.signature
+    && right.signature
+    && left.signature.id !== right.signature.id
+  ) {
+    return false;
+  }
+  if (
+    left.finalChapter
+    && right.finalChapter
+    && left.finalChapter.summary !== right.finalChapter.summary
+  ) {
+    return false;
+  }
+
   const leftScenarios = [...left.completedScenarios].sort();
   const rightScenarios = [...right.completedScenarios].sort();
 
@@ -284,6 +315,7 @@ function areCompletedCareersEquivalent(
  */
 export function generateCompletedCareer(state: GameState): CompletedCareer {
   const { scout, legacyScore, discoveryRecords } = state;
+  const { signature, finalChapter } = deriveCareerSignature(state);
 
   const totalReports =
     selectLatestReportsByCase(Object.values(state.reports)).length +
@@ -300,6 +332,12 @@ export function generateCompletedCareer(state: GameState): CompletedCareer {
       : getCareerSeasonOrdinal(state.currentSeason);
 
   const completedScenarios = [...(state.completedScenarioIds ?? [])];
+  const scoutedCountryIds = Object.entries(state.scout.countryReputations ?? {})
+    .filter(([, reputation]) => reputation.reportsSubmitted > 0)
+    .map(([countryId, reputation]) => reputation.country || countryId)
+    .filter((countryId, index, all) => countryId.length > 0 && all.indexOf(countryId) === index)
+    .sort()
+    .slice(0, MAX_ARCHIVED_SCOUTED_COUNTRIES);
 
   return {
     scoutName: `${scout.firstName} ${scout.lastName}`,
@@ -313,6 +351,12 @@ export function generateCompletedCareer(state: GameState): CompletedCareer {
     specialization: scout.primarySpecialization,
     completedScenarios,
     legacyScoreTotal: legacyScore.totalScore,
+    legacyEvidence: {
+      version: COMPLETED_CAREER_LEGACY_EVIDENCE_VERSION,
+      scoutedCountryIds,
+    },
+    signature,
+    finalChapter,
     completedAt: Date.now(),
   };
 }
@@ -333,13 +377,41 @@ export function generateLegacyProfile(
     latestCompletedCareer &&
     areCompletedCareersEquivalent(completedCareer, latestCompletedCareer)
   ) {
-    return existingProfile;
+    const verifiedLatestSignature = sanitizeCareerSignature(latestCompletedCareer.signature);
+    const sanitizedLatestFinalChapter = sanitizeCareerFinalChapter(latestCompletedCareer.finalChapter);
+    const sanitizedLatestLegacyEvidence = sanitizeCompletedCareerLegacyEvidence(
+      latestCompletedCareer.legacyEvidence,
+    );
+    if (
+      !verifiedLatestSignature
+      || !sanitizedLatestFinalChapter
+      || !sanitizedLatestLegacyEvidence
+    ) {
+      return {
+        ...existingProfile,
+        entitlementSchemaVersion: LEGACY_ENTITLEMENT_SCHEMA_VERSION,
+        completedCareers: [
+          {
+            ...latestCompletedCareer,
+            signature: verifiedLatestSignature ?? completedCareer.signature,
+            finalChapter: sanitizedLatestFinalChapter ?? completedCareer.finalChapter,
+            legacyEvidence: sanitizedLatestLegacyEvidence ?? completedCareer.legacyEvidence,
+          },
+          ...existingProfile.completedCareers.slice(1),
+        ],
+      };
+    }
+    return {
+      ...existingProfile,
+      entitlementSchemaVersion: LEGACY_ENTITLEMENT_SCHEMA_VERSION,
+    };
   }
 
   const base: LegacyProfile = existingProfile
     ? { ...existingProfile }
     : {
         id: `legacy-${Date.now()}`,
+        entitlementSchemaVersion: LEGACY_ENTITLEMENT_SCHEMA_VERSION,
         completedCareers: [],
         unlockedScenarios: [],
         legacyPerks: [],
@@ -384,11 +456,12 @@ export function generateLegacyProfile(
     bestHitRate,
     bestLegacyScore,
     highestTierReached,
-  }, state);
+  });
 
   // Determine newly unlocked scenarios
   const updatedProfile: LegacyProfile = {
     ...base,
+    entitlementSchemaVersion: LEGACY_ENTITLEMENT_SCHEMA_VERSION,
     completedCareers: updatedCareers,
     totalDiscoveries,
     totalSeasonsPlayed,
@@ -409,12 +482,11 @@ export function generateLegacyProfile(
  */
 function evaluateUnlockedPerks(
   profile: LegacyProfile,
-  state: GameState,
 ): LegacyPerk[] {
   const unlocked: LegacyPerk[] = [];
 
   for (const perk of LEGACY_PERK_DEFINITIONS) {
-    if (isPerkConditionMet(perk.unlockedBy, profile, state)) {
+    if (isPerkConditionMet(perk.unlockedBy, profile)) {
       unlocked.push({ ...perk });
     }
   }
@@ -428,7 +500,6 @@ function evaluateUnlockedPerks(
 function isPerkConditionMet(
   condition: string,
   profile: LegacyProfile,
-  state: GameState,
 ): boolean {
   switch (condition) {
     case "career_completed":
@@ -443,14 +514,14 @@ function isPerkConditionMet(
       return profile.totalDiscoveries >= 10;
     case "25_discoveries":
       return profile.totalDiscoveries >= 25;
-    case "3_countries_scouted": {
-      const countriesScouted = Object.values(state.scout.countryReputations)
-        .filter((cr) => cr.reportsSubmitted > 0).length;
-      // Check current career + any previous careers that had 3+ countries
-      return countriesScouted >= 3 || profile.completedCareers.some(
-        (c) => c.completedScenarios.includes("international_assignment"),
-      );
-    }
+    case "3_countries_scouted":
+      return profile.completedCareers.some((career) =>
+        (career.legacyEvidence?.scoutedCountryIds.length ?? 0) >= 3
+        // Profiles predating legacyEvidence can still prove this milestone
+        // through the historical scenario that originally granted it.
+        || career.completedScenarios.includes("international_assignment")
+      ) || profile.entitlementMigrationEvidence?.grandfatheredPerkIds
+        .includes("regional_memory") === true;
     case "legacy_score_100":
       return profile.bestLegacyScore >= 100;
     case "2_careers_completed":
@@ -467,11 +538,9 @@ function isPerkConditionMet(
  * Returns the full list of unlocked scenario IDs.
  */
 export function checkScenarioUnlocks(profile: LegacyProfile): string[] {
-  const unlocked = new Set(
-    (profile.unlockedScenarios ?? []).filter((scenarioId) =>
-      LAUNCHABLE_ADVANCED_SCENARIO_IDS.has(scenarioId),
-    ),
-  );
+  // Stored IDs are display/cache data only. Re-earn every scenario from the
+  // completed-career aggregates so adding an ID to localStorage grants nothing.
+  const unlocked = new Set<string>();
 
   for (const entry of SCENARIO_UNLOCK_CONDITIONS) {
     if (!LAUNCHABLE_ADVANCED_SCENARIO_IDS.has(entry.scenarioId)) continue;
@@ -541,13 +610,42 @@ export function applyLegacyPerks(
   profile: LegacyProfile,
   selectedPerkIds: string[],
 ): LegacyPerkApplicationResult {
-  // Clamp to max perks
-  const activePerkIds = selectedPerkIds.slice(0, MAX_ACTIVE_PERKS);
+  // localStorage is never an entitlement or mechanical authority. Re-earn
+  // unlocks from sanitized career evidence, then resolve every selected ID
+  // through immutable definitions so stored fields cannot grant/amplify effects.
+  const unlockedPerkIds = new Set<string>();
+  const storedPerks = sanitizeLegacyProfile(profile)?.legacyPerks;
+  if (Array.isArray(storedPerks)) {
+    for (const storedPerk of storedPerks) {
+      if (
+        storedPerk
+        && typeof storedPerk === "object"
+        && typeof storedPerk.id === "string"
+        && LEGACY_PERK_DEFINITION_BY_ID.has(storedPerk.id)
+      ) {
+        unlockedPerkIds.add(storedPerk.id);
+      }
+    }
+  }
 
-  // Resolve perk objects from the profile
-  const activePerks = profile.legacyPerks.filter((p) =>
-    activePerkIds.includes(p.id),
-  );
+  const activePerks: LegacyPerk[] = [];
+  const seenSelectedIds = new Set<string>();
+  if (Array.isArray(selectedPerkIds)) {
+    for (const selectedPerkId of selectedPerkIds) {
+      if (
+        typeof selectedPerkId !== "string"
+        || seenSelectedIds.has(selectedPerkId)
+        || !unlockedPerkIds.has(selectedPerkId)
+      ) {
+        continue;
+      }
+      const definition = LEGACY_PERK_DEFINITION_BY_ID.get(selectedPerkId);
+      if (!definition) continue;
+      seenSelectedIds.add(selectedPerkId);
+      activePerks.push({ ...definition });
+      if (activePerks.length >= MAX_ACTIVE_PERKS) break;
+    }
+  }
 
   // Accumulate bonuses
   let reputationBonus = 0;
@@ -591,7 +689,13 @@ export function applyLegacyPerks(
     // Skill perks are applied to the generated scout by startNewGamePlus.
     // Keeping the player's eight creation points unchanged avoids both
     // double-applying the perk and invalidating the creation-point contract.
-    config: { ...config },
+    config: {
+      ...config,
+      legacyUnlockIds: [
+        ...(config.legacyUnlockIds ?? []),
+        ...activePerks.map((perk) => `legacy-perk:${perk.id}`),
+      ].filter((id, index, all) => all.indexOf(id) === index),
+    },
     reputationBonus,
     extraContacts,
     budgetBonusPercent,
@@ -605,6 +709,338 @@ export function applyLegacyPerks(
 // PERSISTENCE HELPERS
 // =============================================================================
 
+const MAX_LEGACY_PROFILE_STORAGE_CHARS = 1_000_000;
+const MAX_COMPLETED_CAREERS = 128;
+const MAX_COMPLETED_SCENARIOS_PER_CAREER = 128;
+const MAX_PROFILE_SCENARIO_UNLOCKS = 64;
+const MAX_PROFILE_PERK_ENTITLEMENTS = LEGACY_PERK_DEFINITIONS.length * 2;
+const MAX_PROFILE_ID_LENGTH = 160;
+const MAX_SCOUT_NAME_LENGTH = 120;
+const MAX_SCENARIO_ID_LENGTH = 96;
+const SPECIALIZATIONS = new Set<Specialization>([
+  "youth",
+  "firstTeam",
+  "regional",
+  "data",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeText(
+  value: unknown,
+  maxLength: number,
+  identifierOnly = false,
+): string | undefined {
+  if (
+    typeof value !== "string"
+    || value.length === 0
+    || value.length > maxLength
+    || value.trim().length === 0
+    || /[\u0000-\u001f\u007f]/.test(value)
+    || (identifierOnly && !/^[A-Za-z0-9_.:-]+$/.test(value))
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
+function sanitizeNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  integer = false,
+): number | undefined {
+  if (
+    typeof value !== "number"
+    || !Number.isFinite(value)
+    || value < minimum
+    || value > maximum
+    || (integer && !Number.isInteger(value))
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
+function sanitizeIdentifierArray(
+  value: unknown,
+  maxItems: number,
+  allow?: ReadonlySet<string>,
+): string[] | undefined {
+  if (!Array.isArray(value) || value.length > maxItems) return undefined;
+  const sanitized: string[] = [];
+  for (const candidate of value) {
+    const identifier = sanitizeText(candidate, MAX_SCENARIO_ID_LENGTH, true);
+    if (!identifier) return undefined;
+    if (allow && !allow.has(identifier)) continue;
+    if (!sanitized.includes(identifier)) sanitized.push(identifier);
+  }
+  return sanitized;
+}
+
+function sanitizeCompletedCareerLegacyEvidence(
+  value: unknown,
+): CompletedCareerLegacyEvidence | undefined {
+  if (
+    !isRecord(value)
+    || value.version !== COMPLETED_CAREER_LEGACY_EVIDENCE_VERSION
+    || !Array.isArray(value.scoutedCountryIds)
+    || value.scoutedCountryIds.length > MAX_ARCHIVED_SCOUTED_COUNTRIES
+  ) {
+    return undefined;
+  }
+  const scoutedCountryIds: string[] = [];
+  for (const candidate of value.scoutedCountryIds) {
+    const countryId = sanitizeText(candidate, MAX_SCENARIO_ID_LENGTH, true);
+    if (!countryId || scoutedCountryIds.includes(countryId)) return undefined;
+    scoutedCountryIds.push(countryId);
+  }
+  return {
+    version: COMPLETED_CAREER_LEGACY_EVIDENCE_VERSION,
+    scoutedCountryIds,
+  };
+}
+
+function sanitizeCompletedCareer(value: unknown): CompletedCareer | undefined {
+  if (!isRecord(value)) return undefined;
+  const scoutName = sanitizeText(value.scoutName, MAX_SCOUT_NAME_LENGTH);
+  const finalTier = sanitizeNumber(value.finalTier, 1, 5, true);
+  const seasonsPlayed = sanitizeNumber(value.seasonsPlayed, 1, 10_000, true);
+  const totalDiscoveries = sanitizeNumber(value.totalDiscoveries, 0, 10_000_000, true);
+  const hitRate = sanitizeNumber(value.hitRate, 0, 1);
+  const specialization = value.specialization;
+  const completedScenarios = sanitizeIdentifierArray(
+    value.completedScenarios,
+    MAX_COMPLETED_SCENARIOS_PER_CAREER,
+  );
+  const legacyScoreTotal = sanitizeNumber(value.legacyScoreTotal, -1_000_000_000, 1_000_000_000);
+  const completedAt = sanitizeNumber(value.completedAt, 0, Number.MAX_SAFE_INTEGER, true);
+  if (
+    !scoutName
+    || finalTier === undefined
+    || seasonsPlayed === undefined
+    || totalDiscoveries === undefined
+    || hitRate === undefined
+    || typeof specialization !== "string"
+    || !SPECIALIZATIONS.has(specialization as Specialization)
+    || !completedScenarios
+    || legacyScoreTotal === undefined
+    || completedAt === undefined
+  ) {
+    return undefined;
+  }
+
+  const signature = value.signature === undefined
+    ? undefined
+    : sanitizeCareerSignature(value.signature);
+  const finalChapter = value.finalChapter === undefined
+    ? undefined
+    : sanitizeCareerFinalChapter(value.finalChapter);
+  const legacyEvidence = value.legacyEvidence === undefined
+    ? undefined
+    : sanitizeCompletedCareerLegacyEvidence(value.legacyEvidence);
+  return {
+    scoutName,
+    finalTier,
+    seasonsPlayed,
+    totalDiscoveries,
+    hitRate,
+    specialization: specialization as Specialization,
+    completedScenarios,
+    legacyScoreTotal,
+    ...(legacyEvidence ? { legacyEvidence } : {}),
+    ...(signature ? { signature } : {}),
+    ...(finalChapter ? { finalChapter } : {}),
+    completedAt,
+  };
+}
+
+function regionalMemoryDefinition(): LegacyPerk {
+  const definition = LEGACY_PERK_DEFINITION_BY_ID.get("regional_memory");
+  if (!definition) {
+    throw new Error("Regional Memory legacy definition is missing");
+  }
+  return definition;
+}
+
+function isExactCanonicalStoredPerk(value: unknown, definition: LegacyPerk): boolean {
+  if (!isRecord(value)) return false;
+  const expectedKeys = ["description", "id", "name", "type", "unlockedBy", "value"];
+  const actualKeys = Object.keys(value).sort();
+  return actualKeys.length === expectedKeys.length
+    && actualKeys.every((key, index) => key === expectedKeys[index])
+    && value.id === definition.id
+    && value.name === definition.name
+    && value.description === definition.description
+    && value.type === definition.type
+    && value.value === definition.value
+    && value.unlockedBy === definition.unlockedBy;
+}
+
+function entitlementMigrationCareerProjection(career: CompletedCareer): object {
+  // These are exactly the fields retained by the pre-evidence career archive.
+  // Later signature/final-chapter enrichment must not invalidate the migration.
+  return {
+    scoutName: career.scoutName,
+    finalTier: career.finalTier,
+    seasonsPlayed: career.seasonsPlayed,
+    totalDiscoveries: career.totalDiscoveries,
+    hitRate: career.hitRate,
+    specialization: career.specialization,
+    completedScenarios: career.completedScenarios,
+    legacyScoreTotal: career.legacyScoreTotal,
+    completedAt: career.completedAt,
+  };
+}
+
+function entitlementMigrationFingerprint(
+  profileId: string,
+  completedCareers: readonly CompletedCareer[],
+  migratedCareerCount: number,
+): string {
+  return stableFingerprint({
+    migration: "pre-evidence-regional-memory-v1",
+    profileId,
+    careers: completedCareers
+      .slice(-migratedCareerCount)
+      .map(entitlementMigrationCareerProjection),
+  });
+}
+
+function createLegacyRegionalMemoryMigrationEvidence(
+  rawProfile: Record<string, unknown>,
+  profileId: string,
+  completedCareers: readonly CompletedCareer[],
+): LegacyEntitlementMigrationEvidence | undefined {
+  if (
+    rawProfile.entitlementSchemaVersion !== undefined
+    || rawProfile.entitlementMigrationEvidence !== undefined
+    || completedCareers.length === 0
+    || completedCareers.some((career) => career.legacyEvidence !== undefined)
+    || !Array.isArray(rawProfile.legacyPerks)
+    || !rawProfile.legacyPerks.some((perk) =>
+      isExactCanonicalStoredPerk(perk, regionalMemoryDefinition()))
+  ) {
+    return undefined;
+  }
+  const migratedCareerCount = completedCareers.length;
+  return {
+    version: LEGACY_ENTITLEMENT_MIGRATION_VERSION,
+    grandfatheredPerkIds: ["regional_memory"],
+    migratedCareerCount,
+    careerFingerprint: entitlementMigrationFingerprint(
+      profileId,
+      completedCareers,
+      migratedCareerCount,
+    ),
+  };
+}
+
+function sanitizeLegacyEntitlementMigrationEvidence(
+  value: unknown,
+  profileId: string,
+  completedCareers: readonly CompletedCareer[],
+): LegacyEntitlementMigrationEvidence | undefined {
+  if (
+    !isRecord(value)
+    || value.version !== LEGACY_ENTITLEMENT_MIGRATION_VERSION
+    || !Array.isArray(value.grandfatheredPerkIds)
+    || value.grandfatheredPerkIds.length !== 1
+    || value.grandfatheredPerkIds[0] !== "regional_memory"
+    || typeof value.migratedCareerCount !== "number"
+    || !Number.isInteger(value.migratedCareerCount)
+    || value.migratedCareerCount < 1
+    || value.migratedCareerCount > completedCareers.length
+    || typeof value.careerFingerprint !== "string"
+    || !/^[a-f0-9]{16}$/.test(value.careerFingerprint)
+    || value.careerFingerprint !== entitlementMigrationFingerprint(
+      profileId,
+      completedCareers,
+      value.migratedCareerCount,
+    )
+  ) {
+    return undefined;
+  }
+  return {
+    version: LEGACY_ENTITLEMENT_MIGRATION_VERSION,
+    grandfatheredPerkIds: ["regional_memory"],
+    migratedCareerCount: value.migratedCareerCount,
+    careerFingerprint: value.careerFingerprint,
+  };
+}
+
+function sanitizeLegacyProfile(
+  value: unknown,
+  options: { allowPreEvidenceRegionalMemoryMigration?: boolean } = {},
+): LegacyProfile | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = sanitizeText(value.id, MAX_PROFILE_ID_LENGTH, true);
+  if (
+    !id
+    || (value.entitlementSchemaVersion !== undefined
+      && value.entitlementSchemaVersion !== LEGACY_ENTITLEMENT_SCHEMA_VERSION)
+    || !Array.isArray(value.completedCareers)
+    || value.completedCareers.length > MAX_COMPLETED_CAREERS
+    || !Array.isArray(value.unlockedScenarios)
+    || value.unlockedScenarios.length > MAX_PROFILE_SCENARIO_UNLOCKS
+    || !Array.isArray(value.legacyPerks)
+    || value.legacyPerks.length > MAX_PROFILE_PERK_ENTITLEMENTS
+  ) {
+    return undefined;
+  }
+
+  const completedCareers = value.completedCareers
+    .map(sanitizeCompletedCareer)
+    .filter((career): career is CompletedCareer => career !== undefined);
+  const storedEntitlementMigrationEvidence = value.entitlementSchemaVersion
+    === LEGACY_ENTITLEMENT_SCHEMA_VERSION
+    ? sanitizeLegacyEntitlementMigrationEvidence(
+        value.entitlementMigrationEvidence,
+        id,
+        completedCareers,
+      )
+    : undefined;
+  const entitlementMigrationEvidence = storedEntitlementMigrationEvidence
+    ?? (options.allowPreEvidenceRegionalMemoryMigration
+    ? createLegacyRegionalMemoryMigrationEvidence(value, id, completedCareers)
+    : undefined);
+  const unlockedScenarios = sanitizeIdentifierArray(
+    value.unlockedScenarios,
+    MAX_PROFILE_SCENARIO_UNLOCKS,
+    LAUNCHABLE_ADVANCED_SCENARIO_IDS,
+  );
+  if (!unlockedScenarios) return undefined;
+
+  const totalDiscoveries = completedCareers.reduce(
+    (sum, career) => sum + career.totalDiscoveries,
+    0,
+  );
+  const totalSeasonsPlayed = completedCareers.reduce(
+    (sum, career) => sum + career.seasonsPlayed,
+    0,
+  );
+  const sanitized: LegacyProfile = {
+    id,
+    entitlementSchemaVersion: LEGACY_ENTITLEMENT_SCHEMA_VERSION,
+    ...(entitlementMigrationEvidence ? { entitlementMigrationEvidence } : {}),
+    completedCareers,
+    unlockedScenarios,
+    legacyPerks: [],
+    totalDiscoveries,
+    totalSeasonsPlayed,
+    bestHitRate: Math.max(0, ...completedCareers.map((career) => career.hitRate)),
+    bestLegacyScore: Math.max(0, ...completedCareers.map((career) => career.legacyScoreTotal)),
+    highestTierReached: Math.max(0, ...completedCareers.map((career) => career.finalTier)),
+  };
+  // Neither stored perk objects nor stored scenario IDs are authorities. Both
+  // are reconstructed from the sanitized completed-career record.
+  sanitized.legacyPerks = evaluateUnlockedPerks(sanitized);
+  sanitized.unlockedScenarios = checkScenarioUnlocks(sanitized);
+  return sanitized;
+}
+
 /**
  * Read the legacy profile from localStorage.
  * Returns undefined if no profile exists or parsing fails.
@@ -612,14 +1048,29 @@ export function applyLegacyPerks(
 export function readLegacyProfile(): LegacyProfile | undefined {
   try {
     if (typeof window === "undefined") return undefined;
-    const raw = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEY);
-    if (!raw) return undefined;
+    const raw = window.localStorage.getItem(LEGACY_PROFILE_STORAGE_KEY);
+    if (!raw || raw.length > MAX_LEGACY_PROFILE_STORAGE_CHARS) return undefined;
     const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== "object" || parsed === null) return undefined;
-    // Basic shape validation
-    const profile = parsed as LegacyProfile;
-    if (!profile.id || !Array.isArray(profile.completedCareers)) return undefined;
-    return profile;
+    const sanitized = sanitizeLegacyProfile(parsed, {
+      allowPreEvidenceRegionalMemoryMigration: true,
+    });
+    if (
+      sanitized
+      && isRecord(parsed)
+      && parsed.entitlementSchemaVersion === undefined
+    ) {
+      // Persist the bounded compatibility proof once so every later mechanical
+      // read uses the evidence-backed schema rather than re-trusting old data.
+      try {
+        window.localStorage.setItem(
+          LEGACY_PROFILE_STORAGE_KEY,
+          JSON.stringify(sanitized),
+        );
+      } catch {
+        // The in-memory sanitized profile remains safe if storage is unavailable.
+      }
+    }
+    return sanitized;
   } catch {
     return undefined;
   }
@@ -632,7 +1083,9 @@ export function readLegacyProfile(): LegacyProfile | undefined {
 export function writeLegacyProfile(profile: LegacyProfile): void {
   try {
     if (typeof window === "undefined") return;
-    localStorage.setItem(LEGACY_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    const sanitized = sanitizeLegacyProfile(profile);
+    if (!sanitized) return;
+    window.localStorage.setItem(LEGACY_PROFILE_STORAGE_KEY, JSON.stringify(sanitized));
   } catch {
     // localStorage unavailable — silently ignore
   }
@@ -656,7 +1109,9 @@ export function getAvailablePerks(
     }));
   }
 
-  const unlockedIds = new Set(profile.legacyPerks.map((p) => p.id));
+  const unlockedIds = new Set(
+    (sanitizeLegacyProfile(profile)?.legacyPerks ?? []).map((perk) => perk.id),
+  );
 
   return LEGACY_PERK_DEFINITIONS.map((p) => ({
     ...p,
@@ -682,5 +1137,5 @@ export function getUsedSpecializations(
  * Check if a legacy profile has any completed careers (i.e., New Game+ is available).
  */
 export function hasCompletedCareer(profile: LegacyProfile | undefined): boolean {
-  return profile !== undefined && profile.completedCareers.length > 0;
+  return (sanitizeLegacyProfile(profile)?.completedCareers.length ?? 0) > 0;
 }

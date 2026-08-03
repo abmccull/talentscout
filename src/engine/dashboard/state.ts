@@ -100,6 +100,7 @@ function normalizeActionTarget(value: unknown): DashboardActionTarget | undefine
         week,
         season,
         ...(normalizeId(candidate.playerId) ? { playerId: normalizeId(candidate.playerId)! } : {}),
+        ...(normalizeId(candidate.contactId) ? { contactId: normalizeId(candidate.contactId)! } : {}),
         ...(normalizeId(candidate.briefId) ? { briefId: normalizeId(candidate.briefId)! } : {}),
         ...(normalizeId(candidate.focusActivityType)
           ? { focusActivityType: normalizeId(candidate.focusActivityType)! }

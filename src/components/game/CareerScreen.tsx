@@ -92,6 +92,8 @@ import {
   deriveCareerFingerprintAuthority,
   deriveCareerFingerprintProjection,
 } from "@/engine/career/fingerprint";
+import { projectDevelopmentPressureForState } from "@/engine/career/developmentPressure";
+import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
 import { CareerYouthWorkspace } from "./career/CareerYouthWorkspace";
 import {
   ATTRIBUTE_LABELS,
@@ -516,6 +518,12 @@ export function CareerScreen() {
     club: currentClub,
     leadershipPortfolio: gameState.leadershipPortfolio,
   });
+  const developmentPressure = projectDevelopmentPressureForState(
+    gameState,
+    getSeasonLength(gameState.fixtures, gameState.currentSeason),
+    deriveSeasonReviewMetrics(gameState, gameState.currentSeason),
+  );
+  const leadDevelopmentPressure = developmentPressure.fronts[0];
   const agencyStrategy = finances
     ? normalizeAgencyStrategyState(finances.agencyStrategyState)
     : undefined;
@@ -546,6 +554,23 @@ export function CareerScreen() {
         meta: activeObligations[0].kind,
         tone: "amber",
       }
+    : leadDevelopmentPressure
+      ? {
+          id: leadDevelopmentPressure.id,
+          label: "Current pressure",
+          title: leadDevelopmentPressure.title,
+          body: [
+            leadDevelopmentPressure.cause,
+            leadDevelopmentPressure.consequence,
+            developmentPressure.youthPayoffSummary,
+          ].filter(Boolean).join(" "),
+          meta: leadDevelopmentPressure.actionLabel,
+          tone: leadDevelopmentPressure.severity === "critical"
+            ? "red"
+            : leadDevelopmentPressure.severity === "high"
+              ? "amber"
+              : "sky",
+        }
     : leadPressure
       ? {
           id: `role-pressure-${leadPressure.id}`,
@@ -1570,6 +1595,14 @@ export function CareerScreen() {
                         {review.contractSummary && (
                           <p className={`mt-2 text-[10px] ${review.contractSummary.objectivesMet === review.contractSummary.objectivesTotal ? "text-emerald-300" : "text-amber-300"}`}>
                             Contract objectives: {review.contractSummary.objectivesMet}/{review.contractSummary.objectivesTotal} met · targets {review.contractSummary.reportsTarget} reports, {review.contractSummary.qualityTarget} quality, {review.contractSummary.recommendationsTarget} signings
+                          </p>
+                        )}
+                        {review.developmentSummary && (
+                          <p className="mt-2 text-[10px] leading-4 text-amber-300">
+                            Development pressure: -{review.developmentSummary.pressurePenalty} points
+                            {review.developmentSummary.youthPayoffOffset > 0
+                              ? ` after ${review.developmentSummary.youthPayoffOffset} points of youth-outcome relief`
+                              : ""}. {review.developmentSummary.reasons[0]}
                           </p>
                         )}
                       </div>
