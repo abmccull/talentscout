@@ -10,6 +10,7 @@ import type {
 import { createRNG } from "@/engine/rng";
 import {
   applyRegionalPresenceToObservation,
+  createRegionalPresenceResolver,
   deriveRegionalPresence,
   deriveTerritorialStrategy,
   getRegionalTravelQuote,
@@ -478,6 +479,51 @@ describe("regional presence invariants", () => {
     expect(applied.regionalContext).toMatchObject({ countryId: "brazil" });
     expect(applied.notes.join(" ")).toContain("Regional context");
     expect(replayed).toEqual(applied);
+  });
+
+  it("reuses canonical country presence without changing observation output", () => {
+    const sourceState = state();
+    const observation: Observation = {
+      id: "cached-live-observation",
+      playerId: "prospect",
+      scoutId: "scout",
+      week: 8,
+      season: 2,
+      context: "liveMatch",
+      attributeReadings: [{
+        attribute: "passing",
+        perceivedValue: 13,
+        confidence: 0.5,
+        observationCount: 1,
+        rangeLow: 10,
+        rangeHigh: 16,
+      }],
+      notes: [],
+      flaggedMoments: [],
+    };
+    const videoObservation: Observation = {
+      ...observation,
+      id: "cached-video-observation",
+      context: "videoAnalysis",
+    };
+    const resolvePresence = createRegionalPresenceResolver(sourceState);
+
+    expect(resolvePresence("Brazil")).toBe(resolvePresence("brazil"));
+    expect([
+      applyRegionalPresenceToObservation(
+        sourceState,
+        observation,
+        resolvePresence,
+      ),
+      applyRegionalPresenceToObservation(
+        sourceState,
+        videoObservation,
+        resolvePresence,
+      ),
+    ]).toEqual([
+      applyRegionalPresenceToObservation(sourceState, observation),
+      applyRegionalPresenceToObservation(sourceState, videoObservation),
+    ]);
   });
 
   it("lets maintained infrastructure grow knowledge while the player is elsewhere", () => {

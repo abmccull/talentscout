@@ -159,6 +159,10 @@ export interface RegionalPresenceSnapshot {
   summary: string;
 }
 
+export type RegionalPresenceResolver = (
+  country: string,
+) => RegionalPresenceSnapshot;
+
 export type TerritorialStrategyPosture =
   | "specialist"
   | "selective"
@@ -895,6 +899,26 @@ export function deriveRegionalPresence(
   return snapshot;
 }
 
+/**
+ * Bind regional-presence derivation to one immutable state snapshot and reuse
+ * the result for every canonical country requested during that transaction.
+ * Keeping the cache inside the resolver prevents snapshots leaking across
+ * weekly state transitions.
+ */
+export function createRegionalPresenceResolver(
+  state: GameState,
+): RegionalPresenceResolver {
+  const presenceByCountry = new Map<string, RegionalPresenceSnapshot>();
+  return (country: string): RegionalPresenceSnapshot => {
+    const countryId = canonicalCountry(country) ?? country.toLowerCase();
+    const cached = presenceByCountry.get(countryId);
+    if (cached) return cached;
+    const presence = deriveRegionalPresence(state, countryId);
+    presenceByCountry.set(countryId, presence);
+    return presence;
+  };
+}
+
 export function deriveRegionalPresenceIndex(
   state: GameState,
 ): Record<string, RegionalPresenceSnapshot> {
@@ -1094,11 +1118,14 @@ export function getRegionalTravelQuote(
 export function applyRegionalPresenceToObservation(
   state: GameState,
   observation: Observation,
+  resolvePresence?: RegionalPresenceResolver,
 ): Observation {
   if (observation.regionalContext) return observation;
   const countryId = getPlayerScoutingCountry(state, observation.playerId);
   if (!countryId) return observation;
-  const presence = deriveRegionalPresence(state, countryId);
+  const presence = resolvePresence
+    ? resolvePresence(countryId)
+    : deriveRegionalPresence(state, countryId);
   const bonus = observation.context === "databaseQuery"
     || observation.context === "statsBriefing"
     || observation.context === "deepVideoAnalysis"

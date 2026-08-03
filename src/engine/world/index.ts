@@ -121,6 +121,7 @@ export type {
 export {
   deriveRegionalPresence,
   deriveRegionalPresenceIndex,
+  createRegionalPresenceResolver,
   getPlayerScoutingCountry,
   getRegionalTravelQuote,
   applyRegionalPresenceToObservation,
@@ -130,6 +131,7 @@ export type {
   RegionalPresenceEffects,
   RegionalPresenceDimensions,
   RegionalPresenceSnapshot,
+  RegionalPresenceResolver,
   RegionalPresenceSource,
   RegionalTravelQuote,
   RegionalObservationContext,

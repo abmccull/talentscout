@@ -17,6 +17,7 @@ import {
 import { processCompletedWeek } from "@/engine/core/calendar";
 import {
   applyRegionalPresenceToObservation,
+  createRegionalPresenceResolver,
 } from "@/engine/world";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
 import {
@@ -354,12 +355,16 @@ export function processWeeklyObservationActivities(
     // Apply regional context once, after every manual/week-simulation path
     // has converged on the same authoritative observation collection.
     const regionalPresenceStartedAt = readObservationDiagnosticClock();
+    const resolveRegionalPresence = createRegionalPresenceResolver(
+      stateWithScheduleApplied,
+    );
     for (const observationId of newObservationIds) {
       const observation = updatedObservations[observationId];
       if (!observation) continue;
       updatedObservations[observationId] = applyRegionalPresenceToObservation(
         stateWithScheduleApplied,
         observation,
+        resolveRegionalPresence,
       );
     }
     if (newObservationIds.size > 0) {
