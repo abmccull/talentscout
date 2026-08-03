@@ -16,24 +16,29 @@ import {
   type WeeklyTransactionExecutionPlan,
   type WeeklyTransactionJob,
 } from "./weeklyTransactionProtocol";
+import {
+  CANONICAL_WEEKLY_SIMULATION_PHASES,
+  cloneDiagnostics,
+  cloneExecution,
+  clonePhaseTimings,
+  cloneTelemetry,
+  cloneTransaction,
+  emitTelemetry,
+  type WeeklySimulationDiagnosticValue,
+  type WeeklySimulationPhase,
+  type WeeklySimulationPhaseTiming,
+  type WeeklySimulationTelemetry,
+} from "./weeklySimulationTelemetry";
 
-/**
- * Ordered checkpoints for the one authoritative week transaction. They are
- * deliberately presentation-free: manual advancement, fast-forward, and
- * batch advancement all pass through the same action and therefore share this
- * exact order.
- */
-export const CANONICAL_WEEKLY_SIMULATION_PHASES = [
-  "activity-resolution",
-  "world-systems",
-  "core-world-tick",
-  "post-tick-accountability",
-  "season-rollover",
-  "finalize",
-] as const;
-
-export type WeeklySimulationPhase =
-  (typeof CANONICAL_WEEKLY_SIMULATION_PHASES)[number];
+export {
+  CANONICAL_WEEKLY_SIMULATION_PHASES,
+  observeWeeklySimulationTelemetry,
+  type WeeklySimulationDiagnosticValue,
+  type WeeklySimulationPhase,
+  type WeeklySimulationPhaseTiming,
+  type WeeklySimulationTelemetry,
+  type WeeklySimulationTelemetryListener,
+} from "./weeklySimulationTelemetry";
 
 export interface WeekAdvancePreflightInput {
   hasWeekSimulation: boolean;
@@ -77,27 +82,7 @@ export interface WeeklySimulationPipelineSnapshot {
   completedAtMs?: number;
   transaction: WeeklyTransactionJob;
   execution: WeeklyTransactionExecutionPlan;
-}
-
-export interface WeeklySimulationPhaseTiming {
-  phase: WeeklySimulationPhase;
-  startedAtMs: number;
-  completedAtMs: number;
-  elapsedMs: number;
-}
-
-export interface WeeklySimulationTelemetry {
-  transaction: WeeklyTransactionJob;
-  execution: WeeklyTransactionExecutionPlan;
-  sourceSeason: number;
-  sourceWeek: number;
-  mode: Specialization;
-  gameModeId: GameModeId;
-  runKind: RunKind;
-  startedAtMs: number;
-  completedAtMs: number;
-  elapsedMs: number;
-  phases: readonly WeeklySimulationPhaseTiming[];
+  diagnostics?: Readonly<Record<string, WeeklySimulationDiagnosticValue>>;
 }
 
 export interface WeeklySimulationPipelineOptions {
@@ -109,69 +94,19 @@ export interface WeeklySimulationPipelineOptions {
   onTelemetry?: (telemetry: WeeklySimulationTelemetry) => void;
 }
 
-export type WeeklySimulationTelemetryListener = (
-  telemetry: WeeklySimulationTelemetry,
-) => void;
-
-const telemetryListeners = new Set<WeeklySimulationTelemetryListener>();
-
-/**
- * Observe completed transactions without persisting timing data into a save.
- * Listener failures are deliberately isolated from the authoritative game loop.
- */
-export function observeWeeklySimulationTelemetry(
-  listener: WeeklySimulationTelemetryListener,
-): () => void {
-  telemetryListeners.add(listener);
-  return () => telemetryListeners.delete(listener);
-}
-
 function monotonicNow(): number {
   return typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
     : Date.now();
 }
 
-function cloneTransaction(job: WeeklyTransactionJob): WeeklyTransactionJob {
-  return { ...job, source: { ...job.source } };
-}
-
-function cloneExecution(
-  execution: WeeklyTransactionExecutionPlan,
-): WeeklyTransactionExecutionPlan {
-  return { ...execution };
-}
-
-function clonePhaseTimings(
-  timings: readonly WeeklySimulationPhaseTiming[],
-): WeeklySimulationPhaseTiming[] {
-  return timings.map((timing) => ({ ...timing }));
-}
-
-function cloneTelemetry(
-  telemetry: WeeklySimulationTelemetry,
-): WeeklySimulationTelemetry {
-  return {
-    ...telemetry,
-    transaction: cloneTransaction(telemetry.transaction),
-    execution: cloneExecution(telemetry.execution),
-    phases: clonePhaseTimings(telemetry.phases),
-  };
-}
-
-function emitTelemetry(telemetry: WeeklySimulationTelemetry): void {
-  for (const listener of telemetryListeners) {
-    try {
-      listener(cloneTelemetry(telemetry));
-    } catch {
-      // Observability must never turn a completed career week into a failure.
-    }
-  }
-}
-
 export interface WeeklySimulationPipeline {
   readonly snapshot: () => WeeklySimulationPipelineSnapshot;
   enter: (phase: WeeklySimulationPhase) => void;
+  noteDiagnostic: (
+    key: string,
+    value: WeeklySimulationDiagnosticValue | undefined,
+  ) => void;
   complete: (state: GameState) => GameState;
 }
 
@@ -206,6 +141,7 @@ export function createWeeklySimulationPipeline(
   let activePhase: { phase: WeeklySimulationPhase; startedAtMs: number } | null = null;
   let completedAtMs: number | undefined;
   let completedTelemetry: WeeklySimulationTelemetry | null = null;
+  const diagnostics: Record<string, WeeklySimulationDiagnosticValue> = {};
 
   const finishActivePhase = (atMs: number): void => {
     if (!activePhase) return;
@@ -231,6 +167,9 @@ export function createWeeklySimulationPipeline(
     ...(completedAtMs !== undefined ? { completedAtMs } : {}),
     transaction: cloneTransaction(transaction),
     execution: cloneExecution(execution),
+    ...(Object.keys(diagnostics).length > 0
+      ? { diagnostics: cloneDiagnostics(diagnostics) }
+      : {}),
   });
 
   return {
@@ -247,6 +186,15 @@ export function createWeeklySimulationPipeline(
       completedPhases.push(phase);
       nextPhaseIndex += 1;
       activePhase = { phase, startedAtMs: enteredAtMs };
+    },
+    noteDiagnostic: (key, value) => {
+      if (!key) return;
+      if (value === undefined) {
+        delete diagnostics[key];
+        return;
+      }
+      if (typeof value === "number" && !Number.isFinite(value)) return;
+      diagnostics[key] = value;
     },
     complete: (state) => {
       if (nextPhaseIndex !== CANONICAL_WEEKLY_SIMULATION_PHASES.length) {
@@ -276,6 +224,9 @@ export function createWeeklySimulationPipeline(
           completedAtMs,
           elapsedMs: Math.max(0, completedAtMs - startedAtMs),
           phases: clonePhaseTimings(phaseTimings),
+          ...(Object.keys(diagnostics).length > 0
+            ? { diagnostics: cloneDiagnostics(diagnostics) }
+            : {}),
         };
         try {
           options.onTelemetry?.(cloneTelemetry(completedTelemetry));

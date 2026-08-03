@@ -95,6 +95,7 @@ export interface WeeklyYouthObservationInput {
   observationsGenerated: number;
   playerEvidence: (playerId: string) => Observation[];
   recordObservation: (observation: Observation) => void;
+  hasNewObservations: () => boolean;
   discoveryModifier: (activityType: Activity["type"]) => number;
   focusDepth: (activityType: Activity["type"]) => number;
   focusPlayers: (activityType: Activity["type"]) => string[];
@@ -123,6 +124,7 @@ export function processWeeklyYouthObservationActivities(
     effectiveScoutCountry,
     playerEvidence,
     recordObservation,
+    hasNewObservations,
     completedInteractiveIds,
     completedLiveActivityTypes,
   } = input;
@@ -824,7 +826,7 @@ export function processWeeklyYouthObservationActivities(
     unsignedYouth: updatedUnsignedYouthObs,
   };
 
-  if (actObsMessages.length > 0 || Object.keys(updatedObservations).length !== Object.keys(stateWithScheduleApplied.observations).length) {
+  if (actObsMessages.length > 0 || hasNewObservations()) {
     stateWithScheduleApplied = {
       ...stateWithScheduleApplied,
       observations: updatedObservations,

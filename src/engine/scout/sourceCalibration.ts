@@ -206,49 +206,66 @@ export function calibrateSourceEvidenceFromReviews(
   const calibratedClaimIdsByReviewId: Record<string, string[]> = {};
   const reviewsByPlayer = indexReviewsByPlayer(input.reviews);
 
-  const npcReports = Object.fromEntries(
-    Object.entries(input.npcReports).map(([id, report]) => {
-      const reviews = reviewsByPlayer.get(report.playerId);
-      if (!reviews?.length || !report.evidenceClaims?.length) {
-        return [id, report];
-      }
-      const evidenceClaims = report.evidenceClaims.map((claim) => {
-        const result = calibrateEvidenceClaimFromOrderedReviews(claim, reviews);
-        if (result.claim !== claim) {
-          calibratedClaimIds.push(claim.id);
-          if (result.reviewId) {
-            calibratedClaimIdsByReviewId[result.reviewId] ??= [];
-            calibratedClaimIdsByReviewId[result.reviewId].push(claim.id);
-          }
-        }
-        return result.claim;
-      });
-      return [id, evidenceClaims.some((claim, index) => claim !== report.evidenceClaims![index])
-        ? { ...report, evidenceClaims }
-        : report];
-    }),
-  );
+  let npcReports = input.npcReports;
+  for (const [id, report] of Object.entries(input.npcReports)) {
+    const reviews = reviewsByPlayer.get(report.playerId);
+    const originalClaims = report.evidenceClaims;
+    if (!reviews?.length || !originalClaims?.length) continue;
 
-  const contactIntel = Object.fromEntries(
-    Object.entries(input.contactIntel).map(([playerId, entries]) => {
-      const reviews = reviewsByPlayer.get(playerId);
-      if (!reviews?.length) return [playerId, entries];
-      const calibratedEntries = entries.map((entry) => {
-        if (!entry.evidenceClaim) return entry;
-        const result = calibrateEvidenceClaimFromOrderedReviews(entry.evidenceClaim, reviews);
-        if (result.claim === entry.evidenceClaim) return entry;
-        calibratedClaimIds.push(entry.evidenceClaim.id);
-        if (result.reviewId) {
-          calibratedClaimIdsByReviewId[result.reviewId] ??= [];
-          calibratedClaimIdsByReviewId[result.reviewId].push(entry.evidenceClaim.id);
-        }
-        return { ...entry, evidenceClaim: result.claim };
-      });
-      return [playerId, calibratedEntries.some((entry, index) => entry !== entries[index])
-        ? calibratedEntries
-        : entries];
-    }),
-  );
+    let evidenceClaims: ScoutEvidenceClaim[] | undefined;
+    for (let index = 0; index < originalClaims.length; index += 1) {
+      const claim = originalClaims[index];
+      const result = calibrateEvidenceClaimFromOrderedReviews(claim, reviews);
+      if (result.claim === claim) continue;
+
+      if (!evidenceClaims) {
+        evidenceClaims = originalClaims.slice();
+      }
+      evidenceClaims[index] = result.claim;
+      calibratedClaimIds.push(claim.id);
+      if (result.reviewId) {
+        calibratedClaimIdsByReviewId[result.reviewId] ??= [];
+        calibratedClaimIdsByReviewId[result.reviewId].push(claim.id);
+      }
+    }
+
+    if (!evidenceClaims) continue;
+    if (npcReports === input.npcReports) {
+      npcReports = { ...input.npcReports };
+    }
+    npcReports[id] = { ...report, evidenceClaims };
+  }
+
+  let contactIntel = input.contactIntel;
+  for (const [playerId, entries] of Object.entries(input.contactIntel)) {
+    const reviews = reviewsByPlayer.get(playerId);
+    if (!reviews?.length) continue;
+
+    let calibratedEntries: HiddenIntel[] | undefined;
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+      if (!entry.evidenceClaim) continue;
+
+      const result = calibrateEvidenceClaimFromOrderedReviews(entry.evidenceClaim, reviews);
+      if (result.claim === entry.evidenceClaim) continue;
+
+      if (!calibratedEntries) {
+        calibratedEntries = entries.slice();
+      }
+      calibratedEntries[index] = { ...entry, evidenceClaim: result.claim };
+      calibratedClaimIds.push(entry.evidenceClaim.id);
+      if (result.reviewId) {
+        calibratedClaimIdsByReviewId[result.reviewId] ??= [];
+        calibratedClaimIdsByReviewId[result.reviewId].push(entry.evidenceClaim.id);
+      }
+    }
+
+    if (!calibratedEntries) continue;
+    if (contactIntel === input.contactIntel) {
+      contactIntel = { ...input.contactIntel };
+    }
+    contactIntel[playerId] = calibratedEntries;
+  }
 
   return {
     npcReports,

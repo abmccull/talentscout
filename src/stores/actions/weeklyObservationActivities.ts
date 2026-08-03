@@ -83,8 +83,9 @@ export function processWeeklyObservationActivities(
     const actObsRng = createRNG(
       `${gameState.seed}-actobs-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
-    const updatedObservations = { ...stateWithScheduleApplied.observations };
-    const preexistingObservationIds = new Set(Object.keys(updatedObservations));
+    const originalObservations = stateWithScheduleApplied.observations;
+    const updatedObservations = { ...originalObservations };
+    const newObservationIds = new Set<string>();
     let actDiscoveries = [...(stateWithScheduleApplied.discoveryRecords ?? [])];
     let actObsMessages: InboxMessage[] = [];
     const allPlayers = Object.values(stateWithScheduleApplied.players);
@@ -94,6 +95,9 @@ export function processWeeklyObservationActivities(
       getPlayerObservationEvidence(observationEvidenceIndex, playerId);
     const recordObservation = (observation: Observation): void => {
       updatedObservations[observation.id] = observation;
+      if (!Object.prototype.hasOwnProperty.call(originalObservations, observation.id)) {
+        newObservationIds.add(observation.id);
+      }
       upsertObservationEvidence(observationEvidenceIndex, observation);
     };
     const observedPlayerIds = new Set(existingObs.map((o) => o.playerId));
@@ -280,6 +284,7 @@ export function processWeeklyObservationActivities(
       observationsGenerated: weekObservationsGenerated,
       playerEvidence,
       recordObservation,
+      hasNewObservations: () => newObservationIds.size > 0,
       discoveryModifier: choiceDiscoveryMod,
       focusDepth,
       focusPlayers,
@@ -296,20 +301,20 @@ export function processWeeklyObservationActivities(
     weekObservationsGenerated = youthObservations.observationsGenerated;
     // Apply regional context once, after every manual/week-simulation path
     // has converged on the same authoritative observation collection.
-    const presenceAdjustedObservations = {
-      ...stateWithScheduleApplied.observations,
-    };
-    for (const [observationId, observation] of Object.entries(presenceAdjustedObservations)) {
-      if (preexistingObservationIds.has(observationId)) continue;
-      presenceAdjustedObservations[observationId] = applyRegionalPresenceToObservation(
+    for (const observationId of newObservationIds) {
+      const observation = updatedObservations[observationId];
+      if (!observation) continue;
+      updatedObservations[observationId] = applyRegionalPresenceToObservation(
         stateWithScheduleApplied,
         observation,
       );
     }
-    stateWithScheduleApplied = {
-      ...stateWithScheduleApplied,
-      observations: presenceAdjustedObservations,
-    };
+    if (newObservationIds.size > 0) {
+      stateWithScheduleApplied = {
+        ...stateWithScheduleApplied,
+        observations: updatedObservations,
+      };
+    }
   }
   return {
     state: stateWithScheduleApplied,

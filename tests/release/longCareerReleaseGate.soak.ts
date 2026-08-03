@@ -63,6 +63,9 @@ const OUTPUT_PATH = resolve(
   process.env.SOAK_OUTPUT
     ?? "artifacts/release/generated/long-career-release-summary.json",
 );
+const DIAGNOSTIC_CHECKPOINT_PATH = process.env.SOAK_DIAGNOSTIC_CHECKPOINT_PATH
+  ? resolve(process.env.SOAK_DIAGNOSTIC_CHECKPOINT_PATH)
+  : undefined;
 const MAX_SERIALIZED_BYTES = Number.parseInt(
   process.env.SOAK_MAX_SERIALIZED_BYTES ?? String(80 * 1024 * 1024),
   10,
@@ -171,6 +174,18 @@ function percentile(values: readonly number[], fraction: number): number {
 function round(value: number, precision = 2): number {
   const scale = 10 ** precision;
   return Math.round(value * scale) / scale;
+}
+
+function formatWeeklyDiagnostics(
+  diagnostics?: WeeklySimulationTelemetry["diagnostics"],
+): string {
+  if (!diagnostics) return "unavailable";
+  const entries = Object.entries(diagnostics);
+  if (entries.length === 0) return "none";
+  return entries
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(", ");
 }
 
 function collectMemorySample(season: number): MemorySample {
@@ -736,7 +751,7 @@ async function simulateCareer(
     if (!before) throw new Error(`Seed ${seed} lost game state`);
     const started = performance.now();
     const cpuStarted = process.cpuUsage();
-    await driveAutonomousYouthCareerWeek(careerTelemetry);
+    const driverTiming = await driveAutonomousYouthCareerWeek(careerTelemetry);
     const elapsed = performance.now() - started;
     const cpuUsage = process.cpuUsage(cpuStarted);
     const cpuElapsed = (cpuUsage.user + cpuUsage.system) / 1_000;
@@ -773,13 +788,20 @@ async function simulateCareer(
         .map((phase) => `${phase.phase}=${phase.elapsedMs.toFixed(1)}ms`)
         .join(", ")
       : "unavailable";
+    const diagnosticBreakdown = formatWeeklyDiagnostics(matchingWeeklyTelemetry?.diagnostics);
+    const driverBreakdown = [
+      `stabilization=${driverTiming.stabilizationMs.toFixed(1)}ms`,
+      `scheduling=${driverTiming.schedulingMs.toFixed(1)}ms`,
+      `simulation=${driverTiming.simulationMs.toFixed(1)}ms`,
+      `total=${driverTiming.totalMs.toFixed(1)}ms`,
+    ].join(", ");
     expect(
       elapsed,
-      `seed ${seed} batch wall latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
+      `seed ${seed} batch wall latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; driver: ${driverBreakdown}; phases: ${phaseBreakdown}; diagnostics: ${diagnosticBreakdown}`,
     ).toBeLessThan(MAX_SINGLE_BATCH_WALL_MS);
     expect(
       cpuElapsed,
-      `seed ${seed} batch CPU latency indicates excessive work at S${before.currentSeason} W${before.currentWeek}; wall=${elapsed.toFixed(1)}ms; phases=${phaseElapsed?.toFixed(1) ?? "unavailable"}ms (${phaseBreakdown})`,
+      `seed ${seed} batch CPU latency indicates excessive work at S${before.currentSeason} W${before.currentWeek}; wall=${elapsed.toFixed(1)}ms; driver: ${driverBreakdown}; phases=${phaseElapsed?.toFixed(1) ?? "unavailable"}ms (${phaseBreakdown}); diagnostics: ${diagnosticBreakdown}`,
     ).toBeLessThan(MAX_SINGLE_BATCH_CPU_MS);
 
     if (after.currentSeason !== lastCheckedSeason) {
@@ -800,6 +822,22 @@ async function simulateCareer(
         Object.keys(stabilized.unsignedYouth ?? {}).length,
         `seed ${seed} exhausted the unsigned youth pool`,
       ).toBeGreaterThan(0);
+      if (DIAGNOSTIC_CHECKPOINT_PATH) {
+        await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
+        await writeFile(
+          DIAGNOSTIC_CHECKPOINT_PATH,
+          JSON.stringify({
+            schemaVersion: 1,
+            evidenceKind: "long-career-diagnostic-season-checkpoint",
+            seed,
+            seasonCount,
+            completedCanonicalTicks: canonicalTicks,
+            careerTelemetry,
+            gameState: stabilized,
+          }),
+          "utf8",
+        );
+      }
       const bytes = footprint.totalBytes;
       const boundaryCompactions = pendingCompactionSamples.splice(
         0,

@@ -7,6 +7,7 @@ import {
 import {
   createDevelopmentEnvironmentIndex,
   projectCurrentPlayerCareerEnvironment,
+  type DevelopmentEnvironmentIndex,
 } from "@/engine/world/developmentEnvironment";
 
 export type CareerInterventionOutcome =
@@ -43,11 +44,33 @@ export interface CareerInterventionPortfolio {
 
 type PlayerMovementRecord = NonNullable<GameState["playerMovementHistory"]>[number];
 type CareerInterventionPlayerFilter = string | ReadonlySet<string>;
+export type CareerInterventionEnvironmentStrategy = "adaptive" | "direct" | "indexed";
+
+const CAREER_INTERVENTION_DIRECT_ENVIRONMENT_PLAYER_LIMIT = 3;
 
 interface CareerInterventionIndexes {
   callbackObservedByDecision: ReadonlySet<string>;
   factIdsByDecision: ReadonlyMap<string, readonly string[]>;
   movementsByPlayer: ReadonlyMap<string, readonly PlayerMovementRecord[]>;
+}
+
+function normalizeCareerInterventionPlayerFilter(
+  filter: CareerInterventionPlayerFilter | undefined,
+): ReadonlySet<string> | undefined {
+  if (filter === undefined) return undefined;
+  return typeof filter === "string" ? new Set([filter]) : filter;
+}
+
+export function determineCareerInterventionEnvironmentStrategy(
+  playerFilter: CareerInterventionPlayerFilter | undefined,
+  strategy: CareerInterventionEnvironmentStrategy = "adaptive",
+): "direct" | "indexed" {
+  if (strategy === "direct" || strategy === "indexed") return strategy;
+  const filteredPlayerIds = normalizeCareerInterventionPlayerFilter(playerFilter);
+  if (!filteredPlayerIds) return "indexed";
+  return filteredPlayerIds.size <= CAREER_INTERVENTION_DIRECT_ENVIRONMENT_PLAYER_LIMIT
+    ? "direct"
+    : "indexed";
 }
 
 function metadataString(
@@ -140,24 +163,35 @@ function createCareerInterventionIndexes(
   };
 }
 
-function createCurrentEnvironmentResolver(state: GameState) {
+function createCurrentEnvironmentResolver(
+  state: GameState,
+  playerFilter: CareerInterventionPlayerFilter | undefined,
+  strategy: CareerInterventionEnvironmentStrategy,
+) {
   const cache = new Map<string, {
     score: number;
     headline: string;
     summary: string;
   }>();
-  let developmentEnvironmentIndex:
-    | ReturnType<typeof createDevelopmentEnvironmentIndex>
-    | undefined;
+  const resolvedStrategy = determineCareerInterventionEnvironmentStrategy(
+    playerFilter,
+    strategy,
+  );
+  let developmentEnvironmentIndex: DevelopmentEnvironmentIndex | undefined;
+
+  const resolveWithDirectProjection = (player: Player) =>
+    projectCurrentPlayerCareerEnvironment(state, player);
+  const resolveWithSharedIndex = (player: Player) =>
+    projectCurrentPlayerCareerEnvironment(state, player, {
+      index: developmentEnvironmentIndex ??= createDevelopmentEnvironmentIndex(state),
+    });
 
   return (player: Player) => {
     const cached = cache.get(player.id);
     if (cached) return cached;
-    const projection = player.clubId
-      ? projectCurrentPlayerCareerEnvironment(state, player, {
-          index: developmentEnvironmentIndex ??= createDevelopmentEnvironmentIndex(state),
-        })
-      : projectCurrentPlayerCareerEnvironment(state, player);
+    const projection = player.clubId && resolvedStrategy === "indexed"
+      ? resolveWithSharedIndex(player)
+      : resolveWithDirectProjection(player);
     const resolved = {
       score: projection.score,
       headline: projection.headline,
@@ -201,10 +235,15 @@ function latestMovementId(
 export function collectCareerInterventionEvidence(
   state: GameState,
   playerFilter?: CareerInterventionPlayerFilter,
+  strategy: CareerInterventionEnvironmentStrategy = "adaptive",
 ): CareerInterventionEvidence[] {
   const now = { week: state.currentWeek, season: state.currentSeason };
   const indexes = createCareerInterventionIndexes(state, playerFilter);
-  const resolveCurrentEnvironment = createCurrentEnvironmentResolver(state);
+  const resolveCurrentEnvironment = createCurrentEnvironmentResolver(
+    state,
+    playerFilter,
+    strategy,
+  );
   let gameCalendar: ReturnType<typeof createGameCalendarIndex> | undefined;
   const activeById = new Map(
     Object.values(state.consequenceState.decisions ?? {})

@@ -19,11 +19,9 @@ import type {
 import type { DecisionOption, DecisionRecord } from "@/engine/consequences/types";
 import {
   getFreshReportObservationIds,
-  getLatestReportInScope,
   selectLatestReportsByCase,
 } from "@/engine/reports/reportAccountability";
 import type { DelegationPolicyId, WeeklyIntentId } from "@/engine/core/weeklyStrategy";
-import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { reconcileInboxActionRequirements } from "@/engine/world/inboxActionAuthority";
 import { useGameStore } from "@/stores/gameStore";
 
@@ -507,8 +505,11 @@ function chooseDayInteraction(
   }
 }
 
-function getPlayerForReport(state: GameState, playerId: string): Player | undefined {
-  return resolvePlayerEntity(state, playerId)?.player;
+function compareReportRecency(left: ScoutReport, right: ScoutReport): number {
+  return left.submittedSeason - right.submittedSeason
+    || left.submittedWeek - right.submittedWeek
+    || (left.revision ?? 1) - (right.revision ?? 1)
+    || left.id.localeCompare(right.id);
 }
 
 function getReportCandidates(state: GameState): ReportCandidate[] {
@@ -520,16 +521,29 @@ function getReportCandidates(state: GameState): ReportCandidate[] {
     grouped.set(observation.playerId, bucket);
   }
 
-  const reports = Object.values(state.reports);
+  const unsignedYouthByPlayerId = new Map(
+    Object.values(state.unsignedYouth ?? {}).map((entry) => [entry.player.id, entry] as const),
+  );
+  const latestGeneralReportByPlayerId = new Map<string, ScoutReport>();
+  for (const report of Object.values(state.reports)) {
+    if (report.scoutId !== state.scout.id || report.briefId !== undefined) continue;
+    const current = latestGeneralReportByPlayerId.get(report.playerId);
+    if (!current || compareReportRecency(report, current) > 0) {
+      latestGeneralReportByPlayerId.set(report.playerId, report);
+    }
+  }
   const candidates: ReportCandidate[] = [];
   for (const [playerId, observations] of grouped.entries()) {
-    const player = getPlayerForReport(state, playerId);
+    const player = state.players[playerId]
+      ?? state.retiredPlayers?.[playerId]
+      ?? state.unsignedYouth[playerId]?.player
+      ?? unsignedYouthByPlayerId.get(playerId)?.player;
     if (!player) continue;
-    const priorReport = getLatestReportInScope(reports, state.scout.id, playerId);
+    const priorReport = latestGeneralReportByPlayerId.get(playerId);
     const freshObservationIds = getFreshReportObservationIds(observations, priorReport);
     const minimumFresh = priorReport ? 2 : 3;
     if (freshObservationIds.length < minimumFresh || observations.length < 3) continue;
-    const unsignedYouth = Object.values(state.unsignedYouth ?? {}).find((entry) => entry.player.id === playerId);
+    const unsignedYouth = unsignedYouthByPlayerId.get(playerId);
     const score = freshObservationIds.length * 12
       + observations.length * 5
       + (unsignedYouth?.buzzLevel ?? 0)
@@ -627,13 +641,6 @@ function authorReports(telemetry: AutonomousCareerTelemetry): void {
   }
 }
 
-function listingExistsForReport(listings: ReportListing[], reportId: string): boolean {
-  return listings.some((listing) =>
-    listing.reportId === reportId
-    && (listing.status === "active" || (listing.isExclusive && listing.status === "sold"))
-  );
-}
-
 function listingPriceForReport(report: ScoutReport): number {
   return Math.max(200, Math.round(report.qualityScore * 10));
 }
@@ -645,10 +652,17 @@ function listFreshReports(telemetry: AutonomousCareerTelemetry): void {
   const profile = chooserProfile(telemetry.chooserProfile);
 
   const listings = state.finances.reportListings ?? [];
+  const alreadyListedReportIds = new Set(
+    listings
+      .filter((listing) =>
+        listing.status === "active" || (listing.isExclusive && listing.status === "sold")
+      )
+      .map((listing) => listing.reportId),
+  );
   const latestReports = selectLatestReportsByCase(Object.values(state.reports))
     .filter((report) => report.scoutId === state.scout.id)
     .filter((report) => report.qualityScore >= 45)
-    .filter((report) => !listingExistsForReport(listings, report.id));
+    .filter((report) => !alreadyListedReportIds.has(report.id));
 
   for (const report of latestReports.slice(0, profile.reportListingLimit)) {
     store.listReportForSale(
@@ -703,7 +717,10 @@ export function resolveCommercialInbox(telemetry: AutonomousCareerTelemetry): vo
   const state = store.gameState;
   if (!state || !state.finances) return;
 
-  for (const listingId of state.finances.reportListings.map((listing) => listing.id)) {
+  const listingIdsWithPendingBids = state.finances.reportListings
+    .filter((listing) => listing.bids.some((bid) => bid.status === "pending"))
+    .map((listing) => listing.id);
+  for (const listingId of listingIdsWithPendingBids) {
     // Non-exclusive listings can receive several simultaneously valid buyers.
     // Refresh after each store action and drain the bounded queue; accepting
     // only one bid per listing allowed supply to outpace the certification
@@ -877,10 +894,25 @@ function resolveNarrativeAndConsequenceChoices(telemetry: AutonomousCareerTeleme
   }
 }
 
+export interface AutonomousCareerWeekTiming {
+  stabilizationMs: number;
+  schedulingMs: number;
+  simulationMs: number;
+  totalMs: number;
+}
+
+function diagnosticNow(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
+
 export async function driveAutonomousYouthCareerWeek(
   telemetry: AutonomousCareerTelemetry,
-): Promise<void> {
+): Promise<AutonomousCareerWeekTiming> {
+  const startedAtMs = diagnosticNow();
   stabilizeAutonomousCareerState(telemetry);
+  const stabilizedAtMs = diagnosticNow();
 
   const store = useGameStore.getState();
   const state = store.gameState;
@@ -894,6 +926,7 @@ export async function driveAutonomousYouthCareerWeek(
   store.autoSchedule(buildPriorities(state, telemetry));
   ensureCourseStudyScheduled();
   ensureScheduledWork();
+  const scheduledAtMs = diagnosticNow();
 
   const sourceSeason = useGameStore.getState().gameState?.currentSeason;
   const sourceWeek = useGameStore.getState().gameState?.currentWeek;
@@ -930,6 +963,13 @@ export async function driveAutonomousYouthCareerWeek(
   }
 
   telemetry.weeksDriven += 1;
+  const completedAtMs = diagnosticNow();
+  return {
+    stabilizationMs: stabilizedAtMs - startedAtMs,
+    schedulingMs: scheduledAtMs - stabilizedAtMs,
+    simulationMs: completedAtMs - scheduledAtMs,
+    totalMs: completedAtMs - startedAtMs,
+  };
 }
 
 export function stabilizeAutonomousCareerState(

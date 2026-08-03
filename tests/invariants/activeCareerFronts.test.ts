@@ -14,6 +14,7 @@ import {
 import { buildDashboardActiveFronts } from "@/engine/dashboard/activeFronts";
 import {
   collectCareerInterventionEvidence,
+  determineCareerInterventionEnvironmentStrategy,
   projectCareerInterventionPortfolio,
 } from "@/engine/career/careerInterventionPortfolio";
 import { createRunManifest } from "@/engine/run";
@@ -419,6 +420,43 @@ describe("active career fronts", () => {
       .toEqual(collectCareerInterventionEvidence(selectedState, "player-front"));
     expect(collectCareerInterventionEvidence(selectedState, new Set(["missing-player"])))
       .toEqual([]);
+  });
+
+  it("chooses direct projection only for small filtered intervention batches", () => {
+    expect(determineCareerInterventionEnvironmentStrategy(undefined)).toBe("indexed");
+    expect(determineCareerInterventionEnvironmentStrategy("player-front")).toBe("direct");
+    expect(determineCareerInterventionEnvironmentStrategy(new Set(["a", "b", "c"]))).toBe("direct");
+    expect(determineCareerInterventionEnvironmentStrategy(new Set(["a", "b", "c", "d"])))
+      .toBe("indexed");
+    expect(determineCareerInterventionEnvironmentStrategy("player-front", "indexed"))
+      .toBe("indexed");
+  });
+
+  it("preserves intervention evidence across direct and indexed environment resolution paths", () => {
+    const initial = state();
+    const prepared = prepareWeeklyActiveCareerFrontCandidate(initial)!;
+    const applied = applyPreparedActiveCareerFront(initial, prepared).state;
+    const selected = selectDecisionOption(
+      applied.consequenceState,
+      prepared.decision.id,
+      "reopen-route",
+      { week: applied.currentWeek, season: applied.currentSeason },
+      "player",
+      38,
+    );
+    const selectedState = { ...applied, consequenceState: selected.state };
+
+    const singletonFilter = new Set(["player-front"]);
+    const largeFilter = new Set(["player-front", "other-1", "other-2", "other-3"]);
+
+    expect(collectCareerInterventionEvidence(selectedState, singletonFilter, "adaptive"))
+      .toEqual(collectCareerInterventionEvidence(selectedState, singletonFilter, "direct"));
+    expect(collectCareerInterventionEvidence(selectedState, singletonFilter, "direct"))
+      .toEqual(collectCareerInterventionEvidence(selectedState, singletonFilter, "indexed"));
+    expect(collectCareerInterventionEvidence(selectedState, largeFilter, "adaptive"))
+      .toEqual(collectCareerInterventionEvidence(selectedState, largeFilter, "indexed"));
+    expect(collectCareerInterventionEvidence(selectedState, largeFilter, "indexed"))
+      .toEqual(collectCareerInterventionEvidence(selectedState, largeFilter, "direct"));
   });
 
   it("does not re-offer a late-season front until the prior pathway arc fully clears", () => {

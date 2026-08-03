@@ -12,6 +12,105 @@ import {
   calibrateSourceEvidenceFromReview,
 } from "@/engine/scout/sourceCalibration";
 
+function legacyCalibrateSourceEvidenceFromReviews(
+  input: {
+    npcReports: Record<string, NPCScoutReport>;
+    contactIntel: Record<string, HiddenIntel[]>;
+    reviews: readonly RecommendationReview[];
+  },
+) {
+  const calibratedClaimIds: string[] = [];
+  const calibratedClaimIdsByReviewId: Record<string, string[]> = {};
+
+  const reviewsByPlayer = input.reviews.reduce<Map<string, RecommendationReview[]>>((map, currentReview) => {
+    const existing = map.get(currentReview.playerId);
+    if (existing) {
+      existing.push(currentReview);
+    } else {
+      map.set(currentReview.playerId, [currentReview]);
+    }
+    return map;
+  }, new Map());
+
+  const npcReports = Object.fromEntries(
+    Object.entries(input.npcReports).map(([id, report]) => {
+      const reviews = reviewsByPlayer.get(report.playerId);
+      if (!reviews?.length || !report.evidenceClaims?.length) {
+        return [id, report];
+      }
+      const evidenceClaims = report.evidenceClaims.map((currentClaim) => {
+        let claimResult = currentClaim;
+        let reviewId: string | undefined;
+        for (const currentReview of reviews) {
+          const nextClaim = calibrateEvidenceClaimFromReview(claimResult, currentReview);
+          if (nextClaim !== claimResult) {
+            claimResult = nextClaim;
+            reviewId = currentReview.id;
+            break;
+          }
+          claimResult = nextClaim;
+        }
+        if (claimResult !== currentClaim) {
+          calibratedClaimIds.push(currentClaim.id);
+          if (reviewId) {
+            calibratedClaimIdsByReviewId[reviewId] ??= [];
+            calibratedClaimIdsByReviewId[reviewId].push(currentClaim.id);
+          }
+        }
+        return claimResult;
+      });
+      return [id, evidenceClaims.some((currentClaim, index) => currentClaim !== report.evidenceClaims![index])
+        ? { ...report, evidenceClaims }
+        : report];
+    }),
+  );
+
+  const contactIntel = Object.fromEntries(
+    Object.entries(input.contactIntel).map(([playerId, entries]) => {
+      const reviews = reviewsByPlayer.get(playerId);
+      if (!reviews?.length) return [playerId, entries];
+      const calibratedEntries = entries.map((entry) => {
+        if (!entry.evidenceClaim) return entry;
+
+        let claimResult = entry.evidenceClaim;
+        let reviewId: string | undefined;
+        for (const currentReview of reviews) {
+          const nextClaim = calibrateEvidenceClaimFromReview(claimResult, currentReview);
+          if (nextClaim !== claimResult) {
+            claimResult = nextClaim;
+            reviewId = currentReview.id;
+            break;
+          }
+          claimResult = nextClaim;
+        }
+        if (claimResult === entry.evidenceClaim) return entry;
+
+        calibratedClaimIds.push(entry.evidenceClaim.id);
+        if (reviewId) {
+          calibratedClaimIdsByReviewId[reviewId] ??= [];
+          calibratedClaimIdsByReviewId[reviewId].push(entry.evidenceClaim.id);
+        }
+        return { ...entry, evidenceClaim: claimResult };
+      });
+      return [playerId, calibratedEntries.some((entry, index) => entry !== entries[index])
+        ? calibratedEntries
+        : entries];
+    }),
+  );
+
+  return {
+    npcReports,
+    contactIntel,
+    calibratedClaimIds: [...new Set(calibratedClaimIds)],
+    calibratedClaimIdsByReviewId: Object.fromEntries(
+      Object.entries(calibratedClaimIdsByReviewId).map(([reviewId, claimIds]) => [
+        reviewId,
+        [...new Set(claimIds)],
+      ]),
+    ),
+  };
+}
+
 function claim(
   overrides: Partial<ScoutEvidenceClaim> = {},
 ): ScoutEvidenceClaim {
@@ -379,5 +478,238 @@ describe("source evidence calibration", () => {
     expect(batched.calibratedClaimIdsByReviewId).toEqual({
       "review-1": ["claim-readiness"],
     });
+  });
+
+  it("preserves top-level references when no claims are calibrated", () => {
+    const baseNpcReports: Record<string, NPCScoutReport> = {
+      "report-1": {
+        id: "report-1",
+        npcScoutId: "npc-1",
+        playerId: "player-1",
+        week: 8,
+        season: 1,
+        quality: 78,
+        summary: "Long-term upside only.",
+        recommendation: "monitor",
+        reviewed: true,
+        evidenceClaims: [claim({ category: "potential" })],
+      },
+    };
+    const baseContactIntel: Record<string, HiddenIntel[]> = {
+      "player-1": [{
+        playerId: "player-1",
+        attribute: "professionalism",
+        hint: "Interesting habits, no hard proof yet.",
+        reliability: 0.67,
+        evidenceClaim: claim({
+          id: "claim-contact-potential",
+          category: "potential",
+          sourceId: "contact-1",
+          sourceKind: "contact",
+        }),
+      }],
+    };
+
+    const result = calibrateSourceEvidenceFromReviews({
+      npcReports: baseNpcReports,
+      contactIntel: baseContactIntel,
+      reviews: [review()],
+    });
+
+    expect(result.calibratedClaimIds).toEqual([]);
+    expect(result.calibratedClaimIdsByReviewId).toEqual({});
+    expect(result.npcReports).toBe(baseNpcReports);
+    expect(result.contactIntel).toBe(baseContactIntel);
+  });
+
+  it("clones only the changed branches during batch calibration", () => {
+    const changedClaim = claim();
+    const unchangedClaim = claim({
+      id: "claim-unchanged",
+      playerId: "player-2",
+      sourceId: "report-2",
+      category: "potential",
+    });
+    const changedReport: NPCScoutReport = {
+      id: "report-1",
+      npcScoutId: "npc-1",
+      playerId: "player-1",
+      week: 8,
+      season: 1,
+      quality: 78,
+      summary: "Ready now.",
+      recommendation: "pursue",
+      reviewed: true,
+      evidenceClaims: [changedClaim],
+    };
+    const unchangedReport: NPCScoutReport = {
+      id: "report-2",
+      npcScoutId: "npc-2",
+      playerId: "player-2",
+      week: 9,
+      season: 1,
+      quality: 74,
+      summary: "Still a projection.",
+      recommendation: "monitor",
+      reviewed: true,
+      evidenceClaims: [unchangedClaim],
+    };
+    const changedIntel: HiddenIntel = {
+      playerId: "player-1",
+      attribute: "injuryProneness",
+      hint: "Availability has been dependable.",
+      reliability: 0.7,
+      evidenceClaim: claim({
+        id: "claim-contact-readiness",
+        sourceId: "contact-1",
+        sourceKind: "contact",
+      }),
+    };
+    const unchangedIntel: HiddenIntel = {
+      playerId: "player-2",
+      attribute: "professionalism",
+      hint: "Still reading the room.",
+      reliability: 0.61,
+      evidenceClaim: claim({
+        id: "claim-contact-unchanged",
+        playerId: "player-2",
+        category: "potential",
+        sourceId: "contact-2",
+        sourceKind: "contact",
+      }),
+    };
+    const baseNpcReports = {
+      "report-1": changedReport,
+      "report-2": unchangedReport,
+    };
+    const baseContactIntel = {
+      "player-1": [changedIntel],
+      "player-2": [unchangedIntel],
+    };
+
+    const result = calibrateSourceEvidenceFromReviews({
+      npcReports: baseNpcReports,
+      contactIntel: baseContactIntel,
+      reviews: [review()],
+    });
+
+    expect(result.npcReports).not.toBe(baseNpcReports);
+    expect(result.contactIntel).not.toBe(baseContactIntel);
+    expect(result.npcReports["report-1"]).not.toBe(changedReport);
+    expect(result.npcReports["report-2"]).toBe(unchangedReport);
+    expect(result.npcReports["report-1"].evidenceClaims).not.toBe(changedReport.evidenceClaims);
+    expect(result.npcReports["report-2"].evidenceClaims).toBe(unchangedReport.evidenceClaims);
+    expect(result.contactIntel["player-1"]).not.toBe(baseContactIntel["player-1"]);
+    expect(result.contactIntel["player-2"]).toBe(baseContactIntel["player-2"]);
+    expect(result.contactIntel["player-1"][0]).not.toBe(changedIntel);
+    expect(result.contactIntel["player-2"][0]).toBe(unchangedIntel);
+  });
+
+  it("matches the legacy eager batch output across multiple ordered reviews", () => {
+    const baseNpcReports: Record<string, NPCScoutReport> = {
+      "report-1": {
+        id: "report-1",
+        npcScoutId: "npc-1",
+        playerId: "player-1",
+        week: 8,
+        season: 1,
+        quality: 78,
+        summary: "Ready now.",
+        recommendation: "pursue",
+        reviewed: true,
+        evidenceClaims: [
+          claim(),
+          claim({
+            id: "claim-rolefit",
+            category: "roleFit",
+            direction: "negative",
+          }),
+        ],
+      },
+      "report-2": {
+        id: "report-2",
+        npcScoutId: "npc-2",
+        playerId: "player-2",
+        week: 9,
+        season: 1,
+        quality: 74,
+        summary: "Should adapt quickly.",
+        recommendation: "monitor",
+        reviewed: true,
+        evidenceClaims: [claim({
+          id: "claim-player-2",
+          playerId: "player-2",
+          sourceId: "report-2",
+          category: "adaptability",
+          direction: "negative",
+        })],
+      },
+    };
+    const baseContactIntel: Record<string, HiddenIntel[]> = {
+      "player-1": [{
+        playerId: "player-1",
+        attribute: "injuryProneness",
+        hint: "Availability has been dependable.",
+        reliability: 0.7,
+        evidenceClaim: claim({
+          id: "claim-contact-player-1",
+          sourceId: "contact-1",
+          sourceKind: "contact",
+        }),
+      }],
+      "player-2": [{
+        playerId: "player-2",
+        attribute: "professionalism",
+        hint: "The move has been rocky.",
+        reliability: 0.67,
+        evidenceClaim: claim({
+          id: "claim-contact-player-2",
+          playerId: "player-2",
+          sourceId: "contact-2",
+          sourceKind: "contact",
+          category: "adaptability",
+          direction: "negative",
+        }),
+      }],
+    };
+    const reviews = [
+      review(),
+      review({
+        id: "review-2",
+        playerId: "player-2",
+        reportId: "player-report-2",
+        overallScore: 52,
+        playerFacingDimensions: [{
+          key: "supportAdaptationFit",
+          label: "Support/adaptation fit",
+          status: "negative",
+          evidenceLevel: "full",
+          score: 34,
+          summary: "The destination club left the player isolated.",
+        }],
+      }),
+      review({
+        id: "review-3",
+        playerId: "player-1",
+        checkpoint: "twoSeasons",
+        dueSeason: 3,
+        completedWeek: 8,
+        completedSeason: 3,
+        overallScore: 91,
+      }),
+    ] as const;
+
+    const result = calibrateSourceEvidenceFromReviews({
+      npcReports: baseNpcReports,
+      contactIntel: baseContactIntel,
+      reviews,
+    });
+    const legacy = legacyCalibrateSourceEvidenceFromReviews({
+      npcReports: baseNpcReports,
+      contactIntel: baseContactIntel,
+      reviews,
+    });
+
+    expect(result).toEqual(legacy);
   });
 });

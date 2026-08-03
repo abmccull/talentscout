@@ -749,14 +749,23 @@ export function removeActivity(
   return { ...schedule, activities: updatedActivities };
 }
 
-function collectObservedPlayerCounts(
+function collectObservationSummary(
   observations?: Record<string, Observation>,
-): Map<string, number> {
+): {
+  countsByPlayerId: Map<string, number>;
+  bestAbilityByPlayerId: Map<string, AbilityReading>;
+} {
   const counts = new Map<string, number>();
+  const bestAbilityByPlayerId = new Map<string, AbilityReading>();
   for (const obs of Object.values(observations ?? {})) {
     counts.set(obs.playerId, (counts.get(obs.playerId) ?? 0) + 1);
+    if (!obs.abilityReading) continue;
+    const best = bestAbilityByPlayerId.get(obs.playerId);
+    if (!best || obs.abilityReading.caConfidence > best.caConfidence) {
+      bestAbilityByPlayerId.set(obs.playerId, obs.abilityReading);
+    }
   }
-  return counts;
+  return { countsByPlayerId: counts, bestAbilityByPlayerId };
 }
 
 function topObservedPlayers(
@@ -783,21 +792,6 @@ function topObservedUnsignedYouth(
     .filter((entry) => entry.observations > 0)
     .sort((a, b) => b.observations - a.observations);
   return results.slice(0, maxCount);
-}
-
-/** Find the highest-confidence ability reading for a player across all observations. */
-function getBestAbilityReading(
-  playerId: string,
-  observations?: Record<string, Observation>,
-): AbilityReading | undefined {
-  let best: AbilityReading | undefined;
-  for (const obs of Object.values(observations ?? {})) {
-    if (obs.playerId !== playerId || !obs.abilityReading) continue;
-    if (!best || obs.abilityReading.caConfidence > best.caConfidence) {
-      best = obs.abilityReading;
-    }
-  }
-  return best;
 }
 
 /**
@@ -844,7 +838,10 @@ export function getAvailableActivities(
 ): Activity[] {
   const activities: Activity[] = [];
   const perkModifiers = resolveScoutPerkModifiers(scout);
-  const observedCounts = collectObservedPlayerCounts(observations);
+  const {
+    countsByPlayerId: observedCounts,
+    bestAbilityByPlayerId,
+  } = collectObservationSummary(observations);
   const reportCandidates = topObservedPlayers(
     new Map(
       [...observedCounts.entries()].filter(([playerId]) => players?.[playerId] !== undefined),
@@ -904,7 +901,7 @@ export function getAvailableActivities(
       description: "Write a scouting report on an observed player",
       targetPool: reportCandidates.map((c) => {
         const p = players?.[c.playerId];
-        const bestAbility = getBestAbilityReading(c.playerId, observations);
+        const bestAbility = bestAbilityByPlayerId.get(c.playerId);
         return {
           id: c.playerId,
           name: p ? `${p.firstName} ${p.lastName}` : `Player ${c.playerId.slice(0, 6)}`,
@@ -1075,7 +1072,7 @@ export function getAvailableActivities(
     const youthPoolByPlayerId = new Map<string, TargetOption>();
     for (const entry of targetedYouth) {
       const p = entry.youth.player;
-      const bestAbility = getBestAbilityReading(p.id, observations);
+      const bestAbility = bestAbilityByPlayerId.get(p.id);
       youthPoolByPlayerId.set(p.id, {
         id: p.id,
         name: `${p.firstName} ${p.lastName}`,

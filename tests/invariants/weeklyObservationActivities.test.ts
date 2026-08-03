@@ -149,6 +149,7 @@ describe("weekly observation transaction", () => {
     expect(result.observationsGenerated).toBe(0);
     expect(result.playersDiscovered).toBe(0);
     expect(result.state.observations).toEqual(empty.observations);
+    expect(result.state.observations).toBe(empty.observations);
   }, 30_000);
 
   it("consumes a matching professional-case lock once through weekly completion and does not replay it", async () => {
