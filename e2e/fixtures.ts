@@ -114,21 +114,42 @@ export class GamePage {
           "Continue to promotion",
           "Continue to milestone",
         ]);
+        const isVisible = (element: HTMLElement): boolean => {
+          const style = window.getComputedStyle(element);
+          return style.display !== "none"
+            && style.visibility !== "hidden"
+            && element.getClientRects().length > 0;
+        };
+
+        // Week Summary is a single-action acknowledgement whose button label
+        // changes when it is followed by a promotion or milestone. Target its
+        // stable dialog identity first so label/render timing cannot strand a
+        // completed canonical week behind the overlay.
+        const weekSummary = document.querySelector<HTMLElement>(
+          '[role="dialog"][aria-labelledby="week-summary-title"]',
+        );
+        if (weekSummary && isVisible(weekSummary)) {
+          const dismissButton = weekSummary.querySelector<HTMLButtonElement>(
+            "button:not([disabled])",
+          );
+          if (dismissButton) {
+            dismissButton.click();
+            return true;
+          }
+        }
+
         const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')];
         for (let index = dialogs.length - 1; index >= 0; index--) {
           const dialog = dialogs[index];
-          const style = window.getComputedStyle(dialog);
-          if (
-            style.display === "none"
-            || style.visibility === "hidden"
-            || dialog.getClientRects().length === 0
-          ) {
-            continue;
-          }
+          if (!isVisible(dialog)) continue;
           const button = [...dialog.querySelectorAll<HTMLButtonElement>("button")]
-            .find((candidate) =>
-              !candidate.disabled
-              && allowedLabels.has(candidate.textContent?.trim() ?? ""));
+            .find((candidate) => {
+              const label = candidate.getAttribute("aria-label")?.trim()
+                || candidate.innerText.trim()
+                || candidate.textContent?.trim()
+                || "";
+              return !candidate.disabled && allowedLabels.has(label);
+            });
           if (!button) continue;
           button.click();
           return true;
@@ -138,6 +159,36 @@ export class GamePage {
       if (!dismissed) return;
       await this.page.waitForTimeout(150);
     }
+  }
+
+  private async activateVisibleButton(
+    labels: readonly string[],
+  ): Promise<"absent" | "disabled" | "clicked"> {
+    // Keep discovery, enabled-state inspection, and activation in one browser
+    // turn. A locator can legitimately detach between separate isVisible(),
+    // evaluate(), and click() calls when a simulation control commits the day.
+    return this.page.evaluate((expectedLabels): "absent" | "disabled" | "clicked" => {
+      const normalize = (value: string | null | undefined): string =>
+        (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+      const allowed = new Set(expectedLabels.map(normalize));
+      const button = [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((candidate) => {
+          const style = window.getComputedStyle(candidate);
+          if (
+            style.display === "none"
+            || style.visibility === "hidden"
+            || candidate.getClientRects().length === 0
+          ) return false;
+          const label = candidate.getAttribute("aria-label")
+            || candidate.innerText
+            || candidate.textContent;
+          return allowed.has(normalize(label));
+        });
+      if (!button) return "absent";
+      if (button.disabled) return "disabled";
+      button.click();
+      return "clicked";
+    }, [...labels]);
   }
 
   async goto(): Promise<void> {
@@ -312,18 +363,12 @@ export class GamePage {
       }
 
       if (launchLiveSession) {
-        const launchLiveSessionButton = this.page.getByRole("button", {
-          name: /^Launch Live Session$/,
-        });
-        if (
-          await launchLiveSessionButton.isVisible({ timeout: 1_000 }).catch(() => false)
-        ) {
-          // The handler immediately replaces the week-simulation tree with the
-          // observation screen. Dispatch directly so Playwright does not retry
-          // the already-successful click after the source button detaches.
-          await launchLiveSessionButton.evaluate((element) => {
-            (element as HTMLButtonElement).click();
-          });
+        const launchResult = await this.activateVisibleButton(["Launch Live Session"]);
+        if (launchResult === "disabled") {
+          await this.page.waitForTimeout(250);
+          continue;
+        }
+        if (launchResult === "clicked") {
           await this.waitForScreen("observation", 10_000);
           await this.completeObservationViaUI();
           await this.waitForScreen("weekSimulation", 10_000);
@@ -331,60 +376,36 @@ export class GamePage {
         }
       }
 
-      const viewCalendar = this.page.getByRole("button", { name: /^View Calendar$/ });
-      if (await viewCalendar.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        const enabled = await viewCalendar.evaluate(
-          (element) => !(element as HTMLButtonElement).disabled,
-        ).catch(() => false);
-        if (!enabled) {
-          // The final commit can land between the screen check above and this
-          // stale control read. Reconcile the newly mounted summary immediately
-          // instead of charging another polling turn to a completed week.
-          await this.dismissBlockingDialogs();
-          if (await this.getCurrentScreen() === "calendar") break;
-          await this.page.waitForTimeout(250);
-          continue;
-        }
-        // The final simulation commit can replace this source control with the
-        // Planner and Week Summary between the visibility check and click.
-        // Reconcile that legitimate transition first, then keep the click
-        // bounded so a detached control cannot consume the entire test budget.
-        await this.page.waitForTimeout(100);
+      const calendarResult = await this.activateVisibleButton(["View Calendar"]);
+      if (calendarResult === "disabled") {
+        // The final commit can replace a disabled source control with the
+        // Planner and Week Summary immediately after this atomic read.
         await this.dismissBlockingDialogs();
         if (await this.getCurrentScreen() === "calendar") break;
-        const clicked = await viewCalendar.click({ timeout: 2_000 })
-          .then(() => true)
-          .catch(() => false);
-        if (clicked) break;
+        await this.page.waitForTimeout(250);
         continue;
       }
+      if (calendarResult === "clicked") break;
 
-      const completeWeek = this.page.getByRole("button", {
-        name: /^(Complete the week and process results|Complete Week)$/i,
-      });
-      if (await completeWeek.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        const enabled = await completeWeek.evaluate(
-          (element) => !(element as HTMLButtonElement).disabled,
-        ).catch(() => false);
-        if (!enabled) {
-          await this.page.waitForTimeout(250);
-          continue;
-        }
-        await completeWeek.click();
+      const completeResult = await this.activateVisibleButton([
+        "Complete the week and process results",
+        "Complete Week",
+      ]);
+      if (completeResult === "disabled") {
+        await this.page.waitForTimeout(250);
+        continue;
+      }
+      if (completeResult === "clicked") {
         await this.page.waitForTimeout(200);
         continue;
       }
 
-      const nextDay = this.page.getByRole("button", { name: /^(Advance to next day|Next Day)$/i });
-      if (await nextDay.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        const enabled = await nextDay.evaluate(
-          (element) => !(element as HTMLButtonElement).disabled,
-        ).catch(() => false);
-        if (!enabled) {
-          await this.page.waitForTimeout(250);
-          continue;
-        }
-        await nextDay.click();
+      const nextDayResult = await this.activateVisibleButton(["Advance to next day", "Next Day"]);
+      if (nextDayResult === "disabled") {
+        await this.page.waitForTimeout(250);
+        continue;
+      }
+      if (nextDayResult === "clicked") {
         await this.page.waitForTimeout(200);
         continue;
       }
