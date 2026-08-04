@@ -2,7 +2,7 @@
 
 Generation date: August 4, 2026
 
-This evidence covers the new TalentScout Early Access Steam capsule, hero, library, logo, and rendered-game screenshot set. It does not replace the older `steam-capsule.png` or `steam-hero.png` assets.
+This evidence covers the TalentScout Early Access Steam capsule, hero, library, logo, and rendered-game screenshot set. The superseded unbranded `steam-capsule.png` and `steam-hero.png` placeholders were removed so they cannot be selected for a public store slot.
 
 ## Generation process
 

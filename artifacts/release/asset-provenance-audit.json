@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-04T17:24:42.594Z",
+  "generatedAt": "2026-08-04T17:31:24.579Z",
   "manifestPath": "docs/asset-provenance.json",
   "manifestStatus": "owner-attested-approved",
   "status": "pass",
   "summary": {
-    "assetCount": 151,
-    "trackedCount": 151,
+    "assetCount": 149,
+    "trackedCount": 149,
     "untrackedCount": 0,
     "blockerCount": 0,
-    "totalBytes": 91490115
+    "totalBytes": 89900658
   },
   "groups": [
     {
       "id": "meshy-generated-images",
       "rightsStatus": "approved",
       "evidenceCount": 1,
-      "assetCount": 39
+      "assetCount": 37
     },
     {
       "id": "openai-steam-store-art",
@@ -1174,26 +1174,10 @@
       "evidenceCount": 2
     },
     {
-      "path": "public/images/steam/steam-capsule.png",
-      "bytes": 858624,
-      "sha256": "ba55e1c0816c83b66e0a999ae8002dca740a43ab4f3895ee672df620ef487c2e",
-      "groupId": "meshy-generated-images",
-      "rightsStatus": "approved",
-      "evidenceCount": 1
-    },
-    {
       "path": "public/images/steam/steam-header-capsule.png",
       "bytes": 153352,
       "sha256": "da4d5b8748b3ae7a829d9160b3d766e2251902a2d446fa403a95052b251a47c9",
       "groupId": "openai-steam-store-art",
-      "rightsStatus": "approved",
-      "evidenceCount": 1
-    },
-    {
-      "path": "public/images/steam/steam-hero.png",
-      "bytes": 730833,
-      "sha256": "94dd1814a4355c1cd6330fd6ecf4ff4eb90f82ae18c8010beaa6c6a86a13f2bd",
-      "groupId": "meshy-generated-images",
       "rightsStatus": "approved",
       "evidenceCount": 1
     },

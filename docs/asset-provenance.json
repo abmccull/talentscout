@@ -9,9 +9,7 @@
       "paths": [
         "public/images/avatars/*.png",
         "public/images/backgrounds/**/*.png",
-        "public/images/branding/*.png",
-        "public/images/steam/steam-capsule.png",
-        "public/images/steam/steam-hero.png"
+        "public/images/branding/*.png"
       ],
       "source": "scripts/generate-images.mjs",
       "generator": "Meshy AI Text-to-Image API",
