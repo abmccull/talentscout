@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "storeCopyPath": "STEAM_STORE_COPY.md",
+  "assets": {
+    "headerCapsule": {
+      "path": "public/images/steam/steam-header-capsule.png"
+    },
+    "smallCapsule": {
+      "path": "public/images/steam/steam-small-capsule.png"
+    },
+    "mainCapsule": {
+      "path": "public/images/steam/steam-main-capsule.png"
+    },
+    "heroGraphic": {
+      "path": "public/images/steam/steam-store-hero-v2.png"
+    },
+    "pageBackground": {
+      "path": "public/images/steam/steam-page-background.png"
+    },
+    "libraryCapsule": {
+      "path": "public/images/steam/steam-library-capsule-v2.png"
+    },
+    "libraryHero": {
+      "path": "public/images/steam/steam-library-hero.png"
+    },
+    "transparentLogo": {
+      "path": "public/images/steam/steam-logo-transparent.png"
+    }
+  },
+  "screenshots": [
+    {
+      "slot": 1,
+      "path": "public/images/steam/screenshots/01-dashboard.png"
+    },
+    {
+      "slot": 2,
+      "path": "public/images/steam/screenshots/02-observation.png"
+    },
+    {
+      "slot": 3,
+      "path": "public/images/steam/screenshots/03-report-writer.png"
+    },
+    {
+      "slot": 4,
+      "path": "public/images/steam/screenshots/04-player-database.png"
+    },
+    {
+      "slot": 5,
+      "path": "public/images/steam/screenshots/05-world-map.png"
+    },
+    {
+      "slot": 6,
+      "path": "public/images/steam/screenshots/06-scenarios.png"
+    },
+    {
+      "slot": 7,
+      "path": "public/images/steam/screenshots/07-career-progression.png"
+    },
+    {
+      "slot": 8,
+      "path": "public/images/steam/screenshots/08-calendar.png"
+    }
+  ]
+}
