@@ -1,6 +1,6 @@
 # TalentScout - Steam Launch Guide (First-Time Publisher)
 
-Complete walkthrough from setup to a manually promoted Steam release.
+Complete walkthrough from setup to an evidence-gated Steam release.
 
 ---
 
@@ -27,8 +27,10 @@ Complete walkthrough from setup to a manually promoted Steam release.
 Here is the operating model:
 
 ```text
-Your Code -> Candidate Tag -> GitHub candidate run -> Manual certification
-           -> Manual promotion -> Steam Build Manager -> Steam Client
+Accepted candidate SHA/tree -> Bounded GitHub verification/package run
+                            -> Independent certification
+                            -> Automated safe tag binding and promotion
+                            -> Steam Build Manager -> Steam Client
 ```
 
 **Key concepts:**
@@ -38,14 +40,16 @@ Your Code -> Candidate Tag -> GitHub candidate run -> Manual certification
 - **Branches** = Named release channels. `default` is what players get.
   `testing` is for internal QA.
 - **SteamCmd** = Valve's CLI tool for uploading builds to depots.
-- **Candidate run** = The GitHub Actions run created by pushing a `v*` tag. It
-  builds artifacts for one exact tag, SHA, tree, and run ID, then stops short
-  of publication.
+- **Candidate run** = A manual `Package Accepted Candidate` dispatch from the
+  protected release-control branch. It proves one exact candidate SHA and tree,
+  associates an intended label, and stops short of publication. Verification-
+  only mode skips signed packages and never reruns the accepted long soak.
 - **Certification bundle** = Independent manual/platform evidence collected
   against the exact candidate packages.
-- **Promotion run** = The manual `Certify and Promote Existing Candidate`
-  workflow that can create a draft GitHub release and, for a fully certified
-  final tag only, upload Steam depots.
+- **Promotion run** = The `Certify and Promote Existing Candidate` workflow.
+  It certifies the existing bytes, binds the intended tag only after success,
+  can create a draft GitHub release, and can upload Steam depots for a fully
+  certified final tag.
 
 **What is already done in this project:**
 - Steamworks SDK integrated (`steamworks.js`)
@@ -57,7 +61,7 @@ Your Code -> Candidate Tag -> GitHub candidate run -> Manual certification
 
 **What you still need to do:**
 - Create depots in Steamworks
-- Push a candidate tag and keep the original run ID
+- Dispatch the bounded candidate workflow and keep its run ID
 - Complete the manual/platform certification gates
 - Promote the exact certified candidate
 - Configure the store page
@@ -156,29 +160,28 @@ Output goes to `dist/`. On macOS you should expect artifacts such as:
 - `dist/mac/TalentScout.app`
 - `dist/TalentScout-x.x.x-arm64.dmg`
 
-### Option B: Build all platforms with the official candidate path
+### Option B: Use the official accepted-candidate path
 
-Push a release-candidate tag:
-
-```bash
-git tag v0.1.0-rc.1
-git push origin v0.1.0-rc.1
-```
-
-That creates exact Windows, macOS, and Linux candidate artifacts in GitHub
-Actions. It does not create a GitHub release and does not upload to Steam.
-
-For a final candidate, push the final tag the same way:
+Do not push a `v*` tag from a workstation. The accepted gameplay commit still
+contains a legacy tag trigger that would repeat the expensive long soak.
+Dispatch the protected control workflow by exact identity instead:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+gh workflow run package-accepted-candidate.yml \
+  --ref release/youth-ea-rc2 \
+  -f candidate_sha=6fa7297c13ad6058a2e1c157fb9541677d0195c4 \
+  -f candidate_tree_sha=502f7343d6a889b490802e9df143518dbf9801b4 \
+  -f candidate_tag=v1.0.0-rc.7 \
+  -f accepted_source_run_id=30902995422 \
+  -f verification_only=true
 ```
 
-That still creates candidate artifacts only. Steam upload remains a later,
-manual promotion step after certification. Use
-`docs/release/release-certification.md` as the source of truth for the
-promotion flow.
+Verification-only runs execute the bounded candidate suites without signing or
+native packaging. Set `verification_only=false` only after all production
+signing, notarization, licensed SDK, and crash-reporting secrets are configured.
+The later certification workflow binds the tag automatically after all gates
+pass, using the repository `GITHUB_TOKEN` so the legacy push workflow is not
+triggered. Use `docs/release/release-certification.md` as the source of truth.
 
 ### Option C: Use the helper script for local packaging or ad hoc uploads
 
@@ -436,8 +439,8 @@ Code signing is part of the release model, not just a polish step.
 ### Pre-review checklist
 
 - [ ] Store page complete
-- [ ] Exact candidate tag pushed
-- [ ] Original candidate workflow run ID recorded
+- [ ] Intended candidate label recorded (do not push it manually)
+- [ ] Package candidate workflow run ID recorded
 - [ ] Candidate commit SHA and source tree recorded with the run evidence
 - [ ] Manual/platform certification bundle completed against that exact
       candidate
@@ -459,8 +462,8 @@ Code signing is part of the release model, not just a polish step.
 ### Release day
 
 1. Run `Certify and Promote Existing Candidate` manually using:
-   - the original candidate workflow run ID;
-   - the exact candidate tag;
+   - the package candidate workflow run ID;
+   - the intended candidate tag;
    - the independent certification ref;
    - explicit GitHub and Steam publication choices.
 2. If GitHub publication was enabled, review the generated draft release and
@@ -483,8 +486,10 @@ Set the base USD price and any launch discount you intend to use.
 ### Updating the game
 
 1. Build a new version.
-2. Push a new candidate tag.
-3. Certify that exact candidate.
+2. Dispatch `Package Accepted Candidate` with the new SHA/tree and intended
+   label.
+3. Certify that exact candidate; the workflow binds the label only after it
+   passes.
 4. Promote the exact certified candidate.
 5. Set the resulting build live on `default`.
 
@@ -555,11 +560,13 @@ npm run test:steam-achievement-imports
 # Upload only
 ./scripts/steam-upload.sh --skip-build
 
-# Push a release candidate tag
-git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1
-
-# Push a final tag
-git tag v0.1.0 && git push origin v0.1.0
+# Start bounded exact-candidate verification without another long soak
+gh workflow run package-accepted-candidate.yml --ref release/youth-ea-rc2 \
+  -f candidate_sha=<40-character-sha> \
+  -f candidate_tree_sha=<40-character-tree-sha> \
+  -f candidate_tag=<intended-semver-label> \
+  -f accepted_source_run_id=<accepted-run-id> \
+  -f verification_only=true
 
 # Install SteamCmd on macOS
 brew install steamcmd

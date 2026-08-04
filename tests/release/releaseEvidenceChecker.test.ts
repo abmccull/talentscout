@@ -133,6 +133,7 @@ function releaseNeutralEnvironment(overrides: Record<string, string> = {}) {
     "GITHUB_SHA",
     "RELEASE_CANDIDATE_SHA",
     "RELEASE_CANDIDATE_TAG",
+    "RELEASE_TAG_BINDING_MODE",
     "RELEASE_WORKFLOW_RUN_ID",
   ]) {
     delete env[key];
@@ -518,6 +519,37 @@ describe("release evidence checker", () => {
     expect(wrong.failures).toEqual(
       expect.arrayContaining([expect.stringContaining("is not v1.0.0 or a prerelease")]),
     );
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it("validates an intended version tag before the post-certification binding step", () => {
+    const { cwd } = fixture();
+    const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.candidateTag = "v1.0.0-rc.7";
+    writeJson(manifestPath, manifest);
+    const statusPath = join(cwd, "docs", "release", "release-evidence-status.json");
+    const status = JSON.parse(readFileSync(statusPath, "utf8"));
+    status.candidate.requireVersionTag = true;
+    writeJson(statusPath, status);
+    run(cwd, "git", ["add", "docs/release/release-evidence-status.json"]);
+    run(cwd, "git", ["commit", "-m", "require intended release tag"]);
+    const updatedSha = run(cwd, "git", ["rev-parse", "HEAD"]);
+    manifest.candidateCommitSha = updatedSha;
+    writeJson(manifestPath, manifest);
+
+    const unresolved = check(cwd, { RELEASE_CANDIDATE_TAG: "v1.0.0-rc.7" });
+    expect(unresolved.status).toBe("Failed");
+    expect(unresolved.failures).toContain("candidate tag v1.0.0-rc.7 cannot be resolved");
+
+    const intended = check(cwd, {
+      RELEASE_CANDIDATE_TAG: "v1.0.0-rc.7",
+      RELEASE_TAG_BINDING_MODE: "intended",
+    });
+    expect(intended.status).toBe("Passed");
+    expect(intended.candidate).toMatchObject({
+      tag: "v1.0.0-rc.7",
+      tagBindingMode: "intended",
+    });
   }, RELEASE_CHECK_TIMEOUT_MS);
 
   it("promotes long-save policy only for clean exact-candidate 20x30 evidence", () => {

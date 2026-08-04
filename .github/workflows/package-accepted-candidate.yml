@@ -697,9 +697,16 @@ jobs:
             "--out=artifacts/release/candidate-package-manifest.json",
             ...inventory.artifacts.map((artifact) => `${artifact.kind}=${artifact.path}`),
           ];
+          fs.rmSync("artifacts/release/release-artifact-inventory.json");
+          fs.rmSync("artifacts/release/promotion-files.txt");
           const result = spawnSync(process.execPath, args, { stdio: "inherit" });
           process.exit(result.status ?? 1);
           NODE
+
+      - name: Recreate exact artifact inventory after clean manifest generation
+        if: inputs.verification_only != true
+        working-directory: candidate
+        run: node ../scripts/validate-release-artifacts.mjs --out=artifacts/release/release-artifact-inventory.json --promote=artifacts/release/promotion-files.txt
 
       - name: Create Steam depot hash inventories
         if: inputs.verification_only != true

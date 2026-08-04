@@ -7,6 +7,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -14,6 +15,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const validator = join(process.cwd(), "scripts", "validate-release-artifacts.mjs");
 const tempDirs: string[] = [];
+
+function sha256(contents: string) {
+  return createHash("sha256").update(contents).digest("hex");
+}
 
 function writeFile(path: string, contents: string) {
   mkdirSync(dirname(path), { recursive: true });
@@ -93,30 +98,37 @@ describe("release artifact inventory validator", () => {
           kind: "windows-installer",
           path: "release-artifacts/windows-build/TalentScout-Setup-1.0.0.exe",
           bytes: 17,
+          sha256: sha256("windows-installer"),
           blockmapPath: "release-artifacts/windows-build/TalentScout-Setup-1.0.0.exe.blockmap",
           blockmapBytes: 16,
+          blockmapSha256: sha256("windows-blockmap"),
         },
         {
           kind: "macos-dmg",
           path: "release-artifacts/macos-build/TalentScout-1.0.0-arm64.dmg",
           bytes: 9,
+          sha256: sha256("macos-dmg"),
           blockmapPath: "release-artifacts/macos-build/TalentScout-1.0.0-arm64.dmg.blockmap",
           blockmapBytes: 18,
+          blockmapSha256: sha256("macos-dmg-blockmap"),
         },
         {
           kind: "macos-zip",
           path: "release-artifacts/macos-build/TalentScout-1.0.0-arm64.zip",
           bytes: 9,
+          sha256: sha256("macos-zip"),
         },
         {
           kind: "linux-appimage",
           path: "release-artifacts/linux-build/TalentScout-1.0.0-x86_64.AppImage",
           bytes: 14,
+          sha256: sha256("linux-appimage"),
         },
         {
           kind: "linux-deb",
           path: "release-artifacts/linux-build/TalentScout-1.0.0-amd64.deb",
           bytes: 9,
+          sha256: sha256("linux-deb"),
         },
       ],
       promotionFiles: [

@@ -109,6 +109,13 @@ if (dirty) failures.push("working tree is dirty; evidence cannot describe an exa
 
 const configuredTag =
   process.env.RELEASE_CANDIDATE_TAG?.trim() || statusDocument.candidate?.tag;
+const tagBindingMode = process.env.RELEASE_TAG_BINDING_MODE?.trim().toLowerCase() || "resolved";
+const allowedTagBindingModes = new Set(["resolved", "intended"]);
+if (!allowedTagBindingModes.has(tagBindingMode)) {
+  failures.push(
+    `RELEASE_TAG_BINDING_MODE must be one of ${[...allowedTagBindingModes].join(", ")}`,
+  );
+}
 const expectedVersionTag = productVersion ? `v${productVersion}` : null;
 const escapedProductVersion = productVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const compatibleVersionTagPattern = productVersion
@@ -123,7 +130,7 @@ if (statusDocument.candidate?.requireVersionTag === true) {
     );
   }
 }
-if (configuredTag) {
+if (configuredTag && tagBindingMode === "resolved") {
   try {
     const taggedSha = (await git(["rev-parse", `${configuredTag}^{commit}`])).toLowerCase();
     if (taggedSha !== candidateSha) {
@@ -1282,6 +1289,7 @@ const report = {
     currentHeadSha: currentSha,
     currentTreeSha,
     tag: configuredTag ?? null,
+    tagBindingMode,
     packageManifest: packageManifestPath ? relative(root, packageManifestPath).replaceAll("\\", "/") : null,
   },
   dirty,

@@ -9,11 +9,16 @@ byte-for-byte.
 
 ## Stage 1: Construct an immutable candidate
 
-1. Commit a clean candidate and create a compatible tag such as
-   `v1.0.0-rc.1`.
-2. The `Build Desktop App` workflow runs candidate-bound core suites and the
-   isolated 20 x 30 soak, builds native packages, hashes all five
-   distributables, and uploads:
+1. Record the accepted gameplay candidate's full commit SHA, tree SHA, and the
+   source workflow run that already carries its long-career evidence. Do not
+   push a `v*` tag; the accepted candidate still contains a legacy tag trigger.
+2. Dispatch `Package Accepted Candidate` from the protected
+   `release/youth-ea-rc2` control branch. Supply the exact SHA, tree SHA,
+   intended semver label, accepted source run ID, and whether the run is
+   verification-only.
+3. The workflow re-proves the SHA and tree, runs the bounded core suites, and,
+   when production credentials are present, builds native packages, hashes all
+   distributables and sidecars, and uploads:
    - `windows-build`
    - `macos-build`
    - `linux-build`
@@ -21,19 +26,22 @@ byte-for-byte.
    - `steam-macos`
    - `steam-linux`
    - `candidate-build-evidence`
-3. When signing secrets are present, those candidate packages are the
+4. When signing secrets are present, those candidate packages are the
    production-signed artifacts later reused for promotion.
-4. When signing secrets are intentionally absent, the run is verification-only
+5. When signing secrets are intentionally absent, the run is verification-only
    and is not eligible for GitHub or Steam promotion.
-5. Record the workflow run ID. Nothing in this workflow publishes a GitHub
-   release or uploads to Steam, including RC tags and final tags.
+6. Record the package workflow run ID. This workflow treats the semver value as
+   an intended label only; it does not create a tag, publish a GitHub release,
+   upload to Steam, or repeat the 20 x 30 soak.
 
 Record these provenance fields together and never mix them across runs:
 
-- candidate tag
+- intended candidate tag/label
 - candidate commit SHA
 - candidate source tree
-- original workflow run ID
+- accepted source workflow run ID
+- package workflow run ID
+- release-control workflow SHA
 - package manifest SHA-256
 
 Artifact retention is 90 days. Rebuild rather than certifying expired or
@@ -99,22 +107,31 @@ or wrong-manifest attestations.
 
 Run `Certify and Promote Existing Candidate` manually with:
 
-- the original candidate workflow run ID
-- the candidate tag
+- the package workflow run ID
+- the intended candidate tag
 - the independent certification ref
 - explicit GitHub and/or Steam publication choices
 
 The workflow checks out the immutable candidate, downloads artifacts from the
-specified original run, copies only the certification directory into an ignored
-evidence path, removes the independent checkout, and runs the strict gate. It
+specified package run, installs only non-colliding independent evidence, and
+runs the strict gate. Independent evidence cannot overwrite the raw GitHub run,
+job, or long-career shard evidence already captured in the accepted bundle. It
 does not rebuild.
+
+Only after certification passes does the `bind-tag` job create or verify the
+lightweight `v*` tag at the certified commit. It uses the repository
+`GITHUB_TOKEN`; GitHub suppresses ordinary workflow fan-out caused by that
+token, so the legacy tag-triggered soak is not started. Existing conflicting or
+annotated tags fail closed. GitHub and Steam promotion both depend on that tag
+binding and re-prove it before publication. See GitHub's
+[`GITHUB_TOKEN` behavior](https://docs.github.com/en/actions/concepts/security/github_token).
 
 Keep these identities separate:
 
 - the candidate commit SHA identifies the exact source commit
 - the candidate source tree identifies the exact repository content that was
   packaged by the original run
-- the original workflow run ID identifies the one and only artifact set that
+- the package workflow run ID identifies the one and only artifact set that
   certification is allowed to reuse
 
 If any one of those changes, the candidate changed and certification must start
@@ -129,7 +146,8 @@ Both certification and publication jobs use GitHub environments:
 
 GitHub publication creates a draft only. Steam publication is impossible for a
 tag containing a prerelease suffix, even when requested. Only an explicitly
-dispatched, fully certified final tag can upload depots.
+dispatched, fully certified final label that was bound by the post-certification
+job can upload depots.
 
 ## External/manual gates
 

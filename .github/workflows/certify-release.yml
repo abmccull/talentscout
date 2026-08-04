@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       candidate_tag:
-        description: "Existing candidate tag, for example v1.0.0-rc.1 or v1.0.0"
+        description: "Intended release tag, bound automatically only after certification passes"
         required: true
         type: string
       certification_ref:
@@ -74,7 +74,7 @@ jobs:
             echo "::error::Prerelease/RC tags can never be uploaded to Steam"
             exit 1
           fi
-          echo "::notice::This workflow never creates or pushes ${CANDIDATE_TAG}. Pushing any v* tag still triggers legacy build.yml, including the 20x30 soak."
+          echo "::notice::${CANDIDATE_TAG} is an intended label until certification passes. The post-certification bind-tag job uses only the repository GITHUB_TOKEN so the legacy v* push workflow is not recursively triggered."
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,7 +140,7 @@ jobs:
           cache: npm
           cache-dependency-path: candidate/package-lock.json
 
-      - name: Resolve immutable candidate and explicit tag binding
+      - name: Resolve immutable candidate
         id: candidate
         env:
           CANDIDATE_SHA: ${{ steps.bundle_metadata.outputs.candidate_sha }}
@@ -155,12 +155,6 @@ jobs:
           fi
           if [ "$tree_sha" != "$CANDIDATE_TREE_SHA" ]; then
             echo "::error::Checked-out candidate tree ${tree_sha} does not match bundle metadata ${CANDIDATE_TREE_SHA}"
-            exit 1
-          fi
-          git -C candidate fetch --force origin "refs/tags/${CANDIDATE_TAG}:refs/tags/${CANDIDATE_TAG}"
-          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
-          if [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
-            echo "::error::candidate tag ${CANDIDATE_TAG} resolves to ${tagged_sha}, not ${CANDIDATE_SHA}"
             exit 1
           fi
           if printf '%s' "$CANDIDATE_TAG" | grep -q -- '-'; then prerelease=true; else prerelease=false; fi
@@ -190,12 +184,10 @@ jobs:
             echo "::error::Certification directory is missing: $source_dir"
             exit 1
           fi
-          if find "$source_dir" -type l -print -quit | grep -q .; then
-            echo "::error::Certification bundles may not contain symbolic links"
-            exit 1
-          fi
           mkdir -p candidate/artifacts/release/generated/certifications
-          cp -R "$source_dir/." candidate/artifacts/release/generated/certifications/
+          node scripts/install-release-certification.mjs \
+            --source="$source_dir" \
+            --destination=candidate/artifacts/release/generated/certifications
           rm -rf certification-source
 
       - name: Fetch completed candidate package workflow metadata
@@ -220,6 +212,7 @@ jobs:
         env:
           RELEASE_WORKFLOW_RUN_ID: ${{ inputs.candidate_run_id }}
           RELEASE_EVIDENCE_STATUS: ../docs/release/release-evidence-status.json
+          RELEASE_TAG_BINDING_MODE: intended
         working-directory: candidate
         run: node ../scripts/check-release-evidence.mjs
 
@@ -232,9 +225,60 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
+  bind-tag:
+    name: Bind certified candidate tag without recursive workflows
+    needs: certify
+    runs-on: ubuntu-latest
+    environment: production-release
+    permissions:
+      contents: write
+    steps:
+      - name: Create or verify immutable lightweight tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ needs.certify.outputs.candidate_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          node <<'NODE'
+          const apiRoot = process.env.GITHUB_API_URL;
+          const repository = process.env.GITHUB_REPOSITORY;
+          const tag = process.env.CANDIDATE_TAG;
+          const candidateSha = process.env.CANDIDATE_SHA;
+          const headers = {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          };
+          const refUrl = `${apiRoot}/repos/${repository}/git/ref/tags/${encodeURIComponent(tag)}`;
+
+          async function readRef() {
+            const response = await fetch(refUrl, { headers });
+            if (response.status === 404) return null;
+            if (!response.ok) throw new Error(`GitHub tag lookup failed with HTTP ${response.status}`);
+            return response.json();
+          }
+
+          let reference = await readRef();
+          if (reference === null) {
+            const response = await fetch(`${apiRoot}/repos/${repository}/git/refs`, {
+              method: "POST",
+              headers: { ...headers, "Content-Type": "application/json" },
+              body: JSON.stringify({ ref: `refs/tags/${tag}`, sha: candidateSha }),
+            });
+            if (!response.ok) {
+              throw new Error(`GitHub tag creation failed with HTTP ${response.status}: ${await response.text()}`);
+            }
+            reference = await readRef();
+          }
+          if (reference?.object?.type !== "commit" || reference.object.sha !== candidateSha) {
+            throw new Error(`Tag ${tag} is not a lightweight ref to certified commit ${candidateSha}`);
+          }
+          console.log(`Bound ${tag} to certified commit ${candidateSha} with the repository GITHUB_TOKEN.`);
+          NODE
+
   github-release:
     name: Draft GitHub release from certified bytes
-    needs: certify
+    needs: [certify, bind-tag]
     if: inputs.publish_github == true
     runs-on: ubuntu-latest
     environment: production-release
@@ -242,6 +286,28 @@ jobs:
       actions: read
       contents: write
     steps:
+      - name: Re-prove exact tag immediately before GitHub release promotion
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ needs.certify.outputs.candidate_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          node <<'NODE'
+          const url = `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/git/ref/tags/${encodeURIComponent(process.env.CANDIDATE_TAG)}`;
+          const response = await fetch(url, {
+            headers: {
+              Accept: "application/vnd.github+json",
+              Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              "X-GitHub-Api-Version": "2022-11-28",
+            },
+          });
+          if (!response.ok) throw new Error(`GitHub tag lookup failed with HTTP ${response.status}`);
+          const reference = await response.json();
+          if (reference?.object?.type !== "commit" || reference.object.sha !== process.env.CANDIDATE_SHA) {
+            throw new Error(`GitHub release tag is not bound to certified commit ${process.env.CANDIDATE_SHA}`);
+          }
+          NODE
+
       - name: Download accepted candidate bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -259,6 +325,7 @@ jobs:
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
         run: |
           node <<'NODE'
+          const crypto = require("node:crypto");
           const fs = require("node:fs");
           const path = require("node:path");
 
@@ -276,10 +343,33 @@ jobs:
           }
 
           const inventory = JSON.parse(fs.readFileSync(inventoryPath, "utf8"));
+          if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.artifacts)) {
+            throw new Error("release artifact inventory has an unsupported schema");
+          }
           const expectedFiles = Array.isArray(inventory.promotionFiles) ? inventory.promotionFiles : [];
           const listedFiles = fs.readFileSync(promotionListPath, "utf8").split(/\r?\n/).filter(Boolean);
           if (JSON.stringify(expectedFiles) !== JSON.stringify(listedFiles)) {
             throw new Error("promotion-files.txt does not exactly match release-artifact-inventory.json");
+          }
+
+          const expectedMetadata = new Map();
+          function registerExpected(filePath, bytes, sha256) {
+            if (typeof filePath !== "string" || !Number.isSafeInteger(bytes) || !/^[0-9a-f]{64}$/.test(String(sha256))) {
+              throw new Error(`release artifact inventory contains invalid byte identity for ${String(filePath)}`);
+            }
+            if (expectedMetadata.has(filePath)) {
+              throw new Error(`release artifact inventory duplicates ${filePath}`);
+            }
+            expectedMetadata.set(filePath, { bytes, sha256 });
+          }
+          for (const artifact of inventory.artifacts) {
+            registerExpected(artifact.path, artifact.bytes, artifact.sha256);
+            if (artifact.blockmapPath) {
+              registerExpected(artifact.blockmapPath, artifact.blockmapBytes, artifact.blockmapSha256);
+            }
+          }
+          if (JSON.stringify([...expectedMetadata.keys()]) !== JSON.stringify(listedFiles)) {
+            throw new Error("release artifact inventory metadata does not exactly cover the promotion list");
           }
 
           const seen = new Set();
@@ -310,6 +400,11 @@ jobs:
             }
             if (!stat.isFile()) {
               throw new Error(`promotion file is not a regular file: ${relativePath}`);
+            }
+            const expected = expectedMetadata.get(normalized);
+            const actualSha256 = crypto.createHash("sha256").update(fs.readFileSync(sourcePath)).digest("hex");
+            if (stat.size !== expected.bytes || actualSha256 !== expected.sha256) {
+              throw new Error(`promotion file byte identity does not match the accepted inventory: ${relativePath}`);
             }
             const targetPath = path.resolve(workspaceRoot, normalized);
             fs.mkdirSync(path.dirname(targetPath), { recursive: true });
@@ -354,7 +449,7 @@ jobs:
 
   steam-upload:
     name: Upload certified final depots to Steam
-    needs: certify
+    needs: [certify, bind-tag]
     if: inputs.publish_steam == true && needs.certify.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     environment: production-release

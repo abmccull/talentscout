@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { lstat, mkdir, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,6 +61,17 @@ function repositoryRelativePath(candidatePath) {
   return normalizePath(relative(rootRealPath, candidatePath));
 }
 
+async function sha256(path) {
+  const hash = createHash("sha256");
+  await new Promise((resolveHash, rejectHash) => {
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.once("error", rejectHash);
+    stream.once("end", resolveHash);
+  });
+  return hash.digest("hex");
+}
+
 function resolveInsideRoot(configuredPath, label) {
   if (!configuredPath || typeof configuredPath !== "string") {
     throw new Error(`${label} must be a non-empty repository-relative path`);
@@ -116,6 +129,7 @@ async function classifyDirectoryEntry(absoluteDirectoryPath, entryName) {
     absolutePath,
     relativePath: repositoryRelativePath(absolutePath),
     bytes: entryStat.size,
+    sha256: await sha256(absolutePath),
   };
 }
 
@@ -143,6 +157,7 @@ async function scanArtifactDirectory(releaseDirectoryPath, subdirectory) {
         ),
         path: classified.relativePath,
         bytes: classified.bytes,
+        sha256: classified.sha256,
       });
       continue;
     }
@@ -166,6 +181,7 @@ async function scanArtifactDirectory(releaseDirectoryPath, subdirectory) {
       kind: distributableKind,
       path: classified.relativePath,
       bytes: classified.bytes,
+      sha256: classified.sha256,
     });
   }
 
@@ -181,6 +197,7 @@ async function scanArtifactDirectory(releaseDirectoryPath, subdirectory) {
     }
     distributable.blockmapPath = blockmap.path;
     distributable.blockmapBytes = blockmap.bytes;
+    distributable.blockmapSha256 = blockmap.sha256;
   }
 
   return inventoryByKind;

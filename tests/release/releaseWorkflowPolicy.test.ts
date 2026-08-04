@@ -46,6 +46,8 @@ describe("release workflow policy", () => {
     expect(acceptedCandidate).toContain("if: inputs.verification_only != true");
     expect(acceptedCandidate).toContain("name: accepted-candidate-bundle");
     expect(acceptedCandidate).toContain("node ../scripts/validate-release-artifacts.mjs --out=artifacts/release/release-artifact-inventory.json --promote=artifacts/release/promotion-files.txt");
+    expect(acceptedCandidate.match(/node \.\.\/scripts\/validate-release-artifacts\.mjs --out=artifacts\/release\/release-artifact-inventory\.json --promote=artifacts\/release\/promotion-files\.txt/g)).toHaveLength(2);
+    expect(acceptedCandidate).toContain('fs.rmSync("artifacts/release/release-artifact-inventory.json")');
     expect(acceptedCandidate).toContain("artifacts/release/release-artifact-inventory.json");
     expect(acceptedCandidate).toContain("artifacts/release/promotion-files.txt");
     expect(acceptedCandidate).toContain("artifacts/release/generated/steam-depot-inventories.json");
@@ -84,13 +86,23 @@ describe("release workflow policy", () => {
     expect(certification).toContain("working-directory: candidate");
     expect(certification).toContain("node ../scripts/check-release-preflight.mjs --mode certify --json");
     expect(certification).toContain("run: node ../scripts/check-release-evidence.mjs");
+    expect(certification).toContain("RELEASE_TAG_BINDING_MODE: intended");
+    expect(certification).toContain("node scripts/install-release-certification.mjs");
+    expect(certification).toContain("--destination=candidate/artifacts/release/generated/certifications");
     expect(certification).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" > candidate/artifacts/release/generated/certifications/package-workflow-run.json');
     expect(certification).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}/jobs?per_page=100" > candidate/artifacts/release/generated/certifications/package-workflow-jobs.json');
     expect(certification).toContain("release-artifact-inventory.json");
     expect(certification).toContain("promotion-files.txt");
+    expect(certification).toContain("promotion file byte identity does not match the accepted inventory");
+    expect(certification).toContain("blockmapSha256");
     expect(certification).toContain("files: ${{ steps.promotion_manifest.outputs.files }}");
     expect(certification).toContain("accepted candidate bundle is missing artifacts/release/release-artifact-inventory.json");
     expect(certification).toContain("Prerelease/RC tags can never be uploaded to Steam");
+    expect(certification).toContain("bind-tag:");
+    expect(certification).toContain("Bind certified candidate tag without recursive workflows");
+    expect(certification).toContain("refs/tags/${tag}");
+    expect(certification).toContain("needs: [certify, bind-tag]");
+    expect(certification).toContain("GitHub release tag is not bound to certified commit");
     expect(certification).toContain(
       "if: inputs.publish_steam == true && needs.certify.outputs.prerelease == 'false'",
     );

@@ -85,19 +85,23 @@ refresh the secret.
 
 ## How It Works
 
-On a `v*` tag push:
-1. The quality gate runs unit, migration, production-static Youth EA, smoke,
-   accessibility, and candidate-bound certification checks.
-2. Three platform jobs provision and verify SDK files, then build packages. If
+On a `Package Accepted Candidate` workflow dispatch from the protected release
+control branch:
+1. The workflow proves the supplied candidate commit SHA and tree SHA, validates
+   the intended semver label and accepted source run ID, and runs unit,
+   migration, production-static Youth EA, smoke, accessibility, and
+   candidate-bound checks. It does not rerun the 20 x 30 long-career soak.
+2. For a production package run, three platform jobs provision and verify SDK
+   files, then build packages. If
    signing secrets are present, the candidate packages are production-signed.
-   If signing secrets are intentionally omitted, the artifacts are
-   verification-only and cannot be promoted.
+   A verification-only dispatch skips those package jobs and cannot be
+   promoted.
 3. Each unpacked build is uploaded as a GitHub Actions artifact
    (`steam-windows`, `steam-macos`, `steam-linux`) along with the broader
    candidate evidence bundle.
 4. The run records the exact candidate provenance that later certification must
-   match: candidate tag, full commit SHA, source tree, package manifest hash,
-   and original workflow run ID.
+   match: intended tag, full commit SHA, source tree, accepted source run,
+   package workflow run, release-control SHA, and package manifest hash.
 5. The run stops there. It does not upload to Steam and does not create a
    GitHub release, including for final-looking tags.
 
@@ -106,20 +110,24 @@ After external/manual gates pass:
    candidate workflow run ID, the candidate tag, the independent certification
    ref, and explicit GitHub and/or Steam publication choices.
 2. The promotion workflow reuses the original artifacts byte-for-byte instead
-   of rebuilding them. It verifies the candidate tag, commit SHA, source tree,
-   package manifest hash, and certification hashes before any publication step.
-3. GitHub promotion creates a draft release only.
-4. Steam promotion is allowed only when all of the following are true:
+   of rebuilding them. It verifies the commit SHA, source tree, package and
+   sidecar hashes, and certification hashes before any publication step.
+3. Only after certification passes, a narrow `bind-tag` job creates or verifies
+   the lightweight tag using the repository `GITHUB_TOKEN`. That token's events
+   do not start ordinary push workflows, preventing the accepted candidate's
+   legacy `v*` trigger from launching another soak.
+4. GitHub promotion creates a draft release only.
+5. Steam promotion is allowed only when all of the following are true:
    - the operator explicitly requested Steam publication;
    - the `production-release` environment approval passed;
    - the tag is a final tag with no prerelease suffix;
    - all external/manual certification gates passed against the exact
      candidate.
-5. Only then does SteamCmd run:
+6. Only then does SteamCmd run:
    ```text
    steamcmd +login <username> +run_app_build steamcmd/app_build_4455570.vdf +quit
    ```
-6. The resulting build appears in the
+7. The resulting build appears in the
    [Steamworks partner portal](https://partner.steamgames.com/apps/builds/4455570).
 
 External/manual gates stay outside the candidate packaging run. At minimum,
