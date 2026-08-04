@@ -1,0 +1,80 @@
+name: Crash report
+description: Record an Early Access crash with exact candidate and package identity.
+title: "[Crash]: "
+labels:
+  - bug
+  - crash
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Record exact build identity if you have it. Do not paste passwords, Steam Guard codes, tokens, or private certificates.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - SEV-0
+        - SEV-1
+        - SEV-2
+        - SEV-3
+    validations:
+      required: true
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Distribution channel
+      options:
+        - Steam default
+        - Steam testing
+        - Manual installer
+        - Unknown
+    validations:
+      required: true
+  - type: input
+    id: candidate_sha
+    attributes:
+      label: Candidate commit SHA
+      description: Full SHA if known.
+      placeholder: 6fa7297c13ad6058a2e1c157fb9541677d0195c4
+  - type: input
+    id: candidate_tag
+    attributes:
+      label: Candidate tag
+      placeholder: v1.0.0-rc.1
+  - type: input
+    id: package_manifest_sha256
+    attributes:
+      label: Package manifest SHA-256
+  - type: input
+    id: package_identity
+    attributes:
+      label: Package identity
+      description: Package kind, filename, and SHA-256 if known.
+      placeholder: windows-installer | TalentScout-Setup-1.0.0.exe | <sha256>
+  - type: input
+    id: steam_identity
+    attributes:
+      label: Steam identity
+      description: Steam build ID and branch if this came from Steam.
+      placeholder: build 12345678 on default
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Reproduction steps
+      description: List what happened immediately before the crash.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_vs_actual
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence collected
+      description: Link screenshots, save exports, crash dialogs, Event Viewer details, or logs. Redact secrets.
+    validations:
+      required: true
