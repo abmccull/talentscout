@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { getSeasonLength } from "@/engine/core/gameDate";
@@ -85,9 +86,14 @@ const MAX_SINGLE_BATCH_WALL_MS = Number.parseInt(
 );
 const DIAGNOSTIC_ONLY = process.env.SOAK_DIAGNOSTIC_ONLY === "true";
 const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
+// Heap samples are taken after an explicit collection so the release gate
+// measures retained game state instead of garbage from its own repeated
+// full-save serialization and round-trip assertions. RSS remains the guard
+// for the complete process footprint, including those temporary allocations.
 const MAX_HEAP_USED_BYTES = 1536 * 1024 * 1024;
 const MAX_RSS_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_POST_GC_HEAP_GROWTH_BYTES = 1024 * 1024 * 1024;
+const V8_HEAP_LIMIT_BYTES = getHeapStatistics().heap_size_limit;
 const SUPPLEMENTAL_CHOOSER_PROFILES = ["cautious", "aggressive"] as const satisfies readonly AutonomousCareerChooserProfileId[];
 const PROFILE_MATRIX_SEED_COUNT = Number.parseInt(process.env.SOAK_PROFILE_MATRIX_SEEDS ?? "1", 10);
 const PROFILE_MATRIX_SEASON_COUNT = Number.parseInt(
@@ -156,6 +162,7 @@ interface RunEvidence {
   memory: {
     initial: MemorySample;
     final: MemorySample;
+    peakRuntimeHeapUsedBytes: number;
     peakHeapUsedBytes: number;
     peakRssBytes: number;
     samples: MemorySample[];
@@ -730,6 +737,7 @@ async function simulateCareer(
   requestGarbageCollection();
   const initialMemory = collectMemorySample(initial.currentSeason);
   const memorySamples: MemorySample[] = [initialMemory];
+  let peakRuntimeHeapUsedBytes = initialMemory.heapUsedBytes;
   let peakHeapUsedBytes = initialMemory.heapUsedBytes;
   let peakRssBytes = initialMemory.rssBytes;
   let peakBytes = initialBytes;
@@ -777,6 +785,15 @@ async function simulateCareer(
         `Seed ${seed} stalled at S${before.currentSeason} W${before.currentWeek}`,
       );
     }
+    // Sample the product path after its persistence yield and before the
+    // release harness performs several whole-save serialization passes. The
+    // worker's V8 ceiling remains the hard guard for spikes between samples.
+    const runtimeMemory = collectMemorySample(after.currentSeason);
+    peakRuntimeHeapUsedBytes = Math.max(
+      peakRuntimeHeapUsedBytes,
+      runtimeMemory.heapUsedBytes,
+    );
+    peakRssBytes = Math.max(peakRssBytes, runtimeMemory.rssBytes);
     canonicalTicks++;
     calendarWeeksSpanned += 1;
     weeklyLatency.push(elapsed);
@@ -865,7 +882,6 @@ async function simulateCareer(
       peakBytes = Math.max(peakBytes, bytes);
       lastCheckedSeason = stabilized.currentSeason;
       const beforeCollection = collectMemorySample(stabilized.currentSeason);
-      peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeCollection.heapUsedBytes);
       peakRssBytes = Math.max(peakRssBytes, beforeCollection.rssBytes);
       requestGarbageCollection();
       const afterCollection = collectMemorySample(stabilized.currentSeason);
@@ -904,13 +920,12 @@ async function simulateCareer(
     `seed ${seed} changed during JSON save round trip`,
   ).toBe(finalDigest);
   const beforeFinalCollection = collectMemorySample(stabilizedFinalState.currentSeason);
-  peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeFinalCollection.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, beforeFinalCollection.rssBytes);
   requestGarbageCollection();
   const finalMemory = collectMemorySample(stabilizedFinalState.currentSeason);
   peakHeapUsedBytes = Math.max(peakHeapUsedBytes, finalMemory.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, finalMemory.rssBytes);
-  expect(peakHeapUsedBytes, `seed ${seed} exceeded the heap release budget`).toBeLessThanOrEqual(
+  expect(peakHeapUsedBytes, `seed ${seed} exceeded the retained heap release budget`).toBeLessThanOrEqual(
     MAX_HEAP_USED_BYTES,
   );
   expect(peakRssBytes, `seed ${seed} exceeded the RSS release budget`).toBeLessThanOrEqual(
@@ -950,6 +965,7 @@ async function simulateCareer(
     memory: {
       initial: initialMemory,
       final: finalMemory,
+      peakRuntimeHeapUsedBytes,
       peakHeapUsedBytes,
       peakRssBytes,
       samples: memorySamples,
@@ -1003,6 +1019,16 @@ describe("full canonical-week release soak", () => {
     expect(RELEASE_SEASON_COUNT).toBeGreaterThan(0);
     expect(PROFILE_MATRIX_SEED_COUNT).toBeGreaterThanOrEqual(0);
     expect(PROFILE_MATRIX_SEASON_COUNT).toBeGreaterThan(0);
+    if (WORKER_MODE) {
+      expect(
+        V8_HEAP_LIMIT_BYTES,
+        "isolated release worker must enforce the certified V8 heap ceiling",
+      ).toBe(MAX_HEAP_USED_BYTES);
+      expect(
+        typeof (globalThis as typeof globalThis & { gc?: () => void }).gc,
+        "isolated release worker must expose explicit garbage collection",
+      ).toBe("function");
+    }
     const seeds = Array.from(
       { length: RELEASE_SEED_COUNT },
       (_, index) => `release-soak-${String(index + RELEASE_SEED_START).padStart(2, "0")}`,
@@ -1031,6 +1057,7 @@ describe("full canonical-week release soak", () => {
         maxSerializedBytes: MAX_SERIALIZED_BYTES,
         maxGrowthMultiplier: MAX_GROWTH_MULTIPLIER,
         maxHeapUsedBytes: MAX_HEAP_USED_BYTES,
+        v8HeapLimitBytes: V8_HEAP_LIMIT_BYTES,
         maxRssBytes: MAX_RSS_BYTES,
         maxPostGcHeapGrowthBytes: MAX_POST_GC_HEAP_GROWTH_BYTES,
         collectionByteBudgets: COLLECTION_BYTE_BUDGETS,
@@ -1040,6 +1067,9 @@ describe("full canonical-week release soak", () => {
         totalCalendarWeeksSpanned: runs.reduce((sum, run) => sum + run.calendarWeeksSpanned, 0),
         largestSaveBytes: Math.max(...runs.map((run) => run.peakBytes)),
         largestFinalToInitialRatio: Math.max(...runs.map((run) => run.finalToInitialRatio)),
+        peakRuntimeHeapUsedBytes: Math.max(
+          ...runs.map((run) => run.memory.peakRuntimeHeapUsedBytes),
+        ),
         peakHeapUsedBytes: Math.max(...runs.map((run) => run.memory.peakHeapUsedBytes)),
         peakRssBytes: Math.max(...runs.map((run) => run.memory.peakRssBytes)),
         largestSingleSeasonGrowthBytes: Math.max(

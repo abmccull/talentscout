@@ -14,6 +14,12 @@ const outputPath = resolve(
     ?? "artifacts/release/generated/long-career-release-summary.json",
 );
 const repositoryRoot = resolve(".");
+const certifiedWorkerNodeArguments = [
+  "--max-old-space-size=1440",
+  "--max-semi-space-size=32",
+  "--expose-gc",
+];
+const certifiedWorkerHeapLimitBytes = 1536 * 1024 * 1024;
 
 if (!Number.isInteger(seedCount) || seedCount <= 0) {
   throw new Error("SOAK_SEEDS must be positive");
@@ -66,11 +72,16 @@ for (const shard of shards) {
     || document.profile?.seedCount !== 1
     || document.profile?.seasonCount !== seasonCount
     || document.profile?.processIsolation !== "one-seeded-career-per-process"
+    || document.profile?.v8HeapLimitBytes !== certifiedWorkerHeapLimitBytes
     || !run?.seed
     || run.reachedSeason < seasonCount + 1
+    || !Number.isFinite(run.memory?.peakRuntimeHeapUsedBytes)
+    || !Number.isFinite(run.memory?.peakHeapUsedBytes)
     || document.checkpoint?.executionIdentityHash !== calculatedIdentityHash
     || identity?.candidateCommitSha !== candidateCommitSha
     || identity?.candidateTreeSha !== candidateTreeSha
+    || identity?.workerHeapLimitBytes !== certifiedWorkerHeapLimitBytes
+    || JSON.stringify(identity?.workerNodeArguments) !== JSON.stringify(certifiedWorkerNodeArguments)
   ) {
     throw new Error(`Invalid release soak shard: ${shard.file}`);
   }
@@ -109,6 +120,8 @@ const executionIdentity = {
   maxSerializedBytes: firstShard.profile.maxSerializedBytes,
   profileKind: "full-canonical-weekly-career",
   processIsolation: "one-seeded-career-per-process",
+  workerNodeArguments: certifiedWorkerNodeArguments,
+  workerHeapLimitBytes: certifiedWorkerHeapLimitBytes,
   nodeVersion: process.version,
   nodeOptions: process.env.NODE_OPTIONS ?? "",
   platform: process.platform,
@@ -159,6 +172,9 @@ const summary = {
     ),
     largestSaveBytes: Math.max(...runs.map((run) => run.peakBytes)),
     largestFinalToInitialRatio: Math.max(...runs.map((run) => run.finalToInitialRatio)),
+    peakRuntimeHeapUsedBytes: Math.max(
+      ...runs.map((run) => run.memory.peakRuntimeHeapUsedBytes),
+    ),
     peakHeapUsedBytes: Math.max(...runs.map((run) => run.memory.peakHeapUsedBytes)),
     peakRssBytes: Math.max(...runs.map((run) => run.memory.peakRssBytes)),
     largestSingleSeasonGrowthBytes: Math.max(

@@ -41,6 +41,8 @@ interface ReleaseSoakPlan {
     candidateCommitSha: string;
     candidateTreeSha: string;
     maxSerializedBytes: number;
+    workerHeapLimitBytes: number;
+    workerNodeArguments: string[];
   };
   sourceTreeClean: boolean;
   resumeEnabled: boolean;
@@ -192,6 +194,7 @@ function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
       seedCount: 1,
       seasonCount: 1,
       maxSerializedBytes: plan.executionIdentity.maxSerializedBytes,
+      v8HeapLimitBytes: plan.executionIdentity.workerHeapLimitBytes,
       collectionByteBudgets: { players: 1024 },
     },
     runs: [{
@@ -224,6 +227,7 @@ function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
       memory: {
         initial: memorySample,
         final: memorySample,
+        peakRuntimeHeapUsedBytes: 1,
         peakHeapUsedBytes: 1,
         peakRssBytes: 1,
         samples: [memorySample],
@@ -333,6 +337,14 @@ describe("release evidence checker", () => {
       resumeEnabled: true,
       reusableSeedIndices: [],
       pendingSeedIndices: [1],
+      executionIdentity: {
+        workerHeapLimitBytes: 1536 * 1024 * 1024,
+        workerNodeArguments: [
+          "--max-old-space-size=1440",
+          "--max-semi-space-size=32",
+          "--expose-gc",
+        ],
+      },
     });
 
     const stale = validSoakWorkerCheckpoint(initial);
@@ -550,6 +562,12 @@ describe("release evidence checker", () => {
       maxSerializedBytes: 80 * 1024 * 1024,
       profileKind: "full-canonical-weekly-career",
       processIsolation: "one-seeded-career-per-process",
+      workerNodeArguments: [
+        "--max-old-space-size=1440",
+        "--max-semi-space-size=32",
+        "--expose-gc",
+      ],
+      workerHeapLimitBytes: 1536 * 1024 * 1024,
       nodeVersion: process.version,
       nodeOptions: "",
       platform: process.platform,
@@ -584,6 +602,7 @@ describe("release evidence checker", () => {
         seedCount: 20,
         seasonCount: 30,
         processIsolation: "one-seeded-career-per-process",
+        v8HeapLimitBytes: 1536 * 1024 * 1024,
       },
       runs,
       persistenceReplay: { seed: runs[0].seed, digest: runs[0].digest },
@@ -595,6 +614,32 @@ describe("release evidence checker", () => {
       .toMatchObject({ configuredStatus: "Unverified", status: "Passed" });
 
     const evidencePath = join(cwd, "artifacts", "release", "generated", "long-career.json");
+    const cleanEvidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+    const removeCertifiedHeapEvidence = [
+      (evidence: typeof cleanEvidence) => {
+        delete evidence.profile.v8HeapLimitBytes;
+      },
+      (evidence: typeof cleanEvidence) => {
+        delete evidence.checkpoint.executionIdentity.workerHeapLimitBytes;
+      },
+      (evidence: typeof cleanEvidence) => {
+        evidence.checkpoint.executionIdentity.workerNodeArguments = ["--expose-gc"];
+      },
+    ];
+    for (const mutate of removeCertifiedHeapEvidence) {
+      const uncapped = JSON.parse(JSON.stringify(cleanEvidence));
+      mutate(uncapped);
+      uncapped.checkpoint.executionIdentityHash = createHash("sha256")
+        .update(JSON.stringify(uncapped.checkpoint.executionIdentity))
+        .digest("hex");
+      writeJson(evidencePath, uncapped);
+      const rejected = check(cwd);
+      expect(rejected.status).toBe("Failed");
+      expect(rejected.failures).toEqual(expect.arrayContaining([
+        expect.stringContaining("certified 1.5 GiB heap ceiling"),
+      ]));
+    }
+    writeJson(evidencePath, cleanEvidence);
     const stale = JSON.parse(readFileSync(evidencePath, "utf8"));
     stale.candidateCommitSha = "a".repeat(40);
     stale.profile.seedCount = 2;

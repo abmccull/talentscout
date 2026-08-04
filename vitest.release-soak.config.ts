@@ -19,6 +19,14 @@ export default defineConfig({
     ),
     hookTimeout: 120_000,
     maxWorkers: 1,
+    // Vitest launches the test file in an isolated worker and intentionally
+    // filters most parent execArgv values. Put the certified ceiling and GC
+    // hook on that actual worker, not only on the orchestration process.
+    execArgv: [
+      "--max-old-space-size=1440",
+      "--max-semi-space-size=32",
+      "--expose-gc",
+    ],
     coverage: { enabled: false },
   },
 });

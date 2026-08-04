@@ -3,6 +3,8 @@ import { addActivity, createWeekSchedule } from "@/engine/core/calendar";
 import { advanceWeek, processWeeklyTick } from "@/engine/core/gameLoop";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { createRNG } from "@/engine/rng";
+import { observeSaveRetentionCompaction } from "@/engine/world/saveRetention";
+import { finalizeWeeklyState } from "@/stores/actions/weeklyFinalizeState";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -84,11 +86,22 @@ describe("regional knowledge at the season boundary", () => {
     expect(tick.endOfSeasonTriggered).toBe(true);
     expect(earned).toBeDefined();
 
-    const advanced = advanceWeek(state, tick);
+    const compactionPhases: string[] = [];
+    const stopObserving = observeSaveRetentionCompaction((sample) => {
+      compactionPhases.push(sample.phase);
+    });
+    let finalized: ReturnType<typeof finalizeWeeklyState>;
+    try {
+      const advanced = advanceWeek(state, tick);
+      finalized = finalizeWeeklyState(state, advanced);
+    } finally {
+      stopObserving();
+    }
 
-    expect(advanced.currentSeason).toBe(state.currentSeason + 1);
-    expect(advanced.currentWeek).toBe(1);
-    expect(advanced.regionalKnowledge.england.localContacts).toContain(earned!.contactId);
-    expect(advanced.contacts[earned!.contactId]).toEqual(earned!.contact);
+    expect(compactionPhases).toEqual(["fixtureRetention", "archiveCompaction"]);
+    expect(finalized.currentSeason).toBe(state.currentSeason + 1);
+    expect(finalized.currentWeek).toBe(1);
+    expect(finalized.regionalKnowledge.england.localContacts).toContain(earned!.contactId);
+    expect(finalized.contacts[earned!.contactId]).toEqual(earned!.contact);
   }, 60_000);
 });

@@ -23,6 +23,12 @@ const workerDirectory = resolve(
 );
 const checkpointPath = resolve(workerDirectory, "checkpoint.json");
 const vitestEntry = resolve("node_modules/vitest/vitest.mjs");
+const workerNodeArguments = [
+  "--max-old-space-size=1440",
+  "--max-semi-space-size=32",
+  "--expose-gc",
+];
+const workerHeapLimitBytes = 1536 * 1024 * 1024;
 const planOnly = process.env.SOAK_PLAN_ONLY === "true";
 const resumeRequested = process.env.SOAK_RESUME !== "false";
 const skipDeterminismReplay = process.env.SOAK_SKIP_DETERMINISM_REPLAY === "true";
@@ -85,6 +91,8 @@ const executionIdentity = {
   maxSerializedBytes,
   profileKind: "full-canonical-weekly-career",
   processIsolation: "one-seeded-career-per-process",
+  workerNodeArguments,
+  workerHeapLimitBytes,
   nodeVersion: process.version,
   nodeOptions: process.env.NODE_OPTIONS ?? "",
   platform: process.platform,
@@ -138,6 +146,7 @@ function validateWorkerResult(result, seedIndex, requireCheckpoint) {
     || result.profile.seedCount !== 1
     || result.profile.seasonCount !== seasonCount
     || result.profile.maxSerializedBytes !== maxSerializedBytes
+    || result.profile.v8HeapLimitBytes !== workerHeapLimitBytes
     || !isRecord(result.profile.collectionByteBudgets)
   ) {
     failures.push("worker profile does not match the requested single-seed release profile");
@@ -196,6 +205,7 @@ function validateWorkerResult(result, seedIndex, requireCheckpoint) {
   }
   if (
     !isRecord(run.memory)
+    || !isFiniteNumber(run.memory.peakRuntimeHeapUsedBytes)
     || !isFiniteNumber(run.memory.peakHeapUsedBytes)
     || !isFiniteNumber(run.memory.peakRssBytes)
   ) {
@@ -382,7 +392,7 @@ async function runWorker(seedIndex, suffix = "run") {
       const child = spawn(
         process.execPath,
         [
-          "--expose-gc",
+          ...workerNodeArguments,
           vitestEntry,
           "run",
           "--config",
@@ -570,6 +580,9 @@ try {
       totalCalendarWeeksSpanned: runs.reduce((sum, run) => sum + run.calendarWeeksSpanned, 0),
       largestSaveBytes: Math.max(...runs.map((run) => run.peakBytes)),
       largestFinalToInitialRatio: Math.max(...runs.map((run) => run.finalToInitialRatio)),
+      peakRuntimeHeapUsedBytes: Math.max(
+        ...runs.map((run) => run.memory.peakRuntimeHeapUsedBytes),
+      ),
       peakHeapUsedBytes: Math.max(...runs.map((run) => run.memory.peakHeapUsedBytes)),
       peakRssBytes: Math.max(...runs.map((run) => run.memory.peakRssBytes)),
       largestSingleSeasonGrowthBytes: Math.max(

@@ -19,6 +19,12 @@ const reportOnly = process.argv.includes("--report-only");
 const allowedStatuses = new Set(["Passed", "Failed", "Unverified", "N/A"]);
 const hashPattern = /^[a-f0-9]{64}$/i;
 const commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
+const certifiedSoakWorkerNodeArguments = [
+  "--max-old-space-size=1440",
+  "--max-semi-space-size=32",
+  "--expose-gc",
+];
+const certifiedSoakHeapLimitBytes = 1536 * 1024 * 1024;
 const packageKindExtensions = new Map([
   ["windows-installer", ".exe"],
   ["macos-dmg", ".dmg"],
@@ -592,8 +598,14 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     || executionIdentity?.seasonCount !== seasonCount
     || executionIdentity?.profileKind !== "full-canonical-weekly-career"
     || executionIdentity?.processIsolation !== "one-seeded-career-per-process"
+    || executionIdentity?.workerHeapLimitBytes !== certifiedSoakHeapLimitBytes
+    || JSON.stringify(executionIdentity?.workerNodeArguments)
+      !== JSON.stringify(certifiedSoakWorkerNodeArguments)
+    || evidence.profile?.v8HeapLimitBytes !== certifiedSoakHeapLimitBytes
   ) {
-    result.failures.push("soak checkpoint identity is missing, inconsistent, or not candidate-bound");
+    result.failures.push(
+      "soak checkpoint identity or certified 1.5 GiB heap ceiling is missing, inconsistent, or not candidate-bound",
+    );
   }
   if (
     !Number.isInteger(checkpoint?.reusedSeedCount)

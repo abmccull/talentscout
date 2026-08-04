@@ -2,6 +2,11 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
 const vitestEntry = resolve("node_modules/vitest/vitest.mjs");
+const workerNodeArguments = [
+  "--max-old-space-size=1440",
+  "--max-semi-space-size=32",
+  "--expose-gc",
+];
 const outputPath = resolve(
   process.env.SOAK_PROFILE_MATRIX_OUTPUT
     ?? "artifacts/release/generated/long-career-chooser-profile-matrix.json",
@@ -15,7 +20,7 @@ if (planOnly) {
     const child = spawn(
       process.execPath,
       [
-        "--expose-gc",
+        ...workerNodeArguments,
         vitestEntry,
         "run",
         "--config",
