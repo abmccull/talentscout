@@ -450,6 +450,13 @@ async function main() {
     }
 
     if (mode === "package") {
+      requireField(
+        report,
+        "sentry.clientDsn",
+        ["NEXT_PUBLIC_SENTRY_DSN"],
+        (value) => urlPattern.test(value),
+        "an HTTPS URL",
+      );
       requireField(report, "signing.windows.link", ["WIN_CSC_LINK"], null, "present");
       requireField(report, "signing.windows.password", ["WIN_CSC_KEY_PASSWORD"], null, "present");
       requireField(report, "signing.macos.link", ["CSC_LINK"], null, "present");
@@ -470,6 +477,13 @@ async function main() {
         "a 10-character Apple team ID",
       );
     } else {
+      optionalField(
+        report,
+        "sentry.clientDsn",
+        ["NEXT_PUBLIC_SENTRY_DSN"],
+        (value) => urlPattern.test(value),
+        "an HTTPS URL",
+      );
       optionalField(
         report,
         "notarization.appleId",

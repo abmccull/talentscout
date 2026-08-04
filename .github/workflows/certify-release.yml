@@ -34,6 +34,9 @@ permissions:
   actions: read
   contents: read
 
+env:
+  CANONICAL_CONTROL_BRANCH: release/youth-ea-rc2
+
 jobs:
   certify:
     name: Certify immutable candidate artifacts
@@ -41,14 +44,24 @@ jobs:
     environment: release-certification
     outputs:
       candidate_sha: ${{ steps.candidate.outputs.sha }}
+      candidate_tree_sha: ${{ steps.candidate.outputs.tree_sha }}
       prerelease: ${{ steps.candidate.outputs.prerelease }}
     steps:
-      - name: Validate dispatch inputs
+      - name: Validate dispatch inputs and control-plane guardrails
         env:
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           PUBLISH_STEAM: ${{ inputs.publish_steam }}
+          CANONICAL_CONTROL_BRANCH: ${{ env.CANONICAL_CONTROL_BRANCH }}
         run: |
+          if [ "${GITHUB_REF_TYPE}" != "branch" ]; then
+            echo "::error::certify-release must run from the canonical control branch"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_NAME}" != "${CANONICAL_CONTROL_BRANCH}" ]; then
+            echo "::error::certify-release only runs from ${CANONICAL_CONTROL_BRANCH}, not ${GITHUB_REF_NAME}"
+            exit 1
+          fi
           if ! printf '%s' "$CANDIDATE_RUN_ID" | grep -Eq '^[0-9]+$'; then
             echo "::error::candidate_run_id must be numeric"
             exit 1
@@ -61,38 +74,11 @@ jobs:
             echo "::error::Prerelease/RC tags can never be uploaded to Steam"
             exit 1
           fi
+          echo "::notice::This workflow never creates or pushes ${CANDIDATE_TAG}. Pushing any v* tag still triggers legacy build.yml, including the 20x30 soak."
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.candidate_tag }}
-          path: candidate
-          fetch-depth: 0
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-          cache: npm
-
-      - name: Resolve immutable candidate
-        id: candidate
-        env:
-          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
-        run: |
-          sha="$(git -C candidate rev-parse HEAD)"
-          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
-          if [ "$sha" != "$tagged_sha" ]; then
-            echo "::error::Checked-out candidate does not match its tag"
-            exit 1
-          fi
-          if printf '%s' "$CANDIDATE_TAG" | grep -q -- '-'; then prerelease=true; else prerelease=false; fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
-          echo "RELEASE_CANDIDATE_SHA=$sha" >> "$GITHUB_ENV"
-          echo "RELEASE_CANDIDATE_TAG=$CANDIDATE_TAG" >> "$GITHUB_ENV"
 
       - name: Download accepted candidate bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -103,33 +89,90 @@ jobs:
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate accepted bundle identity and install immutable evidence
+      - name: Read accepted bundle metadata
+        id: bundle_metadata
         env:
+          INPUT_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          INPUT_CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANONICAL_CONTROL_BRANCH: ${{ env.CANONICAL_CONTROL_BRANCH }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const metadataPath = path.resolve("bundle", "artifacts", "release", "generated", "accepted-candidate.json");
+          if (!fs.existsSync(metadataPath)) {
+            throw new Error(`Accepted candidate metadata is missing: ${metadataPath}`);
+          }
+          const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+          if (String(metadata.packageWorkflowRunId ?? "") !== process.env.INPUT_CANDIDATE_RUN_ID) {
+            throw new Error("accepted bundle packageWorkflowRunId does not match candidate_run_id");
+          }
+          if (String(metadata.candidateTag ?? "") !== process.env.INPUT_CANDIDATE_TAG) {
+            throw new Error("accepted bundle candidateTag does not match the requested candidate_tag");
+          }
+          if (String(metadata.controlWorkflowSha ?? "") !== process.env.GITHUB_SHA) {
+            throw new Error("accepted bundle controlWorkflowSha does not match the current certification control SHA");
+          }
+          if (String(metadata.controlWorkflowRefName ?? "") !== process.env.CANONICAL_CONTROL_BRANCH) {
+            throw new Error("accepted bundle was not created from the canonical control branch");
+          }
+          if (metadata.verificationOnly === true) {
+            throw new Error("verification-only package runs cannot be certified or promoted");
+          }
+          const output = [
+            `candidate_sha=${String(metadata.candidateCommitSha ?? "")}`,
+            `candidate_tree_sha=${String(metadata.candidateTreeSha ?? "")}`,
+            `candidate_tag=${String(metadata.candidateTag ?? "")}`,
+          ].join("\n");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `${output}\n`, "utf8");
+          NODE
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.bundle_metadata.outputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - name: Resolve immutable candidate and explicit tag binding
+        id: candidate
+        env:
+          CANDIDATE_SHA: ${{ steps.bundle_metadata.outputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ steps.bundle_metadata.outputs.candidate_tree_sha }}
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
         run: |
-          metadata_path="bundle/artifacts/release/generated/accepted-candidate.json"
-          if [ ! -f "$metadata_path" ]; then
-            echo "::error::Accepted candidate metadata is missing: $metadata_path"
+          sha="$(git -C candidate rev-parse HEAD)"
+          tree_sha="$(git -C candidate rev-parse HEAD^{tree})"
+          if [ "$sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::Checked-out candidate SHA ${sha} does not match bundle metadata ${CANDIDATE_SHA}"
             exit 1
           fi
-          expected_sha="$(node -e 'const fs=require("fs"); const metadata=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(metadata.candidateCommitSha ?? ""));' "$metadata_path")"
-          expected_tree="$(node -e 'const fs=require("fs"); const metadata=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(metadata.candidateTreeSha ?? ""));' "$metadata_path")"
-          expected_tag="$(node -e 'const fs=require("fs"); const metadata=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(metadata.candidateTag ?? ""));' "$metadata_path")"
-          actual_sha="$(git -C candidate rev-parse HEAD)"
-          actual_tree="$(git -C candidate rev-parse HEAD^{tree})"
-          if [ "$expected_sha" != "$actual_sha" ]; then
-            echo "::error::Accepted bundle SHA $expected_sha does not match candidate checkout $actual_sha"
+          if [ "$tree_sha" != "$CANDIDATE_TREE_SHA" ]; then
+            echo "::error::Checked-out candidate tree ${tree_sha} does not match bundle metadata ${CANDIDATE_TREE_SHA}"
             exit 1
           fi
-          if [ "$expected_tree" != "$actual_tree" ]; then
-            echo "::error::Accepted bundle tree $expected_tree does not match candidate checkout $actual_tree"
+          git -C candidate fetch --force origin "refs/tags/${CANDIDATE_TAG}:refs/tags/${CANDIDATE_TAG}"
+          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate tag ${CANDIDATE_TAG} resolves to ${tagged_sha}, not ${CANDIDATE_SHA}"
             exit 1
           fi
-          if [ "$expected_tag" != "$CANDIDATE_TAG" ]; then
-            echo "::error::Accepted bundle tag $expected_tag does not match input $CANDIDATE_TAG"
-            exit 1
-          fi
-          cp -R bundle/. candidate/
+          if printf '%s' "$CANDIDATE_TAG" | grep -q -- '-'; then prerelease=true; else prerelease=false; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tree_sha=$tree_sha" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_CANDIDATE_SHA=$sha" >> "$GITHUB_ENV"
+          echo "RELEASE_CANDIDATE_TREE_SHA=$tree_sha" >> "$GITHUB_ENV"
+          echo "RELEASE_CANDIDATE_TAG=$CANDIDATE_TAG" >> "$GITHUB_ENV"
+
+      - name: Install accepted bundle into the immutable candidate checkout
+        run: cp -R bundle/. candidate/
 
       - name: Checkout independent certification evidence
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -154,6 +197,24 @@ jobs:
           mkdir -p candidate/artifacts/release/generated/certifications
           cp -R "$source_dir/." candidate/artifacts/release/generated/certifications/
           rm -rf certification-source
+
+      - name: Fetch completed candidate package workflow metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          mkdir -p candidate/artifacts/release/generated/certifications
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" > candidate/artifacts/release/generated/certifications/package-workflow-run.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}/jobs?per_page=100" > candidate/artifacts/release/generated/certifications/package-workflow-jobs.json
+
+      - name: Run certification preflight
+        working-directory: candidate
+        env:
+          RELEASE_CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          RELEASE_CANDIDATE_TREE_SHA: ${{ steps.candidate.outputs.tree_sha }}
+          RELEASE_CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          RELEASE_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: node ../scripts/check-release-preflight.mjs --mode certify --json
 
       - name: Enforce exact package, core, human, hardware, and platform evidence from control policy
         env:
@@ -181,8 +242,6 @@ jobs:
       actions: read
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Download accepted candidate bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -199,25 +258,77 @@ jobs:
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
         run: |
-          promotion_list="bundle/artifacts/release/promotion-files.txt"
-          if [ ! -f "$promotion_list" ]; then
-            echo "::error::Accepted candidate bundle is missing artifacts/release/promotion-files.txt"
-            exit 1
-          fi
-          mkdir -p release-artifacts
-          : > release-artifacts/promotion-files.txt
-          while IFS= read -r relative_path; do
-            [ -n "$relative_path" ] || continue
-            source_path="bundle/${relative_path}"
-            if [ ! -f "$source_path" ]; then
-              echo "::error::Promotion file is missing from the accepted bundle: $relative_path"
-              exit 1
-            fi
-            target_path="release-artifacts/$(basename "$relative_path")"
-            cp "$source_path" "$target_path"
-            printf '%s\n' "$target_path" >> release-artifacts/promotion-files.txt
-          done < "$promotion_list"
-          node -e 'const fs=require("fs"); fs.writeFileSync("release-artifacts/build-manifest.json", JSON.stringify({product:"TalentScout",tag:process.env.CANDIDATE_TAG,commit:process.env.CANDIDATE_SHA,candidateWorkflowRun:process.env.CANDIDATE_RUN_ID,certificationWorkflowRun:process.env.GITHUB_RUN_ID,promotedAt:new Date().toISOString()}, null, 2)+"\n")'
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const workspaceRoot = process.cwd();
+          const bundleRoot = path.resolve("bundle");
+          const inventoryPath = path.resolve(bundleRoot, "artifacts", "release", "release-artifact-inventory.json");
+          const promotionListPath = path.resolve(bundleRoot, "artifacts", "release", "promotion-files.txt");
+          const promotionStagePath = path.resolve("release-artifacts", "promotion-files.txt");
+
+          if (!fs.existsSync(inventoryPath)) {
+            throw new Error("accepted candidate bundle is missing artifacts/release/release-artifact-inventory.json");
+          }
+          if (!fs.existsSync(promotionListPath)) {
+            throw new Error("accepted candidate bundle is missing artifacts/release/promotion-files.txt");
+          }
+
+          const inventory = JSON.parse(fs.readFileSync(inventoryPath, "utf8"));
+          const expectedFiles = Array.isArray(inventory.promotionFiles) ? inventory.promotionFiles : [];
+          const listedFiles = fs.readFileSync(promotionListPath, "utf8").split(/\r?\n/).filter(Boolean);
+          if (JSON.stringify(expectedFiles) !== JSON.stringify(listedFiles)) {
+            throw new Error("promotion-files.txt does not exactly match release-artifact-inventory.json");
+          }
+
+          const seen = new Set();
+          const stagedFiles = [];
+          for (const relativePath of listedFiles) {
+            if (path.isAbsolute(relativePath)) {
+              throw new Error(`promotion file must be repository-relative: ${relativePath}`);
+            }
+            const normalized = relativePath.replaceAll("\\", "/");
+            if (normalized !== path.posix.normalize(normalized) || normalized.startsWith("../") || normalized.includes("/../")) {
+              throw new Error(`promotion file path is unsafe: ${relativePath}`);
+            }
+            if (!normalized.startsWith("release-artifacts/")) {
+              throw new Error(`promotion file must stay under release-artifacts/: ${relativePath}`);
+            }
+            if (seen.has(normalized)) {
+              throw new Error(`promotion file is duplicated: ${relativePath}`);
+            }
+            seen.add(normalized);
+            const sourcePath = path.resolve(bundleRoot, normalized);
+            const sourceRealPath = fs.realpathSync(sourcePath);
+            if (!sourceRealPath.startsWith(bundleRoot + path.sep)) {
+              throw new Error(`promotion file escapes the accepted bundle: ${relativePath}`);
+            }
+            const stat = fs.lstatSync(sourcePath);
+            if (stat.isSymbolicLink()) {
+              throw new Error(`promotion file must not be a symlink: ${relativePath}`);
+            }
+            if (!stat.isFile()) {
+              throw new Error(`promotion file is not a regular file: ${relativePath}`);
+            }
+            const targetPath = path.resolve(workspaceRoot, normalized);
+            fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+            fs.copyFileSync(sourcePath, targetPath);
+            stagedFiles.push(normalized);
+          }
+
+          fs.mkdirSync(path.dirname(promotionStagePath), { recursive: true });
+          fs.writeFileSync(promotionStagePath, `${stagedFiles.join("\n")}\n`, "utf8");
+          NODE
+
+      - name: Generate promotion provenance and checksums
+        id: promotion_manifest
+        env:
+          CANDIDATE_SHA: ${{ needs.certify.outputs.candidate_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          node -e 'const fs=require("node:fs"); fs.writeFileSync("release-artifacts/build-manifest.json", JSON.stringify({product:"TalentScout",tag:process.env.CANDIDATE_TAG,commit:process.env.CANDIDATE_SHA,candidateWorkflowRun:process.env.CANDIDATE_RUN_ID,certificationWorkflowRun:process.env.GITHUB_RUN_ID,promotedAt:new Date().toISOString()}, null, 2)+"\n")'
           printf '%s\n' release-artifacts/build-manifest.json >> release-artifacts/promotion-files.txt
           while IFS= read -r path; do
             [ -n "$path" ] || continue
@@ -237,7 +348,7 @@ jobs:
           draft: true
           prerelease: ${{ needs.certify.outputs.prerelease == 'true' }}
           generate_release_notes: true
-          files: ${{ steps.promotion.outputs.files }}
+          files: ${{ steps.promotion_manifest.outputs.files }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -253,13 +364,49 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.candidate_tag }}
+          ref: ${{ needs.certify.outputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - name: Re-prove exact candidate and explicit tag binding
+        env:
+          CANDIDATE_SHA: ${{ needs.certify.outputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ needs.certify.outputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          sha="$(git -C candidate rev-parse HEAD)"
+          tree_sha="$(git -C candidate rev-parse HEAD^{tree})"
+          if [ "$sha" != "$CANDIDATE_SHA" ] || [ "$tree_sha" != "$CANDIDATE_TREE_SHA" ]; then
+            echo "::error::Steam upload candidate checkout does not match the certified SHA/tree"
+            exit 1
+          fi
+          git -C candidate fetch --force origin "refs/tags/${CANDIDATE_TAG}:refs/tags/${CANDIDATE_TAG}"
+          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate tag ${CANDIDATE_TAG} no longer resolves to ${CANDIDATE_SHA}"
+            exit 1
+          fi
+
+      - name: Download accepted candidate bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: accepted-candidate-bundle
+          path: bundle
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download exact Windows depot
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: steam-windows
-          path: dist/win-unpacked
+          path: candidate/dist/win-unpacked
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -268,7 +415,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: steam-macos
-          path: steam-stage/macos
+          path: candidate/steam-stage/macos
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -277,10 +424,78 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: steam-linux
-          path: dist/linux-unpacked
+          path: candidate/dist/linux-unpacked
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Steam depots byte-for-byte against the accepted bundle inventory
+        run: |
+          node <<'NODE'
+          const crypto = require("node:crypto");
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const inventoryPath = path.resolve("bundle", "artifacts", "release", "generated", "steam-depot-inventories.json");
+          if (!fs.existsSync(inventoryPath)) {
+            throw new Error("accepted candidate bundle is missing steam-depot-inventories.json");
+          }
+          const inventory = JSON.parse(fs.readFileSync(inventoryPath, "utf8"));
+          if (!Array.isArray(inventory.depots) || inventory.depots.length !== 3) {
+            throw new Error("steam depot inventory is incomplete");
+          }
+
+          function normalize(value) {
+            return value.replaceAll("\\", "/");
+          }
+
+          function walk(rootPath) {
+            const absoluteRoot = path.resolve("candidate", rootPath);
+            const files = [];
+            function visit(relativePath) {
+              const absolutePath = path.resolve("candidate", relativePath);
+              const stat = fs.lstatSync(absolutePath);
+              if (stat.isSymbolicLink()) {
+                throw new Error(`downloaded Steam depot contains a symlink: ${normalize(relativePath)}`);
+              }
+              if (stat.isDirectory()) {
+                const entries = fs.readdirSync(absolutePath).sort((left, right) => left.localeCompare(right));
+                for (const entry of entries) visit(path.join(relativePath, entry));
+                return;
+              }
+              if (!stat.isFile()) {
+                throw new Error(`downloaded Steam depot contains an unsupported entry: ${normalize(relativePath)}`);
+              }
+              const bytes = fs.readFileSync(absolutePath);
+              files.push({
+                path: normalize(relativePath),
+                bytes: bytes.length,
+                sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+              });
+            }
+            visit(rootPath);
+            return files;
+          }
+
+          for (const depot of inventory.depots) {
+            const expectedFiles = Array.isArray(depot.files) ? depot.files : [];
+            const actualFiles = walk(depot.rootPath);
+            if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
+              throw new Error(`Steam depot ${depot.artifactName} does not match the accepted byte inventory`);
+            }
+          }
+          NODE
+
+      - name: Run Steam promotion preflight
+        working-directory: candidate
+        env:
+          RELEASE_CANDIDATE_SHA: ${{ needs.certify.outputs.candidate_sha }}
+          RELEASE_CANDIDATE_TREE_SHA: ${{ needs.certify.outputs.candidate_tree_sha }}
+          RELEASE_CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          RELEASE_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+        run: node ../scripts/check-release-preflight.mjs --mode promote-steam --json
 
       - name: Install SteamCmd
         run: |
@@ -307,5 +522,5 @@ jobs:
             exit 1
           fi
           steamcmd +login "$STEAM_USERNAME" \
-            +run_app_build "$GITHUB_WORKSPACE/steamcmd/app_build_4455570.vdf" \
+            +run_app_build "$GITHUB_WORKSPACE/candidate/steamcmd/app_build_4455570.vdf" \
             +quit

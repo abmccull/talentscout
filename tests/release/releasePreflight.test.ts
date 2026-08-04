@@ -132,6 +132,7 @@ describe("release preflight checker", () => {
   it("passes package mode with full production credentials and redacted JSON output", () => {
     const cwd = fixture();
     const result = run(cwd, "package", {
+      NEXT_PUBLIC_SENTRY_DSN: "https://public@example.ingest.sentry.io/123456",
       STEAM_SDK_WINDOWS_URL: "https://secret.example/windows",
       STEAM_SDK_WINDOWS_SHA256: fullSha256,
       STEAM_SDK_MACOS_URL: "https://secret.example/macos",
@@ -161,6 +162,28 @@ describe("release preflight checker", () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.report.ok).toBe(true);
+  });
+
+  it("fails package mode when NEXT_PUBLIC_SENTRY_DSN is missing", () => {
+    const cwd = fixture();
+    const result = run(cwd, "package", {
+      STEAM_SDK_WINDOWS_URL: "https://secret.example/windows",
+      STEAM_SDK_WINDOWS_SHA256: fullSha256,
+      STEAM_SDK_MACOS_URL: "https://secret.example/macos",
+      STEAM_SDK_MACOS_SHA256: fullSha256,
+      STEAM_SDK_LINUX_URL: "https://secret.example/linux",
+      STEAM_SDK_LINUX_SHA256: fullSha256,
+      WIN_CSC_LINK: "base64:pfx-secret",
+      WIN_CSC_KEY_PASSWORD: "windows-password",
+      CSC_LINK: "base64:p12-secret",
+      CSC_KEY_PASSWORD: "mac-password",
+      APPLE_ID: "builds@talentscout.game",
+      APPLE_ID_PASSWORD: "app-password",
+      APPLE_TEAM_ID: "A1B2C3D4E5",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.report.failures).toContain("NEXT_PUBLIC_SENTRY_DSN is required");
   });
 
   it("fails verification mode when a configured SDK URL is missing its SHA", () => {
