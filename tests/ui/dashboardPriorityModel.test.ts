@@ -471,6 +471,174 @@ describe("dashboardPriorityModel", () => {
     expect(candidate?.consequence).toContain("S1 W5");
   });
 
+  it("keeps overlapping live social fronts as separate actionable dashboard items", () => {
+    const state = createBaseState();
+    state.contacts = {
+      reporter: {
+        id: "reporter",
+        name: "Mara Vale",
+        type: "journalist",
+        relationship: 58,
+        trustLevel: 61,
+        reliability: 72,
+        knownPlayerIds: [],
+      },
+      coach: {
+        id: "coach",
+        name: "Tomas Reed",
+        type: "academyCoach",
+        relationship: 66,
+        trustLevel: 64,
+        reliability: 68,
+        knownPlayerIds: [],
+      },
+    } as never;
+    state.consequenceState = createConsequenceEngineState({
+      decisions: {
+        "relationship-front-media": {
+          id: "relationship-front-media",
+          source: { kind: "relationshipConflict", id: "family-versus-journalist-privacy" },
+          offeredAt: { season: 1, week: 4 },
+          deadlineAt: { season: 1, week: 4 },
+          status: "selected",
+          selectedOptionId: "protect-family",
+          selectedAt: { season: 1, week: 4 },
+          selectionKind: "player",
+          visibility: "stakeholders",
+          stakeholders: [
+            { kind: "family", id: "player-1" },
+            { kind: "contact", id: "reporter" },
+          ],
+          options: [{
+            id: "protect-family",
+            label: "Protect the family and refuse",
+            knownTradeoffs: ["The journalist loses an exclusive and may stop sharing early leads."],
+            immediateEffects: [],
+            scheduledConsequences: [],
+          }],
+          outcomeRoll: 0.4,
+          consequenceIds: ["relationship-front-media:callback"],
+          metadata: {
+            title: "The Family and the Deadline",
+            premise: "Mara Vale wants an attributable answer while the family wants privacy.",
+            relatedPlayerId: "player-1",
+            frontFamilyId: "family-journalist-media",
+            frontStructure: "publicPrivate",
+            recurrenceName: "The Embargo Triangle",
+            recurrenceIndex: 1,
+            ensembleId: "family-journalist-player-1",
+            subjectKind: "player",
+            subjectId: "player-1",
+            leftStakeholderKey: "family:player-1",
+            rightStakeholderKey: "contact:reporter",
+          },
+        },
+        "relationship-front-pathway": {
+          id: "relationship-front-pathway",
+          source: { kind: "relationshipConflict", id: "manager-versus-family-readiness" },
+          offeredAt: { season: 1, week: 4 },
+          deadlineAt: { season: 1, week: 5 },
+          status: "selected",
+          selectedOptionId: "staged-pathway",
+          selectedAt: { season: 1, week: 4 },
+          selectionKind: "player",
+          visibility: "stakeholders",
+          stakeholders: [
+            { kind: "family", id: "player-2" },
+            { kind: "contact", id: "coach" },
+          ],
+          options: [{
+            id: "staged-pathway",
+            label: "Negotiate a staged pathway",
+            knownTradeoffs: ["Requires continuous follow-up and evidence."],
+            immediateEffects: [],
+            scheduledConsequences: [],
+          }],
+          outcomeRoll: 0.2,
+          consequenceIds: ["relationship-front-pathway:callback"],
+          metadata: {
+            title: "Ready Now, or Ready Properly?",
+            premise: "Tomas Reed wants a fast answer while the family wants a slower path.",
+            relatedPlayerId: "player-2",
+            frontFamilyId: "pathway-acceleration",
+            frontStructure: "ultimatum",
+            recurrenceName: "The Pathway Clock",
+            recurrenceIndex: 1,
+            ensembleId: "pathway-clock-player-2",
+            subjectKind: "player",
+            subjectId: "player-2",
+            leftStakeholderKey: "family:player-2",
+            rightStakeholderKey: "contact:coach",
+          },
+        },
+      },
+      consequences: {
+        "relationship-front-media:callback": {
+          id: "relationship-front-media:callback",
+          decisionId: "relationship-front-media",
+          optionId: "protect-family",
+          templateId: "private-window-buys-access",
+          dueAt: { season: 1, week: 5 },
+          status: "pending",
+          effects: [],
+          conditions: [],
+          probability: 1,
+          outcomeRoll: 0.4,
+          tags: ["relationshipConflict", "callback"],
+        },
+        "relationship-front-pathway:callback": {
+          id: "relationship-front-pathway:callback",
+          decisionId: "relationship-front-pathway",
+          optionId: "staged-pathway",
+          templateId: "staged-pathway-review",
+          dueAt: { season: 1, week: 6 },
+          status: "pending",
+          effects: [],
+          conditions: [],
+          probability: 1,
+          outcomeRoll: 0.2,
+          tags: ["relationshipConflict", "callback"],
+        },
+      },
+      obligations: {
+        "obligation:relationship-front-media:media": {
+          id: "obligation:relationship-front-media:media",
+          debtor: { kind: "scout", id: "scout-1" },
+          creditor: { kind: "contact", id: "reporter" },
+          kind: "mediaAccess",
+          terms: "Give a clear answer before the story runs.",
+          status: "active",
+          createdAt: { season: 1, week: 4 },
+          dueAt: { season: 1, week: 5 },
+          sourceDecisionId: "relationship-front-media",
+        },
+        "obligation:relationship-front-pathway:coach": {
+          id: "obligation:relationship-front-pathway:coach",
+          debtor: { kind: "scout", id: "scout-1" },
+          creditor: { kind: "contact", id: "coach" },
+          kind: "pathwayReview",
+          terms: "Return with a staged recommendation.",
+          status: "active",
+          createdAt: { season: 1, week: 4 },
+          dueAt: { season: 1, week: 6 },
+          sourceDecisionId: "relationship-front-pathway",
+        },
+      },
+    });
+
+    const candidates = buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 })
+      .filter((item) => item.canonicalKey?.startsWith("social-front:"));
+
+    expect(candidates.map((candidate) => candidate.canonicalKey)).toEqual(expect.arrayContaining([
+      "social-front:relationship-front-media",
+      "social-front:relationship-front-pathway",
+    ]));
+    expect(candidates.map((candidate) => candidate.title)).toEqual(expect.arrayContaining([
+      expect.stringContaining("Embargo Triangle"),
+      expect.stringContaining("Pathway Clock"),
+    ]));
+  });
+
   it("routes rival-backed social fronts into matching open rival interventions", () => {
     const state = createBaseState();
     state.players["player-3"] = {

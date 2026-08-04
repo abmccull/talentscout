@@ -1526,6 +1526,10 @@ function entityKey(entity: EntityRef): string {
   return `${entity.kind}:${entity.id}`;
 }
 
+function stakeholderPairKey(leftStakeholderKey: string, rightStakeholderKey: string): string {
+  return [leftStakeholderKey, rightStakeholderKey].sort().join("|");
+}
+
 function sameEntity(left: EntityRef, right: EntityRef): boolean {
   return left.kind === right.kind && left.id === right.id;
 }
@@ -2217,6 +2221,9 @@ export function selectAuthoredRelationshipConflict(input: {
   registry: StakeholderProfileRegistry;
   subject: EntityRef;
   excludedEntityKeys?: ReadonlySet<string>;
+  excludedFrontFamilyIds?: ReadonlySet<string>;
+  excludedEnsembleIds?: ReadonlySet<string>;
+  excludedStakeholderPairKeys?: ReadonlySet<string>;
   quietEligibleOnly?: boolean;
   state?: GameState;
 }): AuthoredConflictCast | undefined {
@@ -2242,6 +2249,10 @@ export function selectAuthoredRelationshipConflict(input: {
         { left, right, subject: input.subject },
         input.state?.consequenceState,
       );
+      const pairKey = stakeholderPairKey(front.leftStakeholderKey, front.rightStakeholderKey);
+      if (input.excludedFrontFamilyIds?.has(front.frontFamilyId)) return [];
+      if (input.excludedEnsembleIds?.has(front.ensembleId)) return [];
+      if (input.excludedStakeholderPairKeys?.has(pairKey)) return [];
       const counts = conflictCounts(input.state?.consequenceState, definition, front);
       const context: RelationshipConflictStateContext | undefined = input.state
         ? {

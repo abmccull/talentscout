@@ -557,40 +557,118 @@ describe("persistent stakeholder profiles and authored conflicts", () => {
     ]);
   });
 
-  it("offers at most one deterministic weekly conflict under the shared choice cap", () => {
+  it("allows a distinct second front after three weeks when the first selected front is still live", () => {
+    const managerState = {
+      ...relationshipFixture(),
+      scout: {
+        ...relationshipFixture().scout,
+        currentClubId: "club-1",
+      },
+      contacts: {},
+      clubs: {
+        "club-1": { id: "club-1", name: "Northbridge" },
+      } as unknown as GameState["clubs"],
+      managerProfiles: {
+        "club-1": { clubId: "club-1", managerId: "manager-1", managerName: "Asha Morgan" },
+      } as unknown as GameState["managerProfiles"],
+    } as GameState;
     const first = directWeeklyRelationshipConflict({
-      state: relationshipFixture(),
+      state: managerState,
       forceTrigger: true,
     });
     const replay = directWeeklyRelationshipConflict({
-      state: relationshipFixture(),
+      state: managerState,
       forceTrigger: true,
     });
     expect(first.offeredDecisionId).toBe(replay.offeredDecisionId);
     expect(first.offeredDecisionId).toBeTruthy();
+    expect(first.state.consequenceState.decisions[first.offeredDecisionId!]?.source.id)
+      .toBe("manager-versus-family-readiness");
     expect(first.state.inbox.at(-1)).toMatchObject({
       actionRequired: true,
       relatedId: first.offeredDecisionId,
     });
     expect(Object.values(first.state.consequenceState.obligations)).toHaveLength(2);
 
-    const blocked = directWeeklyRelationshipConflict({
-      state: first.state,
+    const selectedFirst = selectDecisionOption(
+      first.state.consequenceState,
+      first.offeredDecisionId!,
+      "staged-pathway",
+      week1,
+    ).state;
+    expect(Object.values(selectedFirst.consequences).some((consequence) =>
+      consequence.decisionId === first.offeredDecisionId && consequence.status === "pending",
+    )).toBe(true);
+
+    const liveSelectedState = {
+      state: {
+        ...first.state,
+        consequenceState: selectedFirst,
+        currentWeek: 2,
+      },
+      forceTrigger: true,
+    };
+    expect(directWeeklyRelationshipConflict(liveSelectedState).blockedReason)
+      .toBe("active-conflict-cadence");
+
+    expect(directWeeklyRelationshipConflict({
+      state: {
+        ...first.state,
+        consequenceState: selectedFirst,
+        currentWeek: 4,
+      },
+      forceTrigger: true,
+    }).blockedReason).toBe("no-distinct-front");
+
+    const overlappingState = {
+      ...first.state,
+      consequenceState: selectedFirst,
+      currentWeek: 4,
+      contacts: {
+        reporter: {
+          id: "reporter",
+          name: "Mara Vale",
+          type: "journalist",
+          relationship: 58,
+          trustLevel: 61,
+          organization: "Northbridge Chronicle",
+          reliability: 72,
+          knownPlayerIds: [],
+        },
+      } as unknown as GameState["contacts"],
+    } as GameState;
+    const overlapping = directWeeklyRelationshipConflict({
+      state: overlappingState,
       forceTrigger: true,
     });
-    expect(blocked.blockedReason).toBe("unresolved-conflict");
-    expect(blocked.state).toBe(first.state);
+
+    expect(overlapping.offeredDecisionId).toBeTruthy();
+    expect(overlapping.offeredDecisionId).not.toBe(first.offeredDecisionId);
+    const activeRelationshipDecisions = Object.values(overlapping.state.consequenceState.decisions)
+      .filter((decision) => decision.source.kind === "relationshipConflict");
+    expect(activeRelationshipDecisions).toHaveLength(2);
+    expect(new Set(activeRelationshipDecisions.map((decision) => decision.metadata?.frontFamilyId)).size)
+      .toBe(2);
+
+    expect(directWeeklyRelationshipConflict({
+      state: {
+        ...overlapping.state,
+        currentWeek: 7,
+      },
+      forceTrigger: true,
+    }).blockedReason).toBe("active-conflict-cap");
 
     const decisionId = first.offeredDecisionId!;
+    const processedFirst = processDueConsequences(selectedFirst, { season: 1, week: 8 }).state;
     const recentResolved = {
       ...first.state,
       currentWeek: 5,
       consequenceState: {
-        ...first.state.consequenceState,
+        ...processedFirst,
         decisions: {
-          ...first.state.consequenceState.decisions,
+          ...processedFirst.decisions,
           [decisionId]: {
-            ...first.state.consequenceState.decisions[decisionId],
+            ...processedFirst.decisions[decisionId],
             status: "resolved" as const,
             resolvedAt: { season: 1, week: 2 },
           },
