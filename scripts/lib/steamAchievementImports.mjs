@@ -175,6 +175,48 @@ function parseVdfAchievementApiNames(source) {
   return [...source.matchAll(/"name"\s+"([^"]+)"/g)].map((match) => match[1]);
 }
 
+function countDuplicates(values) {
+  const seen = new Set();
+  const duplicates = [];
+
+  for (const value of values) {
+    if (seen.has(value) && !duplicates.includes(value)) {
+      duplicates.push(value);
+      continue;
+    }
+    seen.add(value);
+  }
+
+  return duplicates;
+}
+
+function diffAchievementApiNames(expectedApiNames, currentSource) {
+  if (currentSource === null) {
+    return {
+      currentCount: 0,
+      expectedCount: expectedApiNames.length,
+      currentApiNames: [],
+      missing: [...expectedApiNames],
+      extra: [],
+      duplicates: [],
+    };
+  }
+
+  const currentApiNames = parseVdfAchievementApiNames(currentSource);
+  const duplicates = countDuplicates(currentApiNames);
+  const missing = expectedApiNames.filter((apiName) => !currentApiNames.includes(apiName));
+  const extra = currentApiNames.filter((apiName) => !expectedApiNames.includes(apiName));
+
+  return {
+    currentCount: currentApiNames.length,
+    expectedCount: expectedApiNames.length,
+    currentApiNames,
+    missing,
+    extra,
+    duplicates,
+  };
+}
+
 function validateUniqueIds(ids, label, failures) {
   const seen = new Set();
   for (const id of ids) {
@@ -257,10 +299,17 @@ export function auditSteamAchievementImports(root = DEFAULT_ROOT) {
     root,
     STEAM_ACHIEVEMENT_IMPORT_PATHS.fullGameImportVdf,
   );
+  const fullGameImportAbsolutePath = path.resolve(
+    root,
+    STEAM_ACHIEVEMENT_IMPORT_PATHS.fullGameImportVdf,
+  );
   const youthImportAbsolutePath = path.resolve(
     root,
     STEAM_ACHIEVEMENT_IMPORT_PATHS.youthEarlyAccessImportVdf,
   );
+  const currentFullGameImportSource = existsSync(fullGameImportAbsolutePath)
+    ? readFileSync(fullGameImportAbsolutePath, "utf8")
+    : null;
   const currentYouthImportSource = existsSync(youthImportAbsolutePath)
     ? readFileSync(youthImportAbsolutePath, "utf8")
     : null;
@@ -270,6 +319,7 @@ export function auditSteamAchievementImports(root = DEFAULT_ROOT) {
   const codeReservedIds = parseUnavailableAchievementIds(screenScopeSource);
   const manifestIncludedIds = manifest.youthEarlyAccessAchievementIds ?? [];
   const manifestReservedIds = manifest.futureBuildOnlyAchievementIds ?? [];
+  const fullGameScopedIds = [...manifestIncludedIds, ...manifestReservedIds];
 
   if (manifest.schemaVersion !== 1) {
     failures.push(`Unsupported manifest schemaVersion: ${manifest.schemaVersion}`);
@@ -296,7 +346,7 @@ export function auditSteamAchievementImports(root = DEFAULT_ROOT) {
     );
   }
 
-  const totalAuditedIds = new Set([...manifestIncludedIds, ...manifestReservedIds]);
+  const totalAuditedIds = new Set(fullGameScopedIds);
   if (totalAuditedIds.size !== 45) {
     failures.push(
       `Audited Steam achievement scope must cover 45 unique IDs, found ${totalAuditedIds.size}`,
@@ -325,37 +375,45 @@ export function auditSteamAchievementImports(root = DEFAULT_ROOT) {
     failures,
     "Future-build manifest",
   );
+  const fullGameEntries = buildEntries(
+    fullGameScopedIds,
+    definitions,
+    steamMap,
+    failures,
+    "Audited Steam scope",
+  );
 
+  const generatedFullGameImportVdf = renderSteamAchievementImportVdf(fullGameEntries);
   const generatedYouthImportVdf = renderSteamAchievementImportVdf(youthEntries);
-  const fullGameImportApiNames = parseVdfAchievementApiNames(fullGameImportSource);
+  const fullGameImportAudit = diffAchievementApiNames(
+    fullGameEntries.map((entry) => entry.steamApiName),
+    currentFullGameImportSource ?? fullGameImportSource,
+  );
+  const youthImportAudit = diffAchievementApiNames(
+    youthEntries.map((entry) => entry.steamApiName),
+    currentYouthImportSource,
+  );
   const youthImportApiNames = youthEntries.map((entry) => entry.steamApiName);
-
-  if (fullGameImportApiNames.length !== 45) {
-    failures.push(
-      `docs/achievements_import.vdf must remain a 45-entry full-game import, found ${fullGameImportApiNames.length}`,
-    );
-  }
-
-  const missingReservedFromFullGame = reservedEntries
-    .map((entry) => entry.steamApiName)
-    .filter((steamApiName) => !fullGameImportApiNames.includes(steamApiName));
 
   return {
     failures,
     manifest,
+    fullGameEntries,
     youthEntries,
     reservedEntries,
+    generatedFullGameImportVdf,
     generatedYouthImportVdf,
+    currentFullGameImportSource,
     currentYouthImportSource,
-    fullGameImportApiNames,
+    fullGameImportAudit,
+    youthImportAudit,
     youthImportApiNames,
-    missingReservedFromFullGame,
     codeReservedIds,
     counts: {
       youthEarlyAccess: manifestIncludedIds.length,
       futureBuildOnly: manifestReservedIds.length,
       auditedSteamScope: totalAuditedIds.size,
-      fullGameImportVdf: fullGameImportApiNames.length,
+      fullGameImportVdf: fullGameScopedIds.length,
     },
   };
 }

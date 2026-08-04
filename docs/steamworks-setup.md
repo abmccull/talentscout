@@ -113,10 +113,10 @@ never crashes.
 
 For the current Youth Scout Early Access branch:
 
-- Keep `docs/achievements_import.vdf` untouched as the preserved full-game
+- `docs/achievements_import.vdf` is the audited 45-achievement full-game
   import file.
 - Import `docs/achievements_import_youth_early_access.vdf` into Steamworks.
-- Regenerate and validate that file with:
+- Regenerate and validate both import files with:
 
 ```bash
 npm run steam:generate-achievement-imports

@@ -341,11 +341,12 @@ Steamworks portal -> **Store Page** -> **Basic Info** -> **System Requirements**
 
 Your project includes:
 
-- `docs/achievements_import.vdf` for the preserved full-game import file.
+- `docs/achievements_import.vdf` for the audited 45-achievement full-game
+  import file.
 - `docs/achievements_import_youth_early_access.vdf` for the current Youth
   Scout Early Access Steam setup.
 
-Before importing, regenerate and validate the scoped file:
+Before importing, regenerate and validate both files:
 
 ```bash
 npm run steam:generate-achievement-imports
@@ -526,7 +527,7 @@ Set the base USD price and any launch discount you intend to use.
 | `steamcmd/app_build_4455570.vdf` | SteamCmd build manifest |
 | `steamcmd/depot_build_*.vdf` | Per-platform depot configs |
 | `scripts/steam-upload.sh` | Local build and upload helper |
-| `docs/achievements_import.vdf` | Preserved full-game achievement import file |
+| `docs/achievements_import.vdf` | Audited 45-achievement full-game import file |
 | `docs/achievements_import_youth_early_access.vdf` | Youth Scout Early Access achievement import file |
 | `docs/steam_achievement_scope_youth_early_access.json` | Audited Youth EA Steam achievement scope manifest |
 | `src/lib/achievements.ts` | Achievement definitions |

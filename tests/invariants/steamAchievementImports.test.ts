@@ -5,7 +5,7 @@ import {
 } from "../../scripts/lib/steamAchievementImports.mjs";
 
 describe("Steam achievement import scope", () => {
-  it("keeps the Youth EA Steam manifest aligned with the reserved runtime IDs", () => {
+  it("keeps the audited Steam scope aligned with the reserved runtime IDs", () => {
     const report = auditSteamAchievementImports();
 
     expect(report.failures).toEqual([]);
@@ -20,23 +20,37 @@ describe("Steam achievement import scope", () => {
     );
   });
 
-  it("renders the checked-in Youth EA import file deterministically", () => {
+  it("renders both checked-in Steam import files deterministically", () => {
     const report = auditSteamAchievementImports();
 
+    expect(report.generatedFullGameImportVdf).toBe(
+      report.currentFullGameImportSource,
+    );
     expect(report.generatedYouthImportVdf).toBe(report.currentYouthImportSource);
+    expect(renderSteamAchievementImportVdf(report.fullGameEntries)).toBe(
+      report.generatedFullGameImportVdf,
+    );
     expect(renderSteamAchievementImportVdf(report.youthEntries)).toBe(
       report.generatedYouthImportVdf,
     );
   });
 
-  it("flags future-build-only achievements that are still absent from the preserved full-game VDF", () => {
+  it("keeps both Steam import files free of missing, extra, or duplicate API names", () => {
     const report = auditSteamAchievementImports();
 
-    expect(report.missingReservedFromFullGame).toEqual([
-      "MATCHES_25",
-      "MATCHES_50",
-      "MATCHES_100",
-      "AGAINST_ALL_ODDS",
-    ]);
+    expect(report.fullGameImportAudit).toMatchObject({
+      expectedCount: 45,
+      currentCount: 45,
+      missing: [],
+      extra: [],
+      duplicates: [],
+    });
+    expect(report.youthImportAudit).toMatchObject({
+      expectedCount: 36,
+      currentCount: 36,
+      missing: [],
+      extra: [],
+      duplicates: [],
+    });
   });
 });
