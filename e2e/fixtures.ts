@@ -337,6 +337,11 @@ export class GamePage {
           (element) => !(element as HTMLButtonElement).disabled,
         ).catch(() => false);
         if (!enabled) {
+          // The final commit can land between the screen check above and this
+          // stale control read. Reconcile the newly mounted summary immediately
+          // instead of charging another polling turn to a completed week.
+          await this.dismissBlockingDialogs();
+          if (await this.getCurrentScreen() === "calendar") break;
           await this.page.waitForTimeout(250);
           continue;
         }
@@ -671,13 +676,30 @@ export class GamePage {
     await completeReflection.click();
 
     const continueButton = this.page.getByRole("button", { name: /^Continue$/ });
-    const completionRoute = await Promise.race([
-      this.waitForScreen("weekSimulation", 10_000).then(() => "weekSimulation" as const),
-      this.waitForScreen("openingDiscovery", 10_000).then(() => "openingDiscovery" as const),
-      continueButton
-        .waitFor({ state: "visible", timeout: 10_000 })
-        .then(() => "continue" as const),
-    ]);
+    // A Promise.race of Playwright calls leaves the losing locator/function
+    // waits alive. Multi-session weeks then accumulate background protocol
+    // work that can consume the next canonical action's test budget. Poll the
+    // three legitimate completion routes in one cancel-free browser wait.
+    const completionRouteHandle = await this.page.waitForFunction(() => {
+      const currentScreen = (window as any).__GAME_STORE__?.getState()?.currentScreen;
+      if (currentScreen === "weekSimulation" || currentScreen === "openingDiscovery") {
+        return currentScreen;
+      }
+      const visibleContinue = [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => {
+          if (button.disabled || button.textContent?.trim() !== "Continue") return false;
+          const style = window.getComputedStyle(button);
+          return style.display !== "none"
+            && style.visibility !== "hidden"
+            && button.getClientRects().length > 0;
+        });
+      return visibleContinue ? "continue" : null;
+    }, undefined, { timeout: 10_000 });
+    const completionRoute = await completionRouteHandle.jsonValue() as
+      | "weekSimulation"
+      | "openingDiscovery"
+      | "continue";
+    await completionRouteHandle.dispose();
     if (completionRoute === "continue") {
       await continueButton.click();
     }
