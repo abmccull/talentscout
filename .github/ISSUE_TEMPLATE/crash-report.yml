@@ -38,10 +38,11 @@ body:
       description: Full SHA if known.
       placeholder: 6fa7297c13ad6058a2e1c157fb9541677d0195c4
   - type: input
-    id: candidate_tag
+    id: candidate_label
     attributes:
-      label: Candidate tag
-      placeholder: v1.0.0-rc.1
+      label: Candidate tag or intended label
+      description: Record the immutable tag after promotion; before that, use the candidate's intended label.
+      placeholder: v1.0.0-rc.7
   - type: input
     id: package_manifest_sha256
     attributes:

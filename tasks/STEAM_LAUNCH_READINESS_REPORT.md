@@ -1,5 +1,7 @@
 # TalentScout — Steam Launch Readiness Report
 
+> **Historical snapshot only (March 5, 2026).** This report predates the Youth Scout Early Access candidate and must not be used as current launch certification. Use `docs/release/release-evidence.md`, `docs/release/release-certification.md`, and `docs/steam-store-assets.json` for the current candidate-bound evidence and storefront inventory.
+
 **Date:** 2026-03-05
 **Version Audited:** 0.1.0
 **Steam App ID:** 4455570
