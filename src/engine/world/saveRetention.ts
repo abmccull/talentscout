@@ -1,9 +1,12 @@
 import type {
+  FinancialRecord,
   Fixture,
   GameState,
+  Observation,
   Player,
   PlayerMovementEvent,
 } from "@/engine/core/types";
+import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
 import { compactPlayerDevelopmentHistory } from "@/engine/world/developmentEnvironment";
 import {
   sortPlayerMovementArchiveSummaries,
@@ -47,9 +50,24 @@ export const PLAYER_INJURY_DETAIL_RETENTION_SEASONS = 3;
 export const BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT = 3;
 /** Background injury detail supports recent-risk mechanics without becoming a career log. */
 export const BACKGROUND_PLAYER_INJURY_HISTORY_LIMIT = 3;
+/**
+ * Keep the full situation-calculation payload while an observation can still
+ * drive current comparison and follow-up work. Older evidence keeps its
+ * player-visible context, narrative, provenance, and numeric readings.
+ */
+export const OBSERVATION_DETAIL_RETENTION_SEASONS = 5;
+/**
+ * Finance rows remain a complete audit/idempotency ledger. Only repeated
+ * presentation labels on closed routine cycles are normalized after this
+ * window; amounts, dates, categories, counterparties, and references remain.
+ */
+export const FINANCIAL_TRANSACTION_DETAIL_RETENTION_SEASONS = 5;
+const HISTORICAL_REGIONAL_CONTEXT_EXPLANATION = "Historical regional context.";
 
 export const SAVE_RETENTION_COLLECTION_KEYS = [
   "players",
+  "observations",
+  "finances",
   "worldHistory",
   "fixtures",
   "matchRatings",
@@ -312,6 +330,113 @@ function compactRetiredPlayerRecord(
     injuryWeeksRemaining: 0,
     disciplinaryRecord: undefined,
   };
+}
+
+/**
+ * Historical observations are durable scouting evidence, so their readings,
+ * authored notes, flagged moments, source IDs, and visible situation context
+ * must survive. Signal maps and source-event ID arrays are calculation inputs:
+ * their result is already baked into attribute/ability readings. The updated
+ * personality snapshot is likewise copied to the Player when the observation
+ * is filed, so retaining it here creates an unbounded duplicate dossier.
+ */
+function compactHistoricalObservation(
+  observation: Observation,
+  currentSeason: number,
+): Observation {
+  const detailCutoff = Math.max(
+    1,
+    currentSeason - OBSERVATION_DETAIL_RETENTION_SEASONS + 1,
+  );
+  if (observation.season >= detailCutoff) return observation;
+
+  const {
+    updatedPersonalityProfile: _appliedPersonalitySnapshot,
+    regionalContext,
+    ...durableObservation
+  } = observation;
+  const durableRegionalContext = regionalContext
+    ? {
+        ...regionalContext,
+        // The detailed presence summary is repeated on every observation.
+        // Numeric access/confidence evidence remains authoritative; this
+        // stable label keeps a truthful archived presentation without copying
+        // the same regional prose through an entire career.
+        explanation: HISTORICAL_REGIONAL_CONTEXT_EXPLANATION,
+      }
+    : undefined;
+  const observationArchive = {
+    ...durableObservation,
+    ...(durableRegionalContext ? { regionalContext: durableRegionalContext } : {}),
+  };
+  if (!observation.situation) return observationArchive;
+
+  const {
+    culturalCalendarWindowIds: _sourceCalendarWindowIds,
+    ...visibleSituation
+  } = observation.situation;
+  const situation: ObservationSituationSnapshot = {
+    ...visibleSituation,
+    atmosphereEventIds: [],
+    signalByDomain: {} as ObservationSituationSnapshot["signalByDomain"],
+    signalByAttribute: {},
+    culturalInsightIds: [],
+  };
+
+  return {
+    ...observationArchive,
+    situation,
+  };
+}
+
+type FinancialTransaction = FinancialRecord["transactions"][number];
+
+function compactHistoricalFinancialTransaction(
+  transaction: FinancialTransaction,
+  currentSeason: number,
+): FinancialTransaction {
+  const detailCutoff = Math.max(
+    1,
+    currentSeason - FINANCIAL_TRANSACTION_DETAIL_RETENTION_SEASONS + 1,
+  );
+  if (transaction.season >= detailCutoff) return transaction;
+
+  const referenceId = transaction.referenceId ?? "";
+  let description = transaction.description;
+  if (
+    referenceId.endsWith(":scout-income")
+    || description === "Monthly salary"
+  ) {
+    description = "Monthly salary";
+  } else if (
+    (referenceId.startsWith("monthly-finance:") && referenceId.includes(":employee:"))
+    || description.startsWith("Employee salary:")
+  ) {
+    description = "Employee salary";
+  } else if (
+    referenceId.endsWith(":operating-expenses")
+    || description === "Monthly operating expenses"
+    || description === "Monthly expenses"
+  ) {
+    description = "Operating cost";
+  }
+
+  return description === transaction.description
+    ? transaction
+    : { ...transaction, description };
+}
+
+function compactFinancialRecord(
+  finances: FinancialRecord | undefined,
+  currentSeason: number,
+): FinancialRecord | undefined {
+  if (!finances) return finances;
+  const transactions = finances.transactions.map((transaction) =>
+    compactHistoricalFinancialTransaction(transaction, currentSeason));
+  if (transactions.every((transaction, index) => transaction === finances.transactions[index])) {
+    return finances;
+  }
+  return { ...finances, transactions };
 }
 
 export function collectCausallyReferencedPlayerIds(state: GameState): Set<string> {
@@ -794,6 +919,13 @@ export function compactLongCareerHistory(state: GameState): GameState {
     state.currentSeason - PLAYER_MOVEMENT_DETAIL_RETENTION_SEASONS + 1,
   );
   const causalPlayerIds = collectCausallyReferencedPlayerIds(state);
+  const observations = Object.fromEntries(
+    Object.entries(state.observations ?? {}).map(([observationId, observation]) => [
+      observationId,
+      compactHistoricalObservation(observation, state.currentSeason),
+    ]),
+  );
+  const finances = compactFinancialRecord(state.finances, state.currentSeason);
   const referencedYouthIds = collectReferencedUnsignedYouthIds(state, causalPlayerIds);
   const unsignedYouth = Object.fromEntries(
     Object.entries(state.unsignedYouth ?? {})
@@ -971,6 +1103,8 @@ export function compactLongCareerHistory(state: GameState): GameState {
   const compacted: GameState = {
     ...state,
     players,
+    observations,
+    finances,
     playerMovementHistory,
     worldHistory,
     retiredPlayers,
