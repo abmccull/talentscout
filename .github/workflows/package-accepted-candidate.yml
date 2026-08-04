@@ -1,0 +1,712 @@
+name: Package Accepted Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Exact accepted candidate commit SHA"
+        required: true
+        type: string
+      candidate_tree_sha:
+        description: "Exact accepted candidate tree SHA"
+        required: true
+        type: string
+      candidate_tag:
+        description: "Exact accepted candidate tag, for example v1.0.0-rc.2 or v1.0.0"
+        required: true
+        type: string
+      accepted_source_run_id:
+        description: "Accepted source workflow run that already carries the bounded 20x30 evidence"
+        required: true
+        type: string
+      verification_only:
+        description: "Run the full core suites without signed packaging"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: package-accepted-${{ inputs.candidate_tag }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  RELEASE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+  RELEASE_CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+  SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
+  NEXT_PUBLIC_BUILD_VERSION: ${{ inputs.candidate_sha }}
+  NEXT_PUBLIC_ENABLE_ONLINE_FEEDBACK: "false"
+
+jobs:
+  quality:
+    name: Accepted candidate quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Validate dispatch inputs
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ inputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "branch" ]; then
+            echo "::error::package-accepted-candidate must run from a control branch"
+            exit 1
+          fi
+          if ! printf '%s' "$CANDIDATE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::candidate_sha must be a full lowercase commit SHA"
+            exit 1
+          fi
+          if ! printf '%s' "$CANDIDATE_TREE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::candidate_tree_sha must be a full lowercase tree SHA"
+            exit 1
+          fi
+          if ! printf '%s' "$CANDIDATE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'; then
+            echo "::error::candidate_tag is not a supported release tag"
+            exit 1
+          fi
+          if ! printf '%s' "$SOURCE_WORKFLOW_RUN_ID" | grep -Eq '^[0-9]+$'; then
+            echo "::error::accepted_source_run_id must be numeric"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - name: Prove exact immutable candidate
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ inputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          actual_tree="$(git -C candidate rev-parse HEAD^{tree})"
+          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$actual_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate checkout SHA $actual_sha does not match $CANDIDATE_SHA"
+            exit 1
+          fi
+          if [ "$actual_tree" != "$CANDIDATE_TREE_SHA" ]; then
+            echo "::error::candidate checkout tree $actual_tree does not match $CANDIDATE_TREE_SHA"
+            exit 1
+          fi
+          if [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate tag ${CANDIDATE_TAG} resolves to $tagged_sha, not $CANDIDATE_SHA"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - name: Bind core-suite verification to clean accepted candidate
+        working-directory: candidate
+        env:
+          CORE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: node ../scripts/create-candidate-core-evidence.mjs --start
+
+      - run: npm ci
+        working-directory: candidate
+
+      - name: Dependency vulnerability audit
+        working-directory: candidate
+        run: npm audit --audit-level=moderate
+
+      - name: Type check
+        working-directory: candidate
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: candidate
+        run: npm run lint
+
+      - name: Architecture dependency gate
+        working-directory: candidate
+        run: npm run test:architecture
+
+      - name: Asset provenance and commercial-rights gate
+        working-directory: candidate
+        env:
+          ASSET_AUDIT_OUTPUT: artifacts/release/generated/asset-provenance-audit.json
+        run: npm run test:asset-provenance
+
+      - name: Unit and migration tests
+        working-directory: candidate
+        run: npm run test:unit
+
+      - name: Critical simulation and persistence coverage gate
+        working-directory: candidate
+        run: npm run test:coverage:critical
+
+      - name: Long-save retention coverage gate
+        working-directory: candidate
+        run: npm run test:coverage:retention
+
+      - name: Replayability divergence gate
+        working-directory: candidate
+        run: npm run test:replayability
+
+      - name: Install Playwright browser
+        working-directory: candidate
+        run: npx playwright install --with-deps chromium
+
+      - name: Build production E2E artifact
+        working-directory: candidate
+        run: npm run build:e2e
+
+      - name: First-five-minute opening hook suite
+        working-directory: candidate
+        run: npm run test:e2e:opening
+
+      - name: Throttled supporting performance journey
+        working-directory: candidate
+        run: npm run test:e2e:performance
+
+      - name: Youth Early Access gameplay suite
+        working-directory: candidate
+        run: npm run test:e2e:youth-ea
+
+      - name: Cross-screen smoke suite
+        working-directory: candidate
+        run: npm run test:e2e:smoke
+
+      - name: Accessibility suite
+        working-directory: candidate
+        run: npm run test:e2e:accessibility
+
+      - name: Build shipping artifact without test bridge
+        working-directory: candidate
+        run: npm run build
+
+      - name: Verify E2E bridge is absent from shipping JavaScript
+        working-directory: candidate
+        run: |
+          if grep -R --include='*.js' -E -l '__GAME_STORE__|__TUTORIAL_STORE__|NEXT_PUBLIC_(ENABLE_)?E2E_BRIDGE' out/_next; then
+            echo "::error::Shipping artifact contains the E2E state bridge"
+            exit 1
+          fi
+
+      - name: Complete exact-candidate core-suite evidence
+        working-directory: candidate
+        env:
+          CORE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: node ../scripts/create-candidate-core-evidence.mjs --complete
+
+      - name: Upload exact-candidate core-suite evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: candidate-core-evidence
+          path: candidate/artifacts/release/generated/candidate-core-suites.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload browser failure evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: quality-evidence
+          path: |
+            candidate/playwright-report/
+            candidate/test-results/
+            candidate/artifacts/coverage/critical/coverage-summary.json
+            candidate/artifacts/coverage/retention/coverage-summary.json
+            candidate/artifacts/performance/low-end-emulation-profile.json
+            candidate/artifacts/release/generated/replayability-release-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build-windows:
+    name: Build Windows
+    needs: quality
+    if: inputs.verification_only != true
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - name: Prove exact immutable candidate
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ inputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          actual_tree="$(git -C candidate rev-parse HEAD^{tree})"
+          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$actual_sha" != "$CANDIDATE_SHA" ] || [ "$actual_tree" != "$CANDIDATE_TREE_SHA" ] || [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate checkout does not match the accepted SHA/tree/tag"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - run: npm ci
+        working-directory: candidate
+
+      - name: Provision verified Steamworks redistributable
+        working-directory: candidate
+        env:
+          STEAM_SDK_WINDOWS_URL: ${{ secrets.STEAM_SDK_WINDOWS_URL }}
+          STEAM_SDK_WINDOWS_SHA256: ${{ secrets.STEAM_SDK_WINDOWS_SHA256 }}
+          STEAM_SDK_DOWNLOAD_TOKEN: ${{ secrets.STEAM_SDK_DOWNLOAD_TOKEN }}
+          REQUIRE_STEAM_SDK: "true"
+        run: node ../scripts/provision-steam-sdk.mjs windows
+
+      - name: Enforce Windows signing credentials
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK) -or [string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
+            throw "Accepted candidate Windows packaging requires WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD."
+          }
+
+      - name: Prepare deterministic Electron package metadata
+        working-directory: candidate
+        run: npm run electron:prepare
+
+      - name: Build Next.js (static export)
+        working-directory: candidate
+        run: npm run build
+
+      - name: Build Electron (Windows, signed)
+        working-directory: candidate
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win --publish never
+
+      - name: Verify Windows signature
+        working-directory: candidate
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          if (-not $installer) { throw "Windows installer not found" }
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          if ($signature.Status -ne "Valid") { throw "Invalid Windows signature: $($signature.Status)" }
+
+      - name: Verify packaged Windows dependency boundary
+        working-directory: candidate
+        run: node ../scripts/assert-packaged-runtime-slim.mjs --app-dir dist/win-unpacked
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-build
+          path: |
+            candidate/dist/*.exe
+            candidate/dist/*.exe.blockmap
+          retention-days: 90
+
+      - name: Upload Windows unpacked (for Steam)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: steam-windows
+          path: candidate/dist/win-unpacked/
+          retention-days: 90
+
+  build-macos:
+    name: Build macOS
+    needs: quality
+    if: inputs.verification_only != true
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - name: Prove exact immutable candidate
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ inputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          actual_tree="$(git -C candidate rev-parse HEAD^{tree})"
+          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$actual_sha" != "$CANDIDATE_SHA" ] || [ "$actual_tree" != "$CANDIDATE_TREE_SHA" ] || [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate checkout does not match the accepted SHA/tree/tag"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - run: npm ci
+        working-directory: candidate
+
+      - name: Provision verified Steamworks redistributable
+        working-directory: candidate
+        env:
+          STEAM_SDK_MACOS_URL: ${{ secrets.STEAM_SDK_MACOS_URL }}
+          STEAM_SDK_MACOS_SHA256: ${{ secrets.STEAM_SDK_MACOS_SHA256 }}
+          STEAM_SDK_DOWNLOAD_TOKEN: ${{ secrets.STEAM_SDK_DOWNLOAD_TOKEN }}
+          REQUIRE_STEAM_SDK: "true"
+        run: node ../scripts/provision-steam-sdk.mjs macos
+
+      - name: Enforce macOS signing and notarization credentials
+        working-directory: candidate
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_ID_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Accepted candidate macOS packaging requires $name"
+              exit 1
+            fi
+          done
+
+      - name: Prepare deterministic Electron package metadata
+        working-directory: candidate
+        run: npm run electron:prepare
+
+      - name: Build Next.js (static export)
+        working-directory: candidate
+        run: npm run build
+
+      - name: Build Electron (macOS, signed)
+        working-directory: candidate
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --publish never
+
+      - name: Stage architecture-independent macOS Steam depot
+        working-directory: candidate
+        run: |
+          app_path="$(find dist -maxdepth 2 -type d -name 'TalentScout.app' -print -quit)"
+          if [ -z "$app_path" ]; then
+            echo "::error::Electron builder did not produce TalentScout.app"
+            exit 1
+          fi
+          mkdir -p steam-stage/macos
+          ditto "$app_path" steam-stage/macos/TalentScout.app
+
+      - name: Verify packaged macOS dependency boundary
+        working-directory: candidate
+        run: node ../scripts/assert-packaged-runtime-slim.mjs --app-dir steam-stage/macos/TalentScout.app
+
+      - name: Verify macOS signature and notarization
+        working-directory: candidate
+        run: |
+          codesign --verify --deep --strict --verbose=2 steam-stage/macos/TalentScout.app
+          xcrun stapler validate steam-stage/macos/TalentScout.app
+          spctl --assess --type execute --verbose=2 steam-stage/macos/TalentScout.app
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-build
+          path: |
+            candidate/dist/*.dmg
+            candidate/dist/*.dmg.blockmap
+            candidate/dist/*.zip
+          retention-days: 90
+
+      - name: Upload macOS unpacked (for Steam)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: steam-macos
+          path: candidate/steam-stage/macos/
+          retention-days: 90
+
+  build-linux:
+    name: Build Linux
+    needs: quality
+    if: inputs.verification_only != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - name: Prove exact immutable candidate
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ inputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          actual_tree="$(git -C candidate rev-parse HEAD^{tree})"
+          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$actual_sha" != "$CANDIDATE_SHA" ] || [ "$actual_tree" != "$CANDIDATE_TREE_SHA" ] || [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate checkout does not match the accepted SHA/tree/tag"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - run: npm ci
+        working-directory: candidate
+
+      - name: Provision verified Steamworks redistributable
+        working-directory: candidate
+        env:
+          STEAM_SDK_LINUX_URL: ${{ secrets.STEAM_SDK_LINUX_URL }}
+          STEAM_SDK_LINUX_SHA256: ${{ secrets.STEAM_SDK_LINUX_SHA256 }}
+          STEAM_SDK_DOWNLOAD_TOKEN: ${{ secrets.STEAM_SDK_DOWNLOAD_TOKEN }}
+          REQUIRE_STEAM_SDK: "true"
+        run: node ../scripts/provision-steam-sdk.mjs linux
+
+      - name: Prepare deterministic Electron package metadata
+        working-directory: candidate
+        run: npm run electron:prepare
+
+      - name: Build Next.js (static export)
+        working-directory: candidate
+        run: npm run build
+
+      - name: Build Electron (Linux)
+        working-directory: candidate
+        run: npx electron-builder --linux --publish never
+
+      - name: Verify packaged Linux dependency boundary
+        working-directory: candidate
+        run: node ../scripts/assert-packaged-runtime-slim.mjs --app-dir dist/linux-unpacked
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-build
+          path: |
+            candidate/dist/*.AppImage
+            candidate/dist/*.deb
+          retention-days: 90
+
+      - name: Upload Linux unpacked (for Steam)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: steam-linux
+          path: candidate/dist/linux-unpacked/
+          retention-days: 90
+
+  candidate-bundle:
+    name: Stage accepted candidate bundle
+    needs: [quality, build-windows, build-macos, build-linux]
+    if: always() && needs.quality.result == 'success' && (inputs.verification_only == true || (needs.build-windows.result == 'success' && needs.build-macos.result == 'success' && needs.build-linux.result == 'success'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+
+      - name: Prove exact immutable candidate
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ inputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          actual_tree="$(git -C candidate rev-parse HEAD^{tree})"
+          tagged_sha="$(git -C candidate rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$actual_sha" != "$CANDIDATE_SHA" ] || [ "$actual_tree" != "$CANDIDATE_TREE_SHA" ] || [ "$tagged_sha" != "$CANDIDATE_SHA" ]; then
+            echo "::error::candidate checkout does not match the accepted SHA/tree/tag"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - name: Download exact-candidate core-suite evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: candidate-core-evidence
+          path: candidate-bundle/artifacts/release/generated
+
+      - name: Download quality evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: quality-evidence
+          path: quality-evidence
+
+      - name: Download exact package artifacts
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-build
+          path: candidate/release-artifacts/windows-build
+
+      - name: Download exact macOS artifacts
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: macos-build
+          path: candidate/release-artifacts/macos-build
+
+      - name: Download exact Linux artifacts
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux-build
+          path: candidate/release-artifacts/linux-build
+
+      - name: Create exact-package manifest and promotion file list
+        if: inputs.verification_only != true
+        working-directory: candidate
+        env:
+          RELEASE_CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          windows_installer="$(find release-artifacts/windows-build -type f -name '*.exe' -print -quit)"
+          windows_blockmap="$(find release-artifacts/windows-build -type f -name '*.exe.blockmap' -print -quit)"
+          macos_dmg="$(find release-artifacts/macos-build -type f -name '*.dmg' -print -quit)"
+          macos_dmg_blockmap="$(find release-artifacts/macos-build -type f -name '*.dmg.blockmap' -print -quit)"
+          macos_zip="$(find release-artifacts/macos-build -type f -name '*.zip' -print -quit)"
+          linux_appimage="$(find release-artifacts/linux-build -type f -name '*.AppImage' -print -quit)"
+          linux_deb="$(find release-artifacts/linux-build -type f -name '*.deb' -print -quit)"
+          for package in "$windows_installer" "$macos_dmg" "$macos_zip" "$linux_appimage" "$linux_deb"; do
+            if [ -z "$package" ]; then
+              echo "::error::A required release package is missing"
+              exit 1
+            fi
+          done
+          node ../scripts/create-release-package-manifest.mjs \
+            --out=artifacts/release/candidate-package-manifest.json \
+            "windows-installer=$windows_installer" \
+            "macos-dmg=$macos_dmg" \
+            "macos-zip=$macos_zip" \
+            "linux-appimage=$linux_appimage" \
+            "linux-deb=$linux_deb"
+          mkdir -p artifacts/release
+          {
+            printf '%s\n' "$windows_installer"
+            if [ -n "$windows_blockmap" ]; then printf '%s\n' "$windows_blockmap"; fi
+            printf '%s\n' "$macos_dmg"
+            if [ -n "$macos_dmg_blockmap" ]; then printf '%s\n' "$macos_dmg_blockmap"; fi
+            printf '%s\n' "$macos_zip"
+            printf '%s\n' "$linux_appimage"
+            printf '%s\n' "$linux_deb"
+          } | sed 's#^\./##' > artifacts/release/promotion-files.txt
+
+      - name: Stage accepted candidate evidence
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CANDIDATE_TREE_SHA: ${{ inputs.candidate_tree_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
+          VERIFICATION_ONLY: ${{ inputs.verification_only }}
+        run: |
+          mkdir -p candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
+          mkdir -p candidate-bundle/artifacts/coverage/critical
+          mkdir -p candidate-bundle/artifacts/coverage/retention
+          mkdir -p candidate-bundle/artifacts/performance
+          replayability_summary="$(find quality-evidence -path '*/artifacts/release/generated/replayability-release-summary.json' -print -quit)"
+          critical_summary="$(find quality-evidence -path '*/artifacts/coverage/critical/coverage-summary.json' -print -quit)"
+          retention_summary="$(find quality-evidence -path '*/artifacts/coverage/retention/coverage-summary.json' -print -quit)"
+          performance_profile="$(find quality-evidence -path '*/artifacts/performance/low-end-emulation-profile.json' -print -quit)"
+          if [ -z "$replayability_summary" ]; then
+            echo "::error::Replayability summary is missing from quality evidence"
+            exit 1
+          fi
+          if [ -z "$critical_summary" ]; then
+            echo "::error::Critical coverage summary is missing from quality evidence"
+            exit 1
+          fi
+          cp "$replayability_summary" candidate-bundle/artifacts/release/generated/replayability-release-summary.json
+          cp "$critical_summary" candidate-bundle/artifacts/coverage/critical/coverage-summary.json
+          if [ -n "$retention_summary" ]; then
+            cp "$retention_summary" candidate-bundle/artifacts/coverage/retention/coverage-summary.json
+          fi
+          if [ -n "$performance_profile" ]; then
+            cp "$performance_profile" candidate-bundle/artifacts/performance/low-end-emulation-profile.json
+          fi
+          if [ -f candidate/artifacts/release/candidate-package-manifest.json ]; then
+            mkdir -p candidate-bundle/artifacts/release
+            cp candidate/artifacts/release/candidate-package-manifest.json candidate-bundle/artifacts/release/candidate-package-manifest.json
+          fi
+          if [ -f candidate/artifacts/release/promotion-files.txt ]; then
+            mkdir -p candidate-bundle/artifacts/release
+            cp candidate/artifacts/release/promotion-files.txt candidate-bundle/artifacts/release/promotion-files.txt
+          fi
+          if [ -d candidate/release-artifacts ]; then
+            cp -R candidate/release-artifacts candidate-bundle/release-artifacts
+          fi
+          node -e 'const fs=require("fs"); const path=require("path"); const output=process.argv[1]; fs.mkdirSync(path.dirname(output), {recursive:true}); fs.writeFileSync(output, `${JSON.stringify({schemaVersion:1,candidateCommitSha:process.env.CANDIDATE_SHA,candidateTreeSha:process.env.CANDIDATE_TREE_SHA,candidateTag:process.env.CANDIDATE_TAG,acceptedSourceRunId:process.env.SOURCE_WORKFLOW_RUN_ID,packageWorkflowRunId:process.env.GITHUB_RUN_ID,packageWorkflowAttempt:process.env.GITHUB_RUN_ATTEMPT,controlWorkflowRef:process.env.GITHUB_WORKFLOW_REF,verificationOnly:process.env.VERIFICATION_ONLY==="true",generatedAt:new Date().toISOString()}, null, 2)}\n`);' candidate-bundle/artifacts/release/generated/accepted-candidate.json
+
+      - name: Download raw package and source workflow evidence via GitHub token
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
+        run: |
+          mkdir -p candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > candidate-bundle/artifacts/release/generated/certifications/package-workflow-run.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/package-workflow-jobs.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > source-artifacts.json
+          node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("source-artifacts.json","utf8")); const matches=(data.artifacts||[]).filter((artifact)=>/^release-soak-shard-\d+$/.test(String(artifact.name||""))); if (matches.length===0) { process.exit(1); } for (const artifact of matches) { console.log(`${artifact.id}\t${artifact.name}`); }' > source-artifacts.tsv || {
+            echo "::error::No release-soak shard artifacts were found for the accepted source run"
+            exit 1
+          }
+          while IFS=$'\t' read -r artifact_id artifact_name; do
+            [ -n "$artifact_id" ] || continue
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > source-artifact.zip
+            unzip -jo source-artifact.zip -d candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
+            rm -f source-artifact.zip
+          done < source-artifacts.tsv
+          rm -f source-artifacts.json source-artifacts.tsv
+
+      - name: Upload accepted candidate bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: accepted-candidate-bundle
+          path: candidate-bundle/
+          if-no-files-found: error
+          retention-days: 90
