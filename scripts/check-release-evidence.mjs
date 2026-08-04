@@ -136,6 +136,7 @@ if (configuredTag) {
 
 const configuredManifest =
   process.env.RELEASE_PACKAGE_MANIFEST?.trim() || statusDocument.candidate?.packageManifest;
+const requiredWorkflowRunId = process.env.RELEASE_WORKFLOW_RUN_ID?.trim();
 const configuredRequiredKinds = statusDocument.candidate?.requiredPackageKinds;
 const requiredPackageKinds = Array.isArray(configuredRequiredKinds)
   ? configuredRequiredKinds.filter((kind) => typeof kind === "string" && kind.trim()).map((kind) => kind.trim())
@@ -183,7 +184,6 @@ if (packageManifest) {
       `release package manifest tag ${String(packageManifest.candidateTag ?? "<missing>")} does not match ${configuredTag}`,
     );
   }
-  const requiredWorkflowRunId = process.env.RELEASE_WORKFLOW_RUN_ID?.trim();
   if (
     requiredWorkflowRunId
     && String(packageManifest.workflowRunId ?? "") !== requiredWorkflowRunId
@@ -678,6 +678,535 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   return result;
 }
 
+async function validateReleaseException(gateId, gate) {
+  const policy = gate?.releaseException;
+  if (!policy) return null;
+
+  const configuredPath = typeof policy.path === "string" ? policy.path.trim() : "";
+  const result = {
+    kind: typeof policy.kind === "string" ? policy.kind : "",
+    path: configuredPath.replaceAll("<candidate-sha>", candidateSha),
+    status: "Unverified",
+    failures: [],
+  };
+
+  // This is intentionally not a general waiver facility. The only accepted
+  // exception is the release owner's bounded decision for the canonical
+  // long-career timing gate.
+  if (
+    gateId !== "longSaveGrowthAndCompaction"
+    || result.kind !== "long-career-timing-exception"
+  ) {
+    result.failures.push("release exceptions are supported only for the long-career timing gate");
+    return result;
+  }
+  const canonicalRequiredControls = [
+    "qualityAndPlatformBuildsPassed",
+    "noCorrectnessCrashMemoryOrSaveFailure",
+    "timingVarianceBelowHalfPercent",
+    "wallGuardRemainedWithinLimit",
+    "candidateAndSourceRunMatch",
+    "ownerDirectedCancellationRecorded",
+    "rollbackAndMonitoringPlanPresent",
+  ];
+  const canonicalSourceEvidence = {
+    workflowRunPath: "artifacts/release/generated/certifications/source-workflow-run.json",
+    workflowJobsPath: "artifacts/release/generated/certifications/source-workflow-jobs.json",
+    successfulShardDirectory:
+      "artifacts/release/generated/certifications/source-long-career-shards",
+    failedSeedPath:
+      "artifacts/release/generated/certifications/source-long-career-shards/seed-17-run-failure.json",
+  };
+  if (
+    String(policy.sourceWorkflowRunId ?? "") !== "30902995422"
+    || policy.maximumValidityDays !== 30
+    || policy.requiredSeedCount !== 20
+    || policy.minimumSuccessfulSeedCount !== 18
+    || policy.maximumAffectedSeedCount !== 2
+    || policy.maximumCpuOverrunRatio !== 0.005
+    || policy.minimumReachedSeason !== 30
+    || JSON.stringify(policy.allowedReasonCodes) !== JSON.stringify([
+      "release-owner-accepted-bounded-hosted-runner-variance",
+    ])
+    || JSON.stringify(policy.expectedAffectedSeeds) !== JSON.stringify([
+      {
+        seedIndex: 1,
+        classification: "operator-cancelled-after-risk-acceptance",
+        status: "Cancelled",
+      },
+      {
+        seedIndex: 17,
+        classification: "hosted-runner-cpu-timing-variance",
+        status: "Failed",
+      },
+    ])
+    || JSON.stringify(policy.requiredControls) !== JSON.stringify(canonicalRequiredControls)
+    || JSON.stringify(policy.sourceEvidence) !== JSON.stringify(canonicalSourceEvidence)
+  ) {
+    result.failures.push("release exception policy differs from the exact approved risk decision");
+  }
+  if (!result.path || isAbsolute(result.path)) {
+    result.failures.push("release exception path must be repository-relative");
+    return result;
+  }
+  const exceptionPath = resolve(root, result.path);
+  if (!isPathInsideRoot(exceptionPath)) {
+    result.failures.push("release exception path escapes the repository root");
+    return result;
+  }
+
+  let exception;
+  try {
+    exception = JSON.parse(await readFile(exceptionPath, "utf8"));
+  } catch (error) {
+    result.failures.push(
+      `release exception cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return result;
+  }
+
+  if (
+    exception.schemaVersion !== 1
+    || exception.evidenceKind !== "release-gate-exception"
+    || exception.exceptionKind !== result.kind
+  ) {
+    result.failures.push("release exception schema/kind is invalid");
+  }
+  if (exception.gateId !== gateId) {
+    result.failures.push(`release exception names ${String(exception.gateId)}, not ${gateId}`);
+  }
+  if (
+    String(exception.candidateCommitSha ?? "").toLowerCase() !== candidateSha
+    || String(exception.candidateTreeSha ?? "").toLowerCase() !== currentTreeSha
+  ) {
+    result.failures.push("release exception does not describe the exact candidate commit and tree");
+  }
+  if (
+    String(policy.sourceCandidateCommitSha ?? "").toLowerCase() !== candidateSha
+    || String(policy.sourceCandidateTreeSha ?? "").toLowerCase() !== currentTreeSha
+  ) {
+    result.failures.push("release exception policy is not locked to this exact candidate");
+  }
+  if ((configuredTag ?? null) !== (exception.candidateTag ?? null)) {
+    result.failures.push("release exception does not describe the exact candidate tag");
+  }
+
+  const candidateWorkflowRunId = String(
+    requiredWorkflowRunId || packageManifest?.workflowRunId || "",
+  );
+  if (!/^\d+$/.test(candidateWorkflowRunId)) {
+    result.failures.push("release exception cannot resolve the candidate package workflow run");
+  } else if (String(exception.candidateWorkflowRunId ?? "") !== candidateWorkflowRunId) {
+    result.failures.push("release exception came from another candidate package workflow run");
+  }
+  if (
+    !/^\d+$/.test(String(policy.sourceWorkflowRunId ?? ""))
+    || String(exception.sourceWorkflowRunId ?? "") !== String(policy.sourceWorkflowRunId)
+  ) {
+    result.failures.push("release exception is not bound to the approved source workflow run");
+  }
+
+  let expectedManifestHash = null;
+  if (packageManifestPath) {
+    try {
+      expectedManifestHash = await sha256(packageManifestPath);
+    } catch {
+      // Package validation above records the primary failure.
+    }
+  }
+  if (
+    !expectedManifestHash
+    || String(exception.packageManifestSha256 ?? "").toLowerCase() !== expectedManifestHash
+  ) {
+    result.failures.push("release exception is not bound to the exact package manifest");
+  }
+
+  const coreEvidencePath = typeof policy.candidateCoreEvidencePath === "string"
+    ? policy.candidateCoreEvidencePath.trim()
+    : "";
+  if (!coreEvidencePath || isAbsolute(coreEvidencePath)) {
+    result.failures.push("release exception policy must name candidate core evidence");
+  } else {
+    const absoluteCoreEvidencePath = resolve(root, coreEvidencePath);
+    if (!isPathInsideRoot(absoluteCoreEvidencePath)) {
+      result.failures.push("candidate core evidence path escapes the repository root");
+    } else {
+      try {
+        const coreEvidenceBytes = await readFile(absoluteCoreEvidencePath);
+        const coreEvidenceHash = createHash("sha256").update(coreEvidenceBytes).digest("hex");
+        const coreEvidence = JSON.parse(coreEvidenceBytes.toString("utf8"));
+        if (
+          String(exception.candidateCoreEvidenceSha256 ?? "").toLowerCase()
+            !== coreEvidenceHash
+        ) {
+          result.failures.push("release exception is not bound to the exact candidate core evidence");
+        }
+        if (
+          coreEvidence.evidenceKind !== "candidate-core-suites"
+          || coreEvidence.status !== "Passed"
+          || String(coreEvidence.candidateCommitSha ?? "").toLowerCase() !== candidateSha
+          || coreEvidence.candidateBound !== true
+          || coreEvidence.sourceTreeCleanAtStart !== true
+          || coreEvidence.sourceAndConfigUnchangedAtCompletion !== true
+          || String(coreEvidence.workflowRunId ?? "") !== candidateWorkflowRunId
+          || !Array.isArray(coreEvidence.commands)
+          || coreEvidence.commands.length === 0
+          || coreEvidence.commands.some(
+            (command) => !command?.command || command.status !== "Passed",
+          )
+        ) {
+          result.failures.push(
+            "release exception references invalid or non-passing candidate core evidence",
+          );
+        }
+      } catch (error) {
+        result.failures.push(
+          `candidate core evidence cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  }
+
+  const generatedPolicy = gate.generatedEvidence ?? {};
+  if (
+    generatedPolicy.kind !== "long-career-release-soak"
+    || generatedPolicy.minimumSeedCount !== 20
+    || generatedPolicy.minimumSeasonCount !== 30
+    || generatedPolicy.requireProcessIsolation !== true
+    || generatedPolicy.requireDeterministicReplay !== true
+  ) {
+    result.failures.push(
+      "release exception requires the canonical 20-seed, 30-season, isolated deterministic soak policy",
+    );
+  }
+  const generatedPolicyHash = createHash("sha256")
+    .update(JSON.stringify(generatedPolicy))
+    .digest("hex");
+  if (String(exception.generatedPolicySha256 ?? "").toLowerCase() !== generatedPolicyHash) {
+    result.failures.push("release exception is not bound to the current long-career policy");
+  }
+
+  const approvedAt = Date.parse(exception.approvedAt ?? "");
+  const expiresAt = Date.parse(exception.expiresAt ?? "");
+  const maximumValidityDays = Number(policy.maximumValidityDays);
+  if (
+    exception.status !== "Accepted"
+    || typeof exception.approvedBy !== "string"
+    || !exception.approvedBy.trim()
+    || typeof exception.approvalReference !== "string"
+    || !exception.approvalReference.trim()
+  ) {
+    result.failures.push("release exception is not an explicit, attributable risk acceptance");
+  }
+  if (
+    !Number.isFinite(approvedAt)
+    || !Number.isFinite(expiresAt)
+    || !Number.isFinite(maximumValidityDays)
+    || maximumValidityDays <= 0
+    || expiresAt <= approvedAt
+    || expiresAt > approvedAt + maximumValidityDays * 24 * 60 * 60 * 1000
+    || expiresAt <= Date.now()
+    || approvedAt > Date.now() + 5 * 60 * 1000
+  ) {
+    result.failures.push("release exception approval window is invalid or expired");
+  }
+  const allowedReasonCodes = Array.isArray(policy.allowedReasonCodes)
+    ? policy.allowedReasonCodes
+    : [];
+  if (!allowedReasonCodes.includes(exception.reasonCode)) {
+    result.failures.push("release exception reason code is not allowed by policy");
+  }
+
+  const metrics = exception.metrics ?? {};
+  const affectedSeeds = Array.isArray(exception.affectedSeeds) ? exception.affectedSeeds : [];
+  const requiredSeedCount = Number(policy.requiredSeedCount);
+  const minimumSuccessfulSeedCount = Number(policy.minimumSuccessfulSeedCount);
+  const maximumAffectedSeedCount = Number(policy.maximumAffectedSeedCount);
+  if (
+    !Number.isInteger(metrics.totalSeedCount)
+    || metrics.totalSeedCount !== requiredSeedCount
+    || !Number.isInteger(metrics.successfulSeedCount)
+    || metrics.successfulSeedCount < minimumSuccessfulSeedCount
+    || !Number.isInteger(metrics.affectedSeedCount)
+    || metrics.affectedSeedCount !== affectedSeeds.length
+    || metrics.affectedSeedCount > maximumAffectedSeedCount
+    || metrics.successfulSeedCount + metrics.affectedSeedCount !== metrics.totalSeedCount
+  ) {
+    result.failures.push("release exception seed accounting exceeds its bounded policy");
+  }
+
+  const expectedAffectedSeeds = Array.isArray(policy.expectedAffectedSeeds)
+    ? policy.expectedAffectedSeeds
+    : [];
+  const seenSeedIndices = new Set();
+  let calculatedMaximumCpuOverrunRatio = 0;
+  for (const expected of expectedAffectedSeeds) {
+    const affected = affectedSeeds.find((entry) => entry?.seedIndex === expected?.seedIndex);
+    if (
+      !affected
+      || affected.classification !== expected.classification
+      || affected.status !== expected.status
+    ) {
+      result.failures.push(`release exception is missing the approved seed ${String(expected?.seedIndex)} outcome`);
+      continue;
+    }
+    if (seenSeedIndices.has(affected.seedIndex)) {
+      result.failures.push("release exception contains duplicate affected seed indices");
+    }
+    seenSeedIndices.add(affected.seedIndex);
+    if (affected.classification === "hosted-runner-cpu-timing-variance") {
+      const cpuElapsedMs = Number(affected.cpuElapsedMs);
+      const cpuLimitMs = Number(affected.cpuLimitMs);
+      const wallElapsedMs = Number(affected.wallElapsedMs);
+      const wallLimitMs = Number(affected.wallLimitMs);
+      const cpuOverrunRatio = (cpuElapsedMs - cpuLimitMs) / cpuLimitMs;
+      calculatedMaximumCpuOverrunRatio = Math.max(
+        calculatedMaximumCpuOverrunRatio,
+        cpuOverrunRatio,
+      );
+      if (
+        !Number.isFinite(cpuOverrunRatio)
+        || cpuOverrunRatio < 0
+        || cpuOverrunRatio > Number(policy.maximumCpuOverrunRatio)
+        || !Number.isFinite(wallElapsedMs)
+        || !Number.isFinite(wallLimitMs)
+        || wallElapsedMs >= wallLimitMs
+        || Number(affected.reachedSeason) < Number(policy.minimumReachedSeason)
+      ) {
+        result.failures.push("release exception timing evidence exceeds the approved bounded variance");
+      }
+    }
+  }
+  if (
+    affectedSeeds.length !== expectedAffectedSeeds.length
+    || seenSeedIndices.size !== affectedSeeds.length
+  ) {
+    result.failures.push("release exception affected-seed set differs from the approved decision");
+  }
+  if (
+    !Number.isFinite(metrics.maximumCpuOverrunRatio)
+    || Math.abs(metrics.maximumCpuOverrunRatio - calculatedMaximumCpuOverrunRatio) > 1e-9
+  ) {
+    result.failures.push("release exception CPU-overrun summary does not match its seed evidence");
+  }
+
+  const requiredControls = Array.isArray(policy.requiredControls) ? policy.requiredControls : [];
+  if (requiredControls.length === 0) {
+    result.failures.push("release exception policy must declare required controls");
+  }
+  for (const controlId of requiredControls) {
+    if (exception.controls?.[controlId]?.status !== "Passed") {
+      result.failures.push(`release exception control ${String(controlId)} did not pass`);
+    }
+  }
+
+  const evidenceFiles = Array.isArray(exception.evidence) ? exception.evidence : [];
+  const evidenceHashes = new Map();
+  if (evidenceFiles.length === 0) {
+    result.failures.push("release exception contains no hashed source evidence");
+  }
+  for (const entry of evidenceFiles) {
+    const entryPath = typeof entry?.path === "string" ? entry.path : "";
+    const expectedHash = typeof entry?.sha256 === "string" ? entry.sha256.toLowerCase() : "";
+    if (!entryPath || isAbsolute(entryPath) || !hashPattern.test(expectedHash)) {
+      result.failures.push("release exception has an invalid evidence file entry");
+      continue;
+    }
+    if (evidenceHashes.has(entryPath)) {
+      result.failures.push(`release exception contains duplicate evidence path: ${entryPath}`);
+      continue;
+    }
+    evidenceHashes.set(entryPath, expectedHash);
+    const absoluteEntryPath = resolve(root, entryPath);
+    if (!isPathInsideRoot(absoluteEntryPath)) {
+      result.failures.push(`release exception evidence path escapes the repository: ${entryPath}`);
+      continue;
+    }
+    try {
+      if (await sha256(absoluteEntryPath) !== expectedHash) {
+        result.failures.push(`release exception evidence hash does not match: ${entryPath}`);
+      }
+    } catch (error) {
+      result.failures.push(
+        `release exception evidence cannot be read: ${entryPath} (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  }
+
+  const sourceEvidencePolicy = policy.sourceEvidence ?? {};
+  async function readBoundSourceJson(configuredPath, label) {
+    const sourcePath = typeof configuredPath === "string" ? configuredPath.trim() : "";
+    if (!sourcePath || isAbsolute(sourcePath)) {
+      result.failures.push(`${label} path must be repository-relative`);
+      return null;
+    }
+    const absoluteSourcePath = resolve(root, sourcePath);
+    if (!isPathInsideRoot(absoluteSourcePath)) {
+      result.failures.push(`${label} path escapes the repository root`);
+      return null;
+    }
+    if (!evidenceHashes.has(sourcePath)) {
+      result.failures.push(`${label} is not hash-bound by the release exception: ${sourcePath}`);
+      return null;
+    }
+    try {
+      return JSON.parse(await readFile(absoluteSourcePath, "utf8"));
+    } catch (error) {
+      result.failures.push(
+        `${label} cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  const sourceRun = await readBoundSourceJson(
+    sourceEvidencePolicy.workflowRunPath,
+    "source workflow run evidence",
+  );
+  if (sourceRun && (
+    String(sourceRun.id ?? "") !== String(policy.sourceWorkflowRunId)
+    || String(sourceRun.head_sha ?? "").toLowerCase() !== candidateSha
+    || sourceRun.event !== "workflow_dispatch"
+    || sourceRun.status !== "completed"
+    || sourceRun.conclusion !== "cancelled"
+  )) {
+    result.failures.push("source workflow run evidence does not match the accepted candidate run");
+  }
+
+  const sourceJobsDocument = await readBoundSourceJson(
+    sourceEvidencePolicy.workflowJobsPath,
+    "source workflow jobs evidence",
+  );
+  const sourceJobs = Array.isArray(sourceJobsDocument?.jobs) ? sourceJobsDocument.jobs : [];
+  const requiredSuccessfulJobs = ["Release quality gate", "Build Windows", "Build macOS", "Build Linux"];
+  for (const jobName of requiredSuccessfulJobs) {
+    const matches = sourceJobs.filter((job) => job?.name === jobName);
+    if (matches.length !== 1 || matches[0]?.conclusion !== "success") {
+      result.failures.push(`source workflow job did not pass exactly once: ${jobName}`);
+    }
+  }
+
+  const expectedSuccessfulSeedIndices = Array.from(
+    { length: Number(policy.requiredSeedCount) },
+    (_, index) => index + 1,
+  ).filter((seedIndex) => !expectedAffectedSeeds.some((entry) => entry?.seedIndex === seedIndex));
+  const seedJobs = new Map();
+  for (const job of sourceJobs) {
+    const match = /^Exact candidate seed (\d+) x 30 seasons$/.exec(String(job?.name ?? ""));
+    if (!match) continue;
+    const seedIndex = Number(match[1]);
+    if (seedJobs.has(seedIndex)) {
+      result.failures.push(`source workflow contains duplicate seed job ${seedIndex}`);
+    } else {
+      seedJobs.set(seedIndex, job);
+    }
+  }
+  for (const seedIndex of expectedSuccessfulSeedIndices) {
+    if (seedJobs.get(seedIndex)?.conclusion !== "success") {
+      result.failures.push(`source workflow seed ${seedIndex} did not pass`);
+    }
+  }
+  if (seedJobs.get(1)?.conclusion !== "cancelled") {
+    result.failures.push("source workflow seed 1 was not recorded as cancelled");
+  }
+  if (seedJobs.get(17)?.conclusion !== "failure") {
+    result.failures.push("source workflow seed 17 was not recorded as failed");
+  }
+  if (seedJobs.size !== Number(policy.requiredSeedCount)) {
+    result.failures.push("source workflow does not contain the exact 20-seed job set");
+  }
+
+  const successfulShardDirectory = typeof sourceEvidencePolicy.successfulShardDirectory === "string"
+    ? sourceEvidencePolicy.successfulShardDirectory.replace(/\/$/, "")
+    : "";
+  for (const seedIndex of expectedSuccessfulSeedIndices) {
+    const shardPath = `${successfulShardDirectory}/long-career-release-summary-seed-${seedIndex}.json`;
+    const shard = await readBoundSourceJson(shardPath, `source seed ${seedIndex} evidence`);
+    const checkpoint = shard?.checkpoint;
+    const executionIdentity = shard?.checkpoint?.executionIdentity;
+    const calculatedIdentityHash = executionIdentity && typeof executionIdentity === "object"
+      ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
+      : null;
+    const run = Array.isArray(shard?.runs) && shard.runs.length === 1 ? shard.runs[0] : null;
+    if (shard && (
+      shard.schemaVersion !== 3
+      || shard.evidenceKind !== "long-career-release-soak"
+      || shard.status !== "Passed"
+      || String(shard.candidateCommitSha ?? "").toLowerCase() !== candidateSha
+      || String(shard.candidateTreeSha ?? "").toLowerCase() !== currentTreeSha
+      || shard.candidateBound !== true
+      || shard.sourceTreeClean !== true
+      || checkpoint?.protocolVersion !== 1
+      || checkpoint?.determinismReplayExecuted !== false
+      || checkpoint?.executionIdentityHash !== calculatedIdentityHash
+      || checkpoint?.reusedSeedCount !== 0
+      || checkpoint?.executedSeedCount !== 1
+      || shard.profile?.seedCount !== 1
+      || shard.profile?.seasonCount !== 30
+      || shard.profile?.kind !== "full-canonical-weekly-career"
+      || shard.profile?.skippedOrdinaryWeeks !== false
+      || shard.profile?.processIsolation !== "one-seeded-career-per-process"
+      || shard.profile?.v8HeapLimitBytes !== certifiedSoakHeapLimitBytes
+      || executionIdentity?.protocolVersion !== 1
+      || String(executionIdentity?.candidateCommitSha ?? "").toLowerCase() !== candidateSha
+      || String(executionIdentity?.candidateTreeSha ?? "").toLowerCase() !== currentTreeSha
+      || executionIdentity?.seedStart !== seedIndex
+      || executionIdentity?.seedCount !== 1
+      || executionIdentity?.seasonCount !== 30
+      || executionIdentity?.profileKind !== "full-canonical-weekly-career"
+      || executionIdentity?.processIsolation !== "one-seeded-career-per-process"
+      || executionIdentity?.workerHeapLimitBytes !== certifiedSoakHeapLimitBytes
+      || JSON.stringify(executionIdentity?.workerNodeArguments)
+        !== JSON.stringify(certifiedSoakWorkerNodeArguments)
+      || run?.seed !== `release-soak-${String(seedIndex).padStart(2, "0")}`
+      || Number(run?.reachedSeason) < 31
+      || !Number.isInteger(run?.canonicalTicks)
+      || !Number.isInteger(run?.calendarWeeksSpanned)
+      || run.canonicalTicks !== run.calendarWeeksSpanned
+      || run.calendarWeeksSpanned < 900
+      || !hashPattern.test(String(run?.digest ?? ""))
+    )) {
+      result.failures.push(`source seed ${seedIndex} evidence is not a passing canonical shard`);
+    }
+  }
+
+  const failedSeedEvidence = await readBoundSourceJson(
+    sourceEvidencePolicy.failedSeedPath,
+    "source seed 17 failure evidence",
+  );
+  const failedMessage = String(failedSeedEvidence?.message ?? "");
+  const seasonWeekMatch = /S(\d+) W(\d+)/.exec(failedMessage);
+  const wallMatch = /wall=([0-9.]+)ms/.exec(failedMessage);
+  const cpuMatch = /expected ([0-9.]+) to be less than ([0-9.]+)/.exec(failedMessage);
+  const acceptedSeed17 = affectedSeeds.find((entry) => entry?.seedIndex === 17);
+  const timingMatchesException = Boolean(
+    seasonWeekMatch
+    && wallMatch
+    && cpuMatch
+    && Number(seasonWeekMatch[1]) === Number(acceptedSeed17?.reachedSeason)
+    && Number(seasonWeekMatch[2]) === Number(acceptedSeed17?.reachedWeek)
+    && Math.abs(Number(wallMatch[1]) - Number(acceptedSeed17?.wallElapsedMs)) <= 1e-6
+    && Math.abs(Number(cpuMatch[1]) - Number(acceptedSeed17?.cpuElapsedMs)) <= 1e-6
+    && Math.abs(Number(cpuMatch[2]) - Number(acceptedSeed17?.cpuLimitMs)) <= 1e-6
+    && Number(acceptedSeed17?.wallLimitMs) === 60000
+  );
+  if (failedSeedEvidence && (
+    failedSeedEvidence.schemaVersion !== 2
+    || failedSeedEvidence.evidenceKind !== "long-career-worker-failure"
+    || String(failedSeedEvidence.candidateCommitSha ?? "").toLowerCase() !== candidateSha
+    || String(failedSeedEvidence.candidateTreeSha ?? "").toLowerCase() !== currentTreeSha
+    || failedSeedEvidence.seedIndex !== 17
+    || failedSeedEvidence.seed !== "release-soak-17"
+    || failedSeedEvidence.seasonCount !== 30
+    || !timingMatchesException
+  )) {
+    result.failures.push("source seed 17 failure evidence does not match the accepted timing variance");
+  }
+
+  if (result.failures.length === 0) result.status = "Accepted";
+  return result;
+}
+
 const gateResults = [];
 for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
   if (!allowedStatuses.has(gate.status)) {
@@ -694,15 +1223,26 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
   const generatedEvidence = gate.generatedEvidence
     ? await validateGeneratedGateEvidence(gateId, gate.generatedEvidence)
     : null;
+  const releaseException = generatedEvidence?.status === "Passed"
+    ? null
+    : await validateReleaseException(gateId, gate);
+  const exceptionApplied = releaseException?.status === "Accepted";
   let effectiveStatus = gate.status;
   if (gate.status === "Unverified" && generatedEvidence?.status === "Passed") {
     effectiveStatus = "Passed";
+  } else if (gate.status === "Unverified" && exceptionApplied) {
+    effectiveStatus = "Passed";
   }
-  if (generatedEvidence && generatedEvidence.status !== "Passed") {
+  if (generatedEvidence && generatedEvidence.status !== "Passed" && !exceptionApplied) {
     failures.push(`${gateId} generated evidence: ${generatedEvidence.failures.join(", ")}`);
   }
+  if (releaseException && releaseException.status !== "Accepted") {
+    failures.push(`${gateId} release exception: ${releaseException.failures.join(", ")}`);
+  }
   const effectiveEvidenceCount =
-    (gate.evidence?.length ?? 0) + (generatedEvidence?.status === "Passed" ? 1 : 0);
+    (gate.evidence?.length ?? 0)
+    + (generatedEvidence?.status === "Passed" ? 1 : 0)
+    + (exceptionApplied ? 1 : 0);
   if (effectiveStatus === "Passed" && effectiveEvidenceCount === 0) {
     failures.push(`${gateId} is Passed without evidence`);
   }
@@ -719,8 +1259,19 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
     evidence: gate.evidence ?? [],
     missingEvidence,
     generatedEvidence,
+    resolution: exceptionApplied ? "AcceptedRisk" : effectiveStatus,
+    exceptionApplied,
+    releaseException,
   });
 }
+
+const acceptedRisks = gateResults
+  .filter((gate) => gate.exceptionApplied)
+  .map((gate) => ({
+    gateId: gate.gateId,
+    kind: gate.releaseException?.kind,
+    path: gate.releaseException?.path,
+  }));
 
 const report = {
   schemaVersion: 2,
@@ -735,12 +1286,17 @@ const report = {
   },
   dirty,
   dirtyPaths,
-  status: failures.length === 0 ? "Passed" : "Failed",
+  status: failures.length > 0
+    ? "Failed"
+    : acceptedRisks.length > 0
+      ? "PassedWithAcceptedRisk"
+      : "Passed",
   packageVerification: {
     requiredKinds: requiredPackageKinds,
     packages: packageResults,
   },
   gateResults,
+  acceptedRisks,
   failures,
 };
 await mkdir(dirname(outputPath), { recursive: true });

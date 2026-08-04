@@ -290,6 +290,50 @@
         "minimumSeasonCount": 30,
         "requireProcessIsolation": true,
         "requireDeterministicReplay": true
+      },
+      "releaseException": {
+        "kind": "long-career-timing-exception",
+        "path": "artifacts/release/generated/certifications/long-career-timing-exception.json",
+        "sourceWorkflowRunId": "30902995422",
+        "sourceCandidateCommitSha": "6fa7297c13ad6058a2e1c157fb9541677d0195c4",
+        "sourceCandidateTreeSha": "502f7343d6a889b490802e9df143518dbf9801b4",
+        "candidateCoreEvidencePath": "artifacts/release/generated/candidate-core-suites.json",
+        "maximumValidityDays": 30,
+        "allowedReasonCodes": [
+          "release-owner-accepted-bounded-hosted-runner-variance"
+        ],
+        "requiredSeedCount": 20,
+        "minimumSuccessfulSeedCount": 18,
+        "maximumAffectedSeedCount": 2,
+        "maximumCpuOverrunRatio": 0.005,
+        "minimumReachedSeason": 30,
+        "sourceEvidence": {
+          "workflowRunPath": "artifacts/release/generated/certifications/source-workflow-run.json",
+          "workflowJobsPath": "artifacts/release/generated/certifications/source-workflow-jobs.json",
+          "successfulShardDirectory": "artifacts/release/generated/certifications/source-long-career-shards",
+          "failedSeedPath": "artifacts/release/generated/certifications/source-long-career-shards/seed-17-run-failure.json"
+        },
+        "expectedAffectedSeeds": [
+          {
+            "seedIndex": 1,
+            "classification": "operator-cancelled-after-risk-acceptance",
+            "status": "Cancelled"
+          },
+          {
+            "seedIndex": 17,
+            "classification": "hosted-runner-cpu-timing-variance",
+            "status": "Failed"
+          }
+        ],
+        "requiredControls": [
+          "qualityAndPlatformBuildsPassed",
+          "noCorrectnessCrashMemoryOrSaveFailure",
+          "timingVarianceBelowHalfPercent",
+          "wallGuardRemainedWithinLimit",
+          "candidateAndSourceRunMatch",
+          "ownerDirectedCancellationRecorded",
+          "rollbackAndMonitoringPlanPresent"
+        ]
       }
     }
   }

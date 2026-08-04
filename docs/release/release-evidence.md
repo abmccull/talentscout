@@ -108,6 +108,37 @@ This is intentionally a multi-hour release job. Do not shorten it by jumping
 calendar weeks; use a smaller seed/season profile only for local development
 proof, where the resulting evidence remains supporting rather than certifying.
 
+### Candidate-specific long-career timing exception
+
+The release checker supports one deliberately narrow exception type for the
+`longSaveGrowthAndCompaction` gate. It is not a reusable waiver system and it
+cannot resolve packaging, security, accessibility, hardware, usability, save
+integrity, crash, memory, determinism, or gameplay-correctness failures.
+
+The tracked policy locks this exception to source workflow `30902995422`,
+candidate `6fa7297c13ad6058a2e1c157fb9541677d0195c4`, and its exact Git tree. The
+exception accepts only the recorded seed-17 hosted-runner CPU variance (less
+than 0.5% over the stall-only CPU threshold while remaining below the separate
+wall-time limit) and the release-owner-directed cancellation of seed 1 after
+the risk decision. At least 18 of 20 requested shards must have passed.
+
+Certification evidence must use
+`docs/release/templates/long-career-timing-exception.template.json` and is
+accepted only when it is bound to the exact candidate tag, signed-package
+workflow run, package manifest, passing candidate-core evidence from that
+package workflow, current long-career policy hash, approval window, required
+controls, and hashed source
+artifacts. A valid exception is reported as `PassedWithAcceptedRisk`; it is
+never presented as an ordinary clean soak pass. Any changed source candidate,
+tree, policy, package, run, or evidence byte invalidates the decision.
+
+The source bundle is not a free-form operator summary. It must include the raw
+workflow-run and workflow-job responses, all 18 passing canonical shard JSON
+files, and the seed-17 worker-failure JSON. The checker parses those files,
+requires the exact quality/platform job outcomes and 20-seed job set, verifies
+every successful shard against the candidate/tree and 30-season profile, and
+derives the accepted timing values from the raw failure message.
+
 Run the strict gate with:
 
 ```powershell
