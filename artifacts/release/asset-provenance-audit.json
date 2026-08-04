@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T18:21:42.635Z",
+  "generatedAt": "2026-08-04T17:24:42.594Z",
   "manifestPath": "docs/asset-provenance.json",
   "manifestStatus": "owner-attested-approved",
   "status": "pass",
   "summary": {
-    "assetCount": 135,
-    "trackedCount": 135,
+    "assetCount": 151,
+    "trackedCount": 151,
     "untrackedCount": 0,
     "blockerCount": 0,
-    "totalBytes": 66815785
+    "totalBytes": 91490115
   },
   "groups": [
     {
@@ -17,6 +17,18 @@
       "rightsStatus": "approved",
       "evidenceCount": 1,
       "assetCount": 39
+    },
+    {
+      "id": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1,
+      "assetCount": 8
+    },
+    {
+      "id": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2,
+      "assetCount": 8
     },
     {
       "id": "elevenlabs-generated-audio",
@@ -1098,6 +1110,70 @@
       "evidenceCount": 1
     },
     {
+      "path": "public/images/steam/screenshots/01-dashboard.png",
+      "bytes": 479856,
+      "sha256": "367a9013ac08abefe4a60085c1fa98948234cf1735c598d7dd96fd007dc643e4",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/steam/screenshots/02-observation.png",
+      "bytes": 872592,
+      "sha256": "bfb3c06fafdb260a4f7cc21baab4641ba8350386a276f9ffdd11aa91ea2e074b",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/steam/screenshots/03-report-writer.png",
+      "bytes": 812704,
+      "sha256": "79e700dc7d213ccf5ba77950852151d4db54915cbd99699a4827ae805c1766ef",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/steam/screenshots/04-prospects.png",
+      "bytes": 210008,
+      "sha256": "88d7092c707b79fb24fb420169a638a7210c622e01c3af438aa42baaea2661e6",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/steam/screenshots/05-world-map.png",
+      "bytes": 1421686,
+      "sha256": "fad97f1b251c1cef03f4d10fe2406cecc6ed20d32514be4f9554da5f06228398",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/steam/screenshots/06-rivals.png",
+      "bytes": 752400,
+      "sha256": "4bc3e341d9ceb9dc7117b641c68bbaf7345b1ce3e647eae4d5e7a7fce0594af2",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/steam/screenshots/07-career-progression.png",
+      "bytes": 578001,
+      "sha256": "f3ca5f516f7c090b9d5399ed7768fd46751772d1c904c03b2989a2c8bdd0f4b8",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/steam/screenshots/08-calendar.png",
+      "bytes": 340721,
+      "sha256": "475e13139df49040a694301336c97566e34a1aeaa2f6d3d8c8a8883ede99d1a2",
+      "groupId": "project-rendered-steam-screenshots",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 2
+    },
+    {
       "path": "public/images/steam/steam-capsule.png",
       "bytes": 858624,
       "sha256": "ba55e1c0816c83b66e0a999ae8002dca740a43ab4f3895ee672df620ef487c2e",
@@ -1106,10 +1182,74 @@
       "evidenceCount": 1
     },
     {
+      "path": "public/images/steam/steam-header-capsule.png",
+      "bytes": 153352,
+      "sha256": "da4d5b8748b3ae7a829d9160b3d766e2251902a2d446fa403a95052b251a47c9",
+      "groupId": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
       "path": "public/images/steam/steam-hero.png",
       "bytes": 730833,
       "sha256": "94dd1814a4355c1cd6330fd6ecf4ff4eb90f82ae18c8010beaa6c6a86a13f2bd",
       "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-library-capsule-v2.png",
+      "bytes": 982958,
+      "sha256": "bbde5295b7f6d699147047c01b402947d74242211d0929a6f334657a381a4dbd",
+      "groupId": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-library-hero.png",
+      "bytes": 7719501,
+      "sha256": "725640c40a097befd5c20f590b82ca322c27a1d01979a935d0243f3a6fb7ec81",
+      "groupId": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-logo-transparent.png",
+      "bytes": 44157,
+      "sha256": "03ccb8565872b501f74ee10e8d4829d9bf36a9b9753955f0d25038d98dde1791",
+      "groupId": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-main-capsule.png",
+      "bytes": 325734,
+      "sha256": "d5e680537beca9927dc5eff2b19003b793f0e65be90bd9f4d15bab973d86d774",
+      "groupId": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-page-background.png",
+      "bytes": 2071616,
+      "sha256": "05ea5db649485bf75b94027903000131534afd6b326d812af832682be92c6684",
+      "groupId": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-small-capsule.png",
+      "bytes": 35984,
+      "sha256": "278b776f5eb775a42512840d04b6c4b0cd5afeb73bea333b5d79e77b02430f01",
+      "groupId": "openai-steam-store-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-store-hero-v2.png",
+      "bytes": 7873060,
+      "sha256": "7b7f78cc0d2d4e0303a588a6a1aa45c2fe3a3c376aac0beeb9c09e4486ec8347",
+      "groupId": "openai-steam-store-art",
       "rightsStatus": "approved",
       "evidenceCount": 1
     }

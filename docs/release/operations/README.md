@@ -21,8 +21,8 @@ fields together and never mix them across runs:
 
 Source of truth for candidate identity:
 
-- [release-certification.md](/C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout-youth-ea-release/docs/release/release-certification.md)
-- [release-evidence.md](/C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout-youth-ea-release/docs/release/release-evidence.md)
+- [release-certification.md](../release-certification.md)
+- [release-evidence.md](../release-evidence.md)
 
 ## Manual gates
 

@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -26,9 +27,9 @@ const manifest = {
     { slot: 1, path: "public/images/steam/screenshots/01-dashboard.png" },
     { slot: 2, path: "public/images/steam/screenshots/02-observation.png" },
     { slot: 3, path: "public/images/steam/screenshots/03-report-writer.png" },
-    { slot: 4, path: "public/images/steam/screenshots/04-player-database.png" },
+    { slot: 4, path: "public/images/steam/screenshots/04-prospects.png" },
     { slot: 5, path: "public/images/steam/screenshots/05-world-map.png" },
-    { slot: 6, path: "public/images/steam/screenshots/06-scenarios.png" },
+    { slot: 6, path: "public/images/steam/screenshots/06-rivals.png" },
     { slot: 7, path: "public/images/steam/screenshots/07-career-progression.png" },
     { slot: 8, path: "public/images/steam/screenshots/08-calendar.png" },
   ],
@@ -61,6 +62,8 @@ TalentScout puts you in the stands with a notebook. Watch football, judge talent
 ## About This Game
 
 TalentScout is a scouting-first football simulation about observation, conviction, and reputation.
+
+The Early Access release starts with one complete identity: Freelance Youth Scout. First Team Scout, Regional Expert, and Data Scout are not part of this Early Access release.
 
 ## Key Features
 
@@ -158,6 +161,12 @@ function writePng(
 
 function fixture() {
   const cwd = mkdtempSync(join(tmpdir(), "talentscout-steam-assets-"));
+  const fixtureManifest = structuredClone(manifest) as unknown as {
+    schemaVersion: number;
+    storeCopyPath: string;
+    assets: Record<string, { path: string; sha256?: string }>;
+    screenshots: Array<{ slot: number; path: string; sha256?: string }>;
+  };
   tempDirs.push(cwd);
   mkdirSync(join(cwd, "docs"), { recursive: true });
   mkdirSync(join(cwd, "public", "images", "steam"), { recursive: true });
@@ -167,7 +176,6 @@ function fixture() {
     "Fixture provenance evidence\n",
     "utf8",
   );
-  writeJson(join(cwd, "docs", "steam-store-assets.json"), manifest);
   writeJson(join(cwd, "docs", "asset-provenance.json"), provenance);
   writeFileSync(join(cwd, "STEAM_STORE_COPY.md"), validCopy, "utf8");
 
@@ -185,6 +193,15 @@ function fixture() {
   for (const screenshot of manifest.screenshots) {
     writePng(cwd, screenshot.path, 1920, 1080);
   }
+  for (const asset of Object.values(fixtureManifest.assets)) {
+    asset.sha256 = createHash("sha256").update(readFileSync(join(cwd, asset.path))).digest("hex");
+  }
+  for (const screenshot of fixtureManifest.screenshots) {
+    screenshot.sha256 = createHash("sha256")
+      .update(readFileSync(join(cwd, screenshot.path)))
+      .digest("hex");
+  }
+  writeJson(join(cwd, "docs", "steam-store-assets.json"), fixtureManifest);
   return cwd;
 }
 
@@ -211,6 +228,18 @@ describe("steam store asset validator", () => {
     expect(result.status).toBe(0);
     expect(report.status).toBe("Passed");
     expect(report.summary.presentScreenshotCount).toBe(8);
+    expect(report.assets.every((asset: { sha256: string | null }) =>
+      typeof asset.sha256 === "string" && /^[0-9a-f]{64}$/.test(asset.sha256),
+    )).toBe(true);
+    expect(report.assets.every((asset: { expectedSha256: string; sha256: string }) =>
+      asset.expectedSha256 === asset.sha256,
+    )).toBe(true);
+    expect(report.screenshots.every((screenshot: { sha256: string | null }) =>
+      typeof screenshot.sha256 === "string" && /^[0-9a-f]{64}$/.test(screenshot.sha256),
+    )).toBe(true);
+    expect(report.screenshots.every((screenshot: { expectedSha256: string; sha256: string }) =>
+      screenshot.expectedSha256 === screenshot.sha256,
+    )).toBe(true);
     expect(report.copy).toMatchObject({
       status: "Passed",
       shortDescriptionLength: expect.any(Number),
@@ -218,6 +247,16 @@ describe("steam store asset validator", () => {
         about: true,
         features: true,
         tags: true,
+      },
+      releaseScope: {
+        requiredPhrasesPresent: expect.arrayContaining([
+          "freelance youth scout",
+          "first team scout",
+          "regional expert",
+          "data scout",
+          "not part of this early access release",
+        ]),
+        forbiddenClaimsPresent: [],
       },
     });
     expect(report.assets.find((asset: { id: string }) => asset.id === "transparentLogo")).toMatchObject({
@@ -251,6 +290,27 @@ describe("steam store asset validator", () => {
     const strict = runValidator(cwd);
     expect(strict.result.status).toBe(1);
     expect(strict.report.status).toBe("Failed");
+  }, TEST_TIMEOUT_MS);
+
+  it("rejects full-game promises in Youth Early Access store copy", () => {
+    const cwd = fixture();
+    writeFileSync(
+      join(cwd, "STEAM_STORE_COPY.md"),
+      `${validCopy}\nFour scouting careers and 10+ challenge scenarios are playable now.\n`,
+      "utf8",
+    );
+
+    const { result, report } = runValidator(cwd, ["--report-only"]);
+    expect(result.status).toBe(0);
+    expect(report.status).toBe("Failed");
+    expect(report.copy.releaseScope.forbiddenClaimsPresent).toEqual([
+      "four scouting careers",
+      "10+ challenge scenarios",
+    ]);
+    expect(report.failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("forbidden full-game claim: four scouting careers"),
+      expect.stringContaining("forbidden full-game claim: 10+ challenge scenarios"),
+    ]));
   }, TEST_TIMEOUT_MS);
 
   it("rejects asset paths that escape provenance coverage or reuse another slot", () => {

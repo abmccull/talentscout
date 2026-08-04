@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -32,11 +33,26 @@ const screenshotFileNames = [
   "01-dashboard.png",
   "02-observation.png",
   "03-report-writer.png",
-  "04-player-database.png",
+  "04-prospects.png",
   "05-world-map.png",
-  "06-scenarios.png",
+  "06-rivals.png",
   "07-career-progression.png",
   "08-calendar.png",
+];
+
+const requiredYouthEarlyAccessPhrases = [
+  "freelance youth scout",
+  "first team scout",
+  "regional expert",
+  "data scout",
+  "not part of this early access release",
+];
+
+const forbiddenFullGameClaims = [
+  "four scouting careers",
+  "four specialization paths",
+  "10+ challenge scenarios",
+  "you can play hundreds of hours right now",
 ];
 
 function normalizePath(value) {
@@ -140,7 +156,7 @@ function extractShortDescription(content) {
   return paragraphs[0] ?? "";
 }
 
-function createAssetResult(id, path, requirement, expectedName = null) {
+function createAssetResult(id, path, requirement, expectedName = null, expectedSha256 = null) {
   return {
     id,
     path,
@@ -154,6 +170,8 @@ function createAssetResult(id, path, requirement, expectedName = null) {
     provenanceCovered: false,
     status: "Unverified",
     failures: [],
+    expectedSha256,
+    sha256: null,
     png: null,
   };
 }
@@ -291,6 +309,10 @@ function validateCopyDocument(path, markdown) {
       features: false,
       tags: false,
     },
+    releaseScope: {
+      requiredPhrasesPresent: [],
+      forbiddenClaimsPresent: [],
+    },
     failures: [],
   };
   const sections = parseMarkdownSections(markdown);
@@ -315,6 +337,22 @@ function validateCopyDocument(path, markdown) {
   if (!result.sections.about) result.failures.push("store copy is missing an About section");
   if (!result.sections.features) result.failures.push("store copy is missing a Features section");
   if (!result.sections.tags) result.failures.push("store copy is missing a Tags section");
+
+  const normalizedCopy = markdown.toLowerCase().replace(/\s+/g, " ");
+  result.releaseScope.requiredPhrasesPresent = requiredYouthEarlyAccessPhrases.filter((phrase) =>
+    normalizedCopy.includes(phrase)
+  );
+  result.releaseScope.forbiddenClaimsPresent = forbiddenFullGameClaims.filter((phrase) =>
+    normalizedCopy.includes(phrase)
+  );
+  for (const phrase of requiredYouthEarlyAccessPhrases) {
+    if (!normalizedCopy.includes(phrase)) {
+      result.failures.push(`Youth Early Access store copy must include scope phrase: ${phrase}`);
+    }
+  }
+  for (const claim of result.releaseScope.forbiddenClaimsPresent) {
+    result.failures.push(`Youth Early Access store copy contains a forbidden full-game claim: ${claim}`);
+  }
   if (result.failures.length > 0) result.status = "Failed";
   return result;
 }
@@ -363,6 +401,10 @@ export async function validateSteamStoreAssets(options = {}) {
       about: false,
       features: false,
       tags: false,
+    },
+    releaseScope: {
+      requiredPhrasesPresent: [],
+      forbiddenClaimsPresent: [],
     },
     failures: ["store copy path is unavailable because the manifest could not be read"],
   };
@@ -467,7 +509,10 @@ export async function validateSteamStoreAssets(options = {}) {
     for (const [assetId, requirement] of Object.entries(assetRequirements)) {
       const configured = manifestAssets?.[assetId];
       const configuredPath = typeof configured?.path === "string" ? configured.path.trim() : "";
-      const result = createAssetResult(assetId, configuredPath, requirement);
+      const configuredSha256 = typeof configured?.sha256 === "string"
+        ? configured.sha256.trim().toLowerCase()
+        : "";
+      const result = createAssetResult(assetId, configuredPath, requirement, null, configuredSha256);
       assetResults.push(result);
 
       if (!configuredPath) {
@@ -487,6 +532,9 @@ export async function validateSteamStoreAssets(options = {}) {
       }
 
       registerPath(validatedPath.normalizedPath, assetId);
+      if (!/^[0-9a-f]{64}$/.test(configuredSha256)) {
+        result.failures.push("asset manifest must declare a lowercase SHA-256 hash");
+      }
       result.provenanceCovered = provenanceMatchers.some((matcher) => matcher.test(validatedPath.normalizedPath));
       if (!result.provenanceCovered) {
         result.failures.push("asset path is not covered by docs/asset-provenance.json");
@@ -495,6 +543,10 @@ export async function validateSteamStoreAssets(options = {}) {
       try {
         const buffer = await readFile(validatedPath.absolutePath);
         result.exists = true;
+        result.sha256 = createHash("sha256").update(buffer).digest("hex");
+        if (/^[0-9a-f]{64}$/.test(configuredSha256) && result.sha256 !== configuredSha256) {
+          result.failures.push(`asset SHA-256 is ${result.sha256}; expected ${configuredSha256}`);
+        }
         const png = parsePng(buffer);
         result.png = {
           width: png.width,
@@ -559,6 +611,7 @@ export async function validateSteamStoreAssets(options = {}) {
         typeof entry?.path === "string" ? entry.path.trim() : "",
         { width: 1920, height: 1080, required: true },
         expectedName,
+        typeof entry?.sha256 === "string" ? entry.sha256.trim().toLowerCase() : "",
       );
       screenshotResults.push(result);
 
@@ -586,6 +639,9 @@ export async function validateSteamStoreAssets(options = {}) {
       }
 
       registerPath(validatedPath.normalizedPath, `screenshot ${String(slot)}`);
+      if (!/^[0-9a-f]{64}$/.test(result.expectedSha256 ?? "")) {
+        result.failures.push("screenshot manifest must declare a lowercase SHA-256 hash");
+      }
       result.provenanceCovered = provenanceMatchers.some((matcher) => matcher.test(validatedPath.normalizedPath));
       if (!result.provenanceCovered) {
         result.failures.push("screenshot path is not covered by docs/asset-provenance.json");
@@ -594,6 +650,10 @@ export async function validateSteamStoreAssets(options = {}) {
       try {
         const buffer = await readFile(validatedPath.absolutePath);
         result.exists = true;
+        result.sha256 = createHash("sha256").update(buffer).digest("hex");
+        if (/^[0-9a-f]{64}$/.test(result.expectedSha256 ?? "") && result.sha256 !== result.expectedSha256) {
+          result.failures.push(`screenshot SHA-256 is ${result.sha256}; expected ${result.expectedSha256}`);
+        }
         const png = parsePng(buffer);
         result.png = {
           width: png.width,

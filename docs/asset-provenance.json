@@ -10,7 +10,8 @@
         "public/images/avatars/*.png",
         "public/images/backgrounds/**/*.png",
         "public/images/branding/*.png",
-        "public/images/steam/*.png"
+        "public/images/steam/steam-capsule.png",
+        "public/images/steam/steam-hero.png"
       ],
       "source": "scripts/generate-images.mjs",
       "generator": "Meshy AI Text-to-Image API",
@@ -21,6 +22,46 @@
       "notes": [
         "Archive prompts, generation dates, provider plan, and applicable terms before release.",
         "public/images/backgrounds/reports-desk.png requires a specific fictional-brand and third-party-IP visual review."
+      ]
+    },
+    {
+      "id": "openai-steam-store-art",
+      "paths": [
+        "public/images/steam/steam-header-capsule.png",
+        "public/images/steam/steam-library-capsule-v2.png",
+        "public/images/steam/steam-library-hero.png",
+        "public/images/steam/steam-logo-transparent.png",
+        "public/images/steam/steam-main-capsule.png",
+        "public/images/steam/steam-page-background.png",
+        "public/images/steam/steam-small-capsule.png",
+        "public/images/steam/steam-store-hero-v2.png"
+      ],
+      "source": "scripts/generate-steam-store-art.mjs",
+      "generator": "OpenAI built-in image generation with project-authored Sharp composition",
+      "rightsStatus": "approved",
+      "evidence": [
+        "docs/release/steam-store-art-provenance.md"
+      ],
+      "notes": [
+        "Source-master and final-output SHA-256 hashes are recorded in the evidence document.",
+        "Visual review found no real club marks, sponsor marks, identifiable people, or third-party characters."
+      ]
+    },
+    {
+      "id": "project-rendered-steam-screenshots",
+      "paths": [
+        "public/images/steam/screenshots/*.png"
+      ],
+      "source": "e2e/visual/steam-store-screenshots.spec.ts",
+      "generator": "Project-authored Playwright capture of the candidate UI",
+      "rightsStatus": "projectSource",
+      "evidence": [
+        "git history",
+        "docs/release/steam-store-art-provenance.md"
+      ],
+      "notes": [
+        "Screenshots must be captured from deterministic fictional game state at 1920x1080.",
+        "The Steam store asset validator enforces the canonical eight screenshot paths and dimensions."
       ]
     },
     {
