@@ -32,6 +32,10 @@ describe("release workflow policy", () => {
     expect(acceptedCandidate).toContain("verification_only:");
     expect(acceptedCandidate.match(/Isolate immutable candidate package workspace/g)).toHaveLength(4);
     expect(acceptedCandidate.match(/package-lock\.release-control\.json/g)).toHaveLength(4);
+    expect(acceptedCandidate).toContain("ESLINT_USE_FLAT_CONFIG: \"false\"");
+    expect(acceptedCandidate).toContain(
+      "./node_modules/.bin/eslint src --ext .js,.jsx,.ts,.tsx --no-eslintrc --config .eslintrc.json",
+    );
     expect(acceptedCandidate).toContain("path: candidate");
     expect(acceptedCandidate).toContain("release/youth-ea-rc2");
     expect(acceptedCandidate).toContain("Pushing any v* tag still triggers legacy build.yml");

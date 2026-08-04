@@ -182,7 +182,9 @@ jobs:
 
       - name: Lint
         working-directory: candidate
-        run: npm run lint
+        env:
+          ESLINT_USE_FLAT_CONFIG: "false"
+        run: ./node_modules/.bin/eslint src --ext .js,.jsx,.ts,.tsx --no-eslintrc --config .eslintrc.json
 
       - name: Architecture dependency gate
         working-directory: candidate
