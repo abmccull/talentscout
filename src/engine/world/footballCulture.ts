@@ -9,25 +9,38 @@
 import type {
   AttributeDomain,
   CulturalInsight,
+  FootballCultureInsightEffects,
 } from "@/engine/core/types";
+import {
+  resolveCountryCalendarEffects,
+  type CountryCalendarEffects,
+} from "@/engine/world/footballCultureCalendar";
+import { getFootballCultureInsightDefinition } from "@/engine/world/footballCulturePlaybooks";
 import { normalizeCountryKey } from "@/lib/country";
 
 export const FOOTBALL_CULTURE_EFFECT_VERSION = 1 as const;
-
-export interface FootballCultureInsightEffects {
-  version: typeof FOOTBALL_CULTURE_EFFECT_VERSION;
-  /** Additive signal adjustment by evidence domain. Bounded to [-0.2, 0.2]. */
-  signalByDomain: Partial<Record<AttributeDomain, number>>;
-  /** Multiplies observation variance. Below one means the context is easier to read. */
-  uncertaintyMultiplier: number;
-  /** Context tags used by the situation planner and future authored events. */
-  contextTags: string[];
-  /** Player-facing cautions about a likely interpretation trap. */
-  biasWarnings: string[];
-}
+export type { FootballCultureInsightEffects } from "@/engine/core/types";
 
 type InsightLike = Pick<CulturalInsight, "type" | "description" | "gameplayEffect"> &
   Partial<Pick<CulturalInsight, "id" | "effects">>;
+
+export interface FootballCultureContextInput {
+  season?: number;
+  week?: number;
+  weeksPerSeason?: number;
+  rootSeed?: string;
+  activeWorldConditionIds?: readonly string[];
+  /** Persisted season context. Prefer this over regenerating live save history. */
+  calendarEffects?: CountryCalendarEffects;
+}
+
+const ATTRIBUTE_DOMAINS: AttributeDomain[] = [
+  "technical",
+  "physical",
+  "mental",
+  "tactical",
+  "hidden",
+];
 
 const BASE_EFFECTS: Record<CulturalInsight["type"], FootballCultureInsightEffects> = {
   playingStyle: {
@@ -60,80 +73,12 @@ const BASE_EFFECTS: Record<CulturalInsight["type"], FootballCultureInsightEffect
   },
 };
 
-/**
- * Small country-level adjustments represent football structures, not innate
- * national traits. The base insight remains useful for every generated market.
- */
-const COUNTRY_EFFECT_ADJUSTMENTS: Partial<Record<
-  string,
-  Partial<Record<CulturalInsight["type"], Partial<FootballCultureInsightEffects>>>
->> = {
-  england: {
-    playingStyle: {
-      signalByDomain: { physical: 0.07, tactical: 0.04 },
-      contextTags: ["direct-lower-leagues", "playing-style"],
-    },
-  },
-  spain: {
-    playingStyle: {
-      signalByDomain: { technical: 0.09, tactical: 0.09 },
-      contextTags: ["positional-play", "playing-style"],
-    },
-  },
-  brazil: {
-    developmentCulture: {
-      signalByDomain: { technical: 0.09, tactical: -0.04 },
-      uncertaintyMultiplier: 1.02,
-      contextTags: ["mixed-formal-informal-pathways", "development-pathway"],
-    },
-  },
-  germany: {
-    playingStyle: {
-      signalByDomain: { mental: 0.06, tactical: 0.09 },
-      contextTags: ["pressing-structure", "playing-style"],
-    },
-  },
-  france: {
-    developmentCulture: {
-      signalByDomain: { physical: 0.06, tactical: 0.06, hidden: 0.03 },
-      contextTags: ["academy-network", "development-pathway"],
-    },
-  },
-  argentina: {
-    mentalityPattern: {
-      signalByDomain: { mental: 0.09, hidden: 0.06 },
-      contextTags: ["high-pressure-competition", "pressure-norms"],
-    },
-  },
-  nigeria: {
-    developmentCulture: {
-      signalByDomain: { physical: 0.07, technical: 0.04, tactical: -0.03 },
-      uncertaintyMultiplier: 1.03,
-      contextTags: ["uneven-pathways", "development-pathway"],
-    },
-  },
-  italy: {
-    playingStyle: {
-      signalByDomain: { tactical: 0.11, mental: 0.04 },
-      contextTags: ["tactical-schooling", "playing-style"],
-    },
-  },
-  portugal: {
-    developmentCulture: {
-      signalByDomain: { technical: 0.08, tactical: 0.05 },
-      contextTags: ["export-academies", "development-pathway"],
-    },
-  },
-  japan: {
-    developmentCulture: {
-      signalByDomain: { technical: 0.06, mental: 0.05, tactical: 0.06 },
-      contextTags: ["school-club-pathway", "development-pathway"],
-    },
-  },
-};
-
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function canonicalCountry(countryId: string): string {
@@ -143,29 +88,34 @@ function canonicalCountry(countryId: string): string {
 
 function mergeEffects(
   base: FootballCultureInsightEffects,
-  adjustment?: Partial<FootballCultureInsightEffects>,
+  adjustment?: Partial<Omit<FootballCultureInsightEffects, "version">>,
 ): FootballCultureInsightEffects {
-  const adjustedSignals = adjustment?.signalByDomain ?? {};
   const signalByDomain = Object.fromEntries(
-    (["technical", "physical", "mental", "tactical", "hidden"] as AttributeDomain[])
-      .flatMap((domain) => {
-        const value = adjustedSignals[domain] ?? base.signalByDomain[domain];
-        return value === undefined
-          ? []
-          : [[domain, Math.round(clamp(value, -0.2, 0.2) * 1000) / 1000] as const];
-      }),
+    ATTRIBUTE_DOMAINS.flatMap((domain) => {
+      const baseValue = base.signalByDomain[domain] ?? 0;
+      const adjustmentValue = adjustment?.signalByDomain?.[domain];
+      const value = adjustmentValue ?? baseValue;
+      if (value === undefined) return [];
+      return [[domain, round(clamp(value, -0.2, 0.2))] as const];
+    }),
   ) as Partial<Record<AttributeDomain, number>>;
 
   return {
     version: FOOTBALL_CULTURE_EFFECT_VERSION,
     signalByDomain,
-    uncertaintyMultiplier: Math.round(clamp(
+    uncertaintyMultiplier: round(clamp(
       adjustment?.uncertaintyMultiplier ?? base.uncertaintyMultiplier,
       0.8,
       1.2,
-    ) * 1000) / 1000,
-    contextTags: [...new Set(adjustment?.contextTags ?? base.contextTags)],
-    biasWarnings: [...new Set(adjustment?.biasWarnings ?? base.biasWarnings)],
+    )),
+    contextTags: [...new Set([
+      ...base.contextTags,
+      ...(adjustment?.contextTags ?? []),
+    ])],
+    biasWarnings: [...new Set([
+      ...base.biasWarnings,
+      ...(adjustment?.biasWarnings ?? []),
+    ])],
   };
 }
 
@@ -177,10 +127,12 @@ export function resolveCulturalInsightEffects(
   if (insight.effects?.version === FOOTBALL_CULTURE_EFFECT_VERSION) {
     return mergeEffects(insight.effects, insight.effects);
   }
+
   const country = canonicalCountry(countryId);
+  const authored = getFootballCultureInsightDefinition(country, insight.type);
   return mergeEffects(
     BASE_EFFECTS[insight.type],
-    COUNTRY_EFFECT_ADJUSTMENTS[country]?.[insight.type],
+    authored.effectAdjustment,
   );
 }
 
@@ -203,6 +155,81 @@ export interface CombinedFootballCultureEffects {
   uncertaintyMultiplier: number;
   contextTags: string[];
   biasWarnings: string[];
+  misleadingSignalRiskDelta: number;
+  activeWindowIds: string[];
+  reasons: string[];
+}
+
+function emptySignal(): Record<AttributeDomain, number> {
+  return {
+    technical: 0,
+    physical: 0,
+    mental: 0,
+    tactical: 0,
+    hidden: 0,
+  };
+}
+
+export function resolveFootballCultureContext(
+  countryId: string | undefined,
+  insights: readonly CulturalInsight[] | undefined,
+  input: FootballCultureContextInput = {},
+): CombinedFootballCultureEffects {
+  const signalByDomain = emptySignal();
+  let uncertaintyMultiplier = 1;
+  const contextTags = new Set<string>();
+  const biasWarnings = new Set<string>();
+  const insightIds: string[] = [];
+  const reasons: string[] = [];
+
+  if (countryId && insights?.length) {
+    for (const rawInsight of insights) {
+      const insight = hydrateCulturalInsight(countryId, rawInsight);
+      const effects = insight.effects!;
+      insightIds.push(insight.id!);
+      for (const domain of ATTRIBUTE_DOMAINS) {
+        signalByDomain[domain] += effects.signalByDomain[domain] ?? 0;
+      }
+      uncertaintyMultiplier *= effects.uncertaintyMultiplier;
+      effects.contextTags.forEach((tag) => contextTags.add(tag));
+      effects.biasWarnings.forEach((warning) => biasWarnings.add(warning));
+    }
+  }
+
+  const calendar = input.calendarEffects ?? resolveCountryCalendarEffects(
+    countryId,
+    input.season,
+    input.week,
+    {
+      weeksPerSeason: input.weeksPerSeason,
+      rootSeed: input.rootSeed,
+      activeWorldConditionIds: input.activeWorldConditionIds,
+    },
+  );
+
+  for (const domain of ATTRIBUTE_DOMAINS) {
+    signalByDomain[domain] += calendar.signalByDomain[domain] ?? 0;
+    signalByDomain[domain] = round(clamp(signalByDomain[domain], -0.18, 0.18));
+  }
+  uncertaintyMultiplier = round(clamp(
+    uncertaintyMultiplier * calendar.uncertaintyMultiplier,
+    0.82,
+    1.18,
+  ));
+  calendar.contextTags.forEach((tag) => contextTags.add(tag));
+  calendar.biasWarnings.forEach((warning) => biasWarnings.add(warning));
+  reasons.push(...calendar.reasons);
+
+  return {
+    insightIds: [...new Set(insightIds)],
+    signalByDomain,
+    uncertaintyMultiplier,
+    contextTags: [...contextTags],
+    biasWarnings: [...biasWarnings],
+    misleadingSignalRiskDelta: calendar.misleadingSignalRiskDelta,
+    activeWindowIds: calendar.activeWindowIds,
+    reasons: [...new Set(reasons)],
+  };
 }
 
 /** Combine only knowledge the scout has actually unlocked. */
@@ -210,43 +237,5 @@ export function combineFootballCultureEffects(
   countryId: string | undefined,
   insights: readonly CulturalInsight[] | undefined,
 ): CombinedFootballCultureEffects {
-  const signalByDomain: Record<AttributeDomain, number> = {
-    technical: 0,
-    physical: 0,
-    mental: 0,
-    tactical: 0,
-    hidden: 0,
-  };
-  let uncertaintyMultiplier = 1;
-  const contextTags = new Set<string>();
-  const biasWarnings = new Set<string>();
-  const insightIds: string[] = [];
-
-  if (!countryId || !insights?.length) {
-    return { insightIds, signalByDomain, uncertaintyMultiplier, contextTags: [], biasWarnings: [] };
-  }
-
-  for (const rawInsight of insights) {
-    const insight = hydrateCulturalInsight(countryId, rawInsight);
-    const effects = insight.effects!;
-    insightIds.push(insight.id!);
-    for (const domain of Object.keys(signalByDomain) as AttributeDomain[]) {
-      signalByDomain[domain] += effects.signalByDomain[domain] ?? 0;
-    }
-    uncertaintyMultiplier *= effects.uncertaintyMultiplier;
-    effects.contextTags.forEach((tag) => contextTags.add(tag));
-    effects.biasWarnings.forEach((warning) => biasWarnings.add(warning));
-  }
-
-  for (const domain of Object.keys(signalByDomain) as AttributeDomain[]) {
-    signalByDomain[domain] = Math.round(clamp(signalByDomain[domain], -0.18, 0.18) * 1000) / 1000;
-  }
-
-  return {
-    insightIds: [...new Set(insightIds)],
-    signalByDomain,
-    uncertaintyMultiplier: Math.round(clamp(uncertaintyMultiplier, 0.82, 1.18) * 1000) / 1000,
-    contextTags: [...contextTags],
-    biasWarnings: [...biasWarnings],
-  };
+  return resolveFootballCultureContext(countryId, insights);
 }

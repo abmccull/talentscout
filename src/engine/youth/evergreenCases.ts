@@ -15,6 +15,7 @@ import {
 } from "@/engine/consequences";
 import { createNamedRNG, getRunGameModeId } from "@/engine/run";
 import { openProfessionalScoutingCase } from "@/engine/reports/scoutingCases";
+import { buildProfessionalCaseOpportunityLockMetadata } from "./professionalCaseOpportunities";
 
 export const YOUTH_CASE_TRIGGER_CHANCE = 0.08;
 export const YOUTH_CASE_COOLDOWN_WEEKS = 7;
@@ -409,6 +410,516 @@ function metricEffect(
   }];
 }
 
+function playerDisplayName(player: Player): string {
+  return `${player.firstName ?? ""} ${player.lastName ?? ""}`.trim() || "The prospect";
+}
+
+function familyDisplayName(player: Player): string {
+  const surname = player.lastName?.trim();
+  if (surname) return `The ${surname} family`;
+  const fallback = player.firstName?.trim() || "The player";
+  return `${fallback}'s family`;
+}
+
+function stakeholderDisplayName(
+  state: GameState,
+  player: Player,
+  stakeholder: EntityRef,
+): string {
+  switch (stakeholder.kind) {
+    case "family":
+      return familyDisplayName(player);
+    case "contact":
+      return state.contacts[stakeholder.id]?.name ?? "A contact in your network";
+    case "rival":
+      return state.rivalScouts?.[stakeholder.id]?.name ?? "A rival scout";
+    case "club":
+      return state.clubs[stakeholder.id]?.name ?? "The club";
+    default:
+      return stakeholder.id;
+  }
+}
+
+function caseClubName(
+  state: GameState,
+  player: Player,
+  stakeholders: readonly EntityRef[],
+): string | undefined {
+  const clubId = player.clubId || stakeholders.find((stakeholder) => stakeholder.kind === "club")?.id;
+  return clubId ? state.clubs[clubId]?.name : undefined;
+}
+
+function selectCallbackActor(
+  familyId: YouthEvergreenCaseFamilyId,
+  outcome: "opening" | "setback",
+  player: Player,
+  stakeholders: readonly EntityRef[],
+): EntityRef {
+  const preferredKinds: readonly string[] = (() => {
+    switch (familyId) {
+      case "academy-release-late-developer":
+        return outcome === "opening" ? ["club", "contact", "family"] : ["family", "contact", "club"];
+      case "education-versus-relocation":
+        return ["family", "contact", "club"];
+      case "injury-recovery-evidence":
+        return outcome === "opening" ? ["club", "contact", "family"] : ["club", "family", "contact"];
+      case "dual-national-pathway":
+        return outcome === "opening" ? ["contact", "family", "club"] : ["family", "contact", "club"];
+      case "role-conversion":
+        return ["club", "contact", "family"];
+      case "agent-exclusivity":
+        return ["contact", "family", "club"];
+      case "rival-claim":
+        return ["contact", "family", "club", "rival"];
+      case "source-conflict":
+        return ["contact", "family", "club"];
+      case "tournament-window":
+        return ["contact", "club", "family"];
+      case "welfare-pressure":
+        return ["family", "contact", "club"];
+      case "trial-deadline":
+        return ["club", "contact", "family"];
+      case "development-environment":
+        return outcome === "opening" ? ["club", "contact", "family"] : ["family", "club", "contact"];
+    }
+  })();
+  for (const kind of preferredKinds) {
+    const match = stakeholders.find((stakeholder) => stakeholder.kind === kind);
+    if (match) return match;
+  }
+  return stakeholders[0] ?? { kind: "family", id: player.id };
+}
+
+interface CallbackPackage {
+  detail: string;
+  changeTag: "callback-access" | "callback-obligation";
+  effects: ConsequenceEffect[];
+  metadata: Record<string, string>;
+}
+
+function callbackMemoryEffect(input: {
+  decisionId: string;
+  optionId: string;
+  outcome: "opening" | "setback";
+  caseId: string;
+  familyId: YouthEvergreenCaseFamilyId;
+  playerId: string;
+  actor: EntityRef;
+  actorName: string;
+  rememberedDecision: string;
+  callbackAt: GameDate;
+  scoutId: string;
+}): ConsequenceEffect {
+  const positive = input.outcome === "opening";
+  return {
+    id: `effect:${input.decisionId}:${input.optionId}:${input.outcome}:callback-memory`,
+    type: "addMemory",
+    memory: {
+      id: `memory:${input.decisionId}:${input.optionId}:${input.outcome}:${input.actor.kind}:${input.actor.id}`,
+      stakeholder: { ...input.actor },
+      subject: { kind: "scout", id: input.scoutId },
+      tags: [
+        "professionalCase",
+        input.familyId,
+        input.optionId,
+        `callback:${input.outcome}`,
+      ],
+      valence: positive ? 28 : -34,
+      intensity: positive ? 70 : 78,
+      salience: positive ? 74 : 82,
+      visibility: "stakeholders",
+      createdAt: { ...input.callbackAt },
+      sourceDecisionId: input.decisionId,
+      halfLifeWeeks: 104,
+      metadata: {
+        caseId: input.caseId,
+        playerId: input.playerId,
+        actorName: input.actorName,
+        rememberedDecision: input.rememberedDecision,
+      },
+    },
+  };
+}
+
+function callbackOpportunityEffect(input: {
+  state: GameState;
+  decisionId: string;
+  optionId: string;
+  outcome: "opening" | "setback";
+  caseId: string;
+  familyId: YouthEvergreenCaseFamilyId;
+  player: Player;
+  actor: EntityRef;
+  actorName: string;
+  clubName?: string;
+  callbackAt: GameDate;
+  label: string;
+  expiresInWeeks: number;
+}): ConsequenceEffect {
+  const expiresAt = addGameWeeks(input.state.fixtures, input.callbackAt, input.expiresInWeeks);
+  return {
+    id: `effect:${input.decisionId}:${input.optionId}:${input.outcome}:callback-opportunity`,
+    type: "createOpportunityLock",
+    lock: {
+      id: `opportunity:${input.decisionId}:${input.optionId}:${input.outcome}`,
+      opportunityId: `professional-case:${input.caseId}:${input.familyId}:${input.outcome}`,
+      exclusiveSetId: `professional-case:${input.caseId}:${input.familyId}`,
+      owner: { kind: "scout", id: input.state.scout.id },
+      status: "active",
+      createdAt: { ...input.callbackAt },
+      expiresAt,
+      sourceDecisionId: input.decisionId,
+      metadata: buildProfessionalCaseOpportunityLockMetadata({
+        label: input.label,
+        actorName: input.actorName,
+        countryId: input.player.nationality,
+        playerName: playerDisplayName(input.player),
+        clubName: input.clubName ?? null,
+        playerId: input.player.id,
+        caseId: input.caseId,
+        familyId: input.familyId,
+      }),
+    },
+  };
+}
+
+function callbackObligationEffect(input: {
+  state: GameState;
+  decisionId: string;
+  optionId: string;
+  outcome: "opening" | "setback";
+  caseId: string;
+  familyId: YouthEvergreenCaseFamilyId;
+  player: Player;
+  actor: EntityRef;
+  actorName: string;
+  clubName?: string;
+  callbackAt: GameDate;
+  obligationKind: string;
+  terms: string;
+  dueInWeeks?: number;
+}): ConsequenceEffect {
+  return {
+    id: `effect:${input.decisionId}:${input.optionId}:${input.outcome}:callback-obligation`,
+    type: "createObligation",
+    obligation: {
+      id: `obligation:${input.decisionId}:${input.optionId}:${input.outcome}:${input.actor.kind}:${input.actor.id}`,
+      debtor: { kind: "scout", id: input.state.scout.id },
+      creditor: { ...input.actor },
+      kind: input.obligationKind,
+      terms: input.terms,
+      status: "active",
+      createdAt: { ...input.callbackAt },
+      dueAt: input.dueInWeeks === undefined
+        ? undefined
+        : addGameWeeks(input.state.fixtures, input.callbackAt, input.dueInWeeks),
+      sourceDecisionId: input.decisionId,
+      metadata: {
+        caseId: input.caseId,
+        familyId: input.familyId,
+        playerId: input.player.id,
+        actorName: input.actorName,
+        clubName: input.clubName ?? null,
+      },
+    },
+  };
+}
+
+function buildCallbackPackage(input: {
+  state: GameState;
+  player: Player;
+  definition: YouthEvergreenCaseDefinition;
+  option: YouthCaseOptionDefinition;
+  decisionId: string;
+  caseId: string;
+  stakeholders: readonly EntityRef[];
+  callbackAt: GameDate;
+  outcome: "opening" | "setback";
+}): CallbackPackage {
+  const playerName = playerDisplayName(input.player);
+  const actor = selectCallbackActor(
+    input.definition.id,
+    input.outcome,
+    input.player,
+    input.stakeholders,
+  );
+  const actorName = stakeholderDisplayName(input.state, input.player, actor);
+  const clubName = caseClubName(input.state, input.player, input.stakeholders);
+  const clubContext = clubName ? ` at ${clubName}` : "";
+  const rememberedDecision = `Remembered decision: "${input.option.label}".`;
+  const baseMetadata = {
+    actorId: actor.id,
+    actorKind: actor.kind,
+    actorName,
+    playerName,
+    clubName: clubName ?? "",
+    rememberedDecision: input.option.label,
+  };
+  const memoryEffect = callbackMemoryEffect({
+    decisionId: input.decisionId,
+    optionId: input.option.id,
+    outcome: input.outcome,
+    caseId: input.caseId,
+    familyId: input.definition.id,
+    playerId: input.player.id,
+    actor,
+    actorName,
+    rememberedDecision: input.option.label,
+    callbackAt: input.callbackAt,
+    scoutId: input.state.scout.id,
+  });
+  const makeOpportunity = (
+    narrative: string,
+    nextState: string,
+    label: string,
+    expiresInWeeks: number,
+  ): CallbackPackage => ({
+    detail: `${narrative}\n${rememberedDecision}\nNext state: ${nextState}`,
+    changeTag: "callback-access",
+    effects: [
+      memoryEffect,
+      callbackOpportunityEffect({
+        state: input.state,
+        decisionId: input.decisionId,
+        optionId: input.option.id,
+        outcome: input.outcome,
+        caseId: input.caseId,
+        familyId: input.definition.id,
+        player: input.player,
+        actor,
+        actorName,
+        clubName,
+        callbackAt: input.callbackAt,
+        label,
+        expiresInWeeks,
+      }),
+    ],
+    metadata: {
+      ...baseMetadata,
+      changeType: "access",
+      stateChange: nextState,
+    },
+  });
+  const makeObligation = (
+    narrative: string,
+    nextState: string,
+    obligationKind: string,
+    terms: string,
+    dueInWeeks: number,
+  ): CallbackPackage => ({
+    detail: `${narrative}\n${rememberedDecision}\nNext state: ${nextState}`,
+    changeTag: "callback-obligation",
+    effects: [
+      memoryEffect,
+      callbackObligationEffect({
+        state: input.state,
+        decisionId: input.decisionId,
+        optionId: input.option.id,
+        outcome: input.outcome,
+        caseId: input.caseId,
+        familyId: input.definition.id,
+        player: input.player,
+        actor,
+        actorName,
+        clubName,
+        callbackAt: input.callbackAt,
+        obligationKind,
+        terms,
+        dueInWeeks,
+      }),
+    ],
+    metadata: {
+      ...baseMetadata,
+      changeType: "obligation",
+      stateChange: nextState,
+    },
+  });
+
+  switch (input.definition.id) {
+    case "academy-release-late-developer":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} is prepared to judge ${playerName} one realistic rung down${clubContext} rather than wait for a perfect file.`,
+            `a six-week realistic-level placement window is now live for ${playerName}`,
+            "Realistic-level placement window",
+            6,
+          )
+        : makeObligation(
+            `${actorName} now treats the early exposure around ${playerName} as your call rather than natural momentum.`,
+            `you now owe ${actorName} a rebuilt pathway brief before you circulate ${playerName} again`,
+            "pathwayRebuild",
+            `a rebuilt pathway brief before you circulate ${playerName} again`,
+            5,
+          );
+    case "education-versus-relocation":
+      return input.outcome === "opening"
+        ? makeObligation(
+            `${actorName} accepts a staged move because your plan tied football to schooling and support around ${playerName}.`,
+            `you now owe ${actorName} a welfare check before the relocation becomes permanent`,
+            "welfareUpdate",
+            `a welfare check before the relocation around ${playerName} becomes permanent`,
+            6,
+          )
+        : makeOpportunity(
+            `${actorName} now treats the move around ${playerName} as destabilizing pressure instead of a timely opportunity.`,
+            `only a four-week local-pathway review window remains before relocation talk closes`,
+            "Local-pathway review window",
+            4,
+          );
+    case "injury-recovery-evidence":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} agrees to let you judge the recovery setting around ${playerName}${clubContext}, not just the injury report.`,
+            `a five-week rehabilitation access window is open around ${playerName}`,
+            "Rehabilitation access window",
+            5,
+          )
+        : makeObligation(
+            `${actorName} now links the recovery setback around ${playerName} to the conviction you showed without full match evidence.`,
+            `you now owe ${actorName} a recovery-based reassessment before you advocate for ${playerName} again`,
+            "reassessment",
+            `a recovery-based reassessment before you advocate for ${playerName} again`,
+            4,
+          );
+    case "dual-national-pathway":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} opens a route in the stronger-fit football environment for ${playerName} because you backed that pathway early.`,
+            `a six-week cross-border introduction window is live for ${playerName}`,
+            "Cross-border introduction window",
+            6,
+          )
+        : makeObligation(
+            `${actorName} now wants an explanation for why you pushed the wrong football environment around ${playerName}.`,
+            `you now owe ${actorName} a comparative pathway brief before the next move`,
+            "comparativeBrief",
+            `a comparative pathway brief before the next move for ${playerName}`,
+            5,
+          );
+    case "role-conversion":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} agrees to test ${playerName}${clubContext} in the alternative role instead of arguing about it from clips.`,
+            `a four-week role-conversion access window is now open for ${playerName}`,
+            "Role-conversion access window",
+            4,
+          )
+        : makeObligation(
+            `${actorName} now sees the conversion pitch around ${playerName} as projection rather than evidence.`,
+            `you now owe ${actorName} a current-role report before another role-switch recommendation`,
+            "currentRoleReport",
+            `a current-role report before another role-switch recommendation for ${playerName}`,
+            4,
+          );
+    case "agent-exclusivity":
+      return input.outcome === "opening"
+        ? makeObligation(
+            `${actorName} keeps the privileged introduction around ${playerName} live because you respected the control they asked for.`,
+            `you now owe ${actorName} confidentiality while the channel stays exclusive for six weeks`,
+            "confidentiality",
+            `confidential handling of the exclusive channel around ${playerName} for the next six weeks`,
+            6,
+          )
+        : makeOpportunity(
+            `${actorName} has shut the private channel after the case around ${playerName} slipped outside the agreed route.`,
+            `only a four-week public-market salvage window remains for ${playerName}`,
+            "Public-market salvage window",
+            4,
+          );
+    case "rival-claim":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} keeps feeding you the case around ${playerName} because you protected the lane instead of panicking.`,
+            `a four-week protected-source window is open before the rival normalizes the file`,
+            "Protected-source window",
+            4,
+          )
+        : makeObligation(
+            `${actorName} now believes the rival turned your hesitation around ${playerName} into their leverage.`,
+            `you now owe ${actorName} a cleaner protection plan before they reopen this player`,
+            "sourceProtection",
+            `a cleaner protection plan before they reopen ${playerName}`,
+            4,
+          );
+    case "source-conflict":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} agrees to one discriminating test around ${playerName} because you named the exact point of disagreement.`,
+            `a five-week evidence-test window is open to break the tie around ${playerName}`,
+            "Evidence-test window",
+            5,
+          )
+        : makeObligation(
+            `${actorName} now treats your call around ${playerName} as backing the other read against them.`,
+            `you now owe ${actorName} a side-by-side review before they trust the file again`,
+            "sideBySideReview",
+            `a side-by-side review before they trust the ${playerName} file again`,
+            4,
+          );
+    case "tournament-window":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} opens the right people around ${playerName} because you used the tournament week for access, not noise.`,
+            `a three-week tournament follow-up window is live while the event memory is fresh`,
+            "Tournament follow-up window",
+            3,
+          )
+        : makeObligation(
+            `${actorName} now sees the tournament week around ${playerName} as a missed chance to build the room.`,
+            `you now owe ${actorName} a cleaned follow-up packet before the next event opens`,
+            "followUpPacket",
+            `a cleaned follow-up packet on ${playerName} before the next event opens`,
+            3,
+          );
+    case "welfare-pressure":
+      return input.outcome === "opening"
+        ? makeObligation(
+            `${actorName} accepts limited exposure around ${playerName} because you kept the support needs ahead of the hype.`,
+            `you now owe ${actorName} regular welfare updates while the case stays live`,
+            "welfareUpdate",
+            `regular welfare updates while the case around ${playerName} stays live`,
+            6,
+          )
+        : makeObligation(
+            `${actorName} now treats outside attention around ${playerName} as a cost you created.`,
+            `you now owe ${actorName} a quieter handling plan before any new exposure`,
+            "quietHandlingPlan",
+            `a quieter handling plan before any new exposure around ${playerName}`,
+            5,
+          );
+    case "trial-deadline":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} keeps a scarce trial slot open for ${playerName}${clubContext} because your timing looked credible.`,
+            `a four-week trial window is now open for ${playerName}`,
+            "Trial window",
+            4,
+          )
+        : makeObligation(
+            `${actorName} now reads the missed fit around ${playerName} as a burned ask, not neutral waiting.`,
+            `you now owe ${actorName} a tighter shortlist before you request another slot`,
+            "trialShortlist",
+            `a tighter shortlist before you request another trial slot for ${playerName}`,
+            4,
+          );
+    case "development-environment":
+      return input.outcome === "opening"
+        ? makeOpportunity(
+            `${actorName} wants to continue around ${playerName}${clubContext} because you argued for the environment, not just the talent.`,
+            `a six-week support-fit channel is open with the destination environment`,
+            "Support-fit channel",
+            6,
+          )
+        : makeObligation(
+            `${actorName} now sees the support questions around ${playerName} as unresolved enough to block the raw-talent pitch.`,
+            `you now owe ${actorName} a full environment brief before the recommendation can move again`,
+            "environmentBrief",
+            `a full environment brief before the recommendation on ${playerName} can move again`,
+            5,
+          );
+  }
+}
+
 function materializeOption(input: {
   state: GameState;
   player: Player;
@@ -466,6 +977,11 @@ function materializeOption(input: {
     })),
   ];
   const callbackAt = addGameWeeks(input.state.fixtures, now, 4);
+  const openingPackage = buildCallbackPackage({
+    ...input,
+    callbackAt,
+    outcome: "opening",
+  });
   const openingEffects: ConsequenceEffect[] = [
     {
       id: `effect:${decisionId}:${option.id}:opening-fact`,
@@ -483,14 +999,21 @@ function materializeOption(input: {
           familyId: input.definition.id,
           optionId: option.id,
           outcome: "opening",
-          detail: option.knownTradeoffs[0],
+          detail: openingPackage.detail,
+          ...openingPackage.metadata,
         },
       },
     },
     ...metricEffect(decisionId, `${option.id}:callback`, "reputation", option.upsideReputation),
     ...metricEffect(decisionId, `${option.id}:callback`, "clubTrust", option.upsideClubTrust),
     ...metricEffect(decisionId, `${option.id}:callback`, "specializationReputation", option.upsideSpecialization),
+    ...openingPackage.effects,
   ];
+  const setbackPackage = buildCallbackPackage({
+    ...input,
+    callbackAt,
+    outcome: "setback",
+  });
   const setbackEffects: ConsequenceEffect[] = [
     {
       id: `effect:${decisionId}:${option.id}:setback-fact`,
@@ -508,7 +1031,8 @@ function materializeOption(input: {
           familyId: input.definition.id,
           optionId: option.id,
           outcome: "setback",
-          detail: option.knownTradeoffs[1],
+          detail: setbackPackage.detail,
+          ...setbackPackage.metadata,
         },
       },
     },
@@ -530,6 +1054,7 @@ function materializeOption(input: {
       "specializationReputation",
       option.specializationDelta > 0 ? -1 : 0,
     ),
+    ...setbackPackage.effects,
   ];
   const inverseRoll = Math.max(
     0,
@@ -547,7 +1072,13 @@ function materializeOption(input: {
         effects: openingEffects,
         probability: option.upsideProbability,
         outcomeRoll,
-        tags: ["professional-case", input.definition.id, option.id, "opening"],
+        tags: [
+          "professional-case",
+          input.definition.id,
+          option.id,
+          "opening",
+          openingPackage.changeTag,
+        ],
       },
       {
         id: `callback:${option.id}:setback`,
@@ -555,7 +1086,13 @@ function materializeOption(input: {
         effects: setbackEffects,
         probability: 1 - option.upsideProbability,
         outcomeRoll: inverseRoll,
-        tags: ["professional-case", input.definition.id, option.id, "setback"],
+        tags: [
+          "professional-case",
+          input.definition.id,
+          option.id,
+          "setback",
+          setbackPackage.changeTag,
+        ],
       },
     ],
   };

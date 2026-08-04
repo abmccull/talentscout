@@ -14,7 +14,10 @@ const requestedSeasonCount = Math.max(
 
 test.describe("Long-career world invariants", () => {
   test("youth world remains coherent across ten seasons", async ({ gamePage }) => {
-    test.setTimeout(900_000);
+    // A healthy release build currently needs roughly two minutes per season
+    // on the reference Windows host. Scale the overall budget with the
+    // requested profile while retaining a per-batch hang detector below.
+    test.setTimeout(Math.max(900_000, 300_000 + requestedSeasonCount * 240_000));
     const recordedBatchTimings: unknown[] = [];
     await mkdir(dirname(progressOutputPath), { recursive: true });
     await writeFile(progressOutputPath, "[]\n", "utf8");
@@ -123,6 +126,11 @@ test.describe("Long-career world invariants", () => {
         if (!madeProgress) {
           throw new Error(
             `Long-career batch made no progress at S${ready.currentSeason} W${ready.currentWeek} with fatigue ${ready.scout.fatigue}`,
+          );
+        }
+        if (elapsedMs >= 120_000) {
+          throw new Error(
+            `Long-career batch exceeded the two-minute hang budget at S${ready.currentSeason} W${ready.currentWeek}: ${Math.round(elapsedMs)}ms`,
           );
         }
 

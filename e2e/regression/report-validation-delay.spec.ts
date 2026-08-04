@@ -112,7 +112,8 @@ test.describe("Delayed scout report validation regression", () => {
     expect(submitted.accuracyReputationDelta).toBeUndefined();
 
     await expect(
-      gamePage.page.getByText(new RegExp(`Craft\\s+${submitted.qualityScore}/100`)),
+      gamePage.page.getByTestId("reports-command-deck")
+        .getByText(new RegExp(`Craft\\s+${submitted.qualityScore}/100`)),
     ).toBeVisible();
     await expect(gamePage.page.getByText(/Validated accuracy:/)).toHaveCount(0);
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  FinancialRecord,
   Fixture,
   GameState,
   Observation,
@@ -441,14 +442,28 @@ describe("long-career save retention", () => {
     });
   });
 
-  it("compacts unreferenced retired records but preserves causal and recent careers", () => {
+  it("compacts unreferenced retired records but preserves causal dossiers", () => {
     const retired = (id: string): Player => ({
       id,
       firstName: "Retired",
       lastName: id,
       clubId: "",
       contractClubId: undefined,
-      recentMatchRatings: [],
+      recentMatchRatings: [
+        { fixtureId: `${id}-fixture`, week: 1, season: 4, rating: 7 },
+      ],
+      seasonRatings: Array.from({ length: 6 }, (_, index) => ({
+        season: index + 1,
+        avgRating: 7,
+        appearances: 20,
+        goals: 1,
+        assists: 1,
+        cleanSheets: 0,
+      })),
+      injured: true,
+      injuryWeeksRemaining: 3,
+      currentInjury: { id: `${id}-injury` },
+      disciplinaryRecord: { playerId: id },
     } as unknown as Player);
     const legacy = state({
       currentSeason: 5,
@@ -471,6 +486,218 @@ describe("long-career save retention", () => {
 
     expect(Object.keys(compacted.retiredPlayers).sort()).toEqual(["causal", "recent"]);
     expect(compacted.retiredPlayerIds.sort()).toEqual(["causal", "recent"]);
+    expect(compacted.retiredPlayers.recent.recentMatchRatings).toEqual([]);
+    expect(compacted.retiredPlayers.recent.seasonRatings?.map((rating) => rating.season)).toEqual([4, 5, 6]);
+    expect(compacted.retiredPlayers.recent.currentInjury).toBeUndefined();
+    expect(compacted.retiredPlayers.recent.injured).toBe(false);
+    expect(compacted.retiredPlayers.recent.injuryWeeksRemaining).toBe(0);
+    expect(compacted.retiredPlayers.recent.disciplinaryRecord).toBeUndefined();
+    expect(compacted.retiredPlayers.causal).toEqual(legacy.retiredPlayers.causal);
+  });
+
+  it("compacts completed observation calculations without erasing scouting evidence", () => {
+    const historical = {
+      id: "historical-observation",
+      playerId: "player",
+      scoutId: "scout",
+      sourceSessionId: "session-historical",
+      activityInstanceId: "activity-historical",
+      matchId: "observed",
+      week: 4,
+      season: 2,
+      context: "academyVisit",
+      attributeReadings: [{
+        attribute: "composure",
+        perceivedValue: 14,
+        confidence: 0.72,
+        observationCount: 3,
+        rangeLow: 12,
+        rangeHigh: 16,
+      }],
+      notes: [
+        "Handled a difficult coaching intervention with patience.",
+        "Repeated the same scanning habit under pressure.",
+        "Asked a useful tactical question after the session.",
+      ],
+      flaggedMoments: [{
+        phase: 2,
+        description: "Recovered quickly after a mistake.",
+        attribute: "composure",
+        positive: true,
+      }],
+      regionalContext: {
+        countryId: "england",
+        accessTier: "established",
+        accessScore: 88,
+        confidenceBonus: 0.08,
+        explanation: "A trusted local network clarified the academy context.",
+      },
+      situation: {
+        version: 1,
+        id: "situation-historical",
+        activityType: "academyVisit",
+        observationContext: "academyVisit",
+        venueType: "academy",
+        countryId: "england",
+        competitionLevel: "academy",
+        stakes: "selection",
+        tacticalFrame: "structured",
+        chaosLevel: 0.2,
+        crowdIntensity: 0.1,
+        atmosphereEventIds: ["event-a", "event-b"],
+        signalByDomain: { technical: 1.1, physical: 0.9, mental: 1.2, tactical: 1.15 },
+        signalByAttribute: { composure: 1.3 },
+        uncertaintyMultiplier: 0.85,
+        misleadingSignalRisk: 0.08,
+        repetitionKey: "academy:embedded:structured",
+        culturalInsightIds: ["culture-a", "culture-b"],
+        culturalCalendarWindowIds: ["calendar-a"],
+        contextTags: ["academy", "trusted-access", "structured"],
+        biasWarnings: ["Training intensity may flatter rehearsed decisions."],
+        reasons: ["The player was observed inside a familiar tactical structure."],
+      },
+      abilityReading: {
+        perceivedCA: 3.5,
+        caConfidence: 0.7,
+        perceivedPALow: 3.5,
+        perceivedPAHigh: 4.5,
+        paConfidence: 0.55,
+      },
+      inferredRoleFit: [{ role: "deepLyingPlaymaker", suitability: 0.78 }],
+      updatedPersonalityProfile: {
+        professionalism: { value: 14, confidence: 0.6 },
+      },
+    } as unknown as Observation;
+    const recent = {
+      ...historical,
+      id: "recent-observation",
+      // Season 6 is the first retained detail season when currentSeason is 10.
+      season: 6,
+      sourceSessionId: "session-recent",
+    };
+    const observations: Record<string, Observation> = {
+      [historical.id]: historical,
+      ...Object.fromEntries(Array.from({ length: 256 }, (_, index) => [
+        `historical-${index}`,
+        {
+          ...historical,
+          id: `historical-${index}`,
+          situation: {
+            ...historical.situation!,
+            id: `situation-${index}`,
+          },
+        },
+      ])),
+    };
+    observations[recent.id] = recent;
+    const legacy = state({ currentSeason: 10, observations });
+    const before = measureSaveRetentionFootprint(legacy);
+
+    const compacted = compactLongCareerHistory(legacy);
+    const after = measureSaveRetentionFootprint(compacted);
+    const retained = compacted.observations[historical.id];
+
+    expect(retained.updatedPersonalityProfile).toBeUndefined();
+    expect(retained.attributeReadings).toEqual(historical.attributeReadings);
+    expect(retained.abilityReading).toEqual(historical.abilityReading);
+    expect(retained.notes).toEqual(historical.notes);
+    expect(retained.flaggedMoments).toEqual(historical.flaggedMoments);
+    expect(retained.regionalContext).toEqual({
+      ...historical.regionalContext,
+      explanation: "Historical regional context.",
+    });
+    expect(retained.situation).toMatchObject({
+      id: historical.situation!.id,
+      competitionLevel: historical.situation!.competitionLevel,
+      stakes: historical.situation!.stakes,
+      tacticalFrame: historical.situation!.tacticalFrame,
+      repetitionKey: historical.situation!.repetitionKey,
+      contextTags: historical.situation!.contextTags,
+      reasons: historical.situation!.reasons,
+      biasWarnings: historical.situation!.biasWarnings,
+      atmosphereEventIds: [],
+      signalByDomain: {},
+      signalByAttribute: {},
+      culturalInsightIds: [],
+    });
+    expect(retained.situation?.culturalCalendarWindowIds).toBeUndefined();
+    expect(compacted.observations[recent.id]).toEqual(recent);
+    expect(after.collections.observations).toBeLessThan(before.collections.observations * 0.9);
+    expect(before.collections.observations - after.collections.observations).toBeGreaterThan(
+      50 * 1024,
+    );
+    expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
+  });
+
+  it("normalizes only old routine finance labels while preserving the complete ledger", () => {
+    const transactions: FinancialRecord["transactions"] = [
+      {
+        week: 4,
+        season: 2,
+        amount: 4_000,
+        description: "Monthly salary",
+        referenceId: "monthly-finance:s2w4:scout-income",
+        category: "salary",
+      },
+      {
+        week: 4,
+        season: 2,
+        amount: -1_200,
+        description: "Employee salary: Morgan Reed (regionalScout)",
+        referenceId: "monthly-finance:s2w4:employee:employee-1",
+        category: "operatingCost",
+        counterpartyId: "employee-1",
+      },
+      {
+        week: 4,
+        season: 2,
+        amount: -850,
+        description: "Monthly operating expenses",
+        category: "operatingCost",
+      },
+      {
+        week: 5,
+        season: 2,
+        amount: -500,
+        description: "Purchased regional analysis package",
+        referenceId: "equipment-purchase:regional-analysis:s2w5",
+        category: "asset",
+      },
+      {
+        week: 4,
+        season: 10,
+        amount: -1_400,
+        description: "Employee salary: Alex Vale (analyst)",
+        referenceId: "monthly-finance:s10w4:employee:employee-2",
+        category: "operatingCost",
+        counterpartyId: "employee-2",
+      },
+    ];
+    const finances = {
+      transactions,
+    } as unknown as FinancialRecord;
+    const legacy = state({ currentSeason: 10, finances });
+
+    const compacted = compactLongCareerHistory(legacy);
+    const retained = compacted.finances!.transactions;
+
+    expect(retained).toHaveLength(transactions.length);
+    expect(retained.map((transaction) => transaction.description)).toEqual([
+      "Monthly salary",
+      "Employee salary",
+      "Operating cost",
+      "Purchased regional analysis package",
+      "Employee salary: Alex Vale (analyst)",
+    ]);
+    for (const [index, transaction] of retained.entries()) {
+      expect(transaction.week).toBe(transactions[index].week);
+      expect(transaction.season).toBe(transactions[index].season);
+      expect(transaction.amount).toBe(transactions[index].amount);
+      expect(transaction.referenceId).toBe(transactions[index].referenceId);
+      expect(transaction.category).toBe(transactions[index].category);
+      expect(transaction.counterpartyId).toBe(transactions[index].counterpartyId);
+    }
+    expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
   });
 
   it("compacts terminal youth immediately while preserving active and malformed causal records", () => {

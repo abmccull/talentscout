@@ -19,6 +19,10 @@ import {
   type AcademyRecruitmentBrief,
 } from "@/engine/youth/recruitmentBriefs";
 import {
+  captureRecruitmentDoctrineSnapshot,
+  deriveClubRecruitmentDoctrine,
+} from "@/engine/world/recruitmentIdentity";
+import {
   completeAcademyRecommendationReview,
   completeDueAcademyRecommendationReviews,
   scheduleAcademyRecommendationReviews,
@@ -231,11 +235,15 @@ describe("academy recruitment briefs", () => {
         createdWeek: 35,
         createdSeason: 1,
         status: "open",
-        developmentPriority: "highCeiling",
       });
+      expect(["highCeiling", "earlyReadiness", "resale", "character"])
+        .toContain(candidate.developmentPriority);
       expect(candidate.requiredPositions).toEqual([candidate.targetPosition]);
       expect(candidate.expiresSeason).toBe(2);
       expect(candidate.expiresWeek).toBe(5);
+      expect(candidate.recruitmentSnapshot?.capturedWeek).toBe(35);
+      expect(candidate.recruitmentSnapshot?.capturedSeason).toBe(1);
+      expect(candidate.recruitmentSnapshot?.seasonalObjective).toBe(candidate.developmentPriority);
     }
   });
 
@@ -386,6 +394,39 @@ describe("academy recruitment briefs", () => {
     expect(causal.report.qualityScore).toBeLessThan(95);
     expect(causal.report.conviction).toBe("strongRecommend");
     expect(result.fulfilled).toBe(true);
+  });
+
+  it("carries the preserved doctrine snapshot into scheduled accountability reviews", () => {
+    const causal = causalPlacement();
+    const doctrine = deriveClubRecruitmentDoctrine({
+      club: club(),
+      seed: "review-snapshot",
+      season: 1,
+    });
+    const recruitmentSnapshot = captureRecruitmentDoctrineSnapshot({
+      doctrine,
+      capturedWeek: 3,
+      capturedSeason: 1,
+    });
+    const scheduled = scheduleAcademyRecommendationReviews({
+      scoutingCase: causal.scoutingCase,
+      report: causal.report,
+      placementReport: {
+        ...causal.placementReport,
+        recruitmentSnapshot,
+      },
+      clubDecision: {
+        ...causal.clubDecision,
+        recruitmentSnapshot,
+      },
+      movementHistory: [causal.placementMovement],
+    });
+
+    expect(scheduled.failures).toEqual([]);
+    expect(scheduled.created).toHaveLength(2);
+    for (const review of scheduled.created) {
+      expect(review.recruitmentSnapshot).toEqual(recruitmentSnapshot);
+    }
   });
 });
 
@@ -554,6 +595,22 @@ describe("academy recommendation reviews", () => {
       ],
       player: prospect,
       movementHistory: movements,
+      careerInterventions: [{
+        decisionId: "active-career-front:player-1",
+        playerId: prospect.id,
+        playerName: "Review Prospect",
+        optionId: "reopen-route",
+        optionLabel: "Push for a new route",
+        selectedAt: { week: 10, season: 1 },
+        originalEnvironmentScore: 30,
+        currentEnvironmentScore: 60,
+        currentEnvironmentHeadline: "Supportive environment",
+        currentEnvironmentSummary: "A credible loan route opened senior minutes.",
+        scoreDelta: 30,
+        outcome: "improved",
+        callbackObserved: true,
+        evidenceIds: ["active-career-front:player-1", "move-loan-start"],
+      }],
       currentWeek: 5,
       currentSeason: 2,
       brief: brief({ status: "fulfilled", fulfilledPlayerAge: 16 }),
@@ -591,7 +648,17 @@ describe("academy recommendation reviews", () => {
         key: "revisionQuality",
         status: "insufficientEvidence",
       }),
+      expect.objectContaining({
+        key: "interventionFollowThrough",
+        status: "positive",
+        evidenceLevel: "full",
+      }),
     ]));
+    expect(oneSeason.review.evidence).toContainEqual(expect.objectContaining({
+      source: "intervention",
+      sourceId: "active-career-front:player-1",
+    }));
+    expect(oneSeason.review.findings?.join(" ")).toContain("follow-through, not proof");
 
     const revisedReport: ScoutReport = {
       ...causal.report,

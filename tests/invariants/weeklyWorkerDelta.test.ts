@@ -243,4 +243,80 @@ describe("weekly worker state delta", () => {
     expect(compact.metrics.responseBytes).toBeLessThan(fullPlayerPayloadBytes * 0.3);
     expect(materialized.patch.gameState).toEqual(next);
   });
+
+  it("preserves record deltas when multiple branches reuse the same large payload", () => {
+    const sharedProspects = Object.fromEntries(
+      Array.from({ length: 180 }, (_, index) => [
+        `prospect-${index}`,
+        {
+          id: `prospect-${index}`,
+          confidence: 50 + (index % 10),
+          tags: [`role-${index % 4}`, `country-${index % 7}`],
+          history: Array.from({ length: 5 }, (__, week) => ({
+            week: week + 1,
+            note: `Report ${index}-${week}`,
+          })),
+        },
+      ]),
+    );
+    const source = {
+      seed: "aliased-record-delta",
+      currentSeason: 3,
+      currentWeek: 18,
+      scoutProspects: sharedProspects,
+      rivalProspects: sharedProspects,
+    } as unknown as GameState;
+    const nextProspects = structuredClone(sharedProspects);
+    (nextProspects["prospect-12"] as { confidence: number }).confidence = 71;
+    const next = {
+      ...source,
+      currentWeek: 19,
+      scoutProspects: nextProspects,
+      rivalProspects: nextProspects,
+    } as unknown as GameState;
+
+    const compact = compactWeeklyWorkerCommit(source, {
+      patch: { gameState: next },
+      tutorialCommands: [],
+    }, 5);
+    const materialized = materializeWeeklyWorkerCommit(source, compact);
+
+    expect(compact.gameState).toEqual({
+      kind: "delta",
+      changedFields: { currentWeek: 19 },
+      recordDeltas: {
+        scoutProspects: {
+          changedEntries: {
+            "prospect-12": {
+              kind: "record",
+              delta: {
+                changedEntries: {
+                  confidence: { kind: "replace", value: 71 },
+                },
+                removedEntries: [],
+              },
+            },
+          },
+          removedEntries: [],
+        },
+        rivalProspects: {
+          changedEntries: {
+            "prospect-12": {
+              kind: "record",
+              delta: {
+                changedEntries: {
+                  confidence: { kind: "replace", value: 71 },
+                },
+                removedEntries: [],
+              },
+            },
+          },
+          removedEntries: [],
+        },
+      },
+      arrayDeltas: {},
+      removedFields: [],
+    });
+    expect(materialized.patch.gameState).toEqual(next);
+  });
 });

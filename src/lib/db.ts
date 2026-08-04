@@ -19,6 +19,10 @@ import {
   validateRunManifest,
 } from "@/engine/run";
 import { createConsequenceEngineState } from "@/engine/consequences";
+import {
+  cleanupDashboardState,
+  migrateDashboardState,
+} from "@/engine/dashboard/state";
 import { createEventDirectorState } from "@/engine/events/eventDirector";
 import type { CountryData } from "@/data/types";
 import { reconcileFinancialLedger } from "@/engine/finance/saveMigration";
@@ -1632,7 +1636,6 @@ export function migrateSaveState(raw: unknown): GameState {
     state.currentWeek,
     state.currentSeason,
   );
-
   // Phase 2 defaults — narrative, rivals, tools, manager profiles
   if (!state.narrativeEvents) state.narrativeEvents = [];
   if (!state.rivalScouts) state.rivalScouts = {};
@@ -1727,7 +1730,11 @@ export function migrateSaveState(raw: unknown): GameState {
     state.finances = reconcileFinancialLedger(state.finances);
   }
 
-  return applyGameplaySaveMigrations(state);
+  const migrated = applyGameplaySaveMigrations(state);
+  migrated.dashboardState = cleanupDashboardState(
+    migrateDashboardState(migrated.dashboardState),
+  );
+  return migrated;
 }
 
 export { db };

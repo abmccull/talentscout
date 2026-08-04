@@ -11,7 +11,7 @@ import {
   projectConsequenceMetrics,
   synchronizeConsequenceMetrics,
 } from "@/engine/consequences";
-import type { EntityRef } from "@/engine/consequences";
+import type { ConsequenceRecord, EntityRef } from "@/engine/consequences";
 import { resolveManagerStakeholderName } from "@/engine/consequences/stakeholderProfiles";
 import {
   computeChainChoiceEffects,
@@ -34,6 +34,7 @@ import {
   reconcileWorldConditionArcDecisions,
 } from "@/engine/world/worldConditionArcs";
 import { reconcileRivalCampaignDecisions } from "./weeklyRivalCampaigns";
+import { projectCurrentPlayerCareerEnvironment } from "@/engine/world/developmentEnvironment";
 
 export function registerNarrativeDecisions(
   state: GameState,
@@ -68,6 +69,167 @@ function resolveArchivedEntityName(state: GameState, entity: EntityRef): string 
     return `${state.scout.firstName} ${state.scout.lastName}`.trim();
   }
   return undefined;
+}
+
+function readableCallbackLabel(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function describeCallbackStateChange(
+  state: GameState,
+  consequence: ConsequenceRecord,
+): string | undefined {
+  let recordedDetail: string | undefined;
+  for (const effect of consequence.effects) {
+    switch (effect.type) {
+      case "createObligation": {
+        const creditor = resolveArchivedEntityName(state, effect.obligation.creditor)
+          ?? readableCallbackLabel(effect.obligation.creditor.kind);
+        return `Next state: you now owe ${creditor} ${effect.obligation.terms}.`;
+      }
+      case "transitionObligation": {
+        const obligation = state.consequenceState.obligations[effect.obligationId];
+        const creditor = obligation
+          ? resolveArchivedEntityName(state, obligation.creditor)
+          : undefined;
+        const counterparty = creditor ?? "the stakeholder involved";
+        const obligationLabel = obligation?.kind
+          ? readableCallbackLabel(obligation.kind)
+          : "relationship";
+        return `Next state: the ${obligationLabel.toLowerCase()} obligation with ${counterparty} is now ${effect.status}.`;
+      }
+      case "createOpportunityLock": {
+        const label = typeof effect.lock.metadata?.label === "string"
+          ? effect.lock.metadata.label
+          : readableCallbackLabel(effect.lock.opportunityId);
+        const subject = typeof effect.lock.metadata?.playerName === "string"
+          ? effect.lock.metadata.playerName
+          : undefined;
+        const expiry = effect.lock.expiresAt
+          ? ` until S${effect.lock.expiresAt.season} W${effect.lock.expiresAt.week}`
+          : "";
+        return `Next state: ${label}${subject ? ` around ${subject}` : ""} is live${expiry}.`;
+      }
+      case "transitionOpportunityLock": {
+        const lock = state.consequenceState.opportunityLocks[effect.opportunityLockId];
+        const label = typeof lock?.metadata?.label === "string"
+          ? lock.metadata.label
+          : lock
+            ? readableCallbackLabel(lock.opportunityId)
+            : "The access window";
+        return `Next state: ${label} is now ${effect.status}.`;
+      }
+      case "recordFact": {
+        const detail = effect.fact.metadata?.detail;
+        if (typeof detail === "string" && detail.trim().length > 0) {
+          recordedDetail ??= detail.trim();
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return recordedDetail ? `Next state: ${recordedDetail}` : undefined;
+}
+
+/** Make delayed relationship fallout visible instead of silently moving meters. */
+export function createRelationshipCallbackMessage(
+  state: GameState,
+  consequence: ConsequenceRecord,
+): InboxMessage | undefined {
+  if (!consequence.tags.includes("relationshipConflict")) return undefined;
+  const decision = state.consequenceState.decisions[consequence.decisionId];
+  if (!decision || decision.source.kind !== "relationshipConflict") return undefined;
+  const option = decision.options.find((candidate) => candidate.id === consequence.optionId);
+  const recurrenceName = typeof decision.metadata?.recurrenceName === "string"
+    ? decision.metadata.recurrenceName
+    : "A relationship promise";
+  const playerId = typeof decision.metadata?.relatedPlayerId === "string"
+    && decision.metadata.relatedPlayerId.length > 0
+    ? decision.metadata.relatedPlayerId
+    : undefined;
+  const playerName = playerId
+    ? resolveArchivedEntityName(state, { kind: "player", id: playerId })
+    : undefined;
+  const stakeholders = decision.stakeholders
+    .map((entity) => resolveArchivedEntityName(state, entity))
+    .filter((name): name is string => Boolean(name));
+  const callbackLabel = readableCallbackLabel(consequence.templateId);
+  const choiceLabel = option?.label ?? readableCallbackLabel(consequence.optionId ?? "recorded choice");
+  const subject = playerName ? ` around ${playerName}` : "";
+  const castLine = stakeholders.length > 0
+    ? `${stakeholders.join(" and ")} have now come back to how you handled it${subject}.`
+    : `The people involved have now come back to how you handled it${subject}.`;
+  const stateChange = describeCallbackStateChange(state, consequence)
+    ?? "Next state: the relationship now carries a visible consequence instead of moving silently in the background.";
+  return {
+    id: `relationship-callback-${consequence.id}`,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "feedback",
+    title: `${recurrenceName}: ${callbackLabel}`,
+    body: [
+      castLine,
+      `Remembered decision: "${choiceLabel}".`,
+      stateChange,
+    ].join("\n"),
+    read: false,
+    actionRequired: false,
+    relatedId: playerId ?? consequence.decisionId,
+    relatedEntityType: playerId ? "player" : "narrative",
+  };
+}
+
+/** Compare a chosen pathway intervention with the player's live world state. */
+export function createActiveCareerFrontCallbackMessage(
+  state: GameState,
+  consequence: ConsequenceRecord,
+): InboxMessage | undefined {
+  if (!consequence.tags.includes("active-career-front")) return undefined;
+  const decision = state.consequenceState.decisions[consequence.decisionId];
+  if (!decision || decision.source.kind !== "activeCareerFront") return undefined;
+  const playerId = typeof decision.metadata?.playerId === "string"
+    ? decision.metadata.playerId
+    : undefined;
+  const player = playerId
+    ? state.players[playerId] ?? state.retiredPlayers?.[playerId]
+    : undefined;
+  if (!player || !playerId) return undefined;
+
+  const projection = projectCurrentPlayerCareerEnvironment(state, player);
+  const originalScore = typeof decision.metadata?.originalEnvironmentScore === "number"
+    ? decision.metadata.originalEnvironmentScore
+    : projection.score;
+  const scoreDelta = projection.score - originalScore;
+  const selected = decision.options.find((option) => option.id === decision.selectedOptionId);
+  const statusLine = scoreDelta >= 8
+    ? `The route has opened: the visible environment improved from ${originalScore}/100 to ${projection.score}/100 (${projection.headline.toLowerCase()}).`
+    : scoreDelta <= -8
+      ? `The pressure deepened: the visible environment fell from ${originalScore}/100 to ${projection.score}/100 (${projection.headline.toLowerCase()}).`
+      : `The route remains unsettled at ${projection.score}/100 (${projection.headline.toLowerCase()}); the original pressure has not materially moved.`;
+  const name = `${player.firstName} ${player.lastName}`.trim() || "The player";
+  return {
+    id: `active-career-front-callback-${consequence.id}`,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "feedback",
+    title: `${name}: pathway review`,
+    body: [
+      `Remembered response: "${selected?.label ?? "No response recorded"}."`,
+      statusLine,
+      `Current evidence: ${projection.summary}`,
+      "The result now sits beside your original placement and will inform its later recommendation review.",
+    ].join("\n\n"),
+    read: false,
+    actionRequired: false,
+    relatedId: playerId,
+    relatedEntityType: "player",
+  };
 }
 
 /** Apply deadline-selected narrative defaults through the manual-choice domains. */
@@ -324,7 +486,12 @@ export function processWeeklyConsequenceLifecycle(state: GameState): GameState {
   const outcomeMessages: InboxMessage[] = processed.appliedConsequenceIds.flatMap(
     (consequenceId) => {
       const consequence = processed.state.consequences[consequenceId];
-      if (!consequence?.tags.includes("turning-point")) return [];
+      if (!consequence) return [];
+      const activeFrontMessage = createActiveCareerFrontCallbackMessage(updated, consequence);
+      if (activeFrontMessage) return [activeFrontMessage];
+      const relationshipMessage = createRelationshipCallbackMessage(updated, consequence);
+      if (relationshipMessage) return [relationshipMessage];
+      if (!consequence.tags.includes("turning-point")) return [];
       const success = consequence.tags.includes("crossroads-success");
       const reputationEffect = consequence.effects.find((effect) =>
         effect.type === "adjustMetric" && effect.metricKey === "scout:reputation",

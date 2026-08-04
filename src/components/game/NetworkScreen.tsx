@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
@@ -784,6 +784,8 @@ export function NetworkScreen() {
     scoutId,
     scheduledActivities,
     scheduleActivity,
+    pendingNetworkContactId,
+    setPendingNetworkContactId,
   } = useGameStore(
     useShallow((state) => ({
       contactsById: state.gameState?.contacts,
@@ -800,10 +802,13 @@ export function NetworkScreen() {
       scoutId: state.gameState?.scout.id,
       scheduledActivities: state.gameState?.schedule.activities,
       scheduleActivity: state.scheduleActivity,
+      pendingNetworkContactId: state.pendingNetworkContactId,
+      setPendingNetworkContactId: state.setPendingNetworkContactId,
     })),
   );
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [scheduledId, setScheduledId] = useState<string | null>(null);
+  const contactCardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const contacts = useMemo(
     () => Object.values(contactsById ?? {}),
@@ -938,6 +943,22 @@ export function NetworkScreen() {
     }
     return map;
   }, [accessAgreements, consequenceState, contacts, currentSeason, currentWeek]);
+
+  useEffect(() => {
+    if (!pendingNetworkContactId) return;
+    if (!contactsById?.[pendingNetworkContactId]) {
+      setPendingNetworkContactId(null);
+      return;
+    }
+
+    setSelectedContactId(pendingNetworkContactId);
+    setPendingNetworkContactId(null);
+    window.requestAnimationFrame(() => {
+      const target = contactCardRefs.current[pendingNetworkContactId];
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus();
+    });
+  }, [contactsById, pendingNetworkContactId, setPendingNetworkContactId]);
 
   const contactThreadPreviews = useMemo<ContactThreadPreview[]>(() =>
     contacts
@@ -1099,6 +1120,9 @@ export function NetworkScreen() {
                     return (
                       <button
                         key={contact.id}
+                        ref={(node) => {
+                          contactCardRefs.current[contact.id] = node;
+                        }}
                         onClick={() => setSelectedContactId(isSelected ? null : contact.id)}
                         aria-pressed={isSelected}
                         aria-label={`View contact: ${contact.name}`}

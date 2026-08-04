@@ -543,6 +543,12 @@ describe("organic career journey", () => {
       finalTier: 4,
       seasonsPlayed: 3,
     });
+    expect(archive.completedCareers[0].signature).toMatchObject({
+      version: 1,
+      id: expect.stringMatching(/^career-signature:/),
+      startHook: expect.any(String),
+    });
+    expect(archive.completedCareers[0].finalChapter?.summary).toEqual(expect.any(String));
     expect(archive.legacyPerks.map((perk) => perk.id)).toEqual(
       expect.arrayContaining([
         "starting_network",
@@ -562,6 +568,11 @@ describe("organic career journey", () => {
       budgetBonusPercent: 20,
     });
     expect(inheritance.config.worldSeed).toBe("organic-career-new-game-plus");
+    expect(inheritance.config.legacyUnlockIds).toEqual([
+      "legacy-perk:starting_network",
+      "legacy-perk:reputation_head_start",
+      "legacy-perk:financial_cushion",
+    ]);
   });
 
   it("archives report-case hit rate without counting revisions as new judgments", () => {

@@ -11,6 +11,7 @@ import {
   type ActivityCategory,
 } from "@/engine/core/activityMetadata";
 import { ActivityCard } from "./ActivityCard";
+import { activityPlanningKey } from "./activityPlanning";
 
 interface ActivityPanelProps {
   activities: Activity[];
@@ -33,17 +34,6 @@ const CATEGORY_HELP: Record<ActivityCategory, string> = {
   networking: "Private intel, background context, and future access to better leads.",
   recovery: "Protect your judgment, travel cleanly, and improve your own craft.",
 };
-
-function activityPlanningKey(activity: Activity): string {
-  return activity.instanceId ?? [
-    activity.type,
-    activity.targetId ?? "none",
-    activity.destinationClubId ?? "none",
-    activity.slots,
-    activity.description,
-    activity.targetPool?.map((target) => target.id).join(",") ?? "none",
-  ].join(":");
-}
 
 export function ActivityPanel({
   activities,

@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Briefcase,
   TrendingUp,
@@ -20,14 +19,11 @@ import {
   Lock,
   Target,
   Brain,
-  ArrowRight,
   ChevronRight,
   TrendingDown,
   Minus,
   BarChart3,
-  Shield,
   Trophy,
-  Building2,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import type {
@@ -67,7 +63,6 @@ import { deriveCareerRolePackage } from "@/engine/career/rolePackages";
 import { ConsequenceCinema } from "./consequence-cinema/ConsequenceCinema";
 import { LeadershipPortfolioPanel } from "./career/LeadershipPortfolioPanel";
 import { CareerRecoveryPanel } from "./career/CareerRecoveryPanel";
-import { CareerSituationPanel } from "./career/CareerSituationPanel";
 import { getPlayerFacingDiscoverySummaries } from "@/engine/career/playerFacingDiscovery";
 import {
   TOTAL_ACHIEVEMENT_COUNT,
@@ -88,106 +83,31 @@ import {
   deriveAgencyStrategicPressure,
   normalizeAgencyStrategyState,
 } from "@/engine/finance/agencyStrategy";
-import { UrgentQueue } from "./workspace/UrgentQueue";
-import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
+import {
+  buildCareerWorkspaceViewModel,
+  type CareerBridgeHighlight,
+} from "./career/careerWorkspaceModel";
+import CareerEraThread from "./workspace/CareerEraThread";
+import {
+  deriveCareerFingerprintAuthority,
+  deriveCareerFingerprintProjection,
+} from "@/engine/career/fingerprint";
+import { projectDevelopmentPressureForState } from "@/engine/career/developmentPressure";
+import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
+import { CareerYouthWorkspace } from "./career/CareerYouthWorkspace";
+import {
+  ATTRIBUTE_LABELS,
+  type CareerMetricTileProps,
+  type CareerTimelineEntry,
+  SKILL_LABELS,
+  SPEC_LABELS,
+  buildCareerTimeline as buildCareerTimelineModel,
+  derivePredictionCareerStats,
+  deriveTransferCareerStats,
+  getCareerCourseSummary as getCareerCourseSummaryModel,
+} from "./career/careerScreenModel";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
-
-const SKILL_LABELS: Record<ScoutSkill, string> = {
-  technicalEye: "Technical Eye",
-  physicalAssessment: "Physical Assessment",
-  psychologicalRead: "Psychological Read",
-  tacticalUnderstanding: "Tactical Understanding",
-  dataLiteracy: "Data Literacy",
-  playerJudgment: "Player Judgment",
-  potentialAssessment: "Potential Assessment",
-};
-
-const ATTRIBUTE_LABELS: Record<ScoutAttribute, string> = {
-  networking: "Networking",
-  persuasion: "Persuasion",
-  endurance: "Endurance",
-  adaptability: "Adaptability",
-  memory: "Memory",
-  intuition: "Intuition",
-};
-
-const SPEC_LABELS: Record<string, string> = {
-  youth: "Youth Scout",
-  firstTeam: "First Team Scout",
-  regional: "Regional Expert",
-  data: "Data Scout",
-};
-
-type CareerWorkspaceTab = "overview" | "development" | "trackRecord" | "finances";
-
-interface CareerMetricTileProps {
-  label: string;
-  value: string;
-  helper?: string;
-  tone?: "default" | "emerald" | "amber" | "blue" | "violet" | "red";
-}
-
-export function getCareerCourseSummary(input: {
-  activeCourseDurationWeeks?: number;
-  activeEnrollment?: CourseEnrollment | null;
-  completedCourseCount: number;
-  currentWeek: number;
-  currentSeason: number;
-  scheduledStudySessions: number;
-  seasonLength: number;
-}): string {
-  const {
-    activeCourseDurationWeeks,
-    activeEnrollment,
-    completedCourseCount,
-    currentWeek,
-    currentSeason,
-    scheduledStudySessions,
-    seasonLength,
-  } = input;
-
-  if (!activeEnrollment) {
-    return `${completedCourseCount} completed`;
-  }
-
-  const status = getCoursePlannerStatusModel({
-    activeEnrollment,
-    courseDurationWeeks: activeCourseDurationWeeks,
-    currentWeek,
-    currentSeason,
-    scheduledStudySessions,
-    seasonLength,
-  });
-  if (!status) {
-    return "Training enrolled - Planner study required";
-  }
-
-  if (status.studyWeeksPlanned >= 2) {
-    return `${status.progressLabel} - intensive pace booked`;
-  }
-  if (status.studyWeeksPlanned === 1) {
-    return `${status.progressLabel} - normal pace booked`;
-  }
-  return `${status.progressLabel} - Planner study required`;
-}
-
-interface CareerTimelineEntry {
-  id: string;
-  season: number;
-  week: number;
-  label: string;
-  title: string;
-  description: string;
-  tone: "default" | "emerald" | "amber" | "blue" | "red";
-}
-
-const CAREER_TAB_ITEMS: Array<{ value: CareerWorkspaceTab; label: string }> = [
-  { value: "overview", label: "Overview" },
-  { value: "development", label: "Development" },
-  { value: "trackRecord", label: "Track Record" },
-  { value: "finances", label: "Finances" },
-];
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -426,6 +346,13 @@ export function CareerScreen() {
     jobOffers: [] as JobOffer[],
     performanceReviews: [] as PerformanceReview[],
   };
+  const [careerInventoryOpen, setCareerInventoryOpen] = usePersistentDisclosure(
+    "career.lower-overview",
+    jobOffers.length > 0,
+  );
+  const [careerPoliticsOpen, setCareerPoliticsOpen] = usePersistentDisclosure(
+    "career.club-politics",
+  );
 
   const currentClub = scout?.currentClubId ? getClub(scout.currentClubId) : undefined;
   const skillEntries = scout
@@ -455,7 +382,7 @@ export function CareerScreen() {
     ? COURSE_CATALOG.find((course) => course.id === finances.activeEnrollment?.courseId)?.durationWeeks
     : undefined;
   const courseSummary = gameState
-    ? getCareerCourseSummary({
+    ? getCareerCourseSummaryModel({
       activeCourseDurationWeeks,
       activeEnrollment: finances?.activeEnrollment,
       completedCourseCount: finances?.completedCourses.length ?? 0,
@@ -478,33 +405,19 @@ export function CareerScreen() {
   const transferRecords = gameState?.transferRecords ?? [];
   const predictions = gameState?.predictions ?? [];
 
-  // firstTeam: hit rate
-  const completedTransfers = transferRecords.filter(
-    (r) => r.outcome === "hit" || r.outcome === "decent" || r.outcome === "flop",
-  );
-  const hitCount = transferRecords.filter((r) => r.outcome === "hit").length;
-  const hitRate = completedTransfers.length > 0
-    ? Math.round((hitCount / completedTransfers.length) * 100)
-    : null;
-
-  // data: prediction oracle status
-  const resolvedPredictions = predictions.filter((p) => p.resolved);
-  const correctPredictions = resolvedPredictions.filter((p) => p.wasCorrect === true);
-  const predictionAccuracy = resolvedPredictions.length > 0
-    ? Math.round((correctPredictions.length / resolvedPredictions.length) * 100)
-    : null;
-  const oracleStreak = (() => {
-    let streak = 0;
-    const sorted = [...resolvedPredictions].sort(
-      (a, b) => b.madeInSeason - a.madeInSeason || b.madeInWeek - a.madeInWeek,
-    );
-    for (const p of sorted) {
-      if (p.wasCorrect === true) streak++;
-      else break;
-    }
-    return streak;
-  })();
-  const isOracle = predictionAccuracy !== null && predictionAccuracy >= 70 && resolvedPredictions.length >= 10;
+  const {
+    completedTransfers,
+    hitCount,
+    hitRate,
+    decentCount,
+    flopCount,
+  } = deriveTransferCareerStats(transferRecords);
+  const {
+    correctPredictions,
+    predictionAccuracy,
+    oracleStreak,
+    isOracle,
+  } = derivePredictionCareerStats(predictions);
 
   // Manager alignment (data tension) — derive before early return
   const currentClubManager = scout?.currentClubId
@@ -527,11 +440,12 @@ export function CareerScreen() {
 
   if (!gameState || !scout) return null;
 
-  const careerRoleLabel = deriveCareerRoleProfile({
+  const roleProfile = deriveCareerRoleProfile({
     scout,
     finances: finances ?? undefined,
     club: currentClub,
-  }).title;
+  });
+  const careerRoleLabel = roleProfile.title;
   const careerBaseLabel = getCareerBaseLabel(scout, currentClub?.name);
   const consequenceCinemaSource = {
     rootSeed: gameState.runManifest.rootSeed,
@@ -587,7 +501,6 @@ export function CareerScreen() {
   const averageSkill = skillEntries.length > 0
     ? skillEntries.reduce((sum, [, value]) => sum + value, 0) / skillEntries.length
     : 0;
-  const developmentPriority = [...skillEntries].sort((a, b) => a[1] - b[1])[0];
   const careerMonthlyRunRate = finances
     ? calculateMonthlyRunRate(finances, scout)
     : undefined;
@@ -605,6 +518,12 @@ export function CareerScreen() {
     club: currentClub,
     leadershipPortfolio: gameState.leadershipPortfolio,
   });
+  const developmentPressure = projectDevelopmentPressureForState(
+    gameState,
+    getSeasonLength(gameState.fixtures, gameState.currentSeason),
+    deriveSeasonReviewMetrics(gameState, gameState.currentSeason),
+  );
+  const leadDevelopmentPressure = developmentPressure.fronts[0];
   const agencyStrategy = finances
     ? normalizeAgencyStrategyState(finances.agencyStrategyState)
     : undefined;
@@ -618,790 +537,205 @@ export function CareerScreen() {
       )
     : false;
   const leadPressure = rolePackage.pressures[0];
-  const employerNeedSummary = scout.employmentContract?.objectives
-    ? `${scout.employmentContract.objectives.reportsPerSeason} reports · ${scout.employmentContract.objectives.minimumAverageQuality}+ quality · ${scout.employmentContract.objectives.successfulRecommendations} successful recommendations`
-    : agencyPressure
-      ? `${rolePackage.summary} Current operating pressure: ${agencyPressure.dominantRisk}. Choose which tradeoff the practice can carry.`
-    : scout.careerPath === "independent"
-      ? "Protect runway, diversify clients, and avoid letting one failed call dominate the practice."
-      : "Keep producing trustworthy work that creates better roles and more leverage.";
-  const careerPressureItems = [
-    activeObligations[0]
+  const careerTimeline: CareerTimelineEntry[] = buildCareerTimelineModel({
+    discoveryRecords: youthDiscoveryRecords,
+    discoveredPlayerIds,
+    gameState,
+    playerFacingDiscoveryById,
+  });
+  const pressureHighlight: CareerBridgeHighlight | null = activeObligations[0]
+    ? {
+        id: `obligation-${activeObligations[0].id}`,
+        label: "Current pressure",
+        title: activeObligations[0].terms,
+        body: activeObligations[0].dueAt
+          ? `Due ${formatWeekSeason(activeObligations[0].dueAt.season, activeObligations[0].dueAt.week)}. Breaching it becomes part of your record.`
+          : "This promise is still active and can return through trust, access, or fallout.",
+        meta: activeObligations[0].kind,
+        tone: "amber",
+      }
+    : leadDevelopmentPressure
       ? {
-          id: `obligation-${activeObligations[0].id}`,
-          eyebrow: "Active obligation",
-          title: activeObligations[0].terms,
-          body: activeObligations[0].dueAt
-            ? `Due ${formatWeekSeason(activeObligations[0].dueAt.season, activeObligations[0].dueAt.week)}. Breaching it becomes part of your history.`
-            : "This promise is still open and can return through future access, trust, or fallout.",
-          meta: activeObligations[0].kind,
-          tone: "amber" as const,
+          id: leadDevelopmentPressure.id,
+          label: "Current pressure",
+          title: leadDevelopmentPressure.title,
+          body: [
+            leadDevelopmentPressure.cause,
+            leadDevelopmentPressure.consequence,
+            developmentPressure.youthPayoffSummary,
+          ].filter(Boolean).join(" "),
+          meta: leadDevelopmentPressure.actionLabel,
+          tone: leadDevelopmentPressure.severity === "critical"
+            ? "red"
+            : leadDevelopmentPressure.severity === "high"
+              ? "amber"
+              : "sky",
         }
-      : null,
-    showPathChoice
-      ? {
-          id: "career-path-choice",
-          eyebrow: "Career fork",
-          title: "A structural path decision is open",
-          body: "Choose whether the next era is employer-led or self-directed. This changes who carries the risk and who sets the work.",
-          meta: "Overview decision",
-          tone: "amber" as const,
-        }
-      : null,
-    scout.employmentContract?.objectives
-      ? {
-          id: "contract-objectives",
-          eyebrow: scout.careerPath === "independent" ? "Practice pressure" : "Employer expectation",
-          title: scout.careerPath === "independent"
-            ? "The practice needs dependable output"
-            : `${careerRoleLabel} expectations are live`,
-          body: employerNeedSummary,
-          meta: scout.employmentContract.status === "expiring" ? "Renewal leverage is at stake" : "Current role benchmarks",
-          tone: "sky" as const,
-        }
-      : null,
-    agencyPressure
-      ? {
-          id: "agency-strategy",
-          eyebrow: "Practice pressure",
-          title: `Dominant pressure: ${agencyPressure.dominantRisk}`,
-          body: "Runway, client concentration, capacity, and quality debt will respond differently to the agency policy you carry this month.",
-          meta: agencyPressure.runwayWeeks != null
-            ? `${agencyPressure.runwayWeeks} runway weeks · ${Math.round(agencyPressure.capacityUtilization * 100)}% capacity`
-            : `${Math.round(agencyPressure.capacityUtilization * 100)}% capacity · ${Math.round(agencyPressure.clientConcentration * 100)}% concentration`,
-          tone: agencyPressure.dominantRisk === "runway" || agencyPressure.dominantRisk === "qualityDebt" || agencyPressure.dominantRisk === "staffFragility"
-            ? "amber" as const
-            : "emerald" as const,
-        }
-      : null,
-    leadPressure
+    : leadPressure
       ? {
           id: `role-pressure-${leadPressure.id}`,
-          eyebrow: "Role pressure",
+          label: "Current pressure",
           title: leadPressure.label,
           body: leadPressure.reason,
           meta: `Mitigation: ${leadPressure.mitigation}`,
           tone: leadPressure.severity === "high"
-            ? "red" as const
+            ? "red"
             : leadPressure.severity === "medium"
-              ? "amber" as const
-              : "sky" as const,
+              ? "amber"
+              : "sky",
         }
-      : null,
-    openRivalOpportunityCount > 0
-      ? {
-          id: "rival-openings",
-          eyebrow: "Competitive landscape",
-          title: `${openRivalOpportunityCount} rival opening${openRivalOpportunityCount === 1 ? "" : "s"} can still reshape this season`,
-          body: "Persistent organizations are moving on their own timelines. Waiting means giving up initiative, not pausing the world.",
-          meta: `${rivalOrganizationCount} rival organization${rivalOrganizationCount === 1 ? "" : "s"}`,
-          tone: "violet" as const,
-          actionLabel: "Open rivals",
-          onAction: () => setScreen("rivals"),
-        }
-      : null,
-    jobOffers.length > 0
-      ? {
-          id: "career-offers",
-          eyebrow: "Opportunity",
-          title: `${jobOffers.length} career offer${jobOffers.length === 1 ? "" : "s"} on the table`,
-          body: "A better title is only valuable if the role, pressure, and fit improve what your weeks actually become.",
-          meta: "Career opportunities",
-          tone: "emerald" as const,
-        }
-      : null,
-  ].filter((item) => item !== null).slice(0, 3);
-  const careerTimeline: CareerTimelineEntry[] = [
-    ...youthDiscoveryRecords.map((record) => {
-      const player = gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
-      const summary = playerFacingDiscoveryById.get(record.playerId);
-      return {
-        id: `discovery-${record.playerId}`,
-        season: record.discoveredSeason,
-        week: record.discoveredWeek,
-        label: "Discovery",
-        title: player ? `${player.firstName} ${player.lastName}` : "Youth prospect",
-        description: summary?.isHighUpsideProjection
-          ? "Your original report projected high upside."
-          : "Added to your professional scouting record.",
-        tone: summary?.isHighUpsideProjection ? "amber" as const : "emerald" as const,
-      };
-    }),
-    ...youthDiscoveryRecords
-      .filter((record) => record.placementSeason != null && record.placementWeek != null)
-      .map((record) => {
-        const player = gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
-        const club = record.placementClubId ? gameState.clubs[record.placementClubId] : undefined;
-        return {
-          id: `placement-${record.playerId}-${record.placementSeason}-${record.placementWeek}`,
-          season: record.placementSeason!,
-          week: record.placementWeek!,
-          label: "Placement",
-          title: player ? `${player.firstName} ${player.lastName}` : "Youth prospect",
-          description: `Placed with ${club?.name ?? "a professional academy"}${record.placementType ? ` via ${record.placementType === "academyIntake" ? "academy intake" : "youth contract"}` : ""}.`,
-          tone: "blue" as const,
-        };
-      }),
-    ...(gameState.playerMovementHistory ?? [])
-      .filter((movement) => discoveredPlayerIds.has(movement.playerId))
-      .map((movement) => {
-        const player = gameState.players[movement.playerId] ?? gameState.retiredPlayers?.[movement.playerId];
-        const fromClub = movement.fromClubId ? gameState.clubs[movement.fromClubId] : undefined;
-        const toClub = movement.toClubId ? gameState.clubs[movement.toClubId] : undefined;
-        const route = fromClub || toClub
-          ? `${fromClub?.shortName ?? "Free agent"} to ${toClub?.shortName ?? "out of football"}`
-          : movement.reason ?? "Career status updated";
-        return {
-          id: `movement-${movement.id}`,
-          season: movement.season,
-          week: movement.week,
-          label: formatMovementLabel(movement.type),
-          title: player ? `${player.firstName} ${player.lastName}` : "Tracked prospect",
-          description: `${route}${movement.fee ? ` for ${formatBalance(movement.fee)}` : ""}.`,
-          tone: movement.type === "retirement" || movement.type === "footballExit"
-            ? "default" as const
-            : movement.type === "release"
-              ? "red" as const
-              : "blue" as const,
-        };
-      }),
-  ].sort((a, b) => b.season - a.season || b.week - a.week).slice(0, 40);
+      : null;
+  const opportunityHighlight: CareerBridgeHighlight | null = openRivalOpportunityCount > 0
+    ? {
+        id: "rival-openings",
+        label: "Live opportunity",
+        title: `${openRivalOpportunityCount} rival opening${openRivalOpportunityCount === 1 ? "" : "s"} can still reshape this season`,
+        body: "Persistent organizations are moving on their own timelines. Waiting means giving up initiative, not pausing the world.",
+        meta: `${rivalOrganizationCount} rival organization${rivalOrganizationCount === 1 ? "" : "s"} active`,
+        tone: "violet",
+      }
+    : null;
+  const latestTrackedPlayerTitle = careerTimeline[0]?.title ?? null;
+  const careerFingerprint = deriveCareerFingerprintProjection(
+    deriveCareerFingerprintAuthority(gameState),
+  );
+  const careerWorkspaceViewModel = buildCareerWorkspaceViewModel({
+    scout,
+    finances,
+    currentSeason,
+    currentWeek: gameState.currentWeek,
+    roleProfile,
+    roleBase: careerBaseLabel,
+    monthlyIncome,
+    monthlyExpenses,
+    latestReview: latestPerformanceReview,
+    showPathChoice,
+    jobOffers,
+    pressureHighlight: pressureHighlight ?? undefined,
+    opportunityHighlight: opportunityHighlight ?? undefined,
+    timelinePreview: careerTimeline.slice(0, 3).map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      title: entry.title,
+      description: entry.description,
+      when: formatWeekSeason(entry.season, entry.week),
+    })),
+    managerProfile: currentClubManager,
+    boardProfile: gameState.boardProfile,
+    latestTrackedPlayerTitle,
+  });
 
   if (scout.primarySpecialization === "youth") {
     return (
-      <GameLayout>
-        <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
-          <ScreenBackground src="/images/backgrounds/career-journey.png" opacity={0.88} />
-          <div className="relative z-10 mx-auto max-w-[1480px]">
-            <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.13),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-2xl shadow-black/25 sm:p-6 lg:p-8">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <ScoutAvatar avatarId={scout.avatarId ?? 1} size={96} />
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">Professional record</p>
-                    <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                      {scout.firstName} {scout.lastName}
-                    </h1>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-zinc-300">
-                      <span>{careerRoleLabel}</span>
-                      <span aria-hidden="true" className="text-zinc-600">·</span>
-                      <span>{careerBaseLabel}</span>
-                      <span aria-hidden="true" className="text-zinc-600">·</span>
-                      <span>Season {currentSeason}</span>
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200">
-                        Tier {scout.careerTier}
-                      </span>
-                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                        {Math.round(scout.reputation)} reputation
-                      </span>
-                      <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-amber-200">
-                        Youth mastery {scout.specializationLevel}/20
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="w-full rounded-xl border border-white/10 bg-black/20 p-4 lg:max-w-sm">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Next development edge</p>
-                  <p className="mt-2 text-lg font-bold text-white">
-                    {developmentPriority ? SKILL_LABELS[developmentPriority[0]] : "Build experience"}
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-zinc-400">
-                    {developmentPriority
-                      ? `Currently ${developmentPriority[1]}/20. Choose weekly work that trains this weakness instead of chasing XP in the abstract.`
-                      : "Complete scouting work to reveal your development priorities."}
-                  </p>
-                  <Button className="mt-4 min-h-11 w-full" onClick={() => setScreen("calendar")}>
-                    Plan development work
-                    <ArrowRight size={16} className="ml-2" aria-hidden="true" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <Tabs defaultValue="overview">
-              <TabsList className="mb-5 grid h-auto min-h-12 w-full grid-cols-2 gap-1 overflow-hidden rounded-xl border border-white/10 bg-[#11161c]/95 p-1 sm:grid-cols-4">
-                {CAREER_TAB_ITEMS.map((item) => (
-                  <TabsTrigger key={item.value} value={item.value} className="min-h-11 rounded-lg px-3 py-2.5">
-                    {item.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              <TabsContent value="overview" className="mt-0 space-y-5" data-tutorial-id="career-overview">
-                <h2 className="sr-only">Career overview</h2>
-                <CareerRecoveryPanel state={gameState} onChoose={chooseCareerRecovery} />
-                <CareerSituationPanel
-                  scout={scout}
-                  finances={finances}
-                  currentSeason={currentSeason}
-                  currentClub={currentClub}
-                  jobOfferCount={jobOffers.length}
-                  latestReview={latestPerformanceReview}
-                  monthlyIncome={monthlyIncome}
-                  monthlyExpenses={monthlyExpenses}
-                  onPlanWeek={() => setScreen("calendar")}
-                />
-
-                <UrgentQueue
-                  title="Current pressure"
-                  description="The live obligations, role pressures, and competitive openings that can change the next era of your career."
-                  icon={<Briefcase size={17} className="text-emerald-300" aria-hidden="true" />}
-                  items={careerPressureItems}
-                  emptyTitle="No immediate fires"
-                  emptyBody={employerNeedSummary}
-                  footerActionLabel="Plan next week"
-                  onFooterAction={() => setScreen("calendar")}
-                />
-
-                <details
-                  className="group rounded-xl border border-white/10 bg-black/20"
-                  open={careerMetricsOpen}
-                  onToggle={(event) => setCareerMetricsOpen(event.currentTarget.open)}
-                >
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300">
-                    Career record at a glance
-                    <span className="text-xs font-normal text-zinc-400 group-open:hidden">Show four measures</span>
-                    <span className="hidden text-xs font-normal text-zinc-400 group-open:inline">Hide measures</span>
-                  </summary>
-                  <div className="grid grid-cols-2 gap-3 border-t border-white/10 p-3 lg:grid-cols-4">
-                    <CareerMetricTile label="Reputation" value={`${Math.round(scout.reputation)}/100`} helper="Trust earned through decisions" tone="emerald" />
-                    <CareerMetricTile label="Placements" value={`${acceptedPlacements}`} helper={`${pendingPlacements} awaiting response`} tone="blue" />
-                    <CareerMetricTile label="Discoveries" value={`${youthDiscoveryRecords.length}`} helper={`${scout.discoveryCredits.length} credited outcomes`} tone="amber" />
-                    <CareerMetricTile label="Skill Average" value={`${averageSkill.toFixed(1)}/20`} helper={`${scout.reportsSubmitted} reports submitted`} />
-                  </div>
-                </details>
-
-                {scout.careerPath === "independent" && scout.careerTier >= 3 && finances && agencyPressure && (
-                  <WorkspaceDisclosure
-                    title="Agency operating policy"
-                    eyebrow="Four-week commitment"
-                    description="Career summarizes the current policy and pressure. Change the live operating commitment from Agency, where the full practice view is visible."
-                    icon={<Building2 size={17} className="text-emerald-300" aria-hidden="true" />}
-                    summary={
-                      <div className="space-y-0.5">
-                        <p>{agencyStrategy ? AGENCY_POLICY_DEFINITIONS[agencyStrategy.policy].label : "No policy selected"}</p>
-                        <p>{agencyPolicyChangeAvailable ? "Agency can change it now" : `Locked to S${agencyStrategy?.lockedUntil.season} W${agencyStrategy?.lockedUntil.week}`}</p>
-                      </div>
-                    }
-                    contentClassName="space-y-4"
-                  >
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Current pressure</p>
-                        <p className="mt-2 text-sm font-semibold text-white">{agencyPressure.dominantRisk}</p>
-                        <p className="mt-1 text-xs leading-5 text-zinc-400">
-                          {agencyPressure.runwayWeeks != null
-                            ? `${agencyPressure.runwayWeeks} runway weeks · ${Math.round(agencyPressure.capacityUtilization * 100)}% capacity utilization`
-                            : `${Math.round(agencyPressure.capacityUtilization * 100)}% capacity utilization · ${Math.round(agencyPressure.clientConcentration * 100)}% concentration`}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Recommended next</p>
-                        <p className="mt-2 text-sm font-semibold text-white">{AGENCY_POLICY_DEFINITIONS[agencyPressure.suggestedPolicy].label}</p>
-                        <p className="mt-1 text-xs leading-5 text-zinc-300">{agencyPressure.policyEffect.recommendedWhen}</p>
-                      </div>
-                    </div>
-                    <Button className="min-h-11 w-full sm:w-auto" onClick={() => setScreen("agency")}>
-                      Open Agency workspace
-                      <ArrowRight size={16} className="ml-2" aria-hidden="true" />
-                    </Button>
-                  </WorkspaceDisclosure>
-                )}
-
-                {showPathChoice && finances && (
-                  <Card className="border-amber-400/25 bg-amber-400/[0.06]">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base text-amber-200">Choose your career path</CardTitle>
-                      <p className="text-sm leading-6 text-zinc-300">This determines how you earn, who you answer to, and which long-term opportunities become available.</p>
-                    </CardHeader>
-                    <CardContent className="grid gap-3 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        onClick={() => useGameStore.getState().chooseCareerPath("club" as CareerPath)}
-                        className="min-h-24 rounded-xl border border-sky-400/25 bg-sky-400/[0.06] p-4 text-left transition hover:bg-sky-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                      >
-                        <span className="font-semibold text-sky-200">Club Scout</span>
-                        <span className="mt-1 block text-sm leading-5 text-zinc-400">Stable salary, internal influence, and an employer&apos;s priorities.</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => useGameStore.getState().chooseCareerPath("independent" as CareerPath)}
-                        className="min-h-24 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4 text-left transition hover:bg-emerald-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                      >
-                        <span className="font-semibold text-emerald-200">Independent Scout</span>
-                        <span className="mt-1 block text-sm leading-5 text-zinc-400">Sell expertise, build retainers, and own the financial risk.</span>
-                      </button>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {scout.careerTier >= 4 && (
-                  <LeadershipPortfolioPanel
-                    portfolio={gameState.leadershipPortfolio}
-                    players={gameState.players}
-                    npcScouts={gameState.npcScouts}
-                    npcDelegations={gameState.npcDelegations}
-                    onChoice={resolveLeadershipResponsibility}
-                    onOpenPlayer={(playerId) => {
-                      selectPlayer(playerId);
-                      setScreen("playerProfile");
-                    }}
-                    onOpenNpcManagement={() => setScreen("npcManagement")}
-                  />
-                )}
-
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Briefcase size={17} className="text-emerald-300" aria-hidden="true" />
-                        Career opportunities
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {jobOffers.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
-                          <p className="font-semibold text-white">No offers on the table</p>
-                          <p className="mt-1 text-sm text-zinc-400">Reputation, successful placements, and strong reviews create better roles over time.</p>
-                        </div>
-                      ) : (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {jobOffers.map((offer) => (
-                            <JobOfferCard
-                              key={offer.id}
-                              offer={offer}
-                              clubName={getClub(offer.clubId)?.name ?? "Unknown club"}
-                              onAccept={() => acceptJob(offer.id)}
-                              onDecline={() => declineJob(offer.id)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Recent reviews</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {performanceReviews.length === 0 ? (
-                        <p className="text-sm leading-6 text-zinc-400">Your first formal review arrives after enough work has accumulated to judge.</p>
-                      ) : (
-                        [...performanceReviews].reverse().slice(0, 4).map((review) => (
-                          <div key={review.season} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`flex items-center gap-2 text-sm font-semibold ${outcomeColor(review.outcome)}`}>
-                                {outcomeIcon(review.outcome)} {review.outcome}
-                              </span>
-                              <span className="text-xs text-zinc-500">Season {review.season}</span>
-                            </div>
-                            <p className="mt-2 text-xs leading-5 text-zinc-400">
-                              {review.reportsSubmitted} reports · {Math.round(review.averageQuality)} average craft · {review.successfulRecommendations} successful recommendations
-                            </p>
-                          </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <button
-                  type="button"
-                  data-testid="career-world-details"
-                  onClick={() => setScreen("internationalView")}
-                  className="flex min-h-20 w-full items-center gap-4 rounded-xl border border-fuchsia-400/20 bg-[radial-gradient(circle_at_right,rgba(217,70,239,0.08),transparent_42%),rgba(17,22,28,0.95)] px-4 py-3 text-left transition hover:border-fuchsia-300/40 hover:bg-fuchsia-400/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-fuchsia-300"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-fuchsia-300/20 bg-fuchsia-400/10 text-fuchsia-200">
-                    <Shield size={18} aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-300">
-                      World context
-                    </span>
-                    <span className="mt-1 block text-sm font-semibold text-white">Open regional and football outlook</span>
-                    <span className="mt-1 block text-xs leading-5 text-zinc-400">
-                      World conditions, territorial position, and club recruitment identities live with the map. {rivalOrganizationCount} rival organization{rivalOrganizationCount === 1 ? "" : "s"} active.
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-fuchsia-100">
-                    Open World
-                    <ArrowRight size={15} aria-hidden="true" />
-                  </span>
-                </button>
-
-                {(scout.managerRelationship || scout.careerTier >= 5) && (
-                  <section aria-labelledby="club-politics-title" className="space-y-3">
-                    <div>
-                      <h2 id="club-politics-title" className="text-base font-semibold text-white">
-                        Club politics
-                      </h2>
-                      <p className="mt-1 text-sm leading-6 text-zinc-400">
-                        Choose how you use evidence, trust, and accountability. These conversations create
-                        directives, memories, fatigue, and future access.
-                      </p>
-                    </div>
-                    <div className="grid gap-5 lg:grid-cols-2">
-                      <PoliticalMeetingCards
-                        scout={scout}
-                        managerProfile={currentClubManager}
-                        boardProfile={gameState.boardProfile}
-                        managerApproach={managerMeetingApproach}
-                        boardApproach={boardMeetingApproach}
-                        managerEligibility={managerMeetingEligibility}
-                        boardEligibility={boardMeetingEligibility}
-                        onManagerApproachChange={setManagerMeetingApproach}
-                        onBoardApproachChange={setBoardMeetingApproach}
-                        onMeetManager={() => meetManager(managerMeetingApproach)}
-                        onMeetBoard={() => meetBoard(boardMeetingApproach)}
-                      />
-                    </div>
-                  </section>
-                )}
-              </TabsContent>
-
-              <TabsContent value="development" className="mt-0 space-y-5" data-tutorial-id="career-skills">
-                <h2 className="sr-only">Scout development</h2>
-                <div className="grid gap-5 xl:grid-cols-2">
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Scouting skills</CardTitle>
-                      <p className="text-sm text-zinc-400">Skills improve through relevant weekly work. The thin bar is XP toward the next level.</p>
-                    </CardHeader>
-                    <CardContent className="grid gap-4 sm:grid-cols-2">
-                      {skillEntries.map(([skill, value]) => {
-                        const xp = scout.skillXp?.[skill] ?? 0;
-                        const threshold = Math.max(1, value * 10);
-                        return (
-                          <div key={skill} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                            <div className="flex items-center justify-between gap-2 text-sm">
-                              <span className="font-medium text-zinc-200">{SKILL_LABELS[skill]}</span>
-                              <span className="font-mono font-bold text-white">{value}/20</span>
-                            </div>
-                            <Progress value={value} max={20} indicatorClassName={value >= 15 ? "bg-emerald-400" : value >= 10 ? "bg-amber-400" : "bg-sky-400"} className="mt-3" />
-                            <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400">
-                              <span>{xp}/{threshold} XP</span>
-                              <span>{value >= 20 ? "Mastered" : `${Math.max(0, threshold - xp)} to level`}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Professional attributes</CardTitle>
-                      <p className="text-sm text-zinc-400">These shape relationships, stamina, memory, intuition, and how convincingly you act on a read.</p>
-                    </CardHeader>
-                    <CardContent className="grid gap-4 sm:grid-cols-2">
-                      {attrEntries.map(([attribute, value]) => (
-                        <div key={attribute} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                          <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className="font-medium text-zinc-200">{ATTRIBUTE_LABELS[attribute]}</span>
-                            <span className="font-mono font-bold text-white">{value}/20</span>
-                          </div>
-                          <Progress value={value} max={20} indicatorClassName="bg-violet-400" className="mt-3" />
-                          <p className="mt-2 text-[11px] text-zinc-400">{scout.attributeXp?.[attribute] ?? 0} XP banked</p>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid gap-5 lg:grid-cols-3">
-                  <Card className="border-white/10 bg-[#11161c]/95 lg:col-span-2" data-tutorial-id="career-perk-tree">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Star size={17} className="text-amber-300" aria-hidden="true" />
-                        Youth specialization
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="mb-4 flex items-center justify-between text-sm">
-                        <span className="text-zinc-300">Mastery level</span>
-                        <span className="font-semibold text-amber-200">{scout.specializationLevel}/20</span>
-                      </div>
-                      <Progress value={scout.specializationLevel} max={20} indicatorClassName="bg-amber-400" />
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {scout.unlockedPerks.length === 0 ? (
-                          <p className="text-sm text-zinc-400">Perks unlock as your specialization grows.</p>
-                        ) : scout.unlockedPerks.map((perk) => (
-                          <Badge key={perk} variant="outline" className="border-amber-400/20 bg-amber-400/10 text-amber-200">{perk}</Badge>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <div className="space-y-3">
-                    <button onClick={() => setScreen("training")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-amber-400/25 hover:bg-amber-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-                      <span><span className="block font-semibold text-white">Courses & qualifications</span><span className="mt-1 block text-xs text-zinc-400">{courseSummary}</span></span>
-                      <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
-                    </button>
-                    <button onClick={() => setScreen("equipment")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-emerald-400/25 hover:bg-emerald-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-                      <span><span className="block font-semibold text-white">Equipment loadout</span><span className="mt-1 block text-xs text-zinc-400">Tools that change real activity outcomes</span></span>
-                      <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
-                    </button>
-                    <button onClick={() => setScreen("agency")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-sky-400/25 hover:bg-sky-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-                      <span className="flex min-w-0 items-center gap-3">
-                        <Building2 size={18} className="shrink-0 text-sky-300" aria-hidden="true" />
-                        <span>
-                          <span className="block font-semibold text-white">Agency &amp; regional presence</span>
-                          <span className="mt-1 block text-xs text-zinc-400">
-                            {finances?.satelliteOffices.length
-                              ? `${finances.satelliteOffices.length} regional office${finances.satelliteOffices.length === 1 ? "" : "s"} active`
-                              : "Infrastructure, assistants, clients, and offices"}
-                          </span>
-                        </span>
-                      </span>
-                      <ChevronRight size={18} className="shrink-0 text-zinc-400" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="trackRecord" className="mt-0 space-y-5">
-                <h2 className="sr-only">Career track record</h2>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  <CareerMetricTile label="Reports Filed" value={`${youthPlacementReports.length}`} helper="Placement recommendations" />
-                  <CareerMetricTile label="Accepted" value={`${acceptedPlacements}`} helper="Trials and academy offers" tone="emerald" />
-                  <CareerMetricTile label="Tracked Players" value={`${discoveredPlayerIds.size}`} helper="Across full careers" tone="blue" />
-                  <CareerMetricTile label="Legacy" value={`${gameState.legacyScore.totalScore}`} helper="How your calls held up over time" tone="amber" />
-                </div>
-                <section
-                  aria-labelledby="career-records-relationships-title"
-                  className="rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5"
-                  data-testid="career-record-drilldowns"
-                >
-                  <div className="mb-4">
-                    <h3 id="career-records-relationships-title" className="font-semibold text-white">
-                      Records &amp; relationships
-                    </h3>
-                    <p className="mt-1 text-sm text-zinc-400">
-                      Reopen the people and evidence behind your reputation at any time.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    {CAREER_RECORD_DRILLDOWNS.map((item) => {
-                      const status = item.screen === "network"
-                        ? `${Object.keys(gameState.contacts).length} known contacts`
-                        : item.screen === "alumniDashboard"
-                          ? `${gameState.alumniRecords.length} placed prospects`
-                          : item.screen === "performance"
-                            ? latestPerformanceReview
-                              ? `Latest review: ${latestPerformanceReview.outcome}`
-                              : `${scout.reportsSubmitted} reports on record`
-                            : `${currentBuildAchievementCount}/${TOTAL_ACHIEVEMENT_COUNT} unlocked`;
-                      const Icon = item.screen === "network"
-                        ? Users
-                        : item.screen === "alumniDashboard"
-                          ? Trophy
-                          : item.screen === "performance"
-                            ? BarChart3
-                            : Star;
-
-                      return (
-                        <button
-                          key={item.screen}
-                          type="button"
-                          onClick={() => setScreen(item.screen)}
-                          className="flex min-h-28 w-full items-start justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4 text-left transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                        >
-                          <span className="min-w-0">
-                            <span className="flex items-center gap-2 font-semibold text-white">
-                              <Icon size={17} className="shrink-0 text-emerald-300" aria-hidden="true" />
-                              {item.label}
-                            </span>
-                            <span className="mt-2 block text-xs leading-5 text-zinc-400">
-                              {item.description}
-                            </span>
-                            <span className="mt-2 block text-[11px] font-medium text-emerald-200">
-                              {status}
-                            </span>
-                          </span>
-                          <ChevronRight size={17} className="mt-0.5 shrink-0 text-zinc-400" aria-hidden="true" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-                <ConsequenceCinema
-                  source={consequenceCinemaSource}
-                  onOpenPlayer={(playerId) => {
-                    selectPlayer(playerId);
-                    setScreen("playerProfile");
-                  }}
-                  onOpenReport={() => setScreen("reportHistory")}
-                />
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Shield size={17} className="text-fuchsia-300" aria-hidden="true" />
-                        Decision legacy
-                      </CardTitle>
-                      <p className="text-sm text-zinc-400">The calls you made, the alternatives you closed, and whether their consequences have finished unfolding.</p>
-                    </CardHeader>
-                    <CardContent>
-                      {recentDecisions.length === 0 ? (
-                        <p className="rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-zinc-400">Your consequential choices will be recorded here.</p>
-                      ) : (
-                        <ol className="space-y-2">
-                          {recentDecisions.map((decision) => {
-                            const selected = decision.options.find((option) => option.id === decision.selectedOptionId);
-                            const date = decision.selectedAt ?? decision.offeredAt;
-                            return (
-                              <li key={decision.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="font-semibold text-white">{String(decision.metadata?.title ?? selected?.label ?? "Career decision")}</p>
-                                  <Badge variant="outline" className={decision.status === "resolved" ? "border-emerald-400/25 text-emerald-200" : "border-amber-400/25 text-amber-200"}>
-                                    {decision.status}
-                                  </Badge>
-                                </div>
-                                <p className="mt-1 text-sm text-zinc-300">{selected?.label ?? decision.selectedOptionId}</p>
-                                <p className="mt-2 text-[11px] text-zinc-500">
-                                  {formatWeekSeason(date.season, date.week)} &middot; {decision.selectionKind === "default" ? "Deadline decision" : "Chosen by you"} &middot; {Math.max(0, decision.options.length - 1)} alternatives closed
-                                </p>
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Promises &amp; obligations</CardTitle>
-                      <p className="text-sm text-zinc-400">Access creates debts. Future opportunities may force you to choose between keeping a promise and advancing your career.</p>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {activeObligations.length === 0 ? (
-                        <p className="text-sm leading-6 text-zinc-400">No active promises. Relationship choices can create duties that persist beyond the original event.</p>
-                      ) : activeObligations.map((obligation) => (
-                        <div key={obligation.id} className="rounded-xl border border-amber-400/20 bg-amber-400/[0.05] p-3">
-                          <p className="text-sm font-semibold capitalize text-amber-100">{obligation.kind.replace(/([A-Z])/g, " $1")}</p>
-                          <p className="mt-1 text-xs leading-5 text-zinc-300">{obligation.terms}</p>
-                          <p className="mt-2 text-[11px] text-zinc-500">
-                            {obligation.dueAt ? `Due ${formatWeekSeason(obligation.dueAt.season, obligation.dueAt.week)}` : "Ongoing"}
-                          </p>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </div>
-                <Card className="border-white/10 bg-[#11161c]/95">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Trophy size={17} className="text-amber-300" aria-hidden="true" />
-                      Career timeline
-                    </CardTitle>
-                    <p className="text-sm text-zinc-400">Your discoveries remain connected to signings, loans, transfers, releases, and retirement.</p>
-                  </CardHeader>
-                  <CardContent>
-                    {careerTimeline.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-white/15 p-8 text-center">
-                        <p className="font-semibold text-white">Your record starts with the first name you back</p>
-                        <p className="mt-1 text-sm text-zinc-400">Discover a prospect, build evidence, recommend a destination, then watch the career unfold.</p>
-                      </div>
-                    ) : (
-                      <ol className="space-y-3">
-                        {careerTimeline.map((entry) => (
-                          <li key={entry.id} className={`rounded-xl border p-4 ${timelineToneClasses(entry.tone)}`}>
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline" className="border-white/15 text-[10px] text-zinc-300">{entry.label}</Badge>
-                                  <h3 className="font-semibold text-white">{entry.title}</h3>
-                                </div>
-                                <p className="mt-2 text-sm leading-6 text-zinc-300">{entry.description}</p>
-                              </div>
-                              <span className="shrink-0 text-xs font-medium text-zinc-400">{formatWeekSeason(entry.season, entry.week)}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="finances" className="mt-0 space-y-5">
-                <h2 className="sr-only">Career finances</h2>
-                {!finances ? (
-                  <Card><CardContent className="p-8 text-center text-sm text-zinc-400">Financial records are not available in this save.</CardContent></Card>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                      <CareerMetricTile label="Balance" value={formatBalance(finances.balance)} helper="Available cash" tone={finances.balance >= 0 ? "emerald" : "red"} />
-                      <CareerMetricTile label="Monthly Income" value={formatBalance(monthlyIncome)} helper={scout.careerPath === "independent" ? "Committed retainers" : "Contract salary"} tone="emerald" />
-                      <CareerMetricTile label="Monthly Costs" value={formatBalance(monthlyExpenses)} helper="Lifestyle, travel, and tools" tone="red" />
-                      <CareerMetricTile
-                        label="Weekly Pay"
-                        value={scout.salary > 0 ? formatSalary(scout.salary) : scout.careerPath === "independent" ? "Retainers vary" : "No salary"}
-                        helper={scout.employmentContract?.role ?? careerBaseLabel}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setScreen(CAREER_FINANCE_DRILLDOWN.screen)}
-                      className="flex min-h-20 w-full items-center justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4 text-left transition hover:border-emerald-400/40 hover:bg-emerald-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                      data-testid="career-finance-drilldown"
-                    >
-                      <span>
-                        <span className="block font-semibold text-emerald-100">
-                          {CAREER_FINANCE_DRILLDOWN.label}
-                        </span>
-                        <span className="mt-1 block text-sm text-zinc-400">
-                          {CAREER_FINANCE_DRILLDOWN.description}
-                        </span>
-                      </span>
-                      <ChevronRight size={18} className="shrink-0 text-emerald-300" aria-hidden="true" />
-                    </button>
-                    <div className="grid gap-5 lg:grid-cols-2">
-                      <Card className="border-white/10 bg-[#11161c]/95">
-                        <CardHeader className="pb-3"><CardTitle className="text-base">Monthly commitments</CardTitle></CardHeader>
-                        <CardContent className="space-y-2">
-                          {Object.entries(finances.expenses).map(([label, amount]) => (
-                            <div key={label} className="flex min-h-11 items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 text-sm">
-                              <span className="text-zinc-300">{formatExpenseLabel(label)}</span>
-                              <span className="font-semibold text-red-300">{formatBalance(amount)}</span>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
-                      <Card className="border-white/10 bg-[#11161c]/95">
-                        <CardHeader className="pb-3"><CardTitle className="text-base">Lifestyle</CardTitle><p className="text-sm text-zinc-400">Comfort changes monthly costs and recovery. Choose deliberately.</p></CardHeader>
-                        <CardContent className="space-y-2">
-                          {(Object.entries(LIFESTYLE_TIERS) as [string, (typeof LIFESTYLE_TIERS)[LifestyleLevel]][]).map(([levelString, tier]) => {
-                            const level = Number(levelString) as LifestyleLevel;
-                            const active = finances.lifestyle.level === level;
-                            return (
-                              <button
-                                key={level}
-                                type="button"
-                                onClick={() => useGameStore.getState().changeLifestyle(level)}
-                                aria-pressed={active}
-                                className={`flex min-h-14 w-full items-center justify-between rounded-xl border px-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${active ? "border-emerald-400/35 bg-emerald-400/10" : "border-white/10 bg-black/20 hover:border-white/20"}`}
-                              >
-                                <span><span className="block text-sm font-semibold text-white">{tier.name}</span><span className="mt-0.5 block text-xs text-zinc-400">Monthly comfort level</span></span>
-                                <span className={active ? "font-semibold text-emerald-200" : "text-zinc-300"}>{formatBalance(tier.config.monthlyCost)}/mo</span>
-                              </button>
-                            );
-                          })}
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </>
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
-        </div>
-      </GameLayout>
+      <CareerYouthWorkspace
+        acceptedPlacements={acceptedPlacements}
+        activeObligations={activeObligations}
+        agencyPolicyChangeAvailable={agencyPolicyChangeAvailable}
+        agencyPressure={agencyPressure}
+        agencyStrategy={agencyStrategy}
+        attrEntries={attrEntries}
+        averageSkill={averageSkill}
+        careerBaseLabel={careerBaseLabel}
+        careerCommandBridgeProps={{
+          avatarId: scout.avatarId ?? 1,
+          scoutName: `${scout.firstName} ${scout.lastName}`,
+          specializationLevel: scout.specializationLevel,
+          reputation: scout.reputation,
+          careerTier: scout.careerTier,
+          viewModel: careerWorkspaceViewModel,
+          fingerprint: careerFingerprint,
+          onPlanWeek: () => setScreen("calendar"),
+          ...(openRivalOpportunityCount > 0
+            ? {
+                opportunityActionLabel: "Open rivals",
+                onOpportunityAction: () => setScreen("rivals"),
+              }
+            : {}),
+          currentThread: (
+            <CareerEraThread
+              era={gameState.careerEraDirectorState?.current}
+              variant="career"
+              onOpenProspect={(playerId) => {
+                selectPlayer(playerId);
+                setScreen("playerProfile");
+              }}
+              onOpenWorld={() => setScreen("internationalView")}
+            />
+          ),
+        }}
+        careerInventoryOpen={careerInventoryOpen}
+        careerMetricsOpen={careerMetricsOpen}
+        careerPoliticsOpen={careerPoliticsOpen}
+        careerTimeline={careerTimeline}
+        consequenceCinemaProps={{
+          source: consequenceCinemaSource,
+          onOpenPlayer: (playerId) => {
+            selectPlayer(playerId);
+            setScreen("playerProfile");
+          },
+          onOpenReport: () => setScreen("reportHistory"),
+        }}
+        courseSummary={courseSummary}
+        currentBuildAchievementCount={currentBuildAchievementCount}
+        finances={finances}
+        gameState={gameState}
+        getClubName={(clubId) => getClub(clubId)?.name ?? "Unknown club"}
+        jobOffers={jobOffers}
+        latestPerformanceReview={latestPerformanceReview}
+        leadershipPortfolioProps={scout.careerTier >= 4 ? {
+          portfolio: gameState.leadershipPortfolio,
+          players: gameState.players,
+          npcScouts: gameState.npcScouts,
+          npcDelegations: gameState.npcDelegations,
+          onChoice: resolveLeadershipResponsibility,
+          onOpenPlayer: (playerId) => {
+            selectPlayer(playerId);
+            setScreen("playerProfile");
+          },
+          onOpenNpcManagement: () => setScreen("npcManagement"),
+        } : null}
+        monthlyExpenses={monthlyExpenses}
+        monthlyIncome={monthlyIncome}
+        onAcceptJob={acceptJob}
+        onDeclineJob={declineJob}
+        onCareerInventoryToggle={setCareerInventoryOpen}
+        onCareerMetricsToggle={setCareerMetricsOpen}
+        onCareerPoliticsToggle={setCareerPoliticsOpen}
+        onChangeLifestyle={(level) => useGameStore.getState().changeLifestyle(level as LifestyleLevel)}
+        onChooseCareerRecovery={chooseCareerRecovery}
+        onChooseClubPath={() => useGameStore.getState().chooseCareerPath("club" as CareerPath)}
+        onChooseIndependentPath={() => useGameStore.getState().chooseCareerPath("independent" as CareerPath)}
+        onOpenPlayerProfile={(playerId) => {
+          selectPlayer(playerId);
+          setScreen("playerProfile");
+        }}
+        onSetScreen={(screen) => setScreen(screen as never)}
+        pendingPlacements={pendingPlacements}
+        performanceReviews={performanceReviews}
+        politicalMeetingProps={{
+          scout,
+          managerProfile: currentClubManager,
+          boardProfile: gameState.boardProfile,
+          managerApproach: managerMeetingApproach,
+          boardApproach: boardMeetingApproach,
+          managerEligibility: managerMeetingEligibility,
+          boardEligibility: boardMeetingEligibility,
+          onManagerApproachChange: setManagerMeetingApproach,
+          onBoardApproachChange: setBoardMeetingApproach,
+          onMeetManager: () => meetManager(managerMeetingApproach),
+          onMeetBoard: () => meetBoard(boardMeetingApproach),
+        }}
+        recentDecisions={recentDecisions}
+        rivalOrganizationCount={rivalOrganizationCount}
+        scout={scout}
+        showPathChoice={showPathChoice}
+        skillEntries={skillEntries}
+        youthDiscoveryRecords={youthDiscoveryRecords}
+        youthPlacementReportCount={youthPlacementReports.length}
+      />
     );
   }
+
 
   return (
     <GameLayout>
@@ -2261,6 +1595,14 @@ export function CareerScreen() {
                         {review.contractSummary && (
                           <p className={`mt-2 text-[10px] ${review.contractSummary.objectivesMet === review.contractSummary.objectivesTotal ? "text-emerald-300" : "text-amber-300"}`}>
                             Contract objectives: {review.contractSummary.objectivesMet}/{review.contractSummary.objectivesTotal} met · targets {review.contractSummary.reportsTarget} reports, {review.contractSummary.qualityTarget} quality, {review.contractSummary.recommendationsTarget} signings
+                          </p>
+                        )}
+                        {review.developmentSummary && (
+                          <p className="mt-2 text-[10px] leading-4 text-amber-300">
+                            Development pressure: -{review.developmentSummary.pressurePenalty} points
+                            {review.developmentSummary.youthPayoffOffset > 0
+                              ? ` after ${review.developmentSummary.youthPayoffOffset} points of youth-outcome relief`
+                              : ""}. {review.developmentSummary.reasons[0]}
                           </p>
                         )}
                       </div>

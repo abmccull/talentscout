@@ -15,6 +15,7 @@ import {
   hydrateCulturalInsight,
   resolveCulturalInsightEffects,
 } from "@/engine/world/footballCulture";
+import { selectObservationSituationDefinition } from "@/engine/observation/situationCatalog";
 
 const SCOUT_CONFIG: NewGameConfig = {
   scoutFirstName: "Situation",
@@ -43,6 +44,71 @@ const LEGACY_INSIGHT: CulturalInsight = {
 };
 
 describe("observation situations", () => {
+  it("persists non-default authored variant identity through existing snapshot fields", () => {
+    const seeds = Array.from({ length: 64 }, (_, index) => `school-variant-${index}`);
+    const baselineSeed = seeds.find((seed) =>
+      selectObservationSituationDefinition("schoolMatch", seed)?.defaultBaseline);
+    const variantSeed = seeds.find((seed) =>
+      !selectObservationSituationDefinition("schoolMatch", seed)?.defaultBaseline);
+
+    expect(baselineSeed).toBeDefined();
+    expect(variantSeed).toBeDefined();
+
+    const baseline = createObservationSituation({
+      activityType: "schoolMatch",
+      seed: baselineSeed!,
+      countryId: "england",
+    });
+    const alternate = createObservationSituation({
+      activityType: "schoolMatch",
+      seed: variantSeed!,
+      countryId: "england",
+    });
+
+    expect(alternate.repetitionKey).not.toBe(baseline.repetitionKey);
+    expect(alternate.contextTags.some((tag) => tag.startsWith("variant:"))).toBe(true);
+    expect(alternate.reasons.join(" ")).not.toBe(baseline.reasons.join(" "));
+  });
+
+  it("persists the active cultural calendar window and applies its visible evidence climate", () => {
+    const calendarEffects = {
+      countryId: "england",
+      season: 2,
+      week: 14,
+      activeWindowIds: ["calendar:england:academy-festival-band:s2"],
+      signalByDomain: {
+        technical: 0.04,
+        physical: 0,
+        mental: 0,
+        tactical: 0.06,
+        hidden: 0,
+      },
+      uncertaintyMultiplier: 0.91,
+      misleadingSignalRiskDelta: -0.03,
+      contextTags: ["academy-festival"],
+      biasWarnings: ["Compare coached environments before generalising."],
+      reasons: ["A clustered academy fixture window improves comparison quality."],
+    };
+    const baseline = createObservationSituation({
+      activityType: "academyVisit",
+      seed: "calendar-watch",
+      countryId: "england",
+    });
+    const contextual = createObservationSituation({
+      activityType: "academyVisit",
+      seed: "calendar-watch",
+      countryId: "england",
+      calendarEffects,
+    });
+
+    expect(contextual.culturalCalendarWindowIds).toEqual(calendarEffects.activeWindowIds);
+    expect(contextual.contextTags).toContain("academy-festival");
+    expect(contextual.reasons).toContain(calendarEffects.reasons[0]);
+    expect(contextual.signalByDomain.tactical).toBeGreaterThan(baseline.signalByDomain.tactical);
+    expect(contextual.uncertaintyMultiplier).toBeLessThan(baseline.uncertaintyMultiplier);
+    expect(contextual.misleadingSignalRisk).toBeLessThan(baseline.misleadingSignalRisk);
+  });
+
   it("is stable for one seed and records materially different situation keys", () => {
     const first = createObservationSituation({
       activityType: "attendMatch",

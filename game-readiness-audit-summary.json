@@ -1,0 +1,46 @@
+{
+  "assessment_date": "2026-07-29",
+  "base_candidate_sha": "a99b5849c8fa0d7efa873ef0124e37c109b093bd",
+  "branch": "agent/youth-scout-integrated",
+  "assessment_scope": "remediated working tree atop base candidate; not yet committed or tagged",
+  "decision": "Not ready",
+  "verified_passes": {
+    "typecheck": true,
+    "lint": true,
+    "unit_tests": "1314/1314",
+    "architecture": "666 modules, zero cycles",
+    "dependency_audit": "0 vulnerabilities",
+    "production_build": "passed; provenance retained",
+    "academy_case_visual": "desktop/mobile passed with Axe and overflow checks",
+    "windows_package": "supporting pass",
+    "windows_packaged_worker": "passed; worker instantiated with zero CSP errors",
+    "canonical_soak_diagnostic": "1 seed x 3 seasons plus deterministic replay passed; 138 canonical ticks",
+    "browser_ten_season_soak": "60 batches reached Season 11; all invariants passed",
+    "browser_rollover_worker": "6/6 one-season batches used worker after season-aware timeout"
+  },
+  "fixed_blockers": [
+    "Dependency graph and npm audit",
+    "Electron worker CSP policy",
+    "Packaged worker verification",
+    "Academy brief-weight explanation and staged visual contract",
+    "Canonical soak failure diagnostics",
+    "Autonomous course enrollment without scheduled study",
+    "Browser soak fixed total timeout",
+    "Season-rollover worker timeout and duplicate main-thread recomputation",
+    "Shipping bundle budget explicitly approved and enforced at 1,205,862 gzip bytes; current initial graph is 1,069,796 bytes"
+  ],
+  "remaining_engineering_certification": [
+    "Run the clean exact-candidate 20-seed x 30-season canonical soak and deterministic replay",
+    "Rerun GitHub CI and desktop-build workflows on the committed candidate",
+    "Generate exact-tag package manifests and complete the release evidence checker"
+  ],
+  "release_blocking_external": [
+    "Signed exact-tag installer and standard-user installed runtime journey",
+    "macOS and Linux packaged runtime",
+    "Live Steam Cloud conflict and reconnect",
+    "Physical minimum hardware",
+    "Manual NVDA and VoiceOver",
+    "Moderated usability and paired-career replayability",
+    "Rollback and update-signature drill"
+  ]
+}

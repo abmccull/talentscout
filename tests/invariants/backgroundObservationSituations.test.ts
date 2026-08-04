@@ -10,6 +10,7 @@ import type {
 import { createBackgroundObservationSituation } from "@/engine/observation/backgroundSituation";
 import { createRNG } from "@/engine/rng";
 import { produceWeeklyPlayerObservation } from "@/stores/actions/weeklyObservationProducer";
+import { useGameStore } from "@/stores/gameStore";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -33,7 +34,6 @@ const BRAZIL_INSIGHT: CulturalInsight = {
 };
 
 async function createSituationState(seed: string): Promise<GameState> {
-  const { useGameStore } = await import("@/stores/gameStore");
   await useGameStore.getState().startNewGame({
     scoutFirstName: "Background",
     scoutLastName: "Observer",
@@ -99,6 +99,24 @@ function firstPlayer(state: GameState) {
   return player;
 }
 
+function createObservationStub(
+  id: string,
+  playerId: string,
+  context: Observation["context"],
+): Observation {
+  return {
+    id,
+    playerId,
+    scoutId: "background-test-scout",
+    week: 1,
+    season: 1,
+    context,
+    attributeReadings: [],
+    notes: [],
+    flaggedMoments: [],
+  };
+}
+
 describe("background observation situation authority", () => {
   it("is stable across save/reload and carries schedule, culture, and travel identity", async () => {
     const state = await createSituationState("background-situation-save");
@@ -161,5 +179,39 @@ describe("background observation situation authority", () => {
     expect(averageConfidence(deep)).toBeGreaterThan(averageConfidence(blitz));
     expect(deep.activityInstanceId).toBeTruthy();
     expect(deep.situation?.repetitionKey).toBeTruthy();
+  }, 30_000);
+
+  it("keeps background observation ordinals equivalent when player-local counts are supplied", async () => {
+    const state = await createSituationState("background-situation-ordinal");
+    const player = firstPlayer(state);
+    const otherPlayerId = Object.values(state.players).find((candidate) => candidate.id !== player.id)?.id
+      ?? "other-player";
+    const history = [
+      createObservationStub("target-1", player.id, "academyVisit"),
+      createObservationStub("other-1", otherPlayerId, "trainingGround"),
+      createObservationStub("target-2", player.id, "videoAnalysis"),
+      createObservationStub("other-2", otherPlayerId, "statsBriefing"),
+      createObservationStub("target-3", player.id, "followUpSession"),
+    ];
+
+    const legacy = createBackgroundObservationSituation({
+      state,
+      activityType: "deepVideoAnalysis",
+      observationContext: "deepVideoAnalysis",
+      player,
+      existingObservations: history,
+      countryId: "brazil",
+    });
+    const optimized = createBackgroundObservationSituation({
+      state,
+      activityType: "deepVideoAnalysis",
+      observationContext: "deepVideoAnalysis",
+      player,
+      existingObservations: history,
+      playerObservationCount: 3,
+      countryId: "brazil",
+    });
+
+    expect(optimized).toEqual(legacy);
   }, 30_000);
 });

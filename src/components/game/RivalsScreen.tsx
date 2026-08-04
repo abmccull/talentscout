@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
@@ -409,14 +409,26 @@ function OrganizationCard({ organization }: { organization: RivalOrganization })
 function OpportunityCard({
   opportunity,
   organization,
+  highlighted = false,
   onResolve,
+  opportunityRef,
 }: {
   opportunity: RivalOrganizationOpportunity;
   organization?: RivalOrganization;
+  highlighted?: boolean;
   onResolve: (response: "exploit" | "decline") => void;
+  opportunityRef?: (node: HTMLElement | null) => void;
 }) {
   return (
-    <article className="rounded-xl border border-amber-400/25 bg-amber-400/[0.04] p-4">
+    <article
+      ref={opportunityRef}
+      tabIndex={-1}
+      className={`rounded-xl border bg-amber-400/[0.04] p-4 ${
+        highlighted
+          ? "border-amber-300/60 ring-2 ring-amber-300/35"
+          : "border-amber-400/25"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
@@ -647,6 +659,8 @@ export function RivalsScreen() {
     selectPlayer,
     setScreen,
     resolveRivalOrganizationOpportunity,
+    pendingRivalOpportunityId,
+    setPendingRivalOpportunityId,
   } = useGameStore(
     useShallow((state) => ({
       scout: state.gameState?.scout,
@@ -665,8 +679,12 @@ export function RivalsScreen() {
       selectPlayer: state.selectPlayer,
       setScreen: state.setScreen,
       resolveRivalOrganizationOpportunity: state.resolveRivalOrganizationOpportunity,
+      pendingRivalOpportunityId: state.pendingRivalOpportunityId,
+      setPendingRivalOpportunityId: state.setPendingRivalOpportunityId,
     })),
   );
+  const [focusedOpportunityId, setFocusedOpportunityId] = useState<string | null>(null);
+  const opportunityRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const rivalList = useMemo(
     () => Object.values(rivalScoutsById ?? {}),
@@ -761,6 +779,22 @@ export function RivalsScreen() {
       ),
     [rivalScoutsById],
   );
+
+  useEffect(() => {
+    if (!pendingRivalOpportunityId) return;
+    if (!openOpportunities.some((opportunity) => opportunity.id === pendingRivalOpportunityId)) {
+      setPendingRivalOpportunityId(null);
+      return;
+    }
+
+    setFocusedOpportunityId(pendingRivalOpportunityId);
+    setPendingRivalOpportunityId(null);
+    window.requestAnimationFrame(() => {
+      const target = opportunityRefs.current[pendingRivalOpportunityId];
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus();
+    });
+  }, [openOpportunities, pendingRivalOpportunityId, setPendingRivalOpportunityId]);
 
   if (
     !scout
@@ -927,6 +961,10 @@ export function RivalsScreen() {
                   key={opportunity.id}
                   opportunity={opportunity}
                   organization={rivalOrganizationState.organizations[opportunity.organizationId]}
+                  highlighted={focusedOpportunityId === opportunity.id}
+                  opportunityRef={(node) => {
+                    opportunityRefs.current[opportunity.id] = node;
+                  }}
                   onResolve={(response) =>
                     resolveRivalOrganizationOpportunity(opportunity.id, response)
                   }

@@ -134,6 +134,11 @@ export type {
 
 export * from "./chronology";
 export * from "./careerMoments";
+export * from "./activeCareerFronts";
+export * from "./careerInterventionPortfolio";
+export * from "./developmentPressure";
+export * from "./fingerprint";
+export * from "./legacySignature";
 export * from "./lateCareerDilemmas";
 export * from "./lateCareerDilemmaMaterializer";
 export * from "./roleProfile";

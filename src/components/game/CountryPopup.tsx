@@ -9,6 +9,7 @@ import { TRAVEL_POSTURE_DEFINITIONS } from "@/engine/world/travel";
 import type { TerritoryIdentity } from "@/engine/world/territoryIdentity";
 import type { WorldConditionStakeholderMatrix } from "@/engine/world/worldConditionStakeholders";
 import type { ClubRecruitmentEcosystem } from "@/engine/world/clubRecruitmentEcosystem";
+import type { CountryCulturePresentation } from "@/components/game/world/countryCulturePresentation";
 import { Tooltip } from "@/components/ui/tooltip";
 import { WORLD_TERMS } from "@/components/game/worldTerminology";
 
@@ -53,6 +54,7 @@ export interface CountryPopupProps {
   regionalPresence?: RegionalPresenceSnapshot;
   /** Hidden leagues discovered in this country (F13). */
   discoveredHiddenLeagues?: HiddenLeague[];
+  culture?: CountryCulturePresentation | null;
   territoryIdentity?: TerritoryIdentity | null;
   stakeholderMatrix?: WorldConditionStakeholderMatrix | null;
   clubEcosystems?: Array<{
@@ -143,6 +145,7 @@ export function CountryPopup({
   regionalKnowledge,
   regionalPresence,
   discoveredHiddenLeagues,
+  culture,
   territoryIdentity,
   stakeholderMatrix,
   clubEcosystems = [],
@@ -154,6 +157,8 @@ export function CountryPopup({
   const popupRef = React.useRef<HTMLDivElement>(null);
   const closeButtonRef = React.useRef<HTMLButtonElement>(null);
   const titleId = React.useId();
+  const cultureTitleId = React.useId();
+  const cultureWindowTitleId = React.useId();
   const [entering, setEntering] = React.useState(true);
 
   // Entry animation
@@ -375,7 +380,123 @@ export function CountryPopup({
           </div>
         )}
 
-        {/* ── Regional Knowledge (F13) ─────────────────────────── */}
+        {/* Football culture */}
+        {culture && (
+          <section
+            className="mx-4 mb-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5"
+            aria-labelledby={cultureTitleId}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h4
+                  id={cultureTitleId}
+                  className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-200"
+                >
+                  <BookOpen size={10} aria-hidden="true" />
+                  Local football culture
+                </h4>
+                <p className="mt-0.5 text-[10px] text-zinc-500">
+                  {culture.countryName} pathways and evidence habits
+                </p>
+              </div>
+              <span className="rounded-full border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-100">
+                Season {culture.season} / Week {culture.week}
+              </span>
+            </div>
+
+            <dl className="mt-2 space-y-1.5">
+              {culture.cues.map((cue) => (
+                <div key={cue.label} className="rounded bg-zinc-950/55 px-2 py-1.5">
+                  <dt className="text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-300/80">
+                    {cue.label}
+                  </dt>
+                  <dd className="mt-0.5 text-[10px] leading-relaxed text-zinc-300">
+                    {cue.text}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-2 border-t border-amber-500/15 pt-2">
+              <h5
+                id={cultureWindowTitleId}
+                className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-200"
+              >
+                <Eye size={10} aria-hidden="true" />
+                Evidence this week
+              </h5>
+
+              {culture.activeWindows.length > 0 ? (
+                <>
+                  <ul
+                    className="mt-1.5 space-y-1"
+                    aria-labelledby={cultureWindowTitleId}
+                  >
+                    {culture.activeWindows.map((window) => (
+                      <li
+                        key={window.id}
+                        className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 rounded bg-amber-950/25 px-2 py-1.5"
+                      >
+                        <span className="text-[10px] font-medium text-amber-100">
+                          {window.label}
+                        </span>
+                        <span className="text-[9px] text-amber-300/70">
+                          {window.weekRange}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {culture.contextLabels.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1" aria-label="Current evidence contexts">
+                      {culture.contextLabels.map((label) => (
+                        <span
+                          key={label}
+                          className="rounded-full border border-white/10 bg-zinc-950/50 px-1.5 py-0.5 text-[9px] text-zinc-300"
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {culture.reasons.length > 0 && (
+                    <ul className="mt-1.5 space-y-1" aria-label="Why the current evidence window matters">
+                      {culture.reasons.map((reason) => (
+                        <li key={reason} className="text-[10px] leading-relaxed text-zinc-300">
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {culture.evidenceWarnings.length > 0 && (
+                    <ul
+                      className="mt-1.5 space-y-1 rounded border border-amber-500/15 bg-zinc-950/45 px-2 py-1.5"
+                      aria-label="Evidence cautions"
+                    >
+                      {culture.evidenceWarnings.map((warning) => (
+                        <li key={warning} className="text-[10px] leading-relaxed text-amber-100/80">
+                          {warning}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <p className="mt-1.5 text-[9px] leading-relaxed text-zinc-500">
+                    These conditions shape the sample and how much weight to give it; they do not settle the player.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1.5 text-[10px] leading-relaxed text-zinc-400">
+                  No concentrated local event window is active. Build the read through repeated views and normal competition.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Regional knowledge */}
         {territoryIdentity && (
           <div className="mx-4 mb-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">

@@ -22,6 +22,7 @@ import type {
   ScoutingCase,
   SeasonRatingRecord,
 } from "@/engine/core/types";
+import type { CareerInterventionEvidence } from "@/engine/career/careerInterventionPortfolio";
 import type { AcademyRecruitmentBrief } from "./recruitmentBriefs";
 
 const DEFAULT_SEASON_LENGTH = 38;
@@ -129,6 +130,8 @@ export interface CompleteAcademyRecommendationReviewInput {
   currentWeek: number;
   currentSeason: number;
   brief?: AcademyRecruitmentBrief;
+  /** Player-facing pathway responses recorded after the original placement. */
+  careerInterventions?: CareerInterventionEvidence[];
   seasonLength?: number;
 }
 
@@ -313,6 +316,7 @@ export function scheduleAcademyRecommendationReviews(
       reportId: input.report.id,
       playerId: input.scoutingCase.playerId,
       clubId: input.placementReport.targetClubId,
+      recruitmentSnapshot: input.placementReport.recruitmentSnapshot,
       checkpoint,
       dueWeek: placementMovement.week,
       dueSeason: placementMovement.season + horizon,
@@ -954,6 +958,7 @@ function buildPlayerFacingDimensions(input: {
   horizon: number;
   ratingSeasons: number;
   revisions: ScoutReport[];
+  careerInterventions: CareerInterventionEvidence[];
 }): RecommendationReviewDimension[] {
   const baseEvidenceLevel = evidenceLevelFor(
     input.ratingSeasons,
@@ -961,7 +966,7 @@ function buildPlayerFacingDimensions(input: {
     input.outcome.appearances,
     input.outcome.pathwayStatus,
   );
-  return [
+  const dimensions: RecommendationReviewDimension[] = [
     buildPriceValueDimension({
       report: input.report,
       brief: input.brief,
@@ -984,6 +989,30 @@ function buildPlayerFacingDimensions(input: {
     }),
     buildRevisionQualityDimension(input.revisions),
   ];
+  const intervention = input.careerInterventions[0];
+  if (intervention) {
+    const status: RecommendationReviewDimension["status"] = intervention.outcome === "improved"
+      ? "positive"
+      : intervention.outcome === "worsened"
+        ? "negative"
+        : intervention.outcome === "monitoring"
+          ? "insufficientEvidence"
+          : "mixed";
+    const deltaLabel = intervention.scoreDelta > 0
+      ? `improved by ${intervention.scoreDelta} points`
+      : intervention.scoreDelta < 0
+        ? `fell by ${Math.abs(intervention.scoreDelta)} points`
+        : "did not materially change";
+    dimensions.push({
+      key: "interventionFollowThrough",
+      label: "Intervention follow-through",
+      status,
+      evidenceLevel: intervention.callbackObserved ? "full" : "partial",
+      score: clamp(50 + intervention.scoreDelta * 2, 0, 100),
+      summary: `You chose “${intervention.optionLabel}.” The visible environment ${deltaLabel}, from ${intervention.originalEnvironmentScore}/100 to ${intervention.currentEnvironmentScore}/100. This records follow-through, not proof that your intervention caused the change.`,
+    });
+  }
+  return dimensions;
 }
 
 function humanizePathway(pathway: AcademyPathwayStatus): string {
@@ -1181,6 +1210,11 @@ export function completeAcademyRecommendationReview(
       description: `${injury.severity} ${injury.type} injury with ${injury.recoveryWeeks} recovery weeks.`,
       sourceId: injury.id,
     })),
+    ...(input.careerInterventions ?? []).map((intervention) => ({
+      source: "intervention" as const,
+      description: `Selected “${intervention.optionLabel}” before the pathway moved from ${intervention.originalEnvironmentScore}/100 to ${intervention.currentEnvironmentScore}/100.`,
+      sourceId: intervention.decisionId,
+    })),
   ];
   const playerFacingDimensions = buildPlayerFacingDimensions({
     report: input.report,
@@ -1194,6 +1228,7 @@ export function completeAcademyRecommendationReview(
     horizon,
     ratingSeasons: ratings.length,
     revisions,
+    careerInterventions: input.careerInterventions ?? [],
   });
   const verdict = verdictFor(overallScore, pathway.status);
   const findings = [

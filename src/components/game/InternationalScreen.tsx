@@ -30,6 +30,7 @@ import { getHiddenLeaguesForCountry } from "@/engine/world/hiddenLeagues";
 import { getCountryMapLabel, getCountryMapPosition } from "@/engine/world/mapCountryRegistry";
 import { getCountryDisplayName } from "@/lib/country";
 import { WorldOutlookDrawer } from "./world/WorldOutlookDrawer";
+import { buildCountryCulturePresentation } from "./world/countryCulturePresentation";
 import {
   deriveClubRecruitmentEcosystem,
   deriveTerritoryIdentity,
@@ -975,6 +976,9 @@ export function InternationalScreen() {
       ? `${selectedAvailability.clubCount} active clubs and ${selectedAvailability.fixtureCount} playable fixtures are on the calendar here.`
       : `${selectedAvailability.unsignedYouthCount} youth prospects and ${selectedAvailability.subRegionCount} regional scouting areas are active here. This country is tracked through local intel rather than a weekly fixture calendar.`
     : undefined;
+  const selectedCulture = selectedCountry
+    ? buildCountryCulturePresentation(gameState, selectedCountry)
+    : null;
   const selectedTerritoryIdentity = selectedCountry
     ? deriveTerritoryIdentity(gameState, selectedCountry)
     : null;
@@ -1128,6 +1132,7 @@ export function InternationalScreen() {
             regionalKnowledge={selectedRegionalKnowledge}
             regionalPresence={selectedTravelQuote?.presence}
             discoveredHiddenLeagues={selectedHiddenLeagues}
+            culture={selectedCulture}
             territoryIdentity={selectedTerritoryIdentity}
             stakeholderMatrix={selectedStakeholderMatrix}
             clubEcosystems={selectedClubEcosystems}

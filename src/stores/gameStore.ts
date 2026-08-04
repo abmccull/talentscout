@@ -6,6 +6,7 @@ import { createProgressionActions } from "./actions/progressionActions";
 import { createFinanceActions } from "./actions/financeActions";
 import { createWeeklyActions } from "./actions/weeklyActions";
 import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
+import { createDashboardActions } from "./actions/dashboardActions";
 import { terminateWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
 import type {
   GameState,
@@ -103,6 +104,11 @@ import { createConsequenceEngineState } from "@/engine/consequences";
 import { createAccessAgreementState } from "@/engine/consequences/accessAgreements";
 import { createEventDirectorState } from "@/engine/events/eventDirector";
 import { createStoryDirectorStateV2 } from "@/engine/events/storyDirectorV2";
+import {
+  createCareerEraDirectorState,
+  deriveCareerEraContext,
+  directCareerEra,
+} from "@/engine/events/careerEraDirector";
 import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
 import { createCareerStoryArchiveState } from "@/engine/consequences/careerStoryArchive";
 import {
@@ -112,6 +118,7 @@ import {
 import { createCareerMomentState } from "@/engine/career/careerMoments";
 import { generateSeasonEvents, getActiveSeasonEvents } from "@/engine/core/seasonEvents";
 import { createEmptyPool } from "@/engine/freeAgents/pool";
+import { createDashboardState } from "@/engine/dashboard/state";
 import {
   initializeTransferWindows,
   isTransferWindowOpen,
@@ -128,6 +135,7 @@ import {
   createWorldConditionArcState,
   startWorldConditionArcs,
 } from "@/engine/world";
+import { refreshCulturalCalendarState } from "@/engine/world/culturalCalendarState";
 import { createScout } from "@/engine/scout/creation";
 import {
   generateStartingContacts,
@@ -175,8 +183,8 @@ import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import {
   applyScenarioSetup,
-  applyScenarioOverrides,
   getInvalidScenarioReason,
+  reconcileScenarioOpeningState,
 } from "@/engine/scenarios";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import type { ScenarioProgress } from "@/engine/scenarios";
@@ -190,6 +198,7 @@ import {
   readLegacyProfile,
   writeLegacyProfile,
 } from "@/engine/career/legacy";
+import { getLatestCareerSignatureSummary } from "@/engine/career/legacySignature";
 import {
   getResolvedPlayerIds,
   resolvePlayerEntity,
@@ -320,6 +329,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentScreen: "mainMenu",
   // Navigation actions (extracted to actions/navigationActions.ts)
   ...createNavigationActions(get, set),
+  ...createDashboardActions(get, set),
 
   // State
   gameState: null,
@@ -369,6 +379,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Cross-screen calendar pre-fill
   pendingCalendarActivity: null,
+  pendingNetworkContactId: null,
+  pendingRivalOpportunityId: null,
   pendingInternationalCountry: null,
 
   // Post-submit listing prompt (transient — not persisted)
@@ -443,6 +455,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       originId: effectiveConfig.originId,
       flawId: effectiveConfig.flawId,
       doctrineIds: effectiveConfig.doctrineIds,
+      legacyUnlockIds: effectiveConfig.legacyUnlockIds,
       contentDefinitionIds: [
         ...getRunContentDefinitionIds(
           getGameModeIdForSpecialization(effectiveConfig.specialization),
@@ -586,6 +599,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ),
         getSeasonLength(fixtures, 1),
         effectiveConfig.worldSeed,
+        runManifest,
       ).map((brief) => [brief.id, brief]),
     );
 
@@ -613,6 +627,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       accessAgreements: createAccessAgreementState(undefined),
       schedule: createWeekSchedule(1, 1),
       weeklyStrategy: createWeeklyStrategyState(1, 1),
+      dashboardState: createDashboardState(),
       jobOffers: [],
       performanceReviews: [],
       inbox: [],
@@ -627,6 +642,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeStorylines: [],
       eventDirector: createEventDirectorState(),
       storyDirectorV2: createStoryDirectorStateV2(),
+      careerEraDirectorState: createCareerEraDirectorState(),
       consequenceState: createConsequenceEngineState(),
       careerStoryArchive: createCareerStoryArchiveState(),
       eventChains: [],
@@ -721,10 +737,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
     };
-
-    // Profiles are derived from the actual generated cast, so initialize only
-    // after the complete authoritative state exists.
-    tempState.stakeholderProfiles = createStakeholderProfileRegistry(tempState);
 
     // ── Phase 2 initialization ──────────────────────────────────────────────
 
@@ -856,10 +868,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       unlockedTools: startingTools,
       managerDirectives: initialDirectives,
     };
-    const gameState = applyWorldConditionSeasonStart(rawGameState);
-
-    // Apply scenario GameState overrides (week, season, reputation, tier, activeScenarioId)
-    const scenarioState = scenario ? applyScenarioOverrides(gameState, scenario) : gameState;
+    // A scenario must establish its real date before any date-sensitive
+    // opening identity or world announcement is authored. The reconciler also
+    // supplies deterministic pre-scenario fixture history and current windows.
+    const scenarioState = scenario
+      ? reconcileScenarioOpeningState(rawGameState, scenario)
+      : applyWorldConditionSeasonStart(rawGameState);
+    // Opening identities must see the complete Phase 2 cast, economy, world
+    // conditions, and (for challenges) canonical scenario date.
+    scenarioState.stakeholderProfiles = createStakeholderProfileRegistry(scenarioState);
+    scenarioState.careerEraDirectorState = directCareerEra(
+      createCareerEraDirectorState(),
+      deriveCareerEraContext(
+        scenarioState,
+        getSeasonLength(scenarioState.fixtures, scenarioState.currentSeason),
+      ),
+    );
+    scenarioState.culturalCalendarState = refreshCulturalCalendarState(scenarioState);
     const tutorialState = useTutorialStore.getState();
     const openingMode = resolveCareerOpeningMode({
       requested: effectiveConfig.openingMode,
@@ -1423,6 +1448,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       gameState.youthTournaments,
       gameState.reports,
+      {
+        currentSeason: gameState.currentSeason,
+        consequenceState: gameState.consequenceState,
+      },
     );
   },
 
@@ -1493,10 +1522,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Apply legacy perks to config
     const perkResult = applyLegacyPerksEngine(config, profile, selectedPerkIds);
-    const modifiedConfig = perkResult.config;
+    const appliedPerkCount = (perkResult.config.legacyUnlockIds ?? [])
+      .filter((id) => id.startsWith("legacy-perk:"))
+      .length;
+    const signatureSummary = getLatestCareerSignatureSummary(profile);
 
-    // Start the game with the modified config (uses the existing startNewGame flow)
-    await get().startNewGame(modifiedConfig);
+    // Start the game with perk-only carryover using the existing startNewGame flow.
+    await get().startNewGame(perkResult.config);
 
     // Now apply post-generation bonuses that can't be expressed in NewGameConfig
     const { gameState } = get();
@@ -1599,9 +1631,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         "Your legacy carries forward into this new career.",
         "",
         `Career #${profile.completedCareers.length + 1} begins with the wisdom of your past.`,
-        selectedPerkIds.length > 0
-          ? `Active perks: ${selectedPerkIds.length} legacy bonus${selectedPerkIds.length > 1 ? "es" : ""} applied.`
-          : "No legacy perks selected — starting fresh with your earned knowledge.",
+        appliedPerkCount > 0
+          ? `Active perks: ${appliedPerkCount} legacy bonus${appliedPerkCount > 1 ? "es" : ""} applied.`
+          : "No legacy perks selected — starting fresh on mechanics.",
+        ...(signatureSummary
+          ? [
+              "",
+              `Latest legacy identity: ${signatureSummary.signatureTitle}.`,
+              signatureSummary.finalChapterTitle,
+              signatureSummary.finalChapterSummary,
+              "Career signatures remain narrative only; gameplay carryover comes from selected perks.",
+            ]
+          : []),
         "",
         "Prove yourself once more. The scouting world awaits.",
       ].join("\n"),

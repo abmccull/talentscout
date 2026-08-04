@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "release-gate-exception",
+  "exceptionKind": "long-career-timing-exception",
+  "gateId": "longSaveGrowthAndCompaction",
+  "candidateCommitSha": "6fa7297c13ad6058a2e1c157fb9541677d0195c4",
+  "candidateTreeSha": "502f7343d6a889b490802e9df143518dbf9801b4",
+  "candidateTag": "<exact release tag>",
+  "candidateWorkflowRunId": "<signed package workflow run id>",
+  "sourceWorkflowRunId": "30902995422",
+  "packageManifestSha256": "<sha256 of candidate-package-manifest.json>",
+  "candidateCoreEvidenceSha256": "<sha256 of candidate-core-suites.json>",
+  "generatedPolicySha256": "<sha256 of the generatedEvidence policy JSON>",
+  "status": "Accepted",
+  "approvedBy": "<accountable release owner>",
+  "approvalReference": "<durable decision reference>",
+  "approvedAt": "<ISO-8601 timestamp>",
+  "expiresAt": "<ISO-8601 timestamp no more than 30 days later>",
+  "reasonCode": "release-owner-accepted-bounded-hosted-runner-variance",
+  "metrics": {
+    "totalSeedCount": 20,
+    "successfulSeedCount": 18,
+    "affectedSeedCount": 2,
+    "maximumCpuOverrunRatio": 0.003875888888888889
+  },
+  "affectedSeeds": [
+    {
+      "seedIndex": 1,
+      "seed": "release-soak-01",
+      "classification": "operator-cancelled-after-risk-acceptance",
+      "status": "Cancelled"
+    },
+    {
+      "seedIndex": 17,
+      "seed": "release-soak-17",
+      "classification": "hosted-runner-cpu-timing-variance",
+      "status": "Failed",
+      "reachedSeason": 30,
+      "reachedWeek": 46,
+      "cpuElapsedMs": 45174.415,
+      "cpuLimitMs": 45000,
+      "wallElapsedMs": 44278.6,
+      "wallLimitMs": 60000
+    }
+  ],
+  "controls": {
+    "qualityAndPlatformBuildsPassed": { "status": "Passed" },
+    "noCorrectnessCrashMemoryOrSaveFailure": { "status": "Passed" },
+    "timingVarianceBelowHalfPercent": { "status": "Passed" },
+    "wallGuardRemainedWithinLimit": { "status": "Passed" },
+    "candidateAndSourceRunMatch": { "status": "Passed" },
+    "ownerDirectedCancellationRecorded": { "status": "Passed" },
+    "rollbackAndMonitoringPlanPresent": { "status": "Passed" }
+  },
+  "evidence": [
+    {
+      "path": "artifacts/release/generated/certifications/source-workflow-run.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-workflow-jobs.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-2.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-3.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-4.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-5.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-6.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-7.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-8.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-9.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-10.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-11.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-12.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-13.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-14.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-15.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-16.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-18.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-19.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/long-career-release-summary-seed-20.json",
+      "sha256": "<sha256>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/source-long-career-shards/seed-17-run-failure.json",
+      "sha256": "<sha256>"
+    }
+  ]
+}

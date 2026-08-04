@@ -64,6 +64,7 @@ import {
 import {
   expireJobOffersAtWeekEnd,
 } from "@/engine/career/progression";
+import { collectCareerInterventionEvidence } from "@/engine/career/careerInterventionPortfolio";
 import { generateContactForType } from "@/engine/network/contacts";
 import {
   createWeekSchedule,
@@ -98,6 +99,7 @@ import {
   getActiveWorldConditionNames,
   getWorldConditionModifiers,
 } from "@/engine/world/index";
+import { refreshCulturalCalendarState } from "@/engine/world/culturalCalendarState";
 import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
 import { ALL_PERKS } from "@/engine/specializations/perks";
 import {
@@ -131,7 +133,7 @@ import {
 import {
   completeAcademyRecommendationReview,
 } from "@/engine/youth/recommendationReviews";
-import { calibrateSourceEvidenceFromReview } from "@/engine/scout/sourceCalibration";
+import { calibrateSourceEvidenceFromReviews } from "@/engine/scout/sourceCalibration";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
 import { getCountryDataSync, getAvailableCountries } from "@/data/index";
 import {
@@ -519,7 +521,51 @@ export function createWeeklyActions(
     const weeklyPipeline = createWeeklySimulationPipeline(gameState, {
       transaction: weeklyTransaction,
     });
+    const readDiagnosticNow = (): number => (
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now()
+    );
+    const noteActivityDiagnostic = (
+      key: string,
+      value: string | number | boolean | null | undefined,
+    ): void => {
+      weeklyPipeline.noteDiagnostic(`activityResolution.${key}`, value);
+    };
+    const runActivityDiagnosticStep = <T>(
+      key: string,
+      execute: () => T,
+    ): T => {
+      const startedAtMs = readDiagnosticNow();
+      try {
+        return execute();
+      } finally {
+        noteActivityDiagnostic(
+          `${key}Ms`,
+          Math.round(Math.max(0, readDiagnosticNow() - startedAtMs) * 10) / 10,
+        );
+      }
+    };
     weeklyPipeline.enter("activity-resolution");
+    noteActivityDiagnostic(
+      "scheduledActivities",
+      gameState.schedule.activities.filter((activity) => activity !== null).length,
+    );
+    noteActivityDiagnostic(
+      "scheduledActivityTypes",
+      gameState.schedule.activities
+        .map((activity) => activity?.type)
+        .filter((activityType): activityType is Activity["type"] => Boolean(activityType))
+        .join("|"),
+    );
+    noteActivityDiagnostic(
+      "workActivities",
+      gameState.schedule.activities.filter(
+        (activity) => activity !== null && activity.type !== "rest",
+      ).length,
+    );
+    noteActivityDiagnostic("completedInteractiveIds", completedInteractiveIds.size);
+    noteActivityDiagnostic("completedLiveActivityTypes", completedLiveActivityTypes.size);
 
     applyWeeklyStrategyAndInteractiveModifiers(
       { gameState, weekSimulation: simChoices },
@@ -656,17 +702,26 @@ export function createWeeklyActions(
 
     // ── Process week results for new activity types ─────────────────────────
 
-    stateWithScheduleApplied = processWeeklyRelationshipActivities({
-      state: stateWithScheduleApplied,
-      sourceState: gameState,
-      result: weekResult,
-      relationshipModifiers: choiceRelationshipModifiers,
-    });
+    stateWithScheduleApplied = runActivityDiagnosticStep(
+      "relationshipActivities",
+      () => processWeeklyRelationshipActivities({
+        state: stateWithScheduleApplied,
+        sourceState: gameState,
+        result: weekResult,
+        relationshipModifiers: choiceRelationshipModifiers,
+      }),
+    );
 
     // d2) Free agent outreach — direct, schedule-driven discovery pressure.
     // This makes the calendar activity materially different from passive weekly
     // pool discovery by surfacing immediate leads tied to player choices.
-    if (weekResult.freeAgentOutreachExecuted > 0 && stateWithScheduleApplied.freeAgentPool) {
+    noteActivityDiagnostic("freeAgentOutreachExecuted", weekResult.freeAgentOutreachExecuted);
+    runActivityDiagnosticStep("freeAgentOutreach", () => {
+      if (weekResult.freeAgentOutreachExecuted <= 0 || !stateWithScheduleApplied.freeAgentPool) {
+        noteActivityDiagnostic("freeAgentCandidates", 0);
+        noteActivityDiagnostic("freeAgentDiscoveries", 0);
+        return;
+      }
       const qr = qualityByType.get("freeAgentOutreach");
       const qualityDiscoveryMod = qr?.discoveryModifier ?? 0;
       const choiceDiscoveryMod = choiceDiscoveryModifiers.get("freeAgentOutreach") ?? 0;
@@ -678,6 +733,8 @@ export function createWeeklyActions(
       const candidates = stateWithScheduleApplied.freeAgentPool.agents.filter(
         (agent) => agent.status === "available" && !agent.discoveredByScout,
       );
+      noteActivityDiagnostic("freeAgentCandidates", candidates.length);
+      noteActivityDiagnostic("freeAgentDiscoveryBudget", totalDiscoveryBudget);
       const prioritized = [...candidates].sort((a, b) => {
         const aFocus = focusIds.has(a.playerId) ? 1 : 0;
         const bFocus = focusIds.has(b.playerId) ? 1 : 0;
@@ -687,45 +744,45 @@ export function createWeeklyActions(
         return b.weeksInPool - a.weeksInPool;
       });
       const discoveredNow = prioritized.slice(0, totalDiscoveryBudget);
+      noteActivityDiagnostic("freeAgentDiscoveries", discoveredNow.length);
 
-      if (discoveredNow.length > 0) {
-        const discoveredIds = new Set(discoveredNow.map((agent) => agent.playerId));
-        const updatedAgents = stateWithScheduleApplied.freeAgentPool.agents.map((agent) =>
-          discoveredIds.has(agent.playerId)
-            ? { ...agent, discoveredByScout: true, discoverySource: "contactTip" as const }
-            : agent,
-        );
-        const outreachMessages: InboxMessage[] = [];
-        for (const [idx, agent] of discoveredNow.entries()) {
-          const player = stateWithScheduleApplied.players[agent.playerId];
-          if (!player) continue;
-          const formerClub = stateWithScheduleApplied.clubs[agent.releasedFrom];
-          const formerClubName = formerClub?.name ?? "an unknown club";
-          const qualityPrefix = qr && idx === 0 ? `${qr.narrative}\n\n` : "";
-          outreachMessages.push({
-            id: `fa-outreach-${agent.playerId}-w${stateWithScheduleApplied.currentWeek}-${idx}`,
-            week: stateWithScheduleApplied.currentWeek,
-            season: stateWithScheduleApplied.currentSeason,
-            type: "news" as const,
-            title: `Free Agent Lead: ${player.firstName} ${player.lastName}`,
-            body: `${qualityPrefix}Your outreach work surfaced ${player.firstName} ${player.lastName} (${player.position}, ${player.age}) after release from ${formerClubName}. This player is now in your known free agent pool.`,
-            read: false,
-            actionRequired: false,
-            relatedId: player.id,
-            relatedEntityType: "player" as const,
-          });
-        }
-
-        stateWithScheduleApplied = {
-          ...stateWithScheduleApplied,
-          freeAgentPool: {
-            ...stateWithScheduleApplied.freeAgentPool,
-            agents: updatedAgents,
-          },
-          inbox: [...stateWithScheduleApplied.inbox, ...outreachMessages],
-        };
+      if (discoveredNow.length <= 0) return;
+      const discoveredIds = new Set(discoveredNow.map((agent) => agent.playerId));
+      const updatedAgents = stateWithScheduleApplied.freeAgentPool.agents.map((agent) =>
+        discoveredIds.has(agent.playerId)
+          ? { ...agent, discoveredByScout: true, discoverySource: "contactTip" as const }
+          : agent,
+      );
+      const outreachMessages: InboxMessage[] = [];
+      for (const [idx, agent] of discoveredNow.entries()) {
+        const player = stateWithScheduleApplied.players[agent.playerId];
+        if (!player) continue;
+        const formerClub = stateWithScheduleApplied.clubs[agent.releasedFrom];
+        const formerClubName = formerClub?.name ?? "an unknown club";
+        const qualityPrefix = qr && idx === 0 ? `${qr.narrative}\n\n` : "";
+        outreachMessages.push({
+          id: `fa-outreach-${agent.playerId}-w${stateWithScheduleApplied.currentWeek}-${idx}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "news" as const,
+          title: `Free Agent Lead: ${player.firstName} ${player.lastName}`,
+          body: `${qualityPrefix}Your outreach work surfaced ${player.firstName} ${player.lastName} (${player.position}, ${player.age}) after release from ${formerClubName}. This player is now in your known free agent pool.`,
+          read: false,
+          actionRequired: false,
+          relatedId: player.id,
+          relatedEntityType: "player" as const,
+        });
       }
-    }
+
+      stateWithScheduleApplied = {
+        ...stateWithScheduleApplied,
+        freeAgentPool: {
+          ...stateWithScheduleApplied.freeAgentPool,
+          agents: updatedAgents,
+        },
+        inbox: [...stateWithScheduleApplied.inbox, ...outreachMessages],
+      };
+    });
 
     // d3) Loan activity counters → reputation bumps
     if (weekResult.loanMonitoringExecuted > 0) {
@@ -740,190 +797,281 @@ export function createWeeklyActions(
     }
 
     // e) Write Reports — process scheduled writeReport activities into actual reports
-    stateWithScheduleApplied = processWeeklyReportActivities({
-      state: stateWithScheduleApplied,
-      playerIds: weekResult.reportsWritten,
-      qualityModifier: choiceReportQualityModifiers.get("writeReport") ?? 0,
-      equipmentQualityBonus: weekEquipBonuses?.reportQuality ?? 0,
-    });
+    noteActivityDiagnostic("reportsWritten", weekResult.reportsWritten.length);
+    stateWithScheduleApplied = runActivityDiagnosticStep(
+      "reportActivities",
+      () => processWeeklyReportActivities({
+        state: stateWithScheduleApplied,
+        playerIds: weekResult.reportsWritten,
+        qualityModifier: choiceReportQualityModifiers.get("writeReport") ?? 0,
+        equipmentQualityBonus: weekEquipBonuses?.reportQuality ?? 0,
+      }),
+    );
 
     // f) Activity feedback — narrative-driven feedback using quality rolls
-    stateWithScheduleApplied = processWeeklyActivityFeedback({
-      state: stateWithScheduleApplied,
-      qualityRolls: qualityRollsByDay,
-      weekResult,
-    });
+    stateWithScheduleApplied = runActivityDiagnosticStep(
+      "activityFeedback",
+      () => processWeeklyActivityFeedback({
+        state: stateWithScheduleApplied,
+        qualityRolls: qualityRollsByDay,
+        weekResult,
+      }),
+    );
 
-    const observationActivities = processWeeklyObservationActivities({
-      gameState,
-      state: stateWithScheduleApplied,
-      weekResult,
-      equipmentBonuses: weekEquipBonuses,
-      qualityByType,
-      completedInteractiveIds,
-      completedLiveActivityTypes,
-      discoveryModifiers: choiceDiscoveryModifiers,
-      profileModifiers: choiceProfileModifiers,
-      anomalyModifiers: choiceAnomalyModifiers,
-      relationshipModifiers: choiceRelationshipModifiers,
-      reportQualityModifiers: choiceReportQualityModifiers,
-      focusDepthByType: choiceFocusDepthByType,
-      focusedPlayersByType: choiceFocusedPlayersByType,
-      weekSimulation: simChoices,
-    });
+    const observationActivities = runActivityDiagnosticStep(
+      "observationActivities",
+      () => processWeeklyObservationActivities({
+        gameState,
+        state: stateWithScheduleApplied,
+        weekResult,
+        equipmentBonuses: weekEquipBonuses,
+        qualityByType,
+        completedInteractiveIds,
+        completedLiveActivityTypes,
+        discoveryModifiers: choiceDiscoveryModifiers,
+        profileModifiers: choiceProfileModifiers,
+        anomalyModifiers: choiceAnomalyModifiers,
+        relationshipModifiers: choiceRelationshipModifiers,
+        reportQualityModifiers: choiceReportQualityModifiers,
+        focusDepthByType: choiceFocusDepthByType,
+        focusedPlayersByType: choiceFocusedPlayersByType,
+        weekSimulation: simChoices,
+        noteDiagnostic: (key, value) => {
+          noteActivityDiagnostic(`observation.${key}`, value);
+        },
+      }),
+    );
     stateWithScheduleApplied = observationActivities.state;
 
-    stateWithScheduleApplied = processWeeklyPlacementResolution({
-      sourceState: gameState,
-      state: stateWithScheduleApplied,
-      weekResult,
-    });
+    stateWithScheduleApplied = runActivityDiagnosticStep(
+      "placementResolution",
+      () => processWeeklyPlacementResolution({
+        sourceState: gameState,
+        state: stateWithScheduleApplied,
+        weekResult,
+      }),
+    );
 
     // h) New contact generation — every 8th week, 30% chance
     // Academy briefs age every week: pressure rises, expired opportunities
     // close, and a bounded number of new club needs enter the market.
-    const academyBriefSeasonLength = Math.max(
-      stateWithScheduleApplied.currentWeek,
-      getSeasonLength(
-        stateWithScheduleApplied.fixtures,
+    let academyBriefSeasonLength = 0;
+    runActivityDiagnosticStep("academyBriefRefresh", () => {
+      academyBriefSeasonLength = Math.max(
+        stateWithScheduleApplied.currentWeek,
+        getSeasonLength(
+          stateWithScheduleApplied.fixtures,
+          stateWithScheduleApplied.currentSeason,
+        ),
+      );
+      const academyBriefDate = nextGameWeek(
+        stateWithScheduleApplied.currentWeek,
         stateWithScheduleApplied.currentSeason,
-      ),
-    );
-    const academyBriefDate = nextGameWeek(
-      stateWithScheduleApplied.currentWeek,
-      stateWithScheduleApplied.currentSeason,
-      academyBriefSeasonLength,
-    );
-    const academyBriefCapacity = deriveYouthRecruitmentBriefCapacity(
-      getWorldConditionModifiers(stateWithScheduleApplied).opportunityMultiplier,
-    );
-    const briefCycle = advanceYouthRecruitmentBriefs(
-      stateWithScheduleApplied.youthRecruitmentBriefs,
-      academyBriefDate.week,
-      academyBriefDate.season,
-      academyBriefSeasonLength,
-      academyBriefCapacity,
-    );
-    const replacementBriefs = generateYouthRecruitmentBriefs(
-      createRNG(`${stateWithScheduleApplied.seed}-academy-brief-refresh-s${academyBriefDate.season}w${academyBriefDate.week}`),
-      Object.values(stateWithScheduleApplied.clubs),
-      stateWithScheduleApplied.players,
-      academyBriefDate.week,
-      academyBriefDate.season,
-      briefCycle.briefs,
-      academyBriefCapacity,
-      academyBriefSeasonLength,
-      stateWithScheduleApplied.seed,
-    );
-    const recruitmentBriefs = {
-      ...briefCycle.briefs,
-      ...Object.fromEntries(replacementBriefs.map((brief) => [brief.id, brief])),
-    };
-    const briefMessages: InboxMessage[] = [
-      ...briefCycle.expiredIds.map((briefId) => {
-        const brief = briefCycle.briefs[briefId];
-        const clubName = brief ? stateWithScheduleApplied.clubs[brief.clubId]?.name : undefined;
-        return {
-          id: `academy-brief-expired-${briefId}`,
+        academyBriefSeasonLength,
+      );
+      const academyBriefCapacity = deriveYouthRecruitmentBriefCapacity(
+        getWorldConditionModifiers(stateWithScheduleApplied).opportunityMultiplier,
+      );
+      const briefCycle = advanceYouthRecruitmentBriefs(
+        stateWithScheduleApplied.youthRecruitmentBriefs,
+        academyBriefDate.week,
+        academyBriefDate.season,
+        academyBriefSeasonLength,
+        academyBriefCapacity,
+      );
+      const replacementBriefs = generateYouthRecruitmentBriefs(
+        createRNG(`${stateWithScheduleApplied.seed}-academy-brief-refresh-s${academyBriefDate.season}w${academyBriefDate.week}`),
+        Object.values(stateWithScheduleApplied.clubs),
+        stateWithScheduleApplied.players,
+        academyBriefDate.week,
+        academyBriefDate.season,
+        briefCycle.briefs,
+        academyBriefCapacity,
+        academyBriefSeasonLength,
+        stateWithScheduleApplied.seed,
+        stateWithScheduleApplied.runManifest,
+      );
+      noteActivityDiagnostic("academyBriefCapacity", academyBriefCapacity);
+      noteActivityDiagnostic("academyBriefExpired", briefCycle.expiredIds.length);
+      noteActivityDiagnostic("academyBriefOpened", replacementBriefs.length);
+      const recruitmentBriefs = {
+        ...briefCycle.briefs,
+        ...Object.fromEntries(replacementBriefs.map((brief) => [brief.id, brief])),
+      };
+      const briefMessages: InboxMessage[] = [
+        ...briefCycle.expiredIds.map((briefId) => {
+          const brief = briefCycle.briefs[briefId];
+          const clubName = brief ? stateWithScheduleApplied.clubs[brief.clubId]?.name : undefined;
+          return {
+            id: `academy-brief-expired-${briefId}`,
+            week: academyBriefDate.week,
+            season: academyBriefDate.season,
+            type: "event" as const,
+            title: "Academy Brief Expired",
+            body: `${clubName ?? "A client club"} closed its ${brief?.requiredPositions.join("/") ?? "youth"} request. Waiting for certainty carried an opportunity cost.`,
+            read: false,
+            actionRequired: false,
+          };
+        }),
+        ...replacementBriefs.map((brief) => ({
+          id: `academy-brief-opened-${brief.id}`,
           week: academyBriefDate.week,
           season: academyBriefDate.season,
           type: "event" as const,
-          title: "Academy Brief Expired",
-          body: `${clubName ?? "A client club"} closed its ${brief?.requiredPositions.join("/") ?? "youth"} request. Waiting for certainty carried an opportunity cost.`,
+          title: `New Academy Brief: ${brief.requiredPositions.join("/")}`,
+          body: `${stateWithScheduleApplied.clubs[brief.clubId]?.name ?? "A client club"} needs a ${brief.requiredPositions.join("/")} prospect by Season ${brief.expiresSeason}, Week ${brief.expiresWeek}. Rival pressure is ${brief.competitionPressure}/100.`,
           read: false,
           actionRequired: false,
-        };
-      }),
-      ...replacementBriefs.map((brief) => ({
-        id: `academy-brief-opened-${brief.id}`,
-        week: academyBriefDate.week,
-        season: academyBriefDate.season,
-        type: "event" as const,
-        title: `New Academy Brief: ${brief.requiredPositions.join("/")}`,
-        body: `${stateWithScheduleApplied.clubs[brief.clubId]?.name ?? "A client club"} needs a ${brief.requiredPositions.join("/")} prospect by Season ${brief.expiresSeason}, Week ${brief.expiresWeek}. Rival pressure is ${brief.competitionPressure}/100.`,
-        read: false,
-        actionRequired: false,
-      })),
-    ];
-    stateWithScheduleApplied = {
-      ...stateWithScheduleApplied,
-      youthRecruitmentBriefs: recruitmentBriefs,
-      inbox: briefMessages.length > 0
-        ? [...stateWithScheduleApplied.inbox, ...briefMessages]
-        : stateWithScheduleApplied.inbox,
-    };
+        })),
+      ];
+      stateWithScheduleApplied = {
+        ...stateWithScheduleApplied,
+        youthRecruitmentBriefs: recruitmentBriefs,
+        inbox: briefMessages.length > 0
+          ? [...stateWithScheduleApplied.inbox, ...briefMessages]
+          : stateWithScheduleApplied.inbox,
+      };
+    });
 
     // Complete due one- and two-season reviews from canonical movement,
     // appearance/rating, and injury history. Hidden ability is never read.
     let recommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
-    let calibratedNPCReports = stateWithScheduleApplied.npcReports;
-    let calibratedContactIntel = stateWithScheduleApplied.contactIntel;
     let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
-    for (const review of Object.values(recommendationReviews)) {
-      if (review.status !== "scheduled") continue;
-      const due = stateWithScheduleApplied.currentSeason > review.dueSeason
+    const completedReviewNotifications: Array<{
+      review: GameState["recommendationReviews"][string];
+      player: Player;
+    }> = [];
+    const dueRecommendationReviews = Object.values(recommendationReviews).filter((review) => {
+      if (review.status !== "scheduled") return false;
+      return stateWithScheduleApplied.currentSeason > review.dueSeason
         || (
           stateWithScheduleApplied.currentSeason === review.dueSeason
           && stateWithScheduleApplied.currentWeek >= review.dueWeek
         );
-      if (!due) continue;
-      const scoutingCase = stateWithScheduleApplied.scoutingCases[review.caseId];
-      const sourceReport = stateWithScheduleApplied.reports[review.reportId];
-      const placementReport = scoutingCase?.placementReportIds
-        .map((id) => stateWithScheduleApplied.placementReports[id])
-        .find((placement) =>
-          placement?.reportId === review.reportId
-          && placement.targetClubId === review.clubId
-          && placement.clubResponse === "accepted"
-        );
-      const clubDecision = placementReport?.decisionId
-        ? stateWithScheduleApplied.clubDecisions[placementReport.decisionId]
-        : undefined;
-      const reviewedPlayer = stateWithScheduleApplied.players[review.playerId]
-        ?? stateWithScheduleApplied.retiredPlayers[review.playerId];
-      if (!scoutingCase || !sourceReport || !placementReport || !clubDecision || !reviewedPlayer) {
-        continue;
+    });
+    noteActivityDiagnostic("dueRecommendationReviews", dueRecommendationReviews.length);
+    const movementHistoryByPlayerId = new Map<
+      string,
+      typeof stateWithScheduleApplied.playerMovementHistory
+    >();
+    const careerInterventionsByPlayerId = new Map<
+      string,
+      ReturnType<typeof collectCareerInterventionEvidence>
+    >();
+    const recommendationEvidenceStartedAtMs = readDiagnosticNow();
+    if (dueRecommendationReviews.length > 0) {
+      const dueReviewPlayerIds = new Set(
+        dueRecommendationReviews.map((review) => review.playerId),
+      );
+      noteActivityDiagnostic("dueRecommendationReviewPlayers", dueReviewPlayerIds.size);
+      for (const movement of stateWithScheduleApplied.playerMovementHistory) {
+        if (!dueReviewPlayerIds.has(movement.playerId)) continue;
+        const movements = movementHistoryByPlayerId.get(movement.playerId) ?? [];
+        movements.push(movement);
+        movementHistoryByPlayerId.set(movement.playerId, movements);
       }
-      const result = completeAcademyRecommendationReview({
-        review,
-        scoutingCase,
-        report: sourceReport,
-        caseReports: scoutingCase.reportIds
-          .map((id) => stateWithScheduleApplied.reports[id])
-          .filter((candidate): candidate is ScoutReport => Boolean(candidate)),
-        placementReport,
-        clubDecision,
-        player: reviewedPlayer,
-        movementHistory: stateWithScheduleApplied.playerMovementHistory,
-        currentWeek: stateWithScheduleApplied.currentWeek,
-        currentSeason: stateWithScheduleApplied.currentSeason,
-        seasonLength: getSeasonLength(
-          stateWithScheduleApplied.fixtures,
-          stateWithScheduleApplied.currentSeason,
-        ),
-      });
-      if (result.status !== "completed") continue;
-      recommendationReviews[result.review.id] = result.review;
-      const sourceCalibration = calibrateSourceEvidenceFromReview({
-        npcReports: calibratedNPCReports,
-        contactIntel: calibratedContactIntel,
-        review: result.review,
-      });
-      calibratedNPCReports = sourceCalibration.npcReports;
-      calibratedContactIntel = sourceCalibration.contactIntel;
-      recommendationCalibrationXp += result.review.confidenceCalibration === undefined
-        ? 1
-        : result.review.confidenceCalibration >= 75
-          ? 5
-          : 3;
+      for (const intervention of collectCareerInterventionEvidence(
+        stateWithScheduleApplied,
+        dueReviewPlayerIds,
+      )) {
+        const interventions = careerInterventionsByPlayerId.get(intervention.playerId) ?? [];
+        interventions.push(intervention);
+        careerInterventionsByPlayerId.set(intervention.playerId, interventions);
+      }
+    }
+    noteActivityDiagnostic(
+      "recommendationEvidenceMs",
+      Math.round(Math.max(0, readDiagnosticNow() - recommendationEvidenceStartedAtMs) * 10) / 10,
+    );
+    const recommendationMovementEntries = Array.from(
+      movementHistoryByPlayerId.values(),
+      (movements) => movements.length,
+    ).reduce((sum, count) => sum + count, 0);
+    const recommendationInterventionEntries = Array.from(
+      careerInterventionsByPlayerId.values(),
+      (interventions) => interventions.length,
+    ).reduce((sum, count) => sum + count, 0);
+    noteActivityDiagnostic("recommendationMovementEntries", recommendationMovementEntries);
+    noteActivityDiagnostic(
+      "recommendationInterventionEntries",
+      recommendationInterventionEntries,
+    );
+    runActivityDiagnosticStep("recommendationReviewCompletion", () => {
+      for (const review of dueRecommendationReviews) {
+        const scoutingCase = stateWithScheduleApplied.scoutingCases[review.caseId];
+        const sourceReport = stateWithScheduleApplied.reports[review.reportId];
+        const placementReport = scoutingCase?.placementReportIds
+          .map((id) => stateWithScheduleApplied.placementReports[id])
+          .find((placement) =>
+            placement?.reportId === review.reportId
+            && placement.targetClubId === review.clubId
+            && placement.clubResponse === "accepted"
+          );
+        const clubDecision = placementReport?.decisionId
+          ? stateWithScheduleApplied.clubDecisions[placementReport.decisionId]
+          : undefined;
+        const reviewedPlayer = stateWithScheduleApplied.players[review.playerId]
+          ?? stateWithScheduleApplied.retiredPlayers[review.playerId];
+        if (!scoutingCase || !sourceReport || !placementReport || !clubDecision || !reviewedPlayer) {
+          continue;
+        }
+        const result = completeAcademyRecommendationReview({
+          review,
+          scoutingCase,
+          report: sourceReport,
+          caseReports: scoutingCase.reportIds
+            .map((id) => stateWithScheduleApplied.reports[id])
+            .filter((candidate): candidate is ScoutReport => Boolean(candidate)),
+          placementReport,
+          clubDecision,
+          player: reviewedPlayer,
+          movementHistory: movementHistoryByPlayerId.get(review.playerId) ?? [],
+          careerInterventions: careerInterventionsByPlayerId.get(review.playerId) ?? [],
+          currentWeek: stateWithScheduleApplied.currentWeek,
+          currentSeason: stateWithScheduleApplied.currentSeason,
+          seasonLength: academyBriefSeasonLength,
+        });
+        if (result.status !== "completed") continue;
+        recommendationReviews[result.review.id] = result.review;
+        recommendationCalibrationXp += result.review.confidenceCalibration === undefined
+          ? 1
+          : result.review.confidenceCalibration >= 75
+            ? 5
+            : 3;
+        completedReviewNotifications.push({
+          review: result.review,
+          player: reviewedPlayer,
+        });
+      }
+    });
+    noteActivityDiagnostic("completedRecommendationReviews", completedReviewNotifications.length);
+    noteActivityDiagnostic("recommendationCalibrationXp", recommendationCalibrationXp);
+    const sourceCalibration = runActivityDiagnosticStep(
+      "sourceCalibration",
+      () => (completedReviewNotifications.length > 0
+        ? calibrateSourceEvidenceFromReviews({
+            npcReports: stateWithScheduleApplied.npcReports,
+            contactIntel: stateWithScheduleApplied.contactIntel,
+            reviews: completedReviewNotifications.map(({ review }) => review),
+          })
+        : {
+            npcReports: stateWithScheduleApplied.npcReports,
+            contactIntel: stateWithScheduleApplied.contactIntel,
+            calibratedClaimIds: [],
+            calibratedClaimIdsByReviewId: {},
+          }),
+    );
+    noteActivityDiagnostic("calibratedSourceClaims", sourceCalibration.calibratedClaimIds.length);
+    for (const { review, player: reviewedPlayer } of completedReviewNotifications) {
+      const calibratedClaimIds = sourceCalibration.calibratedClaimIdsByReviewId[review.id] ?? [];
       reviewMessages.push({
-        id: `recommendation-review-${result.review.id}`,
+        id: `recommendation-review-${review.id}`,
         week: stateWithScheduleApplied.currentWeek,
         season: stateWithScheduleApplied.currentSeason,
         type: "feedback",
         title: `${review.checkpoint === "oneSeason" ? "One-Season" : "Two-Season"} Recommendation Review`,
-        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} scored ${result.review.overallScore ?? "unresolved"}/100. ${(result.review.findings ?? []).join(" ")}${sourceCalibration.calibratedClaimIds.length > 0 ? ` ${sourceCalibration.calibratedClaimIds.length} attributed source claim${sourceCalibration.calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
+        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} scored ${review.overallScore ?? "unresolved"}/100. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
         read: false,
         actionRequired: false,
         relatedId: reviewedPlayer.id,
@@ -933,8 +1081,8 @@ export function createWeeklyActions(
     stateWithScheduleApplied = {
       ...stateWithScheduleApplied,
       recommendationReviews,
-      npcReports: calibratedNPCReports,
-      contactIntel: calibratedContactIntel,
+      npcReports: sourceCalibration.npcReports,
+      contactIntel: sourceCalibration.contactIntel,
       scout: recommendationCalibrationXp > 0
         ? applyScoutSkillXp(stateWithScheduleApplied.scout, {
             playerJudgment: recommendationCalibrationXp,
@@ -1240,6 +1388,12 @@ export function createWeeklyActions(
       return;
     }
     newState = seasonRollover.state;
+    if (tickResult.endOfSeasonTriggered) {
+      newState = {
+        ...newState,
+        culturalCalendarState: refreshCulturalCalendarState(newState),
+      };
+    }
 
     // The season-opening world condition is selected inside the core rollover,
     // after the ordinary brief refresh above. Reconcile once more against that

@@ -89,6 +89,7 @@ describe("canonical weekly simulation pipeline", () => {
         transaction: job,
         now: () => clockReadings.shift() ?? 20,
       });
+      pipeline.noteDiagnostic("activityResolution.observationActivitiesMs", 12.5);
       for (const phase of CANONICAL_WEEKLY_SIMULATION_PHASES) pipeline.enter(phase);
       const advanced = { ...state, currentWeek: state.currentWeek + 1 };
 
@@ -101,6 +102,9 @@ describe("canonical weekly simulation pipeline", () => {
         },
         startedAtMs: 0,
         completedAtMs: 20,
+        diagnostics: {
+          "activityResolution.observationActivitiesMs": 12.5,
+        },
         phaseTimings: [
           { phase: "activity-resolution", elapsedMs: 3 },
           { phase: "world-systems", elapsedMs: 2 },
@@ -114,6 +118,41 @@ describe("canonical weekly simulation pipeline", () => {
       expect(telemetrySamples[0]).toMatchObject({
         transaction: job,
         elapsedMs: 20,
+        diagnostics: {
+          "activityResolution.observationActivitiesMs": 12.5,
+        },
+      });
+    } finally {
+      stopObserving();
+    }
+  });
+
+  it("clones diagnostics and ignores malformed numeric samples", () => {
+    const state = migratedState();
+    let observed: unknown;
+    const stopObserving = observeWeeklySimulationTelemetry((sample) => {
+      observed = sample;
+      if (sample.diagnostics) {
+        (sample.diagnostics as Record<string, unknown>).mutated = "listener-only";
+      }
+    });
+    try {
+      const pipeline = createWeeklySimulationPipeline(state);
+      pipeline.noteDiagnostic("activityResolution.dueRecommendationReviews", 3);
+      pipeline.noteDiagnostic("activityResolution.invalidLatencyMs", Number.NaN);
+      pipeline.noteDiagnostic("activityResolution.phaseLabel", "academyBriefRefresh");
+      for (const phase of CANONICAL_WEEKLY_SIMULATION_PHASES) pipeline.enter(phase);
+      pipeline.complete({ ...state, currentWeek: state.currentWeek + 1 });
+
+      expect(observed).toMatchObject({
+        diagnostics: {
+          "activityResolution.dueRecommendationReviews": 3,
+          "activityResolution.phaseLabel": "academyBriefRefresh",
+        },
+      });
+      expect(pipeline.snapshot().diagnostics).toEqual({
+        "activityResolution.dueRecommendationReviews": 3,
+        "activityResolution.phaseLabel": "academyBriefRefresh",
       });
     } finally {
       stopObserving();

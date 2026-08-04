@@ -18,10 +18,19 @@ import {
 } from "@/engine/core/types";
 import { getDifficultyChallengeProfile } from "@/engine/core/difficulty";
 import {
-  combineFootballCultureEffects,
+  resolveFootballCultureContext,
   type CombinedFootballCultureEffects,
 } from "@/engine/world/footballCulture";
+import type { CountryCalendarEffects } from "@/engine/world/footballCultureCalendar";
 import { getTravelPostureEffects } from "@/engine/world/travel";
+import {
+  getDefaultObservationSituationDefinition,
+  getObservationSituationDefinitionById,
+  selectObservationSituationDefinition,
+  type ObservationCompetitionLevel,
+  type ObservationStakes,
+  type ObservationTacticalFrame,
+} from "./situationCatalog";
 
 interface SituationAtmosphereEvent {
   id: string;
@@ -39,29 +48,11 @@ interface SituationVenueAtmosphere {
 }
 
 export const OBSERVATION_SITUATION_VERSION = 1 as const;
-
-export type ObservationCompetitionLevel =
-  | "community"
-  | "school"
-  | "academy"
-  | "reserve"
-  | "professional"
-  | "elite";
-
-export type ObservationStakes =
-  | "routine"
-  | "selection"
-  | "competitive"
-  | "knockout"
-  | "careerDefining";
-
-export type ObservationTacticalFrame =
-  | "unstructured"
-  | "direct"
-  | "transitionHeavy"
-  | "possession"
-  | "pressing"
-  | "structured";
+export type {
+  ObservationCompetitionLevel,
+  ObservationStakes,
+  ObservationTacticalFrame,
+} from "./situationCatalog";
 
 export interface ObservationSituationSnapshot {
   version: typeof OBSERVATION_SITUATION_VERSION;
@@ -89,6 +80,8 @@ export interface ObservationSituationSnapshot {
   /** Stable key used for diminishing returns; incidental event ids do not make every watch novel. */
   repetitionKey: string;
   culturalInsightIds: string[];
+  /** Persisted country-season windows that shaped this evidence sample. */
+  culturalCalendarWindowIds?: string[];
   contextTags: string[];
   biasWarnings: string[];
   reasons: string[];
@@ -101,12 +94,15 @@ export interface ObservationSituationInput {
   countryId?: string;
   travelPosture?: TravelPosture;
   culturalInsights?: readonly CulturalInsight[];
+  /** Resolved from the save's persisted country-season calendar. */
+  calendarEffects?: CountryCalendarEffects;
   atmosphere?: SituationVenueAtmosphere;
   atmosphereEvents?: readonly SituationAtmosphereEvent[];
 }
 
 interface SituationBaseline {
-  context?: ObservationContext;
+  id?: string;
+  observationContext?: ObservationContext;
   levels: readonly ObservationCompetitionLevel[];
   stakes: readonly ObservationStakes[];
   frames: readonly ObservationTacticalFrame[];
@@ -114,6 +110,9 @@ interface SituationBaseline {
   uncertainty: number;
   misleadingRisk: number;
   tags: readonly string[];
+  reasons: readonly string[];
+  defaultBaseline: boolean;
+  variantKey?: string;
 }
 
 const DEFAULT_BASELINE: SituationBaseline = {
@@ -124,209 +123,10 @@ const DEFAULT_BASELINE: SituationBaseline = {
   uncertainty: 1,
   misleadingRisk: 0.12,
   tags: ["general-observation"],
-};
-
-const BASELINES: Partial<Record<ActivityType, SituationBaseline>> = {
-  schoolMatch: {
-    context: "schoolMatch",
-    levels: ["school"],
-    stakes: ["routine", "competitive"],
-    frames: ["unstructured", "direct"],
-    signal: { technical: 0.98, physical: 1.04, mental: 1.02, tactical: 0.78 },
-    uncertainty: 1.12,
-    misleadingRisk: 0.2,
-    tags: ["school-pathway", "limited-structure"],
-  },
-  grassrootsTournament: {
-    context: "grassrootsTournament",
-    levels: ["community"],
-    stakes: ["competitive", "knockout"],
-    frames: ["direct", "transitionHeavy", "unstructured"],
-    signal: { physical: 1.12, mental: 1.08, tactical: 0.82 },
-    uncertainty: 1.18,
-    misleadingRisk: 0.22,
-    tags: ["multi-match", "uneven-opposition"],
-  },
-  streetFootball: {
-    context: "streetFootball",
-    levels: ["community"],
-    stakes: ["routine", "competitive"],
-    frames: ["unstructured"],
-    signal: { technical: 1.18, physical: 1.08, tactical: 0.68 },
-    uncertainty: 1.28,
-    misleadingRisk: 0.28,
-    tags: ["informal", "small-space"],
-  },
-  academyTrialDay: {
-    context: "academyTrialDay",
-    levels: ["academy"],
-    stakes: ["selection", "careerDefining"],
-    frames: ["structured", "pressing", "possession"],
-    signal: { mental: 1.12, tactical: 1.12, hidden: 1.04 },
-    uncertainty: 0.92,
-    misleadingRisk: 0.2,
-    tags: ["trial", "coached-drills"],
-  },
-  youthFestival: {
-    context: "youthFestival",
-    levels: ["academy", "elite"],
-    stakes: ["competitive", "knockout"],
-    frames: ["transitionHeavy", "pressing", "structured"],
-    signal: { mental: 1.15, hidden: 1.08, tactical: 0.96 },
-    uncertainty: 1.06,
-    misleadingRisk: 0.18,
-    tags: ["showcase-pressure", "multi-club"],
-  },
-  academyVisit: {
-    context: "academyVisit",
-    levels: ["academy"],
-    stakes: ["routine", "selection"],
-    frames: ["structured", "possession", "pressing"],
-    signal: { technical: 1.1, tactical: 1.08, mental: 1.03 },
-    uncertainty: 0.9,
-    misleadingRisk: 0.11,
-    tags: ["coached-environment", "development-pathway"],
-  },
-  youthTournament: {
-    context: "youthTournament",
-    levels: ["academy", "elite"],
-    stakes: ["competitive", "knockout"],
-    frames: ["transitionHeavy", "pressing", "structured"],
-    signal: { physical: 1.08, mental: 1.08, tactical: 0.94 },
-    uncertainty: 1.05,
-    misleadingRisk: 0.16,
-    tags: ["age-group-competition", "multi-match"],
-  },
-  attendMatch: {
-    context: "liveMatch",
-    levels: ["professional", "elite"],
-    stakes: ["routine", "competitive", "knockout"],
-    frames: ["direct", "transitionHeavy", "possession", "pressing", "structured"],
-    signal: { mental: 1.06, tactical: 1.08 },
-    uncertainty: 1,
-    misleadingRisk: 0.12,
-    tags: ["senior-live"],
-  },
-  reserveMatch: {
-    context: "reserveMatch",
-    levels: ["reserve"],
-    stakes: ["routine", "selection"],
-    frames: ["structured", "transitionHeavy", "pressing"],
-    signal: { technical: 1.04, physical: 1.06, mental: 0.94 },
-    uncertainty: 0.94,
-    misleadingRisk: 0.15,
-    tags: ["reserve-level", "selection-pressure"],
-  },
-  trainingVisit: {
-    context: "trainingGround",
-    levels: ["professional"],
-    stakes: ["routine", "selection"],
-    frames: ["structured", "possession", "pressing"],
-    signal: { technical: 1.14, tactical: 1.12, physical: 1.03, mental: 0.9 },
-    uncertainty: 0.84,
-    misleadingRisk: 0.13,
-    tags: ["training-ground", "repeatable-drills"],
-  },
-  trialMatch: {
-    context: "trialMatch",
-    levels: ["professional"],
-    stakes: ["careerDefining"],
-    frames: ["structured", "transitionHeavy", "pressing"],
-    signal: { mental: 1.16, hidden: 1.08, tactical: 1.04 },
-    uncertainty: 0.92,
-    misleadingRisk: 0.24,
-    tags: ["trial", "career-pressure"],
-  },
-  scoutingMission: {
-    context: "liveMatch",
-    levels: ["professional", "elite"],
-    stakes: ["competitive", "knockout"],
-    frames: ["direct", "transitionHeavy", "possession", "pressing", "structured"],
-    signal: { tactical: 1.08, mental: 1.05 },
-    uncertainty: 1.04,
-    misleadingRisk: 0.14,
-    tags: ["assigned-watch", "senior-live"],
-  },
-  followUpSession: {
-    context: "followUpSession",
-    levels: ["academy"],
-    stakes: ["selection"],
-    frames: ["structured"],
-    signal: { technical: 1.08, physical: 1.08, mental: 1.08, tactical: 1.08 },
-    uncertainty: 0.88,
-    misleadingRisk: 0.08,
-    tags: ["targeted-follow-up"],
-  },
-  parentCoachMeeting: {
-    context: "parentCoachMeeting",
-    levels: ["community", "academy"],
-    stakes: ["selection"],
-    frames: ["structured"],
-    signal: { mental: 1.1, hidden: 1.18 },
-    uncertainty: 1.12,
-    misleadingRisk: 0.2,
-    tags: ["relationship-evidence", "second-hand"],
-  },
-  watchVideo: {
-    context: "videoAnalysis",
-    levels: ["professional"],
-    stakes: ["routine", "competitive"],
-    frames: ["direct", "transitionHeavy", "possession", "pressing", "structured"],
-    signal: { technical: 1.03, tactical: 1.08, physical: 0.82, hidden: 0.62 },
-    uncertainty: 1.12,
-    misleadingRisk: 0.17,
-    tags: ["video", "curated-sample"],
-  },
-  databaseQuery: {
-    context: "databaseQuery",
-    levels: ["professional"],
-    stakes: ["routine"],
-    frames: ["structured"],
-    signal: { technical: 0.94, tactical: 1.02, physical: 0.8, mental: 0.68, hidden: 0.55 },
-    uncertainty: 1.24,
-    misleadingRisk: 0.23,
-    tags: ["data", "competition-normalisation"],
-  },
-  deepVideoAnalysis: {
-    context: "deepVideoAnalysis",
-    levels: ["professional"],
-    stakes: ["routine", "competitive"],
-    frames: ["direct", "transitionHeavy", "possession", "pressing", "structured"],
-    signal: { technical: 1.08, mental: 1.02, tactical: 1.14, physical: 0.86 },
-    uncertainty: 0.98,
-    misleadingRisk: 0.12,
-    tags: ["video", "data-overlay"],
-  },
-  oppositionAnalysis: {
-    context: "oppositionAnalysis",
-    levels: ["professional", "elite"],
-    stakes: ["competitive", "knockout"],
-    frames: ["direct", "transitionHeavy", "possession", "pressing", "structured"],
-    signal: { mental: 1.02, tactical: 1.16, technical: 0.92 },
-    uncertainty: 1.02,
-    misleadingRisk: 0.14,
-    tags: ["opposition", "tactical-sample"],
-  },
-  agentShowcase: {
-    context: "agentShowcase",
-    levels: ["professional"],
-    stakes: ["selection", "careerDefining"],
-    frames: ["transitionHeavy", "possession"],
-    signal: { technical: 1.08, physical: 1.06, mental: 1.04, tactical: 0.8 },
-    uncertainty: 1.14,
-    misleadingRisk: 0.3,
-    tags: ["agent-curated", "showcase-pressure"],
-  },
-  statsBriefing: {
-    context: "statsBriefing",
-    levels: ["professional"],
-    stakes: ["routine"],
-    frames: ["structured"],
-    signal: { technical: 0.88, tactical: 0.94, physical: 0.72, mental: 0.62, hidden: 0.55 },
-    uncertainty: 1.28,
-    misleadingRisk: 0.24,
-    tags: ["data", "summary-only"],
-  },
+  reasons: [
+    "General observation applies when no authored situation pack entry exists for the activity.",
+  ],
+  defaultBaseline: true,
 };
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -348,6 +148,34 @@ function hashSeed(value: string): number {
 
 function pickStable<T>(seed: string, values: readonly T[]): T {
   return values[hashSeed(seed) % values.length];
+}
+
+function variantTag(baseline: SituationBaseline): string | undefined {
+  return baseline.defaultBaseline || !baseline.id ? undefined : `variant:${baseline.id}`;
+}
+
+function resolveSituationBaseline(
+  activityType: ActivityType,
+  seed: string,
+): SituationBaseline {
+  return selectObservationSituationDefinition(activityType, seed)
+    ?? getDefaultObservationSituationDefinition(activityType)
+    ?? DEFAULT_BASELINE;
+}
+
+function resolveSituationBaselineFromSnapshot(
+  situation: ObservationSituationSnapshot,
+): SituationBaseline {
+  const persistedVariantId = situation.contextTags.find((tag) => tag.startsWith("variant:"))
+    ?.slice("variant:".length);
+  if (persistedVariantId) {
+    const persistedVariant = getObservationSituationDefinitionById(persistedVariantId);
+    if (persistedVariant?.activityType === situation.activityType) {
+      return persistedVariant;
+    }
+  }
+  return getDefaultObservationSituationDefinition(situation.activityType)
+    ?? DEFAULT_BASELINE;
 }
 
 function normalizeEventId(id: string): string {
@@ -377,16 +205,27 @@ function applyCulture(
   }
 }
 
-/** Pure, stable construction that does not consume the simulation RNG stream. */
-export function createObservationSituation(
+function buildObservationSituation(
   input: ObservationSituationInput,
+  baseline: SituationBaseline,
+  lockedIdentity?: {
+    competitionLevel: ObservationCompetitionLevel;
+    stakes: ObservationStakes;
+    tacticalFrame: ObservationTacticalFrame;
+  },
 ): ObservationSituationSnapshot {
-  const baseline = BASELINES[input.activityType] ?? DEFAULT_BASELINE;
   const venueType = input.venueType ?? input.activityType;
-  const competitionLevel = pickStable(`${input.seed}:level`, baseline.levels);
-  const stakes = pickStable(`${input.seed}:stakes`, baseline.stakes);
-  const tacticalFrame = pickStable(`${input.seed}:frame`, baseline.frames);
-  const culture = combineFootballCultureEffects(input.countryId, input.culturalInsights);
+  const competitionLevel = lockedIdentity?.competitionLevel
+    ?? pickStable(`${input.seed}:level`, baseline.levels);
+  const stakes = lockedIdentity?.stakes
+    ?? pickStable(`${input.seed}:stakes`, baseline.stakes);
+  const tacticalFrame = lockedIdentity?.tacticalFrame
+    ?? pickStable(`${input.seed}:frame`, baseline.frames);
+  const culture = resolveFootballCultureContext(
+    input.countryId,
+    input.culturalInsights,
+    { calendarEffects: input.calendarEffects },
+  );
   const travelPostureEffects = getTravelPostureEffects(input.travelPosture);
   const atmosphere = input.atmosphere;
   const events = input.atmosphereEvents ?? [];
@@ -399,8 +238,8 @@ export function createObservationSituation(
   for (const domain of Object.keys(signalByDomain) as AttributeDomain[]) {
     signalByDomain[domain] *= travelPostureEffects.observationSignalMultiplier;
   }
-  const contextSignalBias = baseline.context
-    ? travelPostureEffects.observationContextSignalBias[baseline.context] ?? 1
+  const contextSignalBias = baseline.observationContext
+    ? travelPostureEffects.observationContextSignalBias[baseline.observationContext] ?? 1
     : 1;
   for (const domain of Object.keys(signalByDomain) as AttributeDomain[]) {
     signalByDomain[domain] *= contextSignalBias;
@@ -454,8 +293,8 @@ export function createObservationSituation(
       + eventNoise * 0.35
     )
       * culture.uncertaintyMultiplier
-      * (baseline.context
-        ? travelPostureEffects.observationContextUncertaintyBias[baseline.context] ?? 1
+      * (baseline.observationContext
+        ? travelPostureEffects.observationContextUncertaintyBias[baseline.observationContext] ?? 1
         : 1)
       * travelPostureEffects.observationUncertaintyMultiplier,
     0.7,
@@ -465,6 +304,7 @@ export function createObservationSituation(
     baseline.misleadingRisk
       + chaos * 0.12
       + Math.max(0, eventNoise) * 0.08
+      + culture.misleadingSignalRiskDelta
       + Math.max(0, travelPostureEffects.observationUncertaintyMultiplier - 1) * 0.15,
     0.03,
     0.45,
@@ -473,22 +313,28 @@ export function createObservationSituation(
   const contextTags = [...new Set([
     ...baseline.tags,
     ...culture.contextTags,
+    ...(variantTag(baseline) ? [variantTag(baseline)!] : []),
     ...(input.travelPosture ? [`travel-posture:${input.travelPosture}`] : []),
     `level:${competitionLevel}`,
     `stakes:${stakes}`,
     `frame:${tacticalFrame}`,
   ])];
-  const repetitionKey = [
-    baseline.context ?? input.activityType,
+  const repetitionKeyParts = [
+    baseline.observationContext ?? input.activityType,
     venueType,
     competitionLevel,
     stakes,
     tacticalFrame,
+  ].join(":");
+  const repetitionKey = [
+    repetitionKeyParts,
+    ...(baseline.variantKey ? [baseline.variantKey] : []),
     weatherClass(weather),
   ].join(":");
   const reasons = [
     `${competitionLevel} competition under ${stakes.replace(/([A-Z])/g, " $1").toLowerCase()} stakes.`,
     `${tacticalFrame.replace(/([A-Z])/g, " $1").toLowerCase()} football shapes which actions repeat often enough to trust.`,
+    ...baseline.reasons,
   ];
   if (atmosphere) {
     reasons.push(
@@ -498,9 +344,10 @@ export function createObservationSituation(
   if (culture.insightIds.length > 0) {
     reasons.push(`${culture.insightIds.length} earned football-culture insight${culture.insightIds.length === 1 ? "" : "s"} improve interpretation without changing player truth.`);
   }
+  reasons.push(...culture.reasons);
   if (input.travelPosture) {
-    const contextLabel = baseline.context
-      ? baseline.context.replace(/([A-Z])/g, " $1").toLowerCase()
+    const contextLabel = baseline.observationContext
+      ? baseline.observationContext.replace(/([A-Z])/g, " $1").toLowerCase()
       : input.activityType.replace(/([A-Z])/g, " $1").toLowerCase();
     reasons.push(`The ${input.travelPosture.replace(/([A-Z])/g, " $1").toLowerCase()} trip posture changed how useful ${contextLabel} evidence is in this setting.`);
   }
@@ -509,7 +356,7 @@ export function createObservationSituation(
     version: OBSERVATION_SITUATION_VERSION,
     id: `situation:${hashSeed(`${input.seed}:${repetitionKey}`).toString(16)}`,
     activityType: input.activityType,
-    observationContext: baseline.context,
+    observationContext: baseline.observationContext,
     venueType,
     countryId: input.countryId,
     travelPosture: input.travelPosture,
@@ -526,10 +373,21 @@ export function createObservationSituation(
     misleadingSignalRisk,
     repetitionKey,
     culturalInsightIds: culture.insightIds,
+    culturalCalendarWindowIds: culture.activeWindowIds,
     contextTags,
     biasWarnings: culture.biasWarnings,
     reasons,
   };
+}
+
+/** Pure, stable construction that does not consume the simulation RNG stream. */
+export function createObservationSituation(
+  input: ObservationSituationInput,
+): ObservationSituationSnapshot {
+  return buildObservationSituation(
+    input,
+    resolveSituationBaseline(input.activityType, input.seed),
+  );
 }
 
 /** Rebuild the persisted snapshot after atmosphere and phase events are known. */
@@ -538,16 +396,23 @@ export function applyAtmosphereToObservationSituation(
   atmosphere: SituationVenueAtmosphere,
   events: readonly SituationAtmosphereEvent[],
   culturalInsights?: readonly CulturalInsight[],
+  calendarEffects?: CountryCalendarEffects,
 ): ObservationSituationSnapshot {
-  const rebuilt = createObservationSituation({
+  const persistedBaseline = resolveSituationBaselineFromSnapshot(situation);
+  const rebuilt = buildObservationSituation({
     activityType: situation.activityType,
     seed: situation.id,
     venueType: situation.venueType,
     countryId: situation.countryId,
     travelPosture: situation.travelPosture,
     culturalInsights,
+    calendarEffects,
     atmosphere,
     atmosphereEvents: events,
+  }, persistedBaseline, {
+    competitionLevel: situation.competitionLevel,
+    stakes: situation.stakes,
+    tacticalFrame: situation.tacticalFrame,
   });
   const contextTags = rebuilt.contextTags.filter((tag) =>
     !tag.startsWith("level:")
@@ -562,15 +427,13 @@ export function applyAtmosphereToObservationSituation(
   return {
     ...rebuilt,
     id: situation.id,
-    competitionLevel: situation.competitionLevel,
-    stakes: situation.stakes,
-    tacticalFrame: situation.tacticalFrame,
     repetitionKey: [
       rebuilt.observationContext ?? rebuilt.activityType,
       rebuilt.venueType,
-      situation.competitionLevel,
-      situation.stakes,
-      situation.tacticalFrame,
+      rebuilt.competitionLevel,
+      rebuilt.stakes,
+      rebuilt.tacticalFrame,
+      ...(persistedBaseline.variantKey ? [persistedBaseline.variantKey] : []),
       weatherClass(rebuilt.weather),
     ].join(":"),
     contextTags: [...new Set(contextTags)],

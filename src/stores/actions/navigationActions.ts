@@ -7,6 +7,7 @@
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
 import type { InboxMessage, Contact, HiddenIntel } from "@/engine/core/types";
+import type { DashboardActionTarget } from "@/engine/dashboard/types";
 import { createRNG } from "@/engine/rng";
 import { getHiddenAttributeIntel } from "@/engine/network/contacts";
 import { updateRichPresence } from "@/lib/steam/richPresence";
@@ -23,37 +24,80 @@ import {
 } from "@/engine/career/careerMoments";
 
 export function createNavigationActions(get: GetState, set: SetState) {
+  const openScreen = (screen: GameScreen) => {
+    const gs = get().gameState;
+    const resolvedScreen = resolveGameScreenForBuild(screen, Boolean(gs));
+    set({ currentScreen: resolvedScreen });
+    const activeMatch = get().activeMatch;
+    let matchFixture: string | undefined;
+    if (resolvedScreen === "match" && activeMatch && gs) {
+      const fixture = gs.fixtures[activeMatch.fixtureId];
+      if (fixture) {
+        const home = gs.clubs[fixture.homeClubId]?.name ?? fixture.homeClubId;
+        const away = gs.clubs[fixture.awayClubId]?.name ?? fixture.awayClubId;
+        matchFixture = `${home} vs ${away}`;
+      }
+    }
+    updateRichPresence(resolvedScreen, {
+      currentCountry: gs?.countries?.[0],
+      currentSeason: gs?.currentSeason,
+      currentWeek: gs?.currentWeek,
+      matchFixture,
+      activeScenarioId: gs?.activeScenarioId,
+    });
+
+    if (gs) {
+      const tut = useTutorialStore.getState();
+      tut.recordScreenVisit(resolvedScreen);
+      if (resolvedScreen === "dashboard") tut.completeMilestone("viewedDashboard");
+      if (resolvedScreen === "calendar") tut.completeMilestone("openedCalendar");
+    }
+  };
+
+  const calendarFocusLabel = (
+    target: Extract<DashboardActionTarget, { screen: "calendar" }>,
+  ): string => {
+    const gameState = get().gameState;
+    if (target.contactId) {
+      const contactName = gameState?.contacts[target.contactId]?.name ?? "contact";
+      return `Review planner for ${contactName}`;
+    }
+    if (target.playerId) {
+      const player = gameState?.players[target.playerId] ?? gameState?.retiredPlayers?.[target.playerId];
+      const playerName = player ? `${player.firstName} ${player.lastName}` : "player";
+      return `Review planner for ${playerName}`;
+    }
+    return "Review planner";
+  };
+
+  const openDashboardTarget = (target: DashboardActionTarget) => {
+    const focusCalendarActivity = target.screen === "calendar" && (target.playerId || target.contactId)
+      ? {
+          type: target.focusActivityType ?? (target.contactId ? "networkMeeting" : "followUpSession"),
+          targetId: target.contactId ?? target.playerId!,
+          label: calendarFocusLabel(target),
+        }
+      : null;
+
+    set({
+      pendingCalendarActivity: focusCalendarActivity,
+      pendingNetworkContactId: target.screen === "network" ? target.contactId ?? null : null,
+      pendingRivalOpportunityId: target.screen === "rivals" ? target.opportunityId ?? null : null,
+      pendingInternationalCountry: target.screen === "internationalView" ? target.countryId ?? null : null,
+    });
+
+    if ("playerId" in target && target.playerId) {
+      get().selectPlayer(target.playerId);
+    }
+
+    openScreen(target.screen);
+  };
+
   return {
     setScreen: (screen: GameScreen) => {
-      const gs = get().gameState;
-      const resolvedScreen = resolveGameScreenForBuild(screen, Boolean(gs));
-      set({ currentScreen: resolvedScreen });
-      const activeMatch = get().activeMatch;
-      let matchFixture: string | undefined;
-      if (resolvedScreen === "match" && activeMatch && gs) {
-        const fixture = gs.fixtures[activeMatch.fixtureId];
-        if (fixture) {
-          const home = gs.clubs[fixture.homeClubId]?.name ?? fixture.homeClubId;
-          const away = gs.clubs[fixture.awayClubId]?.name ?? fixture.awayClubId;
-          matchFixture = `${home} vs ${away}`;
-        }
-      }
-      updateRichPresence(resolvedScreen, {
-        currentCountry: gs?.countries?.[0],
-        currentSeason: gs?.currentSeason,
-        currentWeek: gs?.currentWeek,
-        matchFixture,
-        activeScenarioId: gs?.activeScenarioId,
-      });
-
-      // Tutorial: record screen visit and fire navigation-based milestones
-      if (gs) {
-        const tut = useTutorialStore.getState();
-        tut.recordScreenVisit(resolvedScreen);
-        if (resolvedScreen === "dashboard") tut.completeMilestone("viewedDashboard");
-        if (resolvedScreen === "calendar") tut.completeMilestone("openedCalendar");
-      }
+      openScreen(screen);
     },
+    openDashboardTarget,
 
     dismissWeekSummary: () => {
       const continueScreen = get().lastWeekSummary?.continueScreen;
@@ -127,6 +171,8 @@ export function createNavigationActions(get: GetState, set: SetState) {
 
     setPendingFixtureClubFilter: (filter: string | null) => set({ pendingFixtureClubFilter: filter }),
     setPendingCalendarActivity: (pending: { type: string; targetId: string; label: string } | null) => set({ pendingCalendarActivity: pending }),
+    setPendingNetworkContactId: (contactId: string | null) => set({ pendingNetworkContactId: contactId }),
+    setPendingRivalOpportunityId: (opportunityId: string | null) => set({ pendingRivalOpportunityId: opportunityId }),
     setPendingInternationalCountry: (country: string | null) => set({ pendingInternationalCountry: country }),
 
     addToComparison: (reportId: string) => {

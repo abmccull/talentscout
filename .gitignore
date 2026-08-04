@@ -41,6 +41,8 @@ libsteam_api.so
 # Playwright
 playwright-report/
 test-results/
+playwright-report-*/
+test-results-*/
 
 # Local review servers emit transient diagnostics during rendered audits.
 artifacts/review-dev-server*.log

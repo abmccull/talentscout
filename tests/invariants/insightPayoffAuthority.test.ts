@@ -55,6 +55,20 @@ const CONFIG: NewGameConfig = {
   },
 };
 
+const LEGACY_RECRUITMENT_MANIFEST = {
+  manifestVersion: 2 as const,
+  contentDefinitionIds: [
+    "career-era:proveJudgment@career-eras.1",
+  ],
+};
+
+const EXPANDED_RECRUITMENT_MANIFEST = {
+  manifestVersion: 3 as const,
+  contentDefinitionIds: [
+    "recruitment-doctrine:winNow@recruitment-doctrines.1",
+  ],
+};
+
 function player(seed: string, clubId: string, marketValue: number, potentialAbility: number): Player {
   return {
     ...generatePlayer(new RNG(seed), {
@@ -766,6 +780,80 @@ describe("Insight payoff authority", () => {
     }));
     expect(state.scout.insightState?.history.map((record) => record.actionId))
       .toEqual(results.map(([result]) => result.actionId));
+  });
+
+  it("threads the saved run manifest into perfect-fit cache weaknesses without changing fit scores", () => {
+    const data = fixture();
+    const player = {
+      ...data.prospect,
+      id: "system-fit-player",
+      position: "ST" as const,
+      attributes: {
+        ...data.prospect.attributes,
+        consistency: 8,
+        injuryProneness: 6,
+      },
+    };
+    const buildState = (
+      runManifest: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds">,
+    ): GameState => ({
+      ...data.state,
+      runManifest,
+      scout: {
+        ...data.state.scout,
+        currentClubId: "winNow-1",
+      },
+      players: {
+        ...data.state.players,
+        [player.id]: player,
+      },
+      prospect: undefined,
+      clubs: {
+        "winNow-1": {
+          ...data.state.clubs["club-1"],
+          id: "winNow-1",
+          scoutingPhilosophy: "winNow",
+          managerId: "manager-1",
+          playerIds: [player.id],
+        },
+      },
+      managerProfiles: {
+        "winNow-1": {
+          ...data.state.managerProfiles["club-1"],
+          clubId: "winNow-1",
+        },
+      },
+    } as unknown as GameState);
+    const applyPerfectFit = (
+      runManifest: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds">,
+    ) =>
+      applyInsightActionResult({
+        state: buildState(runManifest),
+        ...contextFor({
+          ...data,
+          prospect: player,
+          state: buildState(runManifest),
+        }, "perfectFit"),
+        result: {
+          actionId: "perfectFit",
+          success: true,
+          narrative: "Perfect fit identified.",
+          systemFitData: { ST: 92 },
+        },
+        insightState: data.state.scout.insightState ?? createInsightState(),
+      }).state.systemFitCache[`${player.id}:winNow-1`];
+
+    const legacyFit = applyPerfectFit(LEGACY_RECRUITMENT_MANIFEST);
+    const expandedFit = applyPerfectFit(EXPANDED_RECRUITMENT_MANIFEST);
+
+    expect(legacyFit.overallFit).toBe(expandedFit.overallFit);
+    expect(legacyFit.tacticalFit).toBe(expandedFit.tacticalFit);
+    expect(legacyFit.fitWeaknesses.some((weakness) =>
+      weakness.includes("Inconsistent performer"),
+    )).toBe(true);
+    expect(expandedFit.fitWeaknesses.some((weakness) =>
+      weakness.includes("Inconsistent performer"),
+    )).toBe(false);
   });
 
   it("replaces rather than stacks deferred effects and consumes each exactly once", () => {

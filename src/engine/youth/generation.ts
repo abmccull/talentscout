@@ -709,6 +709,7 @@ export function reconcileYouthSigningPlacements(
   unsignedYouth: Record<string, UnsignedYouth>,
   autoSigned: ReadonlyArray<{ youthId: string; clubId: string }>,
   appliedMovements: readonly PlayerMovementEvent[],
+  currentSeason?: number,
 ): Record<string, UnsignedYouth> {
   const appliedSigningKeys = new Set(
     appliedMovements
@@ -722,6 +723,16 @@ export function reconcileYouthSigningPlacements(
     if (!youth) continue;
     if (reconciled === unsignedYouth) reconciled = { ...unsignedYouth };
     if (appliedSigningKeys.has(`${youth.player.id}:${clubId}`)) {
+      delete reconciled[youthId];
+      continue;
+    }
+    // An optimistic offer can fail after the annual aging decision. Do not
+    // restore a prospect whose hard opportunity window closed in that same
+    // rollover; otherwise the expired dossier survives another full season.
+    const completedSeasons = currentSeason === undefined
+      ? 0
+      : Math.max(0, currentSeason - youth.generatedSeason + 1);
+    if (completedSeasons >= UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS) {
       delete reconciled[youthId];
       continue;
     }

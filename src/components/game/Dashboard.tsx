@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
@@ -54,104 +54,22 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { getSeasonLength } from "@/engine/core/gameDate";
-import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
-import { CompactMetricStrip } from "./workspace/CompactMetricStrip";
-import { UrgentQueue } from "./workspace/UrgentQueue";
-import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-function formatBalance(n: number): string {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? "-" : "";
-  if (abs >= 1_000_000) return `${sign}£${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${sign}£${(abs / 1_000).toFixed(0)}K`;
-  return `${sign}£${abs}`;
-}
-
-function formatMoney(n: number): string {
-  if (n >= 1_000_000) return `£${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `£${(n / 1_000).toFixed(0)}K`;
-  return `£${n}`;
-}
-
-function getOrdinal(n: number): string {
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1: return `${n}st`;
-    case 2: return `${n}nd`;
-    case 3: return `${n}rd`;
-    default: return `${n}th`;
-  }
-}
-
-function threatBadgeVariant(
-  quality: number,
-): "default" | "warning" | "destructive" | "secondary" {
-  if (quality >= 4) return "destructive";
-  if (quality >= 3) return "warning";
-  if (quality >= 2) return "default";
-  return "secondary";
-}
-
-function threatLabel(quality: number): string {
-  if (quality >= 4) return "High Threat";
-  if (quality >= 3) return "Medium";
-  if (quality >= 2) return "Low";
-  return "Minimal";
-}
-
-function sortYouthByEvidence(
-  a: {
-    observationCount: number;
-    intelCount: number;
-    reported: boolean;
-    buzzLevel: number;
-    visibility: number;
-  },
-  b: {
-    observationCount: number;
-    intelCount: number;
-    reported: boolean;
-    buzzLevel: number;
-    visibility: number;
-  },
-): number {
-  return (
-    b.observationCount - a.observationCount ||
-    Number(b.reported) - Number(a.reported) ||
-    b.intelCount - a.intelCount ||
-    b.buzzLevel - a.buzzLevel ||
-    b.visibility - a.visibility
-  );
-}
-
-// ─── Specialization widget helpers ────────────────────────────────────────────
-
-function priorityBadgeClass(priority: string): string {
-  switch (priority) {
-    case "critical": return "border-red-500/50 bg-red-500/10 text-red-400";
-    case "high":     return "border-amber-500/50 bg-amber-500/10 text-amber-400";
-    case "medium":   return "border-blue-500/50 bg-blue-500/10 text-blue-400";
-    default:         return "border-zinc-600 bg-zinc-800 text-zinc-400";
-  }
-}
-
-function performanceRatingColor(rating: number): string {
-  if (rating >= 70) return "text-emerald-400";
-  if (rating >= 40) return "text-amber-400";
-  return "text-red-400";
-}
-
-function moraleEmoji(morale: number): string {
-  if (morale >= 75) return "😊";
-  if (morale >= 50) return "😐";
-  if (morale >= 25) return "😕";
-  return "😞";
-}
-
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+import { buildYouthActiveCaseModel } from "./workspace/desk/youthDeskModel";
+import { DashboardSupplementalSections } from "./dashboard/DashboardSupplementalSections";
+import type { DashboardActionTarget } from "./dashboard/dashboardPriorityModel";
+import { buildDashboardWorkspaceModel } from "./dashboard/dashboardWorkspaceModel";
+import {
+  formatBalance,
+  formatMoney,
+  getOrdinal,
+  moraleEmoji,
+  priorityBadgeClass,
+  sortYouthByEvidence,
+  threatBadgeVariant,
+  threatLabel,
+} from "./dashboard/helpers";
+import { YouthDeskDashboard } from "./dashboard/YouthDeskDashboard";
+import { DashboardCommandCenter } from "./dashboard/DashboardCommandCenter";
 
 // ─── component ────────────────────────────────────────────────────────────────
 
@@ -159,6 +77,7 @@ export function Dashboard() {
   const {
     gameState,
     setScreen,
+    openDashboardTarget,
     getUpcomingFixtures,
     getLeagueStandings,
     requestWeekAdvance,
@@ -166,9 +85,18 @@ export function Dashboard() {
     markMessageRead,
     selectPlayer,
     submitLoanMonitoringReport,
+    pendingListingReportId,
+    markDashboardItemViewed,
+    snoozeDashboardItemUntilNextWeek,
+    toggleDashboardItemPinned,
+    dismissDashboardItem,
+    syncDashboardVisibleItems,
+    dismissDashboardInsight,
+    syncDashboardInsights,
   } = useGameStore(useShallow((state) => ({
     gameState: state.gameState,
     setScreen: state.setScreen,
+    openDashboardTarget: state.openDashboardTarget,
     getUpcomingFixtures: state.getUpcomingFixtures,
     getLeagueStandings: state.getLeagueStandings,
     requestWeekAdvance: state.requestWeekAdvance,
@@ -176,6 +104,14 @@ export function Dashboard() {
     markMessageRead: state.markMessageRead,
     selectPlayer: state.selectPlayer,
     submitLoanMonitoringReport: state.submitLoanMonitoringReport,
+    pendingListingReportId: state.pendingListingReportId,
+    markDashboardItemViewed: state.markDashboardItemViewed,
+    snoozeDashboardItemUntilNextWeek: state.snoozeDashboardItemUntilNextWeek,
+    toggleDashboardItemPinned: state.toggleDashboardItemPinned,
+    dismissDashboardItem: state.dismissDashboardItem,
+    syncDashboardVisibleItems: state.syncDashboardVisibleItems,
+    dismissDashboardInsight: state.dismissDashboardInsight,
+    syncDashboardInsights: state.syncDashboardInsights,
   })));
   const [expandedExpenses, setExpandedExpenses] = useState(false);
   const [showSatisfactionHistory, setShowSatisfactionHistory] = useState(false);
@@ -214,6 +150,29 @@ export function Dashboard() {
         : [],
     [gameState],
   );
+  const dashboardWorkspace = useMemo(
+    () =>
+      gameState
+        ? buildDashboardWorkspaceModel({
+            gameState,
+            pendingListingReportId,
+          })
+        : null,
+    [gameState, pendingListingReportId],
+  );
+  useEffect(() => {
+    if (!dashboardWorkspace) return;
+    syncDashboardVisibleItems(dashboardWorkspace.activeItemIds);
+  }, [dashboardWorkspace, syncDashboardVisibleItems]);
+  useEffect(() => {
+    if (!dashboardWorkspace) return;
+    syncDashboardInsights(
+      dashboardWorkspace.insights.map((insight) => ({
+        id: insight.id,
+        fingerprint: insight.fingerprint,
+      })),
+    );
+  }, [dashboardWorkspace, syncDashboardInsights]);
 
   if (!gameState) return null;
 
@@ -224,6 +183,7 @@ export function Dashboard() {
     : [];
   const thisWeekFixtures = upcoming.filter((f) => f.week === currentWeek);
   const unreadMessages = gameState.inbox.filter((m) => !m.read);
+  const currentCareerEra = gameState.careerEraDirectorState?.current;
 
   // Board satisfaction history -- most recent 5 entries
   const satisfactionHistory = (gameState.satisfactionHistory ?? []).slice(-5);
@@ -350,30 +310,13 @@ export function Dashboard() {
     lateseason: "bg-orange-500/15 text-orange-400 border-orange-500/30",
     endseason: "bg-red-500/15 text-red-400 border-red-500/30",
   };
+  const phaseBadgeClassName = phaseClass[seasonPhase];
+  const phaseLabel = tCal(`seasonPhases.${seasonPhase}` as Parameters<typeof tCal>[0]);
 
   const scheduleActivities = gameState.schedule.activities ?? [];
   const scheduledSlots = scheduleActivities.filter((activity) => activity !== null).length;
   const openDayCount = countOpenScheduleDays(gameState.schedule);
   const needsPlannerBeforeAdvance = openDayCount > 0;
-  const plannedActivities: Array<{
-    key: string;
-    dayIndex: number;
-    description: string;
-    slots: number;
-  }> = [];
-  const seenScheduleInstances = new Set<string>();
-  scheduleActivities.forEach((activity, dayIndex) => {
-    if (!activity) return;
-    const key = activity.instanceId ?? `${activity.type}-${activity.targetId ?? "none"}-${dayIndex}`;
-    if (seenScheduleInstances.has(key)) return;
-    seenScheduleInstances.add(key);
-    plannedActivities.push({
-      key,
-      dayIndex,
-      description: activity.description,
-      slots: activity.slots,
-    });
-  });
 
   const decisionReadyYouth = observedYouthEvidence
     .filter((entry) => entry.hasFirmRead && !entry.reported && !entry.youth.placed)
@@ -395,30 +338,6 @@ export function Dashboard() {
       || left.expiresSeason - right.expiresSeason
       || left.expiresWeek - right.expiresWeek
     );
-  const dueRecommendationReviews = Object.values(gameState.recommendationReviews ?? {}).filter(
-    (review) => review.status === "complete"
-      && review.completedSeason === currentSeason
-      && review.completedWeek === currentWeek,
-  );
-  const matchForBrief = (brief: (typeof openRecruitmentBriefs)[number]) => observedYouthEvidence
-    .filter((entry) =>
-      !entry.youth.placed
-      && entry.youth.player.age <= brief.maxAge
-      && (
-        brief.requiredPositions.includes(entry.youth.player.position)
-        || entry.youth.player.secondaryPositions.some((position) => brief.requiredPositions.includes(position))
-      )
-    )
-    .sort(sortYouthByEvidence)[0];
-  const nextTournament = Object.values(gameState.youthTournaments ?? {})
-    .filter(
-      (tournament) =>
-        tournament.discovered &&
-        !tournament.attended &&
-        tournament.season === currentSeason &&
-        tournament.endWeek >= currentWeek,
-    )
-    .sort((a, b) => a.startWeek - b.startWeek)[0];
   const youthDeskAction = decisionReadyYouth.length > 0
     ? {
         eyebrow: "Decision ready",
@@ -470,490 +389,47 @@ export function Dashboard() {
     requestWeekAdvance();
   }
 
+  function openDashboardAction(target: DashboardActionTarget): void {
+    openDashboardTarget(target);
+  }
+
   if (IS_YOUTH_EARLY_ACCESS && specialization === "youth") {
-    const club = scout.currentClubId ? gameState.clubs[scout.currentClubId] : undefined;
-    const deskProspects = (evidenceQueue.length > 0 ? evidenceQueue : observedYouthEvidence).slice(0, 4);
-    const activeSeasonDecisions = gameState.seasonEvents.filter(
-      (event) => event.startWeek <= currentWeek
-        && currentWeek <= event.endWeek
-        && !!event.choices?.length
-        && !event.resolved,
-    );
-    const loopSteps = [
-      { label: "Find", detail: "Discover a lead", complete: youthDiscoveredCount > 0 },
-      { label: "Verify", detail: "Build repeat evidence", complete: multiViewCount > 0 },
-      { label: "Recommend", detail: "Back your judgment", complete: youthReportedCount > 0 },
-      { label: "Track", detail: "Follow the outcome", complete: placedYouthCount > 0 },
-    ];
-    const revealDeskSection = (sectionId: string): void => {
-      const section = document.getElementById(sectionId);
-      if (!(section instanceof HTMLDetailsElement)) return;
-      section.open = true;
-      window.requestAnimationFrame(() => {
-        section.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    };
-    const deskMetrics = [
-      {
-        label: "Current week",
-        value: `W${currentWeek}`,
-        detail: `Season ${currentSeason} · ${7 - scheduledSlots} open day${7 - scheduledSlots === 1 ? "" : "s"}`,
-        icon: <Calendar size={18} className="text-emerald-300" aria-hidden="true" />,
-      },
-      {
-        label: "Scout fatigue",
-        value: `${Math.round(scout.fatigue)}%`,
-        detail: scout.fatigue >= 70 ? "Accuracy at risk" : scout.fatigue >= 40 ? "Recovery soon" : "Ready for field work",
-        icon: <Eye size={18} className="text-sky-300" aria-hidden="true" />,
-        toneClassName: scout.fatigue >= 70 ? "text-red-300" : scout.fatigue >= 40 ? "text-amber-300" : "text-emerald-300",
-      },
-      {
-        label: "Decisions ready",
-        value: decisionReadyYouth.length,
-        detail: `${pendingPlacementCount} awaiting club response`,
-        icon: <ClipboardList size={18} className="text-amber-300" aria-hidden="true" />,
-      },
-      {
-        label: "Placed",
-        value: placedYouthCount,
-        detail: `${gameState.legacyScore.totalScore} legacy points`,
-        icon: <Trophy size={18} className="text-violet-300" aria-hidden="true" />,
-      },
-    ];
-    const urgentDeskQueue = [
-      activeSeasonDecisions.length > 0
-        ? {
-            id: "season-decision",
-            eyebrow: "Decision required",
-            title: `${activeSeasonDecisions.length} season decision${activeSeasonDecisions.length === 1 ? "" : "s"} waiting`,
-            body: "A live football event needs your response. The choice will change the world state and should not be buried in reference material.",
-            meta: `Week ${currentWeek} season context`,
-            tone: "amber" as const,
-            actionLabel: "Review choice",
-            onAction: () => revealDeskSection("desk-season-context"),
-          }
-        : null,
-      dueRecommendationReviews.length > 0
-        ? {
-            id: "completed-reviews",
-            eyebrow: "Recommendation accountability",
-            title: `${dueRecommendationReviews.length} long-term review${dueRecommendationReviews.length === 1 ? "" : "s"} landed this week`,
-            body: "Revisit whether your original report was right for the right reason before the next brief arrives.",
-            meta: "Reports workspace",
-            tone: "violet" as const,
-            actionLabel: "Open reports",
-            onAction: () => setScreen("reportHistory"),
-          }
-        : null,
-      unreadMessages[0]
-        ? {
-            id: `message-${unreadMessages[0].id}`,
-            eyebrow: unreadMessages.length > 1 ? `${unreadMessages.length} unread messages` : "Unread message",
-            title: unreadMessages[0].title,
-            body: unreadMessages[0].body,
-            meta: "Inbox follow-up",
-            tone: "sky" as const,
-            actionLabel: "Open inbox",
-            onAction: () => {
-              markMessageRead(unreadMessages[0]!.id);
-              setScreen("inbox");
-            },
-          }
-        : null,
-      nextTournament
-        ? {
-            id: `tournament-${nextTournament.id}`,
-            eyebrow: "Opportunity radar",
-            title: nextTournament.name,
-            body: nextTournament.startWeek <= currentWeek
-              ? "The event is live now. If you wait, another scout gets the first look."
-              : `Starts in week ${nextTournament.startWeek}. Reserve time while the access window is still soft.`,
-            meta: `${nextTournament.country} · ${nextTournament.prestige}`,
-            tone: "amber" as const,
-            actionLabel: "Plan attendance",
-            onAction: () => setScreen("calendar"),
-          }
-        : null,
-      scout.fatigue >= 50
-        ? {
-            id: "fatigue-pressure",
-            eyebrow: "Scout condition",
-            title: `${Math.round(scout.fatigue)}% fatigue is now shaping your week`,
-            body: scout.fatigue >= 75
-              ? "Accuracy is materially at risk. Leave room for recovery before forcing another live read."
-              : "Moderate fatigue is manageable, but the next few slots should be intentional.",
-            meta: `Tier ${scout.careerTier} · ${Math.round(scout.reputation)} reputation`,
-            tone: scout.fatigue >= 75 ? "red" as const : "amber" as const,
-            actionLabel: "Review planner",
-            onAction: () => setScreen("calendar"),
-          }
-        : null,
-      pendingPlacementCount > 0
-        ? {
-            id: "pending-placements",
-            eyebrow: "Placement queue",
-            title: `${pendingPlacementCount} recommendation${pendingPlacementCount === 1 ? "" : "s"} still await a club response`,
-            body: "These calls are part of your record now. Track which pathways are cooling and which clubs still need persuasion.",
-            meta: "Career consequences continue after filing",
-            tone: "emerald" as const,
-            actionLabel: "Track outcomes",
-            onAction: () => setScreen("reportHistory"),
-          }
-        : null,
-    ].filter((item) => item !== null).slice(0, 3);
-
+    const activeCaseModel = buildYouthActiveCaseModel({
+      decisionReadyYouth,
+      evidenceQueue,
+      observedYouthEvidence,
+      openRecruitmentBriefs,
+      pendingPlacementCount,
+      scheduledSlots,
+      openDayCount,
+    });
+    if (!dashboardWorkspace) {
+      return null;
+    }
     return (
-      <GameLayout>
-        <section
-          className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7"
-          data-tutorial-id="dashboard-overview"
-        >
-          <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.9} />
-          <div className="relative z-10 mx-auto max-w-[1480px]">
-            <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
-                <ScoutAvatar avatarId={scout.avatarId ?? 1} size={48} />
-                {club && <ClubCrest clubId={club.id} clubName={club.name} size={48} />}
-                <div className="min-w-0">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                    Youth recruitment room
-                  </p>
-                  <h1 className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                    Scouting Desk
-                  </h1>
-                  <p className="mt-1 text-sm text-zinc-300">
-                    {club?.name ?? "Independent assignment"} · Week {currentWeek}, Season {currentSeason}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2" data-testid="desk-week-status">
-                <span className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${phaseClass[seasonPhase]}`}>
-                  {tCal(`seasonPhases.${seasonPhase}` as Parameters<typeof tCal>[0])}
-                </span>
-                <span className="inline-flex min-h-9 items-center rounded-full border border-white/10 bg-white/5 px-3 text-xs font-semibold text-zinc-200">
-                  Week {currentWeek} of {seasonLength}
-                </span>
-                <span
-                  aria-label={`${Math.round(scout.fatigue)} percent fatigue`}
-                  className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${
-                    scout.fatigue >= 70
-                      ? "border-red-400/30 bg-red-400/10 text-red-200"
-                      : scout.fatigue >= 40
-                        ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                        : "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-                  }`}
-                >
-                  {Math.round(scout.fatigue)}% fatigue
-                </span>
-              </div>
-            </header>
-
-            <Card data-testid="desk-primary-decision" className="relative mb-5 overflow-hidden border-emerald-400/25 bg-[#101820]/95 shadow-2xl shadow-black/30">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(52,211,153,0.14),transparent_36%)]" aria-hidden="true" />
-              <CardContent className="relative grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] lg:p-8">
-                <div>
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <Badge className="border-emerald-400/30 bg-emerald-400/10 text-emerald-200" variant="outline">
-                      {youthDeskAction.eyebrow}
-                    </Badge>
-                    {scheduledSlots > 0 && (
-                      <span className="text-xs text-zinc-300">{scheduledSlots}/7 days committed</span>
-                    )}
-                  </div>
-                  <h2 className="max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
-                    {youthDeskAction.title}
-                  </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-300 sm:text-base">
-                    {youthDeskAction.description}
-                  </p>
-                  <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                    <Button className="min-h-11 px-5" onClick={openYouthDeskAction}>
-                      {youthDeskAction.label}
-                      <ArrowRight size={16} className="ml-2" aria-hidden="true" />
-                    </Button>
-                    {youthDeskAction.kind !== "planner" && (
-                      <Button className="min-h-11" variant="outline" onClick={() => setScreen("calendar")}>
-                        Review itinerary
-                      </Button>
-                    )}
-                  </div>
-                  <p className="mt-4 text-xs leading-5 text-zinc-400">
-                    Advancing resolves every scheduled activity. Open days recover some fatigue, but they also leave scouting opportunities unused.
-                  </p>
-                </div>
-
-                <WorkspaceDisclosure
-                  title="The scout's loop"
-                  description="Every name must earn the next step, and each step changes what the next week should do."
-                  icon={<Target size={18} className="text-emerald-300" aria-hidden="true" />}
-                  summary={<span>{loopSteps.filter((step) => step.complete).length}/4 active</span>}
-                  className="border-white/10 bg-black/20"
-                  contentClassName="pt-3"
-                >
-                  <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-                    {loopSteps.map((step, index) => (
-                      <li
-                        key={step.label}
-                        className={`rounded-lg border p-3 ${
-                          step.complete
-                            ? "border-emerald-400/30 bg-emerald-400/10"
-                            : "border-white/10 bg-white/[0.025]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-                            step.complete ? "bg-emerald-300 text-zinc-950" : "bg-zinc-700 text-zinc-200"
-                          }`}>
-                            {step.complete ? "✓" : index + 1}
-                          </span>
-                          <span className="text-xs font-semibold text-white">{step.label}</span>
-                        </div>
-                        <p className="mt-2 text-[11px] leading-4 text-zinc-400">{step.detail}</p>
-                      </li>
-                    ))}
-                  </ol>
-                </WorkspaceDisclosure>
-              </CardContent>
-            </Card>
-
-            {gameState.seasonEvents.length > 0 && (
-              <WorkspaceDisclosure
-                id="desk-season-context"
-                title={`Season context · Week ${currentWeek}`}
-                eyebrow="Calendar"
-                description="Open only when you need the wider rhythm behind this week's choice."
-                summary={<span>{gameState.seasonEvents.length} season markers</span>}
-                className="mb-5"
-                contentClassName="p-0"
-              >
-                <SeasonTimeline
-                  seasonEvents={gameState.seasonEvents}
-                  currentWeek={currentWeek}
-                  seasonLength={seasonLength}
-                  onResolveEvent={(eventId, choiceIndex) => {
-                    useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
-                  }}
-                />
-              </WorkspaceDisclosure>
-            )}
-
-            <CompactMetricStrip items={deskMetrics} className="mb-5" />
-
-            <Card className="mb-5 overflow-hidden border-sky-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.12),rgba(17,22,28,0.96)_42%)]">
-              <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base text-white">
-                    <ClipboardList size={18} className="text-sky-300" aria-hidden="true" />
-                    Live academy briefs
-                  </CardTitle>
-                  <p className="mt-1 text-sm text-zinc-400">Real club needs create the deadline, audience, budget, and risk behind each recommendation.</p>
-                </div>
-                <Badge variant="secondary" className="shrink-0">{openRecruitmentBriefs.length} open</Badge>
-              </CardHeader>
-              <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
-                {openRecruitmentBriefs.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-zinc-400">The current brief cycle is closed. New academy needs will arrive as club squads and deadlines change.</p>
-                ) : (
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    {openRecruitmentBriefs.slice(0, 3).map((brief) => {
-                      const match = matchForBrief(brief);
-                      const receivingClub = gameState.clubs[brief.clubId];
-                      const recruitmentIdentity = receivingClub
-                        ? deriveBriefRecruitmentIdentity(receivingClub, brief)
-                        : undefined;
-                      return (
-                        <article key={brief.id} data-testid="desk-brief" className="flex min-h-48 flex-col rounded-xl border border-white/10 bg-black/20 p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">{receivingClub?.name ?? "Academy client"}</p>
-                              <h3 className="mt-1 text-lg font-bold text-white">{brief.requiredPositions.join("/")} pathway</h3>
-                            </div>
-                            <Badge variant={brief.competitionPressure >= 70 ? "warning" : "outline"} className="text-[10px]">
-                              {brief.competitionPressure} pressure
-                            </Badge>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-zinc-300">
-                            <span className="rounded-full border border-white/10 px-2 py-1">S{brief.expiresSeason} W{brief.expiresWeek}</span>
-                            <span className="rounded-full border border-white/10 px-2 py-1">£{brief.weeklyWageBudget.toLocaleString()}/wk</span>
-                            <span className="rounded-full border border-white/10 px-2 py-1 capitalize">{brief.riskTolerance} risk</span>
-                          </div>
-                          {recruitmentIdentity && (
-                            <p className="mt-3 rounded-lg border border-sky-400/15 bg-sky-400/[0.06] px-3 py-2 text-[11px] leading-4 text-sky-100">
-                              <span className="font-semibold">{recruitmentIdentity.label}:</span>{" "}
-                              this brief weights {brief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()}.
-                            </p>
-                          )}
-                          <p className="mt-3 flex-1 text-xs leading-5 text-zinc-400">
-                            {match
-                              ? `${match.youth.player.firstName} ${match.youth.player.lastName} is your best known positional match with ${match.observationCount} live look${match.observationCount === 1 ? "" : "s"}.`
-                              : "No known prospect currently matches this profile. Finding one now could create first-mover advantage."}
-                          </p>
-                          <Button
-                            className="mt-4 min-h-11 w-full"
-                            variant={match ? "outline" : "secondary"}
-                            onClick={() => {
-                              if (match) {
-                                selectPlayer(match.youth.player.id);
-                                setScreen("playerProfile");
-                              } else {
-                                setScreen("calendar");
-                              }
-                            }}
-                          >
-                            {match ? "Open matching dossier" : "Plan discovery work"}
-                          </Button>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-                {dueRecommendationReviews.length > 0 && (
-                  <button
-                    onClick={() => setScreen("reportHistory")}
-                    className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-violet-400/25 bg-violet-400/10 px-4 text-left text-sm text-violet-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                  >
-                    <span>{dueRecommendationReviews.length} long-term recommendation review{dueRecommendationReviews.length === 1 ? "" : "s"} completed this week.</span>
-                    <ChevronRight size={16} aria-hidden="true" />
-                  </button>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
-              <WorkspaceDisclosure
-                title="Current working set"
-                eyebrow="Reference"
-                description="Your itinerary and prospect queue live in Planner and Prospects. Expand this only for a quick cross-check."
-                summary={<span>{plannedActivities.length} planned · {deskProspects.length} tracked</span>}
-                contentClassName="space-y-5"
-              >
-                <Card className="border-white/10 bg-[#11161c]/95">
-                  <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base text-white">
-                        <CalendarPlus size={18} className="text-emerald-300" aria-hidden="true" />
-                        This week&apos;s itinerary
-                      </CardTitle>
-                      <p className="mt-1 text-sm text-zinc-400">Your plan is the strategy; simulation reveals the consequences.</p>
-                    </div>
-                    <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("calendar")}>
-                      Edit plan
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
-                    {plannedActivities.length === 0 ? (
-                      <button
-                        onClick={() => setScreen("calendar")}
-                        className="flex min-h-28 w-full flex-col items-center justify-center rounded-xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.04] p-5 text-center transition hover:bg-emerald-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                      >
-                        <CalendarPlus size={24} className="mb-2 text-emerald-300" aria-hidden="true" />
-                        <span className="font-semibold text-white">Your week is still blank</span>
-                        <span className="mt-1 text-sm text-zinc-400">Schedule a venue, follow-up, report, or recovery day.</span>
-                      </button>
-                    ) : (
-                      <ol className="space-y-2">
-                        {plannedActivities.slice(0, 6).map((item) => (
-                          <li key={item.key} className="flex min-h-14 items-center gap-3 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2.5">
-                            <span className="flex h-9 w-11 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-xs font-bold text-emerald-300">
-                              {DAY_NAMES[item.dayIndex]}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-white">{item.description}</p>
-                              <p className="mt-0.5 text-xs text-zinc-400">{item.slots} day{item.slots === 1 ? "" : "s"}</p>
-                            </div>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="border-white/10 bg-[#11161c]/95">
-                  <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base text-white">
-                        <GraduationCap size={18} className="text-amber-300" aria-hidden="true" />
-                        Priority prospects
-                      </CardTitle>
-                      <p className="mt-1 text-sm text-zinc-400">Ranked by evidence need—not hidden potential.</p>
-                    </div>
-                    <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("youthScouting")}>
-                      Open pipeline
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
-                    {deskProspects.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
-                        <Compass size={24} className="mx-auto mb-2 text-zinc-400" aria-hidden="true" />
-                        <p className="font-semibold text-white">No names on your board yet</p>
-                        <p className="mt-1 text-sm text-zinc-400">Plan a youth event or local visit to create your first lead.</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-white/10">
-                        {deskProspects.map((entry) => {
-                          const status = entry.reported
-                            ? "Recommendation filed"
-                            : entry.hasFirmRead
-                              ? "Decision ready"
-                              : entry.observationCount >= 1
-                                ? "Needs another context"
-                                : "Unverified lead";
-                          return (
-                            <button
-                              key={entry.youth.id}
-                              onClick={() => {
-                                selectPlayer(entry.youth.player.id);
-                                setScreen("playerProfile");
-                              }}
-                              className="group flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                              aria-label={`Open dossier for ${entry.youth.player.firstName} ${entry.youth.player.lastName}`}
-                            >
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/20 to-sky-400/10 font-bold text-emerald-200">
-                                {entry.youth.player.firstName[0]}{entry.youth.player.lastName[0]}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
-                                    {entry.youth.player.firstName} {entry.youth.player.lastName}
-                                  </p>
-                                  <Badge variant="outline" className="border-white/15 text-[10px] text-zinc-300">
-                                    {entry.youth.player.position}
-                                  </Badge>
-                                </div>
-                                <p className="mt-1 text-xs text-zinc-400">
-                                  Age {entry.youth.player.age} · {entry.observationCount} look{entry.observationCount === 1 ? "" : "s"} · Buzz {entry.youth.buzzLevel}
-                                </p>
-                              </div>
-                              <div className="hidden text-right sm:block">
-                                <p className={`text-xs font-semibold ${entry.hasFirmRead ? "text-amber-300" : "text-zinc-300"}`}>{status}</p>
-                                <p className="mt-1 text-[10px] text-zinc-300">{entry.intelCount} contact note{entry.intelCount === 1 ? "" : "s"}</p>
-                              </div>
-                              <ChevronRight size={17} className="shrink-0 text-zinc-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-300" aria-hidden="true" />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </WorkspaceDisclosure>
-
-              <aside className="space-y-5" aria-label="Scouting context">
-                <UrgentQueue
-                  title="Urgent queue"
-                  description="Three things that can materially change your next decision. Everything else belongs in its own workspace."
-                  icon={<Mail size={17} className="text-sky-300" aria-hidden="true" />}
-                  items={urgentDeskQueue}
-                  emptyTitle="No urgent interruptions"
-                  emptyBody="The desk is clear. Use the planner to chase a new lead, deepen evidence, or protect recovery time before advancing."
-                  footerActionLabel="Open career view"
-                  onFooterAction={() => setScreen("career")}
-                />
-              </aside>
-            </div>
-          </div>
-        </section>
-      </GameLayout>
+      <YouthDeskDashboard
+        gameState={gameState}
+        scout={scout}
+        currentWeek={currentWeek}
+        currentSeason={currentSeason}
+        seasonLength={seasonLength}
+        phaseBadgeClassName={phaseBadgeClassName}
+        phaseLabel={phaseLabel}
+        scheduledSlots={scheduledSlots}
+        youthDeskAction={youthDeskAction}
+        activeCaseModel={activeCaseModel}
+        currentCareerEra={currentCareerEra}
+        dashboardWorkspace={dashboardWorkspace}
+        onDashboardAction={openDashboardAction}
+        onMarkReviewed={(item) => markDashboardItemViewed(item.id, item.fingerprint)}
+        onSnooze={(item) => snoozeDashboardItemUntilNextWeek(item.id, item.fingerprint)}
+        onTogglePin={(item) => toggleDashboardItemPinned(item.id, item.fingerprint)}
+        onDismiss={(item) => dismissDashboardItem(item.id, item.fingerprint)}
+        onDismissInsight={dismissDashboardInsight}
+        onPrimaryAction={openYouthDeskAction}
+        setScreen={setScreen}
+        selectPlayer={selectPlayer}
+      />
     );
   }
 
@@ -1006,6 +482,21 @@ export function Dashboard() {
             </Button>
           </div>
         </div>
+
+        {dashboardWorkspace && (
+          <div className="mb-6">
+            <DashboardCommandCenter
+              model={dashboardWorkspace}
+              onAction={openDashboardAction}
+              onOpenPlanner={() => setScreen("calendar")}
+              onMarkReviewed={(item) => markDashboardItemViewed(item.id, item.fingerprint)}
+              onSnooze={(item) => snoozeDashboardItemUntilNextWeek(item.id, item.fingerprint)}
+              onTogglePin={(item) => toggleDashboardItemPinned(item.id, item.fingerprint)}
+              onDismiss={(item) => dismissDashboardItem(item.id, item.fingerprint)}
+              onDismissInsight={dismissDashboardInsight}
+            />
+          </div>
+        )}
 
         {/* Season Timeline */}
         {gameState.seasonEvents.length > 0 && (
@@ -1920,582 +1411,27 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* ── Board Satisfaction (F10 — tier 5 only) ──────────────────────── */}
-        {specialization === "firstTeam" && gameState.boardProfile && scout.careerTier >= 5 && (
-          <div className="mt-6">
-            <Card data-tutorial-id="dashboard-board-satisfaction">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Shield size={14} className="text-amber-400" aria-hidden="true" />
-                  Board Satisfaction
-                  <Badge
-                    variant="outline"
-                    className={`ml-auto text-[10px] capitalize ${
-                      gameState.boardProfile.satisfactionLevel >= 80
-                        ? "border-emerald-500/50 text-emerald-400"
-                        : gameState.boardProfile.satisfactionLevel >= 50
-                          ? "border-amber-500/50 text-amber-400"
-                          : gameState.boardProfile.satisfactionLevel >= 25
-                            ? "border-orange-500/50 text-orange-400"
-                            : "border-red-500/50 text-red-400"
-                    }`}
-                  >
-                    {gameState.boardProfile.personality}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Satisfaction bar */}
-                <div>
-                  <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                    <span>Satisfaction</span>
-                    <span>{Math.round(gameState.boardProfile.satisfactionLevel)}%</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        gameState.boardProfile.satisfactionLevel >= 80
-                          ? "bg-emerald-500"
-                          : gameState.boardProfile.satisfactionLevel >= 50
-                            ? "bg-amber-500"
-                            : gameState.boardProfile.satisfactionLevel >= 25
-                              ? "bg-orange-500"
-                              : "bg-red-500"
-                      }`}
-                      style={{ width: `${Math.min(100, Math.max(0, gameState.boardProfile.satisfactionLevel))}%` }}
-                    />
-                  </div>
-                </div>
-                {/* Patience bar */}
-                <div>
-                  <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                    <span>Patience</span>
-                    <span>{Math.round(gameState.boardProfile.patience)}%</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        gameState.boardProfile.patience >= 60
-                          ? "bg-blue-500"
-                          : gameState.boardProfile.patience >= 30
-                            ? "bg-amber-500"
-                            : "bg-red-500"
-                      }`}
-                      style={{ width: `${Math.min(100, Math.max(0, gameState.boardProfile.patience))}%` }}
-                    />
-                  </div>
-                </div>
-                {/* Budget multiplier */}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-400">Budget Multiplier</span>
-                  <span className={
-                    gameState.boardProfile.budgetMultiplier >= 1.2
-                      ? "text-emerald-400 font-semibold"
-                      : gameState.boardProfile.budgetMultiplier >= 0.9
-                        ? "text-zinc-300"
-                        : "text-red-400 font-semibold"
-                  }>
-                    {gameState.boardProfile.budgetMultiplier.toFixed(2)}x
-                  </span>
-                </div>
-                {/* Ultimatum warning */}
-                {gameState.boardProfile.ultimatumIssued && (
-                  <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-2">
-                    <AlertTriangle size={14} className="text-red-400 shrink-0" aria-hidden="true" />
-                    <span className="text-xs text-red-400">
-                      Ultimatum active{gameState.boardProfile.ultimatumDeadline
-                        ? ` — deadline: week ${gameState.boardProfile.ultimatumDeadline}`
-                        : ""}
-                    </span>
-                  </div>
-                )}
-                {/* Firing warning */}
-                {gameState.boardProfile.satisfactionLevel < 20 && !gameState.boardProfile.ultimatumIssued && (
-                  <div className="flex items-center gap-2 rounded-md border border-orange-500/30 bg-orange-500/10 p-2">
-                    <AlertTriangle size={14} className="text-orange-400 shrink-0" aria-hidden="true" />
-                    <span className="text-xs text-orange-400">
-                      Board satisfaction dangerously low. Risk of termination.
-                    </span>
-                  </div>
-                )}
-                {/* Meet Board button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs"
-                  onClick={() => setScreen("career")}
-                >
-                  <Users size={12} className="mr-1" aria-hidden="true" />
-                  Open Board Relations
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* ── First-Team Scout Widgets ─────────────────────────────────────── */}
-        {specialization === "firstTeam" && (activeDirectives.length > 0 || recentTransfers.length > 0) && (
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Active Directives */}
-            {activeDirectives.length > 0 && (
-              <Card data-tutorial-id="dashboard-directives">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Target size={14} className="text-blue-400" aria-hidden="true" />
-                    Active Directives
-                    <Badge variant="secondary" className="ml-auto text-[10px]">
-                      {gameState.managerDirectives.filter((d) => !d.fulfilled).length}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {activeDirectives.map((directive) => (
-                    <div
-                      key={directive.id}
-                      className="rounded-md border border-[#27272a] p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] capitalize shrink-0 ${priorityBadgeClass(directive.priority)}`}
-                          >
-                            {directive.priority}
-                          </Badge>
-                          <span className="text-sm font-semibold text-white">{directive.position}</span>
-                        </div>
-                        <span className="shrink-0 text-[10px] text-zinc-400">
-                          {directive.submittedReportIds.length} report{directive.submittedReportIds.length !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-zinc-400">
-                        <span>Age {directive.ageRange[0]}–{directive.ageRange[1]}</span>
-                        <span className="text-zinc-400" aria-hidden="true">·</span>
-                        <span>{directive.minCAStars}★ min</span>
-                        <span className="text-zinc-400" aria-hidden="true">·</span>
-                        <span className="text-emerald-400">
-                          {directive.budgetAllocation >= 1_000_000
-                            ? `£${(directive.budgetAllocation / 1_000_000).toFixed(1)}M`
-                            : `£${(directive.budgetAllocation / 1_000).toFixed(0)}K`}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  {gameState.managerDirectives.filter((d) => !d.fulfilled).length > 4 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full text-xs text-zinc-400 hover:text-white"
-                      onClick={() => setScreen("career")}
-                    >
-                      View All
-                      <ArrowRight size={12} className="ml-1" aria-hidden="true" />
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Transfer Tracker */}
-            {recentTransfers.length > 0 && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <TrendingUp size={14} className="text-emerald-400" aria-hidden="true" />
-                    Transfer Tracker
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {recentTransfers.map((record) => {
-                    const player = gameState.players[record.playerId];
-                    const fromClub = gameState.clubs[record.fromClubId];
-                    const toClub = gameState.clubs[record.toClubId];
-                    return (
-                      <div key={record.id} className="rounded-md border border-[#27272a] p-3">
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <p className="text-sm font-semibold text-white">
-                            {player ? `${player.firstName} ${player.lastName}` : "Unknown Player"}
-                          </p>
-                          {record.outcome && (
-                            <Badge
-                              variant="outline"
-                              className={`shrink-0 text-[10px] ${
-                                record.outcome === "hit"
-                                  ? "border-emerald-500/50 text-emerald-400"
-                                  : record.outcome === "decent"
-                                  ? "border-amber-500/50 text-amber-400"
-                                  : record.outcome === "flop"
-                                  ? "border-red-500/50 text-red-400"
-                                  : "border-zinc-600 text-zinc-400"
-                              }`}
-                            >
-                              {record.outcome}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-zinc-400">
-                          {fromClub?.shortName ?? "?"} → {toClub?.shortName ?? "?"}
-                          {record.fee > 0 && <span className="ml-1">· £{record.fee.toLocaleString()}</span>}
-                        </p>
-                        {record.appearances != null && (
-                          <p className="mt-1 text-xs text-zinc-400">
-                            {record.appearances} appearances · S{record.transferSeason}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {/* ── Data Scout Widgets ────────────────────────────────────────────── */}
-        {specialization === "data" && (
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Prediction Tracker */}
-            <Card data-tutorial-id="dashboard-predictions">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Brain size={14} className="text-violet-400" aria-hidden="true" />
-                  Prediction Tracker
-                  {oracleBadge && (
-                    <Badge
-                      variant="outline"
-                      className="ml-auto border-violet-500/50 bg-violet-500/10 text-violet-400 text-[10px]"
-                    >
-                      Oracle
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Summary */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-md border border-[#27272a] p-2 text-center">
-                    <p className="text-lg font-bold text-white">{allPredictions.length}</p>
-                    <p className="text-[10px] text-zinc-400">Total</p>
-                  </div>
-                  <div className="rounded-md border border-[#27272a] p-2 text-center">
-                    <p className="text-lg font-bold text-emerald-400">{correctPredictions.length}</p>
-                    <p className="text-[10px] text-zinc-400">Correct</p>
-                  </div>
-                  <div className="rounded-md border border-[#27272a] p-2 text-center">
-                    <p className={`text-lg font-bold ${predictionAccuracy >= 70 ? "text-emerald-400" : predictionAccuracy >= 50 ? "text-amber-400" : "text-red-400"}`}>
-                      {resolvedPredictions.length > 0 ? `${predictionAccuracy}%` : "—"}
-                    </p>
-                    <p className="text-[10px] text-zinc-400">Accuracy</p>
-                  </div>
-                </div>
-                {currentStreak > 0 && (
-                  <p className="text-xs text-amber-400 font-medium">
-                    {currentStreak} correct in a row
-                  </p>
-                )}
-
-                {/* Recent unresolved predictions */}
-                {unresolvedPredictions.length > 0 && (
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Pending</p>
-                    {unresolvedPredictions.map((pred) => {
-                      const player = gameState.players[pred.playerId];
-                      return (
-                        <div key={pred.id} className="rounded-md border border-[#27272a] p-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-white truncate">
-                              {player ? `${player.firstName} ${player.lastName}` : "Unknown"}
-                            </span>
-                            <Badge variant="outline" className="shrink-0 text-[9px] capitalize">
-                              {pred.type}
-                            </Badge>
-                          </div>
-                          <p className="mt-0.5 text-[10px] text-zinc-400 line-clamp-1">{pred.statement}</p>
-                          <p className="text-[9px] text-zinc-300">Resolves S{pred.resolveBySeason}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-xs text-zinc-400 hover:text-white"
-                  onClick={() => setScreen("career")}
-                >
-                  View All
-                  <ArrowRight size={12} className="ml-1" aria-hidden="true" />
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Analytics Team */}
-            <Card data-tutorial-id="dashboard-data-analysts">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Users size={14} className="text-blue-400" aria-hidden="true" />
-                  Analytics Team
-                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                    {dataAnalysts.length}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {dataAnalysts.length === 0 ? (
-                  <p className="text-xs text-zinc-400">No analysts hired. Recruit analysts to generate passive reports.</p>
-                ) : (
-                  dataAnalysts.map((analyst) => {
-                    const assignedLeague = analyst.assignedLeagueId
-                      ? gameState.leagues[analyst.assignedLeagueId]
-                      : undefined;
-                    return (
-                      <div key={analyst.id} className="rounded-md border border-[#27272a] p-3">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <span className="text-sm font-medium text-white">{analyst.name}</span>
-                          <span
-                            className="text-base"
-                            role="img"
-                            aria-label={`Morale: ${analyst.morale}/100`}
-                          >
-                            {moraleEmoji(analyst.morale)}
-                          </span>
-                        </div>
-                        <div className="mb-1 flex items-center justify-between text-[10px]">
-                          <span className="text-zinc-400">Skill {analyst.skill}/20</span>
-                          <span className="text-zinc-400 capitalize">{analyst.focus}</span>
-                        </div>
-                        <div className="h-1 w-full overflow-hidden rounded-full bg-[#27272a]">
-                          <div
-                            className="h-full rounded-full bg-blue-500 transition-all"
-                            style={{ width: `${(analyst.skill / 20) * 100}%` }}
-                          />
-                        </div>
-                        <p className="mt-1 text-[10px] text-zinc-400">
-                          {assignedLeague ? assignedLeague.name : "Unassigned"}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-xs text-zinc-400 hover:text-white"
-                  onClick={() => setScreen("career")}
-                >
-                  Manage
-                  <ArrowRight size={12} className="ml-1" aria-hidden="true" />
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Issue 13: Quick Links */}
-        <div className="mt-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Quick Links</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => setScreen("discoveries")}
-                  className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
-                >
-                  <Compass size={15} className="text-emerald-400" aria-hidden="true" />
-                  Discoveries
-                </button>
-                {!IS_YOUTH_EARLY_ACCESS && (
-                  <>
-                    <button
-                      onClick={() => setScreen("leaderboard")}
-                      className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
-                    >
-                      <Trophy size={15} className="text-amber-400" aria-hidden="true" />
-                      Leaderboard
-                    </button>
-                    <button
-                      onClick={() => setScreen("analytics")}
-                      className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
-                    >
-                      <BarChart3 size={15} className="text-blue-400" aria-hidden="true" />
-                      Analytics
-                    </button>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ── T8.6: Rival scouts section ───────────────────────────────────── */}
-        {!IS_YOUTH_EARLY_ACCESS && hasRivals && (
-          <div className="mt-6">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Shield size={14} className="text-red-400" aria-hidden="true" />
-                  Rival Scouts Activity
-                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                    {rivalScouts.length} rival{rivalScouts.length !== 1 ? "s" : ""}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {rivalScouts.map((rival) => {
-                    const rivalClub = gameState.clubs[rival.clubId];
-                    const rivalLeague = rivalClub ? gameState.leagues[rivalClub.leagueId] : undefined;
-                    return (
-                      <div
-                        key={rival.id}
-                        className="rounded-lg border border-[#27272a] bg-[#141414] p-3"
-                      >
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-white">
-                              {rival.name}
-                            </p>
-                            <p className="text-xs text-zinc-400">
-                              {rivalClub?.shortName ?? "Unknown Club"}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <Badge
-                              variant={threatBadgeVariant(rival.quality)}
-                              className="shrink-0 text-[10px]"
-                            >
-                              {threatLabel(rival.quality)}
-                            </Badge>
-                            <Badge variant="outline" className="shrink-0 text-[9px] text-zinc-400 border-zinc-700">
-                              {rival.specialization === "firstTeam" ? "First Team"
-                               : rival.specialization === "youth" ? "Youth"
-                               : rival.specialization === "regional" ? "Regional"
-                               : "Data"}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        {/* Quality stars */}
-                        <div className="mb-2 flex items-center gap-0.5">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              size={10}
-                              aria-hidden="true"
-                              className={
-                                i < rival.quality
-                                  ? "text-amber-400 fill-amber-400"
-                                  : "text-zinc-700"
-                              }
-                            />
-                          ))}
-                        </div>
-
-                        {rivalLeague && (
-                          <p className="text-[10px] text-zinc-400">
-                            Active in {rivalLeague.name}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-        {/* League Standings with Relegation/Promotion Zones */}
-        {!IS_YOUTH_EARLY_ACCESS && (
-          <div className="mt-6">
-            <LeagueStandingsWidget />
-          </div>
-        )}
-
-        {/* Active Loans */}
-        {relevantActiveLoans.length > 0 && (
-          <div className="mt-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Eye size={14} className="text-sky-400" />
-                  Active Loans
-                  <Badge variant="outline" className="ml-auto text-[10px]">
-                    {relevantActiveLoans.length}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {relevantActiveLoans.slice(0, 8).map((deal) => {
-                  const loanPlayer = gameState.players[deal.playerId];
-                  const parentClub = gameState.clubs[deal.parentClubId];
-                  const loanClub = gameState.clubs[deal.loanClubId];
-                  const perf = deal.performanceRecord;
-                  const monitoredThisWeek = (deal.monitoringWeeks ?? []).includes(
-                    `${gameState.currentSeason}:${gameState.currentWeek}`,
-                  );
-                  if (!loanPlayer) return null;
-                  return (
-                    <div
-                      key={deal.id}
-                      className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-xs cursor-pointer hover:border-sky-500/30"
-                      onClick={() => {
-                        selectPlayer(deal.playerId);
-                        setScreen("playerProfile");
-                      }}
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium text-zinc-200 truncate">
-                          {loanPlayer.firstName} {loanPlayer.lastName}
-                          <span className="ml-1 text-zinc-400">({loanPlayer.age})</span>
-                        </p>
-                        <p className="text-[10px] text-zinc-400 truncate">
-                          {parentClub?.name ?? "?"} → {loanClub?.name ?? "?"}
-                          {" · "}Ends S{deal.endSeason} W{deal.endWeek}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-2">
-                        {perf && (
-                          <>
-                            <span className="text-zinc-400">{perf.appearances} apps</span>
-                            {perf.avgRating > 0 && (
-                              <span className={perf.avgRating >= 7 ? "text-emerald-400" : perf.avgRating >= 6 ? "text-amber-400" : "text-red-400"}>
-                                {perf.avgRating.toFixed(1)}
-                              </span>
-                            )}
-                            {perf.developmentDelta !== 0 && (
-                              <span className={perf.developmentDelta > 0 ? "text-emerald-400" : "text-red-400"}>
-                                {perf.developmentDelta > 0 ? "+" : ""}{perf.developmentDelta} CA
-                              </span>
-                            )}
-                          </>
-                        )}
-                        {(deal.scoutId === gameState.scout.id ||
-                          deal.parentClubId === gameState.scout.currentClubId ||
-                          deal.loanClubId === gameState.scout.currentClubId) && (
-                          <button
-                            className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:border-sky-500/40 hover:text-sky-400 transition"
-                            disabled={monitoredThisWeek}
-                            title={monitoredThisWeek ? "Monitoring report already filed this week" : "Submit monitoring report"}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              submitLoanMonitoringReport(deal.id);
-                            }}
-                          >
-                            <ClipboardList size={10} className="inline mr-0.5" />
-                            {monitoredThisWeek ? "Monitored" : "Monitor"}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        <DashboardSupplementalSections
+          gameState={gameState}
+          scout={scout}
+          specialization={specialization}
+          activeDirectives={activeDirectives}
+          recentTransfers={recentTransfers}
+          allPredictions={allPredictions}
+          resolvedPredictions={resolvedPredictions}
+          correctPredictions={correctPredictions}
+          predictionAccuracy={predictionAccuracy}
+          currentStreak={currentStreak}
+          oracleBadge={oracleBadge}
+          unresolvedPredictions={unresolvedPredictions}
+          dataAnalysts={dataAnalysts}
+          hasRivals={hasRivals}
+          rivalScouts={rivalScouts}
+          relevantActiveLoans={relevantActiveLoans}
+          setScreen={setScreen}
+          selectPlayer={selectPlayer}
+          submitLoanMonitoringReport={submitLoanMonitoringReport}
+        />
         </div>
       </div>
     </GameLayout>

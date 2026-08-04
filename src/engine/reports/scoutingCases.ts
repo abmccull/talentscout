@@ -799,6 +799,7 @@ interface ResolveDecisionInput {
   requestedEvidenceCategory?: ClubDecision["requestedEvidenceCategory"];
   followUpDueWeek?: number;
   followUpDueSeason?: number;
+  recruitmentSnapshot?: ClubDecision["recruitmentSnapshot"];
 }
 
 export function resolveClubDecision(input: ResolveDecisionInput): {
@@ -820,6 +821,7 @@ export function resolveClubDecision(input: ResolveDecisionInput): {
     deliveryId: delivery.id,
     reportId: delivery.reportId,
     clubId: delivery.clubId,
+    recruitmentSnapshot: input.recruitmentSnapshot,
     outcome: input.outcome,
     decidedWeek: input.week,
     decidedSeason: input.season,

@@ -10,13 +10,14 @@ import type {
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import { createRNG } from "@/engine/rng";
 import {
-  createObservationEvidenceIndex,
+  createObservationEvidenceIndexFromRecord,
   getPlayerObservationEvidence,
   upsertObservationEvidence,
 } from "@/engine/scout/perception";
 import { processCompletedWeek } from "@/engine/core/calendar";
 import {
   applyRegionalPresenceToObservation,
+  createRegionalPresenceResolver,
 } from "@/engine/world";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
 import {
@@ -45,6 +46,7 @@ export interface WeeklyObservationActivitiesInput {
   focusDepthByType: ReadonlyMap<Activity["type"], number>;
   focusedPlayersByType: ReadonlyMap<Activity["type"], readonly string[]>;
   weekSimulation: WeekSimulationState | null;
+  noteDiagnostic?: (key: string, value: string | number | boolean | null) => void;
 }
 
 export interface WeeklyObservationActivitiesResult {
@@ -53,9 +55,16 @@ export interface WeeklyObservationActivitiesResult {
   observationsGenerated: number;
 }
 
+function readObservationDiagnosticClock(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
+
 export function processWeeklyObservationActivities(
   input: WeeklyObservationActivitiesInput,
 ): WeeklyObservationActivitiesResult {
+  const noteDiagnostic = input.noteDiagnostic ?? (() => undefined);
   let stateWithScheduleApplied = input.state;
   const {
     gameState,
@@ -80,23 +89,49 @@ export function processWeeklyObservationActivities(
   let weekPlayersDiscovered = 0;
   let weekObservationsGenerated = 0;
   {
+    const setupStartedAt = readObservationDiagnosticClock();
     const actObsRng = createRNG(
       `${gameState.seed}-actobs-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
-    const updatedObservations = { ...stateWithScheduleApplied.observations };
-    const preexistingObservationIds = new Set(Object.keys(updatedObservations));
+    const originalObservations = stateWithScheduleApplied.observations;
+    const cloneStartedAt = readObservationDiagnosticClock();
+    const updatedObservations = { ...originalObservations };
+    noteDiagnostic(
+      "observationArchiveCloneMs",
+      readObservationDiagnosticClock() - cloneStartedAt,
+    );
+    const newObservationIds = new Set<string>();
     let actDiscoveries = [...(stateWithScheduleApplied.discoveryRecords ?? [])];
     let actObsMessages: InboxMessage[] = [];
+    const playerMaterializeStartedAt = readObservationDiagnosticClock();
     const allPlayers = Object.values(stateWithScheduleApplied.players);
-    const existingObs = Object.values(updatedObservations);
-    const observationEvidenceIndex = createObservationEvidenceIndex(existingObs);
+    noteDiagnostic(
+      "activePlayerMaterializeMs",
+      readObservationDiagnosticClock() - playerMaterializeStartedAt,
+    );
+    const evidenceIndexStartedAt = readObservationDiagnosticClock();
+    const observationEvidenceIndex = createObservationEvidenceIndexFromRecord(
+      originalObservations,
+    );
+    noteDiagnostic(
+      "observationEvidenceIndexMs",
+      readObservationDiagnosticClock() - evidenceIndexStartedAt,
+    );
     const playerEvidence = (playerId: string): Observation[] =>
       getPlayerObservationEvidence(observationEvidenceIndex, playerId);
     const recordObservation = (observation: Observation): void => {
       updatedObservations[observation.id] = observation;
+      if (!Object.prototype.hasOwnProperty.call(originalObservations, observation.id)) {
+        newObservationIds.add(observation.id);
+      }
       upsertObservationEvidence(observationEvidenceIndex, observation);
     };
-    const observedPlayerIds = new Set(existingObs.map((o) => o.playerId));
+    const observedPlayerIds = observationEvidenceIndex.observedPlayerIds;
+    noteDiagnostic(
+      "observationArchiveSize",
+      observationEvidenceIndex.byObservationId.size,
+    );
+    noteDiagnostic("activePlayerCount", allPlayers.length);
     const currentScout = stateWithScheduleApplied.scout;
     const effectiveScoutCountry = resolveScoutEffectiveCountry(
       currentScout,
@@ -208,6 +243,11 @@ export function processWeeklyObservationActivities(
       return [...focused, ...rest];
     }
 
+    noteDiagnostic(
+      "observationSetupMs",
+      readObservationDiagnosticClock() - setupStartedAt,
+    );
+    const professionalStartedAt = readObservationDiagnosticClock();
     const professionalObservations = processWeeklyProfessionalObservationActivities({
       sourceState: gameState,
       state: stateWithScheduleApplied,
@@ -235,12 +275,20 @@ export function processWeeklyObservationActivities(
       prioritizeYouth: prioritizeFocusedYouth,
       prioritizePlayers: prioritizeFocusedPlayers,
       tierLabels: TIER_LABELS,
+      noteDiagnostic: (key, value) => {
+        if (value !== undefined) noteDiagnostic(key, value);
+      },
     });
+    noteDiagnostic(
+      "professionalObservationMs",
+      readObservationDiagnosticClock() - professionalStartedAt,
+    );
     stateWithScheduleApplied = professionalObservations.state;
     actDiscoveries = professionalObservations.discoveries;
     actObsMessages = professionalObservations.messages;
     weekPlayersDiscovered = professionalObservations.playersDiscovered;
     weekObservationsGenerated = professionalObservations.observationsGenerated;
+    const dataStartedAt = readObservationDiagnosticClock();
     const dataObservations = processWeeklyDataObservationActivities({
       sourceState: gameState,
       state: stateWithScheduleApplied,
@@ -260,10 +308,15 @@ export function processWeeklyObservationActivities(
       reportQualityModifier: choiceReportQualityMod,
       prioritizePlayers: prioritizeFocusedPlayers,
     });
+    noteDiagnostic(
+      "dataObservationMs",
+      readObservationDiagnosticClock() - dataStartedAt,
+    );
     stateWithScheduleApplied = dataObservations.state;
     actObsMessages = dataObservations.messages;
     weekObservationsGenerated = dataObservations.observationsGenerated;
 
+    const youthStartedAt = readObservationDiagnosticClock();
     const youthObservations = processWeeklyYouthObservationActivities({
       sourceState: gameState,
       state: stateWithScheduleApplied,
@@ -280,6 +333,7 @@ export function processWeeklyObservationActivities(
       observationsGenerated: weekObservationsGenerated,
       playerEvidence,
       recordObservation,
+      hasNewObservations: () => newObservationIds.size > 0,
       discoveryModifier: choiceDiscoveryMod,
       focusDepth,
       focusPlayers,
@@ -289,6 +343,10 @@ export function processWeeklyObservationActivities(
       completedLiveActivityTypes,
       tierLabels: TIER_LABELS,
     });
+    noteDiagnostic(
+      "youthObservationMs",
+      readObservationDiagnosticClock() - youthStartedAt,
+    );
     stateWithScheduleApplied = youthObservations.state;
     actDiscoveries = youthObservations.discoveries;
     actObsMessages = youthObservations.messages;
@@ -296,20 +354,30 @@ export function processWeeklyObservationActivities(
     weekObservationsGenerated = youthObservations.observationsGenerated;
     // Apply regional context once, after every manual/week-simulation path
     // has converged on the same authoritative observation collection.
-    const presenceAdjustedObservations = {
-      ...stateWithScheduleApplied.observations,
-    };
-    for (const [observationId, observation] of Object.entries(presenceAdjustedObservations)) {
-      if (preexistingObservationIds.has(observationId)) continue;
-      presenceAdjustedObservations[observationId] = applyRegionalPresenceToObservation(
+    const regionalPresenceStartedAt = readObservationDiagnosticClock();
+    const resolveRegionalPresence = createRegionalPresenceResolver(
+      stateWithScheduleApplied,
+    );
+    for (const observationId of newObservationIds) {
+      const observation = updatedObservations[observationId];
+      if (!observation) continue;
+      updatedObservations[observationId] = applyRegionalPresenceToObservation(
         stateWithScheduleApplied,
         observation,
+        resolveRegionalPresence,
       );
     }
-    stateWithScheduleApplied = {
-      ...stateWithScheduleApplied,
-      observations: presenceAdjustedObservations,
-    };
+    if (newObservationIds.size > 0) {
+      stateWithScheduleApplied = {
+        ...stateWithScheduleApplied,
+        observations: updatedObservations,
+      };
+    }
+    noteDiagnostic(
+      "observationRegionalPresenceMs",
+      readObservationDiagnosticClock() - regionalPresenceStartedAt,
+    );
+    noteDiagnostic("newObservationCount", newObservationIds.size);
   }
   return {
     state: stateWithScheduleApplied,

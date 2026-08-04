@@ -74,9 +74,9 @@ test.describe("Career Paths", () => {
     expect(await gamePage.getGameStateValue("scout.salary")).toBe(0);
     expect(await gamePage.getGameStateValue("scout.careerPath")).toBe("independent");
     await expect(
-      gamePage.page.getByRole("tabpanel", { name: "Overview" })
-        .getByText("Freelance Youth Scout", { exact: true }),
-    ).toBeVisible();
+      gamePage.page.getByTestId("career-command-bridge")
+        .getByTestId("career-role-title"),
+    ).toHaveText("Freelance Youth Scout");
 
     gamePage.expectNoConsoleErrors();
   });
@@ -87,8 +87,9 @@ test.describe("Career Paths", () => {
     await expect(
       gamePage.page.locator('[data-tutorial-id="report-marketplace-prompt"]'),
     ).toBeVisible();
-    await expect(gamePage.page.getByText("Active Listings")).toBeVisible();
-    await expect(gamePage.page.getByText("Pending Bids")).toBeVisible();
+    await gamePage.page.getByText("Archive and reference", { exact: true }).click();
+    await expect(gamePage.page.getByText("Active Listings", { exact: true })).toBeVisible();
+    await expect(gamePage.page.getByText("Pending Bids", { exact: true })).toBeVisible();
 
     gamePage.expectNoConsoleErrors();
   });

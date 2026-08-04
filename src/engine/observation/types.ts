@@ -27,6 +27,7 @@ import type {
   ScoutingQuestionId,
 } from "@/engine/core/types";
 import type { ObservationSituationSnapshot } from "./situations";
+import type { CountryCalendarEffects } from "@/engine/world/footballCultureCalendar";
 
 // =============================================================================
 // PRIMITIVES & ENUMS
@@ -620,6 +621,8 @@ export interface ObservationSession {
   countryId?: string;
   /** Earned insights used to construct the situation. Optional on legacy sessions. */
   culturalInsights?: CulturalInsight[];
+  /** Persisted country-season context used to construct this session. */
+  culturalCalendarEffects?: CountryCalendarEffects;
   /** Purpose selected for the active international trip, if any. */
   travelPosture?: TravelPosture;
   /** All players visible in this session. */
@@ -665,6 +668,8 @@ export interface SessionConfig {
   countryId?: string;
   /** Cultural knowledge already earned by the scout in that country. */
   culturalInsights?: CulturalInsight[];
+  /** Persisted country-season context resolved from authoritative save state. */
+  culturalCalendarEffects?: CountryCalendarEffects;
   /** Purpose selected for the active international trip, if any. */
   travelPosture?: TravelPosture;
   /** If set, this session is a follow-up focused on a specific player. */

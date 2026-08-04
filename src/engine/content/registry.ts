@@ -1,5 +1,6 @@
 /** Canonical list of shipped authored content packs. */
 
+import { CAREER_ERA_CONTENT_PACK } from "@/engine/events/careerEraDirector";
 import { EVENT_TEMPLATE_CONTENT_PACK } from "@/engine/events/eventTemplates";
 import { INSIGHT_NARRATIVE_CONTENT_PACK } from "@/engine/insight/actions";
 import {
@@ -9,6 +10,11 @@ import {
   OBSERVATION_ATMOSPHERE_EVENT_CONTENT_PACK,
 } from "@/engine/observation/atmosphere";
 import { SCENARIO_CONTENT_PACK } from "@/engine/scenarios/scenarioDefinitions";
+import {
+  OBSERVATION_SITUATION_CONTENT_PACK,
+} from "@/engine/observation/situationCatalog";
+import { FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK } from "@/engine/world/footballCulturePlaybooks";
+import { RECRUITMENT_DOCTRINE_CONTENT_PACK } from "@/engine/world/recruitmentDoctrineCatalog";
 import {
   getContentDefinitionIds,
   getContentEntry,
@@ -22,17 +28,31 @@ export const SHIPPED_CONTENT_PACKS = Object.freeze([
   EVENT_TEMPLATE_CONTENT_PACK,
   SCENARIO_CONTENT_PACK,
   GAME_MODE_CONTENT_PACK,
+  CAREER_ERA_CONTENT_PACK,
+  FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK,
+  RECRUITMENT_DOCTRINE_CONTENT_PACK,
   INSIGHT_NARRATIVE_CONTENT_PACK,
+  OBSERVATION_SITUATION_CONTENT_PACK,
   OBSERVATION_ATMOSPHERE_EVENT_CONTENT_PACK,
   INVESTIGATION_CONSEQUENCE_NARRATIVE_CONTENT_PACK,
 ]);
+
+export {
+  CAREER_ERA_CONTENT_PACK,
+  FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK,
+  RECRUITMENT_DOCTRINE_CONTENT_PACK,
+};
 
 export function getShippedContentDefinitionIds(): string[] {
   return [
     ...getContentDefinitionIds(EVENT_TEMPLATE_CONTENT_PACK),
     ...getContentDefinitionIds(SCENARIO_CONTENT_PACK),
     ...getContentDefinitionIds(GAME_MODE_CONTENT_PACK),
+    ...getContentDefinitionIds(CAREER_ERA_CONTENT_PACK),
+    ...getContentDefinitionIds(FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK),
+    ...getContentDefinitionIds(RECRUITMENT_DOCTRINE_CONTENT_PACK),
     ...getContentDefinitionIds(INSIGHT_NARRATIVE_CONTENT_PACK),
+    ...getContentDefinitionIds(OBSERVATION_SITUATION_CONTENT_PACK),
     ...getContentDefinitionIds(OBSERVATION_ATMOSPHERE_EVENT_CONTENT_PACK),
     ...getContentDefinitionIds(INVESTIGATION_CONSEQUENCE_NARRATIVE_CONTENT_PACK),
   ];
@@ -59,7 +79,11 @@ export function getRunContentDefinitionIds(
   }
   return [
     ...getContentDefinitionIds(EVENT_TEMPLATE_CONTENT_PACK),
+    ...getContentDefinitionIds(CAREER_ERA_CONTENT_PACK),
+    ...getContentDefinitionIds(FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK),
+    ...getContentDefinitionIds(RECRUITMENT_DOCTRINE_CONTENT_PACK),
     ...getContentDefinitionIds(INSIGHT_NARRATIVE_CONTENT_PACK),
+    ...getContentDefinitionIds(OBSERVATION_SITUATION_CONTENT_PACK),
     ...getContentDefinitionIds(OBSERVATION_ATMOSPHERE_EVENT_CONTENT_PACK),
     ...getContentDefinitionIds(INVESTIGATION_CONSEQUENCE_NARRATIVE_CONTENT_PACK),
     `${GAME_MODE_CONTENT_PACK.manifest.kind}:${GAME_MODE_CONTENT_PACK.getDefinitionId(activeMode)}@${GAME_MODE_CONTENT_PACK.manifest.contentVersion}`,

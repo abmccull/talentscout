@@ -25,7 +25,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -379,6 +379,15 @@ async function createOfflineCareer(page) {
     timeout: 60_000,
   });
   await page.getByText("Offline Verifier", { exact: true }).waitFor({ timeout: 30_000 });
+}
+
+async function packagedWeeklyWorkerProbe(page) {
+  await page.waitForTimeout(1_000);
+  const workerUrls = page.workers().map((worker) => worker.url());
+  return {
+    active: workerUrls.some((url) => /weekly(?:Simulation|-simulation)/i.test(url)),
+    workerUrls,
+  };
 }
 
 async function openSettings(page) {
@@ -884,7 +893,15 @@ async function main() {
     limitations: [],
   };
 
-  const sevenZip = path.resolve(ROOT, "node_modules", "7zip-bin", "win", "x64", "7za.exe");
+  const bundledSevenZip = path.resolve(
+    ROOT,
+    "node_modules",
+    "7zip-bin",
+    "win",
+    "x64",
+    "7za.exe",
+  );
+  const sevenZip = existsSync(bundledSevenZip) ? bundledSevenZip : "7z";
   const archiveTest = spawnSync(sevenZip, ["t", INSTALLER], {
     cwd: ROOT,
     encoding: "utf8",
@@ -925,6 +942,7 @@ async function main() {
     const audio = await audioRangeProbe(firstRun.page);
     const steam = await steamUnavailableProbe(firstRun.page);
     await createOfflineCareer(firstRun.page);
+    const weeklyWorker = await packagedWeeklyWorkerProbe(firstRun.page);
     await openSettings(firstRun.page);
     await quickSaveToFirstSlot(firstRun.page);
     await overwriteFirstSlot(firstRun.page);
@@ -937,6 +955,7 @@ async function main() {
       offline: initialOffline,
       audio,
       steam,
+      weeklyWorker,
       persistence: persistedBeforeRestart,
       launchArgs: firstRun.launchArgs,
       gracefulExit: runLog,
@@ -973,6 +992,22 @@ async function main() {
         localHeadCommitted: Boolean(persistedBeforeRestart.head),
         queuedRemoteIntents: persistedBeforeRestart.queue,
       },
+    );
+    const workerPolicyErrors = firstRun.diagnostics.rendererConsoleErrors.filter(
+      (message) => /content security policy|worker-src|child-src/i.test(message),
+    );
+    evidence.controls.packagedWeeklySimulationWorker = control(
+      weeklyWorker.active
+        && workerPolicyErrors.length === 0
+        ? "Passed"
+        : "Failed",
+      {
+        ...weeklyWorker,
+        policyErrors: workerPolicyErrors,
+      },
+      weeklyWorker.active
+        ? null
+        : "The packaged app did not instantiate its weekly simulation Web Worker.",
     );
     evidence.controls.offlineRemoteQueueCoalescing = control(
       persistedBeforeRestart.queue.length === 1

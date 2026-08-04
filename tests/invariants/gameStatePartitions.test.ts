@@ -41,6 +41,7 @@ describe("GameState ownership partitions", () => {
     expect(getActiveRunKind(state)).toBe("career");
     expect(partitions.sharedWorld.players).toBe(state.players);
     expect(partitions.sharedCareer.reports).toBe(state.reports);
+    expect(partitions.sharedCareer.dashboardState).toBe(state.dashboardState);
     expect(partitions.mode.unsignedYouth).toBe(state.unsignedYouth);
     expect(partitions.sharedCareer.systemFitCache).toBe(state.systemFitCache);
   });

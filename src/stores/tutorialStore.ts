@@ -16,6 +16,7 @@ import {
   subscribePlayerExperience,
   updatePlayerExperience,
 } from "@/lib/playerExperience";
+import { isTutorialSequenceAvailableForBuild } from "@/stores/gameScreenScope";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -161,14 +162,14 @@ function readPersisted(): PersistedTutorialData {
     const parsed = JSON.parse(raw) as Partial<PersistedTutorialData>;
     const migrated: PersistedTutorialData = {
       completedSequences: Array.isArray(parsed.completedSequences)
-        ? parsed.completedSequences
+        ? parsed.completedSequences.filter((value): value is string => typeof value === "string")
         : [],
       dismissed: parsed.dismissed === true,
       visitedScreens: Array.isArray(parsed.visitedScreens)
-        ? parsed.visitedScreens
+        ? parsed.visitedScreens.filter((value): value is string => typeof value === "string")
         : [],
       dismissedHints: Array.isArray(parsed.dismissedHints)
-        ? parsed.dismissedHints
+        ? parsed.dismissedHints.filter((value): value is string => typeof value === "string")
         : [],
       guidedMilestones:
         parsed.guidedMilestones && typeof parsed.guidedMilestones === "object"
@@ -179,7 +180,7 @@ function readPersisted(): PersistedTutorialData {
         ? "discoveryHook"
         : "firstWeek",
       discoveredFeatures: Array.isArray(parsed.discoveredFeatures)
-        ? parsed.discoveredFeatures
+        ? parsed.discoveredFeatures.filter((value): value is string => typeof value === "string")
         : [],
     };
     const mergedExperience = mergePersistedPlayerExperience({
@@ -454,6 +455,7 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   startSequence(id) {
     const { dismissed, completedSequences, tutorialActive, guidedSessionActive, discoveredFeatures } = get();
     if (dismissed) return;
+    if (!isTutorialSequenceAvailableForBuild(id)) return;
     if (id === "firstWeek") return;
     if (completedSequences.has(id)) return;
 
@@ -485,6 +487,7 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   queueSequence(id) {
     const { dismissed, completedSequences, tutorialActive } = get();
     if (dismissed) return;
+    if (!isTutorialSequenceAvailableForBuild(id)) return;
     if (completedSequences.has(id)) return;
 
     if (!tutorialActive) {

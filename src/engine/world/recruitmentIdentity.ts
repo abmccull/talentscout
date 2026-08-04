@@ -10,14 +10,27 @@
 
 import type {
   Club,
+  GameState,
   ManagerProfile,
   Player,
+  RunManifest,
   ScoutReport,
   ScoutingPhilosophy,
   Specialization,
   YouthBriefPriority,
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
+import {
+  DOCTRINE_BASES_BY_FAMILY,
+  DOCTRINE_EXPRESSIONS_BY_FAMILY,
+  listRecruitmentDoctrineExpressions,
+  type ClubRecruitmentExpressionId,
+  type DoctrineBase,
+  type DoctrineExpression,
+  type RecruitmentEvidencePreference,
+  type RecruitmentReach,
+  type RecruitmentRiskTolerance,
+} from "./recruitmentDoctrineCatalog";
 
 export type RecruitmentFocus = YouthBriefPriority;
 
@@ -33,9 +46,12 @@ export type ClubRecruitmentArchetype =
   | "valueTrader"
   | "crossBorderNetwork";
 
-export type RecruitmentEvidencePreference = "live" | "data" | "network" | "balanced";
-export type RecruitmentRiskTolerance = "low" | "medium" | "high";
-export type RecruitmentReach = "local" | "regional" | "international" | "global";
+export type {
+  ClubRecruitmentExpressionId,
+  RecruitmentEvidencePreference,
+  RecruitmentReach,
+  RecruitmentRiskTolerance,
+} from "./recruitmentDoctrineCatalog";
 
 /**
  * One authoritative, player-safe description of how a club recruits.
@@ -48,7 +64,10 @@ export type RecruitmentReach = "local" | "regional" | "international" | "global"
 export interface ClubRecruitmentDoctrine {
   version: 1;
   clubId: string;
+  family: ScoutingPhilosophy;
   archetype: ClubRecruitmentArchetype;
+  expressionId: ClubRecruitmentExpressionId;
+  expressionLabel: string;
   preferredSeniorAgeRange: [number, number];
   academyIntakeAgeRange: [number, number];
   evidencePreference: RecruitmentEvidencePreference;
@@ -64,6 +83,13 @@ export interface ClubRecruitmentDoctrine {
   seasonalObjective: RecruitmentFocus;
   specializationAffinity: Specialization[];
   reasons: string[];
+}
+
+export interface HistoricalRecruitmentDoctrineSnapshot extends ClubRecruitmentDoctrine {
+  snapshotVersion: 1;
+  capturedWeek: number;
+  capturedSeason: number;
+  primaryFocus: RecruitmentFocus;
 }
 
 export interface RegionRecruitmentIdentity {
@@ -126,6 +152,8 @@ const PHILOSOPHY_ORDER: ScoutingPhilosophy[] = [
   "marketSmart",
   "globalRecruiter",
 ];
+const LEGACY_RECRUITMENT_DOCTRINE_EXPRESSION_COUNT = 3;
+const RECRUITMENT_DOCTRINE_LEDGER_PREFIX = "recruitment-doctrine:";
 
 const FOCUS_ORDER: RecruitmentFocus[] = [
   "highCeiling",
@@ -148,74 +176,14 @@ const PRIMARY_FOCUS_BY_PHILOSOPHY: Record<ScoutingPhilosophy, RecruitmentFocus> 
   globalRecruiter: "character",
 };
 
-interface DoctrineBase {
-  preferredSeniorAgeRange: [number, number];
-  academyIntakeAgeRange: [number, number];
-  evidencePreference: RecruitmentEvidencePreference;
-  riskTolerance: RecruitmentRiskTolerance;
-  geographicReach: RecruitmentReach;
-  adaptationTolerance: number;
-  pathwayPatience: number;
-  tacticalRoleRigidity: number;
-  sellingPressure: number;
-  managerInfluence: number;
-  specializationAffinity: Specialization[];
+/** Read-only authored surface used by release telemetry and content audits. */
+export function listClubRecruitmentExpressions(): Array<{
+  id: ClubRecruitmentExpressionId;
+  label: string;
+  family: ScoutingPhilosophy;
+}> {
+  return listRecruitmentDoctrineExpressions();
 }
-
-const DOCTRINE_BASES: Record<ScoutingPhilosophy, DoctrineBase> = {
-  academyFirst: {
-    preferredSeniorAgeRange: [17, 23],
-    academyIntakeAgeRange: [14, 16],
-    evidencePreference: "live",
-    riskTolerance: "high",
-    geographicReach: "regional",
-    adaptationTolerance: 62,
-    pathwayPatience: 86,
-    tacticalRoleRigidity: 38,
-    sellingPressure: 34,
-    managerInfluence: 44,
-    specializationAffinity: ["youth", "regional"],
-  },
-  winNow: {
-    preferredSeniorAgeRange: [24, 31],
-    academyIntakeAgeRange: [16, 17],
-    evidencePreference: "live",
-    riskTolerance: "low",
-    geographicReach: "international",
-    adaptationTolerance: 36,
-    pathwayPatience: 22,
-    tacticalRoleRigidity: 78,
-    sellingPressure: 18,
-    managerInfluence: 72,
-    specializationAffinity: ["firstTeam", "data"],
-  },
-  marketSmart: {
-    preferredSeniorAgeRange: [21, 27],
-    academyIntakeAgeRange: [15, 17],
-    evidencePreference: "data",
-    riskTolerance: "medium",
-    geographicReach: "international",
-    adaptationTolerance: 58,
-    pathwayPatience: 61,
-    tacticalRoleRigidity: 45,
-    sellingPressure: 88,
-    managerInfluence: 38,
-    specializationAffinity: ["data", "regional", "firstTeam"],
-  },
-  globalRecruiter: {
-    preferredSeniorAgeRange: [19, 29],
-    academyIntakeAgeRange: [14, 17],
-    evidencePreference: "network",
-    riskTolerance: "medium",
-    geographicReach: "global",
-    adaptationTolerance: 84,
-    pathwayPatience: 54,
-    tacticalRoleRigidity: 34,
-    sellingPressure: 55,
-    managerInfluence: 48,
-    specializationAffinity: ["regional", "data", "firstTeam"],
-  },
-};
 
 const CLUB_LABELS: Record<ClubRecruitmentArchetype, string> = {
   academyBuilder: "Academy builder",
@@ -262,22 +230,93 @@ function boundedSeasonalTrait(base: number, seed: string): number {
   return clamp(base + (seededUnit(seed) * 2 - 1) * 7);
 }
 
+function pickDoctrineExpression(
+  philosophy: ScoutingPhilosophy,
+  seed: string,
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">,
+): DoctrineExpression {
+  const expressions = DOCTRINE_EXPRESSIONS_BY_FAMILY[philosophy];
+  const activeExpressions = usesLegacyRecruitmentDoctrineExpressions(runManifest)
+    ? expressions.slice(0, LEGACY_RECRUITMENT_DOCTRINE_EXPRESSION_COUNT)
+    : expressions;
+  return activeExpressions[Math.floor(seededUnit(seed) * activeExpressions.length)]
+    ?? activeExpressions[0];
+}
+
+function usesLegacyRecruitmentDoctrineExpressions(
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">,
+): boolean {
+  if (!runManifest) return false;
+  if (runManifest.manifestVersion === 1) return true;
+  return !(runManifest.contentDefinitionIds ?? []).some((definitionId) =>
+    definitionId.startsWith(RECRUITMENT_DOCTRINE_LEDGER_PREFIX)
+  );
+}
+
+function doctrineFromSnapshot(
+  snapshot: HistoricalRecruitmentDoctrineSnapshot,
+): ClubRecruitmentDoctrine {
+  return {
+    version: snapshot.version,
+    clubId: snapshot.clubId,
+    family: snapshot.family,
+    archetype: snapshot.archetype,
+    expressionId: snapshot.expressionId,
+    expressionLabel: snapshot.expressionLabel,
+    preferredSeniorAgeRange: [...snapshot.preferredSeniorAgeRange],
+    academyIntakeAgeRange: [...snapshot.academyIntakeAgeRange],
+    evidencePreference: snapshot.evidencePreference,
+    riskTolerance: snapshot.riskTolerance,
+    geographicReach: snapshot.geographicReach,
+    adaptationTolerance: snapshot.adaptationTolerance,
+    pathwayPatience: snapshot.pathwayPatience,
+    tacticalRoleRigidity: snapshot.tacticalRoleRigidity,
+    sellingPressure: snapshot.sellingPressure,
+    managerInfluence: snapshot.managerInfluence,
+    directorInfluence: snapshot.directorInfluence,
+    minimumEvidenceQuality: snapshot.minimumEvidenceQuality,
+    seasonalObjective: snapshot.seasonalObjective,
+    specializationAffinity: [...snapshot.specializationAffinity],
+    reasons: [...snapshot.reasons],
+  };
+}
+
+export function captureRecruitmentDoctrineSnapshot(input: {
+  doctrine: ClubRecruitmentDoctrine;
+  capturedWeek: number;
+  capturedSeason: number;
+  primaryFocus?: RecruitmentFocus;
+}): HistoricalRecruitmentDoctrineSnapshot {
+  return {
+    ...input.doctrine,
+    snapshotVersion: 1,
+    capturedWeek: input.capturedWeek,
+    capturedSeason: input.capturedSeason,
+    primaryFocus: input.primaryFocus
+      ?? PRIMARY_FOCUS_BY_PHILOSOPHY[input.doctrine.family],
+    preferredSeniorAgeRange: [...input.doctrine.preferredSeniorAgeRange],
+    academyIntakeAgeRange: [...input.doctrine.academyIntakeAgeRange],
+    specializationAffinity: [...input.doctrine.specializationAffinity],
+    reasons: [...input.doctrine.reasons],
+  };
+}
+
 export function getPhilosophyPreferredAgeRange(
   philosophy: ScoutingPhilosophy,
 ): [number, number] {
-  return [...DOCTRINE_BASES[philosophy].preferredSeniorAgeRange];
+  return [...DOCTRINE_BASES_BY_FAMILY[philosophy].preferredSeniorAgeRange];
 }
 
 export function getPhilosophyAcademyIntakeAgeRange(
   philosophy: ScoutingPhilosophy,
 ): [number, number] {
-  return [...DOCTRINE_BASES[philosophy].academyIntakeAgeRange];
+  return [...DOCTRINE_BASES_BY_FAMILY[philosophy].academyIntakeAgeRange];
 }
 
 export function getPhilosophySpecializationAffinity(
   philosophy: ScoutingPhilosophy,
 ): Specialization[] {
-  return [...DOCTRINE_BASES[philosophy].specializationAffinity];
+  return [...DOCTRINE_BASES_BY_FAMILY[philosophy].specializationAffinity];
 }
 
 /** Build the canonical recruitment doctrine used by every club-facing system. */
@@ -288,32 +327,42 @@ export function deriveClubRecruitmentDoctrine(input: {
   region?: RegionRecruitmentIdentity;
   manager?: ManagerProfile;
   seasonalObjective?: RecruitmentFocus;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
 }): ClubRecruitmentDoctrine {
   const { club } = input;
-  const base = DOCTRINE_BASES[club.scoutingPhilosophy];
+  const base = DOCTRINE_BASES_BY_FAMILY[club.scoutingPhilosophy];
   const seedPrefix = `${input.seed}:${club.id}:s${input.season}:doctrine`;
+  const expression = pickDoctrineExpression(
+    club.scoutingPhilosophy,
+    `${seedPrefix}:expression`,
+    input.runManifest,
+  );
   const seasonalObjective = input.seasonalObjective ?? weightedSeededPick(
     `${seedPrefix}:objective`,
     FOCUS_ORDER.map((focus) => ({
       value: focus,
       weight:
-        focus === PRIMARY_FOCUS_BY_PHILOSOPHY[club.scoutingPhilosophy] ? 5
-        : focus === input.region?.seasonalFocus ? 2.5
-        : 1,
+        (focus === PRIMARY_FOCUS_BY_PHILOSOPHY[club.scoutingPhilosophy] ? 5 : 1)
+        + (focus === input.region?.seasonalFocus ? 1.5 : 0)
+        + (expression.objectiveWeights?.[focus] ?? 0),
     })),
   );
   const managerSignal = input.manager
     ? Math.round((input.manager.reportInfluence - 0.5) * 24)
     : 0;
+  const doctrineRiskTolerance = expression.overrides.riskTolerance ?? base.riskTolerance;
   const managerInfluence = clamp(
-    boundedSeasonalTrait(base.managerInfluence, `${seedPrefix}:manager`) + managerSignal,
+    boundedSeasonalTrait(
+      expression.overrides.managerInfluence ?? base.managerInfluence,
+      `${seedPrefix}:manager`,
+    ) + managerSignal,
   );
   const directorInfluence = clamp(100 - managerInfluence);
   const minimumEvidenceQuality = clamp(
     38
       + club.reputation * 0.22
       + club.youthAcademyRating * 0.65
-      + (base.riskTolerance === "low" ? 8 : base.riskTolerance === "high" ? -4 : 2),
+      + (doctrineRiskTolerance === "low" ? 8 : doctrineRiskTolerance === "high" ? -4 : 2),
     45,
     82,
   );
@@ -321,27 +370,72 @@ export function deriveClubRecruitmentDoctrine(input: {
   return {
     version: 1,
     clubId: club.id,
+    family: club.scoutingPhilosophy,
     archetype: ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy],
-    preferredSeniorAgeRange: [...base.preferredSeniorAgeRange],
-    academyIntakeAgeRange: [...base.academyIntakeAgeRange],
-    evidencePreference: base.evidencePreference,
-    riskTolerance: base.riskTolerance,
-    geographicReach: base.geographicReach,
-    adaptationTolerance: boundedSeasonalTrait(base.adaptationTolerance, `${seedPrefix}:adaptation`),
-    pathwayPatience: boundedSeasonalTrait(base.pathwayPatience, `${seedPrefix}:patience`),
-    tacticalRoleRigidity: boundedSeasonalTrait(base.tacticalRoleRigidity, `${seedPrefix}:roles`),
-    sellingPressure: boundedSeasonalTrait(base.sellingPressure, `${seedPrefix}:selling`),
+    expressionId: expression.id,
+    expressionLabel: expression.label,
+    preferredSeniorAgeRange: [...(expression.overrides.preferredSeniorAgeRange ?? base.preferredSeniorAgeRange)],
+    academyIntakeAgeRange: [...(expression.overrides.academyIntakeAgeRange ?? base.academyIntakeAgeRange)],
+    evidencePreference: expression.overrides.evidencePreference ?? base.evidencePreference,
+    riskTolerance: doctrineRiskTolerance,
+    geographicReach: expression.overrides.geographicReach ?? base.geographicReach,
+    adaptationTolerance: boundedSeasonalTrait(
+      expression.overrides.adaptationTolerance ?? base.adaptationTolerance,
+      `${seedPrefix}:adaptation`,
+    ),
+    pathwayPatience: boundedSeasonalTrait(
+      expression.overrides.pathwayPatience ?? base.pathwayPatience,
+      `${seedPrefix}:patience`,
+    ),
+    tacticalRoleRigidity: boundedSeasonalTrait(
+      expression.overrides.tacticalRoleRigidity ?? base.tacticalRoleRigidity,
+      `${seedPrefix}:roles`,
+    ),
+    sellingPressure: boundedSeasonalTrait(
+      expression.overrides.sellingPressure ?? base.sellingPressure,
+      `${seedPrefix}:selling`,
+    ),
     managerInfluence,
     directorInfluence,
     minimumEvidenceQuality,
     seasonalObjective,
-    specializationAffinity: [...base.specializationAffinity],
+    specializationAffinity: [
+      ...(expression.overrides.specializationAffinity ?? base.specializationAffinity),
+    ],
     reasons: [
-      `${CLUB_LABELS[ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy]]} doctrine favours ages ${base.preferredSeniorAgeRange[0]}-${base.preferredSeniorAgeRange[1]} and ${base.evidencePreference} evidence.`,
-      `${base.pathwayPatience >= 70 ? "Patient" : base.pathwayPatience <= 35 ? "Immediate" : "Balanced"} pathway expectations sit alongside ${base.geographicReach} recruitment reach.`,
+      `${CLUB_LABELS[ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy]]} doctrine is currently expressed as ${expression.label.toLowerCase()}, favouring ages ${(expression.overrides.preferredSeniorAgeRange ?? base.preferredSeniorAgeRange)[0]}-${(expression.overrides.preferredSeniorAgeRange ?? base.preferredSeniorAgeRange)[1]} and ${(expression.overrides.evidencePreference ?? base.evidencePreference)} evidence.`,
+      `${(expression.overrides.pathwayPatience ?? base.pathwayPatience) >= 70 ? "Patient" : (expression.overrides.pathwayPatience ?? base.pathwayPatience) <= 35 ? "Immediate" : "Balanced"} pathway expectations sit alongside ${(expression.overrides.geographicReach ?? base.geographicReach)} recruitment reach.`,
+      expression.reason,
       `${managerInfluence >= directorInfluence ? "The manager" : "The recruitment leadership"} currently has the stronger voice; this season emphasises ${FOCUS_LABELS[seasonalObjective]}.`,
     ],
   };
+}
+
+/**
+ * Frozen deterministic key for academy-brief doctrine snapshots.
+ *
+ * Brief ids contain a random nonce and therefore cannot be used to reconstruct
+ * the doctrine that existed before snapshots were persisted. Club id + season
+ * are the stable historical inputs used by both live creation and migration.
+ */
+export function getAcademyBriefRecruitmentDoctrineSeed(clubId: string): string {
+  return `academy-brief:${clubId}`;
+}
+
+/** The single doctrine path for creating or reconstructing academy briefs. */
+export function deriveAcademyBriefRecruitmentDoctrine(input: {
+  club: Club;
+  season: number;
+  seasonalObjective?: RecruitmentFocus;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
+}): ClubRecruitmentDoctrine {
+  return deriveClubRecruitmentDoctrine({
+    club: input.club,
+    seed: getAcademyBriefRecruitmentDoctrineSeed(input.club.id),
+    season: input.season,
+    seasonalObjective: input.seasonalObjective,
+    runManifest: input.runManifest,
+  });
 }
 
 /** 0-100 fit against the doctrine's preferred senior age window. */
@@ -507,6 +601,7 @@ export function deriveClubRecruitmentIdentity(input: {
   season: number;
   region?: RegionRecruitmentIdentity;
   manager?: ManagerProfile;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
 }): ClubRecruitmentIdentity {
   const { club, region } = input;
   const archetype = ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy];
@@ -552,12 +647,13 @@ export function deriveClubRecruitmentIdentity(input: {
     region,
     manager: input.manager,
     seasonalObjective: seasonalFocus,
+    runManifest: input.runManifest,
   });
 
   return {
     clubId: club.id,
     archetype,
-    label: CLUB_LABELS[archetype],
+    label: `${CLUB_LABELS[archetype]} · ${doctrine.expressionLabel}`,
     primaryFocus,
     seasonalFocus,
     opportunityScore,
@@ -580,18 +676,20 @@ export function deriveBriefRecruitmentIdentity(
   club: Club,
   brief: YouthRecruitmentBrief,
 ): ClubRecruitmentIdentity {
-  const archetype = ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy];
-  const doctrine = deriveClubRecruitmentDoctrine({
-    club,
-    seed: brief.id,
-    season: brief.createdSeason,
-    seasonalObjective: brief.developmentPriority,
-  });
+  const doctrine = brief.recruitmentSnapshot
+    ? doctrineFromSnapshot(brief.recruitmentSnapshot)
+    : deriveAcademyBriefRecruitmentDoctrine({
+        club,
+        season: brief.createdSeason,
+        seasonalObjective: brief.developmentPriority,
+      });
+  const family = brief.recruitmentSnapshot?.family ?? club.scoutingPhilosophy;
+  const archetype = doctrine.archetype;
   return {
     clubId: club.id,
     archetype,
-    label: CLUB_LABELS[archetype],
-    primaryFocus: PRIMARY_FOCUS_BY_PHILOSOPHY[club.scoutingPhilosophy],
+    label: `${CLUB_LABELS[archetype]} · ${doctrine.expressionLabel}`,
+    primaryFocus: brief.recruitmentSnapshot?.primaryFocus ?? PRIMARY_FOCUS_BY_PHILOSOPHY[family],
     seasonalFocus: brief.developmentPriority,
     opportunityScore: 0,
     doctrine,
@@ -599,6 +697,252 @@ export function deriveBriefRecruitmentIdentity(
       `${CLUB_LABELS[archetype]} priorities are expressed in this brief through ${FOCUS_LABELS[brief.developmentPriority]}.`,
     ],
   };
+}
+
+interface HistoricalRecruitmentContext {
+  philosophy: ScoutingPhilosophy;
+  reputation?: number;
+  budget?: number;
+  seasonalObjective?: RecruitmentFocus;
+}
+
+function isScoutingPhilosophy(value: unknown): value is ScoutingPhilosophy {
+  return PHILOSOPHY_ORDER.includes(value as ScoutingPhilosophy);
+}
+
+/**
+ * Resolve the club identity that was authoritative when a legacy record was
+ * written. Completed-season history is the strongest evidence. The transition
+ * ledger then reconstructs the family on either side of a season-start change.
+ * Current club state is valid evidence only for the live season; otherwise the
+ * final fallback is deliberately rooted in immutable save and club ids.
+ */
+function resolveHistoricalRecruitmentContext(
+  state: GameState,
+  club: Club,
+  season: number,
+): HistoricalRecruitmentContext {
+  const archivedSeason = Array.isArray(state.worldHistory?.seasons)
+    ? state.worldHistory.seasons.find((candidate) => candidate.season === season)
+    : undefined;
+  const archivedClub = archivedSeason?.clubs.find((candidate) => candidate.clubId === club.id);
+  if (archivedClub && isScoutingPhilosophy(archivedClub.scoutingPhilosophy)) {
+    return {
+      philosophy: archivedClub.scoutingPhilosophy,
+      reputation: archivedClub.reputation,
+      budget: archivedClub.budget,
+      seasonalObjective: archivedClub.recruitmentDoctrine?.seasonalObjective,
+    };
+  }
+
+  const rawHistory: unknown[] = Array.isArray(state.clubPhilosophyTransitionState?.history)
+    ? state.clubPhilosophyTransitionState.history
+    : [];
+  const lineage = rawHistory.flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const candidate = value as {
+      clubId?: unknown;
+      season?: unknown;
+      fromPhilosophy?: unknown;
+      toPhilosophy?: unknown;
+    };
+    if (
+      candidate.clubId !== club.id
+      || !Number.isInteger(candidate.season)
+      || !isScoutingPhilosophy(candidate.fromPhilosophy)
+      || !isScoutingPhilosophy(candidate.toPhilosophy)
+    ) {
+      return [];
+    }
+    return [{
+      season: candidate.season as number,
+      fromPhilosophy: candidate.fromPhilosophy,
+      toPhilosophy: candidate.toPhilosophy,
+    }];
+  }).sort((left, right) => left.season - right.season);
+
+  const latestAppliedTransition = [...lineage]
+    .reverse()
+    .find((transition) => transition.season <= season);
+  if (latestAppliedTransition) {
+    return { philosophy: latestAppliedTransition.toPhilosophy };
+  }
+  const firstFutureTransition = lineage.find((transition) => transition.season > season);
+  if (firstFutureTransition) {
+    return { philosophy: firstFutureTransition.fromPhilosophy };
+  }
+
+  if (Number.isInteger(state.currentSeason) && season === state.currentSeason) {
+    return { philosophy: club.scoutingPhilosophy };
+  }
+
+  const fallbackIndex = hashSeed(
+    `legacy-recruitment-family:${state.seed || "unseeded"}:${club.id}`,
+  ) % PHILOSOPHY_ORDER.length;
+  return { philosophy: PHILOSOPHY_ORDER[fallbackIndex] };
+}
+
+function deriveHistoricalRecruitmentDoctrine(input: {
+  state: GameState;
+  club: Club;
+  season: number;
+  seasonalObjective?: RecruitmentFocus;
+}): ClubRecruitmentDoctrine {
+  const context = resolveHistoricalRecruitmentContext(
+    input.state,
+    input.club,
+    input.season,
+  );
+  return deriveAcademyBriefRecruitmentDoctrine({
+    club: {
+      ...input.club,
+      scoutingPhilosophy: context.philosophy,
+      ...(context.reputation !== undefined ? { reputation: context.reputation } : {}),
+      ...(context.budget !== undefined ? { budget: context.budget } : {}),
+    },
+    season: input.season,
+    seasonalObjective: input.seasonalObjective ?? context.seasonalObjective,
+    runManifest: input.state.runManifest,
+  });
+}
+
+export function migrateHistoricalRecruitmentSnapshots(state: GameState): void {
+  const briefs = state.youthRecruitmentBriefs ?? {};
+  for (const brief of Object.values(briefs)) {
+    if (brief.recruitmentSnapshot) continue;
+    const club = state.clubs[brief.clubId];
+    if (!club) continue;
+    const doctrine = deriveHistoricalRecruitmentDoctrine({
+      state,
+      club,
+      season: brief.createdSeason,
+      seasonalObjective: brief.developmentPriority,
+    });
+    brief.recruitmentSnapshot = captureRecruitmentDoctrineSnapshot({
+      doctrine,
+      capturedWeek: brief.createdWeek,
+      capturedSeason: brief.createdSeason,
+    });
+  }
+
+  const placements = state.placementReports ?? {};
+  for (const placement of Object.values(placements)) {
+    if (placement.recruitmentSnapshot) continue;
+    const sourceReport = placement.reportId ? state.reports?.[placement.reportId] : undefined;
+    const scoutingCase = placement.caseId ? state.scoutingCases?.[placement.caseId] : undefined;
+    const briefId = placement.briefId ?? sourceReport?.briefId ?? scoutingCase?.briefId;
+    const brief = briefId ? briefs[briefId] : undefined;
+    if (brief?.recruitmentSnapshot) {
+      placement.recruitmentSnapshot = brief.recruitmentSnapshot;
+      continue;
+    }
+    const club = state.clubs[placement.targetClubId];
+    if (!club) continue;
+    const doctrine = deriveHistoricalRecruitmentDoctrine({
+      state,
+      club,
+      season: brief?.createdSeason ?? placement.season,
+      seasonalObjective: brief?.developmentPriority,
+    });
+    placement.recruitmentSnapshot = captureRecruitmentDoctrineSnapshot({
+      doctrine,
+      capturedWeek: brief?.createdWeek ?? placement.week,
+      capturedSeason: brief?.createdSeason ?? placement.season,
+    });
+  }
+
+  for (const decision of Object.values(state.clubDecisions ?? {})) {
+    if (decision.recruitmentSnapshot) continue;
+    const delivery = state.reportDeliveries?.[decision.deliveryId];
+    const placementId = decision.placementReportId ?? delivery?.placementReportId;
+    const placement = placementId
+      ? placements[placementId]
+      : Object.values(placements).find((candidate) =>
+          candidate.targetClubId === decision.clubId
+          && (
+            (Boolean(decision.caseId) && candidate.caseId === decision.caseId)
+            || (Boolean(decision.reportId) && candidate.reportId === decision.reportId)
+          )
+        );
+    if (placement?.recruitmentSnapshot) {
+      decision.recruitmentSnapshot = placement.recruitmentSnapshot;
+      continue;
+    }
+    const club = state.clubs[decision.clubId];
+    if (!club) continue;
+    const sourceReportId = decision.reportId ?? delivery?.reportId;
+    const sourceReport = sourceReportId ? state.reports?.[sourceReportId] : undefined;
+    const sourceCase = state.scoutingCases?.[decision.caseId];
+    const briefId = sourceReport?.briefId ?? sourceCase?.briefId;
+    const brief = briefId ? briefs[briefId] : undefined;
+    if (brief?.recruitmentSnapshot) {
+      decision.recruitmentSnapshot = brief.recruitmentSnapshot;
+      continue;
+    }
+    const doctrine = deriveHistoricalRecruitmentDoctrine({
+      state,
+      club,
+      season: brief?.createdSeason ?? delivery?.deliveredSeason ?? decision.decidedSeason,
+      seasonalObjective: brief?.developmentPriority,
+    });
+    decision.recruitmentSnapshot = captureRecruitmentDoctrineSnapshot({
+      doctrine,
+      capturedWeek: brief?.createdWeek ?? delivery?.deliveredWeek ?? decision.decidedWeek,
+      capturedSeason: brief?.createdSeason ?? delivery?.deliveredSeason ?? decision.decidedSeason,
+    });
+  }
+
+  for (const review of Object.values(state.recommendationReviews ?? {})) {
+    if (review.recruitmentSnapshot) continue;
+    const placementReportId = (review as { placementReportId?: string }).placementReportId;
+    const placement = placementReportId
+      ? placements[placementReportId]
+      : Object.values(placements).find((candidate) =>
+          candidate.targetClubId === review.clubId
+          && (
+            (Boolean(review.caseId) && candidate.caseId === review.caseId)
+            || (Boolean(review.reportId) && candidate.reportId === review.reportId)
+          )
+        );
+    if (placement?.recruitmentSnapshot) {
+      review.recruitmentSnapshot = placement.recruitmentSnapshot;
+      continue;
+    }
+    const decision = Object.values(state.clubDecisions ?? {}).find((candidate) =>
+      candidate.clubId === review.clubId
+      && (
+        (Boolean(review.caseId) && candidate.caseId === review.caseId)
+        || (Boolean(review.reportId) && candidate.reportId === review.reportId)
+      )
+    );
+    if (decision?.recruitmentSnapshot) {
+      review.recruitmentSnapshot = decision.recruitmentSnapshot;
+      continue;
+    }
+    const club = state.clubs[review.clubId];
+    if (!club) continue;
+    const sourceReport = state.reports?.[review.reportId];
+    const sourceCase = state.scoutingCases?.[review.caseId];
+    const briefId = sourceReport?.briefId ?? sourceCase?.briefId;
+    const brief = briefId ? briefs[briefId] : undefined;
+    if (brief?.recruitmentSnapshot) {
+      review.recruitmentSnapshot = brief.recruitmentSnapshot;
+      continue;
+    }
+    const reviewOriginSeason = sourceReport?.submittedSeason
+      ?? Math.max(1, review.dueSeason - (review.checkpoint === "twoSeasons" ? 2 : 1));
+    const doctrine = deriveHistoricalRecruitmentDoctrine({
+      state,
+      club,
+      season: brief?.createdSeason ?? reviewOriginSeason,
+      seasonalObjective: brief?.developmentPriority,
+    });
+    review.recruitmentSnapshot = captureRecruitmentDoctrineSnapshot({
+      doctrine,
+      capturedWeek: brief?.createdWeek ?? sourceReport?.submittedWeek ?? review.dueWeek,
+      capturedSeason: brief?.createdSeason ?? reviewOriginSeason,
+    });
+  }
 }
 
 function confidenceFor(

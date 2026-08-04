@@ -38,12 +38,14 @@ export {
   deriveRegionRecruitmentIdentity,
   deriveClubRecruitmentIdentity,
   deriveClubRecruitmentDoctrine,
+  deriveAcademyBriefRecruitmentDoctrine,
   deriveBriefRecruitmentIdentity,
   evaluateRecruitmentIdentityFit,
   getPhilosophyPreferredAgeRange,
   getPhilosophyAcademyIntakeAgeRange,
   getPhilosophySpecializationAffinity,
   scoreDoctrineAgeFit,
+  getAcademyBriefRecruitmentDoctrineSeed,
 } from './recruitmentIdentity';
 export type {
   RecruitmentFocus,
@@ -119,6 +121,7 @@ export type {
 export {
   deriveRegionalPresence,
   deriveRegionalPresenceIndex,
+  createRegionalPresenceResolver,
   getPlayerScoutingCountry,
   getRegionalTravelQuote,
   applyRegionalPresenceToObservation,
@@ -128,6 +131,7 @@ export type {
   RegionalPresenceEffects,
   RegionalPresenceDimensions,
   RegionalPresenceSnapshot,
+  RegionalPresenceResolver,
   RegionalPresenceSource,
   RegionalTravelQuote,
   RegionalObservationContext,
@@ -245,4 +249,6 @@ export {
   calculateLoanTerms,
 } from './loans';
 
+export * from './footballCultureCalendar';
+export * from './footballCulturePlaybooks';
 export * from './footballCulture';

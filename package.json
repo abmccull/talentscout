@@ -12,6 +12,7 @@
     "dev": "next dev",
     "clean:build": "node scripts/clean-build-output.mjs",
     "build": "node scripts/build-production.mjs",
+    "test:bundle-budget": "node scripts/assert-shipping-bundle-budget.mjs",
     "build:e2e": "node scripts/build-e2e.mjs",
     "start": "next start",
     "lint": "next lint",
@@ -30,9 +31,17 @@
     "test:replayability": "node scripts/run-replayability-telemetry.mjs --seeds=100 --seasons=3 --weeks=38 --out=artifacts/release/generated/replayability-release-summary.json",
     "test:replayability:nightly": "node scripts/run-replayability-telemetry.mjs --profile=nightly --seeds=1000 --seasons=10 --weeks=38 --out=artifacts/replayability/nightly-summary.json",
     "test:release-soak": "node scripts/run-long-career-release-soak.mjs",
+    "test:release-soak:chooser-matrix": "node scripts/run-release-chooser-profile-matrix.mjs",
     "test:release-soak:worker": "vitest run --config vitest.release-soak.config.ts",
     "test:asset-provenance": "node scripts/audit-asset-provenance.mjs",
     "audit:asset-provenance": "node scripts/audit-asset-provenance.mjs --report-only",
+    "test:steam-store-assets": "node scripts/validate-steam-store-assets.mjs",
+    "steam:generate-achievement-imports": "node scripts/generate-steam-achievement-imports.mjs",
+    "test:steam-achievement-imports": "node scripts/generate-steam-achievement-imports.mjs --check",
+    "steam:generate-store-art": "node scripts/generate-steam-store-art.mjs",
+    "release:validate-artifacts": "node scripts/validate-release-artifacts.mjs",
+    "release:preflight": "node scripts/check-release-preflight.mjs",
+    "release:create-timing-exception": "node scripts/create-long-career-timing-exception.mjs",
     "release:package-manifest": "node scripts/create-release-package-manifest.mjs",
     "test:release-evidence": "node scripts/check-release-evidence.mjs",
     "audit:release-evidence": "node scripts/check-release-evidence.mjs --report-only",
@@ -49,7 +58,7 @@
     "test:e2e:soak": "playwright test e2e/regression/long-career-invariants.spec.ts --workers=1"
   },
   "dependencies": {
-    "@sentry/nextjs": "^10.40.0",
+    "@sentry/nextjs": "^10.69.0",
     "@supabase/supabase-js": "^2.97.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -57,7 +66,7 @@
     "framer-motion": "^12.34.3",
     "howler": "^2.2.4",
     "lucide-react": "^0.575.0",
-    "next": "^15.5.12",
+    "next": "^15.5.22",
     "next-intl": "^4.8.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -76,11 +85,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.10",
-    "concurrently": "^9.2.1",
+    "concurrently": "^9.2.4",
     "electron": "^40.6.0",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^15.5.12",
+    "eslint-config-next": "^15.5.22",
     "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "typescript": "^5.9.3",
@@ -88,6 +97,13 @@
     "wait-on": "^9.0.4"
   },
   "overrides": {
-    "postcss": "8.5.16"
+    "@electron/get@5.0.0": {
+      "undici": "7.29.0"
+    },
+    "brace-expansion": "5.0.9",
+    "fast-uri": "4.1.2",
+    "postcss": "8.5.25",
+    "sharp": "0.35.3",
+    "tar": "7.5.22"
   }
 }

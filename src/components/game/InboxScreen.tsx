@@ -37,10 +37,15 @@ import {
   getSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
+import {
+  selectActiveInboxNarrativeEvents,
+  selectLiveInboxActionMessages,
+  selectOfferedInboxCareerDecisions,
+} from "@/engine/world/inboxActionAuthority";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useShallow } from "zustand/react/shallow";
-import type { DecisionRecord } from "@/engine/consequences";
 import { getActionableGossipItems } from "@/engine/network/gossip";
+import { ConsequenceDecisionCard } from "@/components/game/inbox/ConsequenceDecisionCard";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -463,88 +468,6 @@ function NarrativeEventCard({
   );
 }
 
-function ConsequenceDecisionCard({
-  decision,
-  currentWeek,
-  currentSeason,
-  seasonLength,
-  onChoice,
-}: {
-  decision: DecisionRecord;
-  currentWeek: number;
-  currentSeason: number;
-  seasonLength: number;
-  onChoice: (optionId: string) => void;
-}) {
-  const metadataTitle = decision.metadata?.title;
-  const metadataPremise = decision.metadata?.premise;
-  const title = typeof metadataTitle === "string"
-    ? metadataTitle
-    : decision.source.kind === "rivalCampaign"
-      ? "Rival campaign / counter-move"
-      : "Career decision";
-  const premise = typeof metadataPremise === "string"
-    ? metadataPremise
-    : "Two legitimate obligations are pulling your career in different directions. Your choice will be recorded.";
-  const decisionKindLabel = decision.source.kind === "lateCareerDilemma"
-    ? "Career crossroads"
-    : decision.source.kind === "worldConditionArc"
-      ? "World condition decision"
-      : decision.source.kind === "professionalCase"
-        ? "Scouting case"
-        : decision.source.kind === "rivalCampaign"
-          ? "Rival campaign"
-      : "Conflicting obligations";
-  const absoluteWeek = (season: number, week: number) => (season - 1) * seasonLength + week;
-  const weeksRemaining = Math.max(
-    0,
-    absoluteWeek(decision.deadlineAt.season, decision.deadlineAt.week)
-      - absoluteWeek(currentSeason, currentWeek),
-  );
-
-  return (
-    <article className="rounded-lg border border-amber-500/35 bg-amber-500/[0.06] p-4">
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
-            {decisionKindLabel}
-          </p>
-          <h3 className="mt-1 font-semibold text-white">{title}</h3>
-        </div>
-        <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-300">
-          {weeksRemaining === 0 ? "Due now" : `${weeksRemaining}w remaining`}
-        </Badge>
-      </div>
-      <p className="mb-4 max-w-3xl text-sm leading-relaxed text-zinc-300">{premise}</p>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3" role="list" aria-label={`Choices for ${title}`}>
-        {decision.options.map((option) => (
-          <div key={option.id} role="listitem" className="flex flex-col rounded-md border border-zinc-700 bg-zinc-950/70 p-3">
-            <p className="text-sm font-medium text-white">{option.label}</p>
-            {option.knownTradeoffs.length > 0 && (
-              <ul className="my-2 flex-1 space-y-1 text-xs leading-relaxed text-zinc-400">
-                {option.knownTradeoffs.map((tradeoff) => (
-                  <li key={tradeoff} className="flex gap-1.5">
-                    <span aria-hidden="true" className="text-amber-500">•</span>
-                    <span>{tradeoff}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2 min-h-10 w-full border-amber-500/35 text-xs hover:border-amber-400"
-              onClick={() => onChoice(option.id)}
-            >
-              Choose: {option.label}
-            </Button>
-          </div>
-        ))}
-      </div>
-    </article>
-  );
-}
-
 // ─── GossipActionButtons (A3) ────────────────────────────────────────────────
 
 interface GossipActionButtonsProps {
@@ -952,7 +875,25 @@ export function InboxScreen() {
   const [seasonFilter, setSeasonFilter] = useState<number | "all">("all");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
-  const inbox = useMemo(() => gameState?.inbox ?? [], [gameState?.inbox]);
+  const liveInboxActionMessages = useMemo(
+    () => (gameState ? selectLiveInboxActionMessages(gameState) : []),
+    [gameState],
+  );
+  const liveInboxActionIds = useMemo(
+    () => new Set(liveInboxActionMessages.map((message) => message.id)),
+    [liveInboxActionMessages],
+  );
+  const inbox = useMemo(() => {
+    const source = gameState?.inbox ?? [];
+    let changed = false;
+    const repaired = source.map((message) => {
+      const actionRequired = liveInboxActionIds.has(message.id);
+      if (message.actionRequired === actionRequired) return message;
+      changed = true;
+      return { ...message, actionRequired };
+    });
+    return changed ? repaired : source;
+  }, [gameState?.inbox, liveInboxActionIds]);
   const currentWeek = gameState?.currentWeek ?? 1;
   const currentSeason = gameState?.currentSeason ?? 1;
   const seasonLength = gameState
@@ -961,25 +902,12 @@ export function InboxScreen() {
 
   // Active (unacknowledged) narrative events — with useMemo for perf (A7)
   const activeNarrativeEvents = useMemo(
-    () => (gameState?.narrativeEvents ?? []).filter((e) => !e.acknowledged),
-    [gameState?.narrativeEvents],
+    () => (gameState ? selectActiveInboxNarrativeEvents(gameState) : []),
+    [gameState],
   );
   const activeCareerDecisions = useMemo(
-    () => Object.values(gameState?.consequenceState.decisions ?? {})
-      .filter((decision) =>
-        decision.status === "offered"
-        && (decision.source.kind === "lateCareerDilemma"
-          || decision.source.kind === "relationshipConflict"
-          || decision.source.kind === "rivalCampaign"
-          || decision.source.kind === "worldConditionArc"
-          || decision.source.kind === "professionalCase"),
-      )
-      .sort((left, right) =>
-        left.deadlineAt.season - right.deadlineAt.season
-        || left.deadlineAt.week - right.deadlineAt.week
-        || left.id.localeCompare(right.id),
-      ),
-    [gameState?.consequenceState.decisions],
+    () => (gameState ? selectOfferedInboxCareerDecisions(gameState) : []),
+    [gameState],
   );
 
   // A7: Compute available seasons
@@ -1065,14 +993,18 @@ export function InboxScreen() {
       );
   }, [inbox]);
 
-  const urgentMessages = useMemo(
-    () =>
-      sortMessages(
-        inbox.filter((message) => message.actionRequired || !message.read),
-        "newest",
-      ).slice(0, 4),
-    [inbox],
-  );
+  const urgentMessages = useMemo(() => {
+    const urgentById = new Map<string, InboxMessage>();
+    for (const message of liveInboxActionMessages) {
+      urgentById.set(message.id, message);
+    }
+    for (const message of inbox) {
+      if (!message.read) {
+        urgentById.set(message.id, message);
+      }
+    }
+    return sortMessages([...urgentById.values()], "newest").slice(0, 4);
+  }, [inbox, liveInboxActionMessages]);
 
   if (!gameState) return null;
 

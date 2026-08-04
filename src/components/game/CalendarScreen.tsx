@@ -40,6 +40,12 @@ import {
 import { countOpenScheduleDays } from "@/engine/core/calendar";
 import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
+import { PlannerCompareTray } from "./calendar/PlannerCompareTray";
+import { PlannerOpportunitySheet } from "./calendar/PlannerOpportunitySheet";
+import { resolvePendingFeaturedActivity } from "./calendar/pendingFocus";
+import { PlannerWeekStrip } from "./calendar/PlannerWeekStrip";
+import { PlannerWeeklyStanceCard } from "./calendar/PlannerWeeklyStanceCard";
+import { buildPlannerCareerPressure } from "./calendar/plannerCareerPressure";
 import { TargetPicker } from "./calendar/TargetPicker";
 import { WeeklyStrategyPanel } from "./calendar/WeeklyStrategyPanel";
 import { useTranslations } from "next-intl";
@@ -57,7 +63,14 @@ import { projectProspectiveDevelopmentEnvironment } from "@/engine/world/develop
 import { getWorldConditionModifiers } from "@/engine/world";
 import { normalizeCountryKey } from "@/lib/country";
 import { getSeasonLength } from "@/engine/core/gameDate";
-import { normalizeWeeklyStrategyState } from "@/engine/core/weeklyStrategy";
+import {
+  normalizeWeeklyStrategyState,
+  WEEKLY_INTENTS,
+} from "@/engine/core/weeklyStrategy";
+import {
+  deriveCareerFingerprintAuthority,
+  deriveCareerFingerprintProjection,
+} from "@/engine/career/fingerprint";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -77,7 +90,6 @@ function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {
   if (fatigue >= 50) return "warn";
   return "ok";
 }
-
 
 export function CalendarScreen() {
   const {
@@ -139,6 +151,8 @@ export function CalendarScreen() {
   const [placementYouthId, setPlacementYouthId] = useState<string | null>(null);
   const [placementPitchPosture, setPlacementPitchPosture] = useState<PlacementPitchPosture>("evidenceLed");
   const [placementSupportCondition, setPlacementSupportCondition] = useState<PlacementSupportCondition>("none");
+  const [showMobileOpportunitySheet, setShowMobileOpportunitySheet] = useState(false);
+  const [plannerReceipt, setPlannerReceipt] = useState<string | null>(null);
 
   // Drag-and-drop state
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
@@ -153,6 +167,7 @@ export function CalendarScreen() {
   const emptyDayDialogRef = useRef<HTMLDivElement>(null);
   const emptyDayCancelRef = useRef<HTMLButtonElement>(null);
   const advanceWeekButtonRef = useRef<HTMLButtonElement>(null);
+  const opportunityBoardRef = useRef<HTMLDivElement>(null);
 
   const closeEmptyDayWarning = useCallback(() => {
     setShowEmptyDayWarning(false);
@@ -242,6 +257,12 @@ export function CalendarScreen() {
     return () => window.removeEventListener("keydown", handler);
   }, [selectedActivity]);
 
+  useEffect(() => {
+    if (!plannerReceipt) return;
+    const timeout = window.setTimeout(() => setPlannerReceipt(null), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [plannerReceipt]);
+
   // Stable callback for resolving club IDs to names in ActivityPanel
   const resolveClubName = useCallback(
     (id: string) => getClub(id)?.name ?? id,
@@ -260,7 +281,16 @@ export function CalendarScreen() {
     [gameState?.currentWeek, gameState?.watchlist, gameState?.managerDirectives, gameState?.scout?.fatigue],
   );
 
-  if (!gameState) return null;
+  const careerPressure = useMemo(
+    () => gameState
+      ? buildPlannerCareerPressure(
+          deriveCareerFingerprintProjection(deriveCareerFingerprintAuthority(gameState)),
+        )
+      : null,
+    [gameState],
+  );
+
+  if (!gameState || !careerPressure) return null;
 
   const { schedule, currentWeek, currentSeason, scout } = gameState;
   const weeklyStrategy = normalizeWeeklyStrategyState(
@@ -378,20 +408,92 @@ export function CalendarScreen() {
     return true;
   };
 
+  const translateDayLabel = (key: string) => t(`dayLabels.${key as (typeof DAY_KEYS)[number]}`);
+
+  const announcePlannerReceipt = (message: string) => {
+    setPlannerReceipt(message);
+  };
+
   const handleSchedule = (activity: Activity, dayIndex: number) => {
     if (!canScheduleAt(activity, dayIndex)) return;
     scheduleActivity(activity, dayIndex);
+    playSFX("calendar-slide");
+    announcePlannerReceipt(
+      `${ACTIVITY_DISPLAY[activity.type]?.label ?? "Activity"} scheduled for ${translateDayLabel(DAY_KEYS[dayIndex])}.`,
+    );
+  };
+
+  const handleUnscheduleActivity = (dayIndex: number) => {
+    const activity = activities[dayIndex];
+    if (!activity) return;
+    unscheduleActivity(dayIndex);
+    playSFX("calendar-slide");
+    announcePlannerReceipt(
+      `${ACTIVITY_DISPLAY[activity.type]?.label ?? "Activity"} removed from ${translateDayLabel(DAY_KEYS[dayIndex])}.`,
+    );
   };
 
   const handleApplySuggestions = () => {
+    let appliedCount = 0;
     for (const suggestion of weekPreview?.suggestions ?? []) {
       if (canScheduleAt(suggestion.activity, suggestion.dayIndex)) {
         scheduleActivity(suggestion.activity, suggestion.dayIndex);
+        appliedCount += 1;
       }
+    }
+    if (appliedCount > 0) {
+      playSFX("calendar-slide");
+      announcePlannerReceipt(
+        `${appliedCount} planner suggestion${appliedCount === 1 ? "" : "s"} committed to the week.`,
+      );
+    }
+  };
+
+  const clearSelectedActivity = () => {
+    setSelectedActivity(null);
+    setSelectedPendingDay(null);
+    setPlacementYouthId(null);
+    setHoverDay(null);
+  };
+
+  const handleSelectActivity = (activity: Activity | null) => {
+    if (!activity) {
+      clearSelectedActivity();
+      return;
+    }
+    setSelectedActivity(activity);
+    setSelectedPendingDay(null);
+    setPlacementYouthId(null);
+    setHoverDay(null);
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setShowMobileOpportunitySheet(false);
     }
   };
 
   const openDayCount = countOpenScheduleDays(gameState.schedule);
+  const weeklyIntent = WEEKLY_INTENTS.find((entry) => entry.id === weeklyStrategy.intentId);
+  const pendingFeaturedActivity = resolvePendingFeaturedActivity(engineActivities, pendingCalendarActivity);
+  const featuredPlannerActivity = selectedActivity ?? pendingFeaturedActivity ?? engineActivities[0] ?? null;
+  const featuredPlannerActivityLabel = selectedActivity
+    ? ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Live opportunity"
+    : pendingCalendarActivity?.label
+      ?? (featuredPlannerActivity
+        ? ACTIVITY_DISPLAY[featuredPlannerActivity.type]?.label ?? "Live opportunity"
+        : "No live opportunity");
+  const featuredPlannerActivitySummary = selectedActivity
+    ? "Selected and ready to place on the seven-day strip."
+    : pendingCalendarActivity
+      ? "Highlighted from another workspace. Either commit it now or compare it against the rest of the board."
+      : featuredPlannerActivity?.description
+        ?? "Open the opportunity board to choose where the week should actually move.";
+
+  const handleOpenOpportunityBoard = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setShowMobileOpportunitySheet(true);
+      return;
+    }
+    opportunityBoardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Click-to-place: user clicked an empty day slot while an activity is selected
   const handleDaySlotClick = (dayIndex: number) => {
@@ -714,199 +816,156 @@ export function CalendarScreen() {
           </div>
         )}
 
-        {/* The itinerary is the Planner's persistent attention budget. It stays
-            available while the player compares opportunities below. */}
-        <section
-          id="planner-itinerary"
-          data-tutorial-id="calendar-grid"
-          aria-labelledby="itinerary-heading"
-          className="sticky -top-4 z-20 -mx-2 mb-4 rounded-xl border border-emerald-400/20 bg-[#0c1217]/95 p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 md:top-0"
-        >
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 id="itinerary-heading" className="text-sm font-semibold text-white">
-                  Weekly itinerary
-                </h2>
-                <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200">
-                  {slotsUsed}/7 days committed
-                </span>
-                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                  severity === "danger"
-                    ? "border-red-400/25 bg-red-400/10 text-red-200"
-                    : severity === "warn"
-                      ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
-                      : "border-sky-400/25 bg-sky-400/10 text-sky-200"
-                }`}>
-                  {Math.round(scout.fatigue)}% fatigue
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-zinc-300" aria-live="polite">
-                {selectedActivity
-                  ? `${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Selected activity"}: choose a highlighted start day.`
-                  : `${openDayCount} open day${openDayCount === 1 ? "" : "s"}. Select one opportunity below to compare and place it.`}
-              </p>
-            </div>
-            {selectedActivity && (
-              <Button
-                className="min-h-11 self-start sm:self-auto"
-                variant="outline"
-                onClick={() => {
-                  setSelectedActivity(null);
-                  setPlacementYouthId(null);
-                  setHoverDay(null);
-                }}
-              >
-                Clear selection
-              </Button>
-            )}
-          </div>
-
-          <div
-            className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] md:grid md:grid-cols-7 md:overflow-visible md:pb-0"
-            tabIndex={0}
-            role="region"
-            aria-label="Weekly itinerary days. Use left and right arrow keys to scroll."
-            onKeyDown={(event) => {
-              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-              event.preventDefault();
-              event.currentTarget.scrollBy({
-                left: event.key === "ArrowLeft" ? -160 : 160,
-                behavior: "smooth",
-              });
-            }}
-          >
-            {DAY_KEYS.map((dayKey, dayIndex) => {
-              const activity = activities[dayIndex];
-              const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
-              const Icon = display?.icon;
-              const canPlaceSelected = !!selectedActivity && canScheduleAt(selectedActivity, dayIndex);
-              const isDropTarget = dragOverDay === dayIndex && !activity;
-
-              return (
-                <div
-                  key={dayKey}
-                  className={`relative min-h-[76px] min-w-[112px] snap-start rounded-lg border p-2 transition md:min-w-0 ${
-                    activity
-                      ? "border-emerald-400/25 bg-emerald-400/[0.06]"
-                      : canPlaceSelected || isDropTarget
-                        ? "border-blue-400/40 bg-blue-400/[0.08]"
-                        : "border-white/10 bg-black/25"
-                  }`}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                  }}
-                  onDragEnter={(event) => {
-                    event.preventDefault();
-                    setDragOverDay(dayIndex);
-                  }}
-                  onDragLeave={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-                      setDragOverDay(null);
-                    }
-                  }}
-                  onDrop={(event) => handleDaySlotDrop(event, dayIndex)}
-                  onMouseEnter={() => {
-                    if (selectedActivity) setHoverDay(dayIndex);
-                  }}
-                  onMouseLeave={() => {
-                    if (selectedActivity) setHoverDay(null);
-                  }}
-                >
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">
-                    {t(`dayLabels.${dayKey}`)}
-                  </p>
-                  {activity && display && Icon ? (
-                    <div className="mt-1 flex items-center gap-2 pr-11">
-                      <Icon size={15} className={`shrink-0 ${display.color}`} aria-hidden="true" />
-                      <span className={`line-clamp-2 text-xs font-semibold leading-4 ${display.color}`}>
-                        {display.label}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => unscheduleActivity(dayIndex)}
-                        className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-md text-zinc-400 transition hover:bg-red-500/10 hover:text-red-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                        aria-label={`Remove ${display.label} from ${t(`dayLabels.${dayKey}`)}`}
-                      >
-                        <X size={15} aria-hidden="true" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleDaySlotClick(dayIndex)}
-                      disabled={!canPlaceSelected}
-                      aria-label={
-                        selectedActivity
-                          ? `Place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} on ${DAY_KEYS[dayIndex]}`
-                          : `${DAY_KEYS[dayIndex]} open day`
-                      }
-                      className={`mt-1 min-h-11 w-full rounded-md px-1 text-left text-xs transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
-                        canPlaceSelected
-                          ? "font-semibold text-blue-100 hover:bg-blue-400/10"
-                          : "cursor-default text-zinc-500"
-                      }`}
-                    >
-                      {canPlaceSelected ? "Place here" : "Open day"}
-                    </button>
-                  )}
+        <PlannerWeekStrip
+          dayKeys={DAY_KEYS}
+          activities={activities}
+          selectedActivity={selectedActivity}
+          dragOverDay={dragOverDay}
+          hoverDay={hoverDay}
+          slotsUsed={slotsUsed}
+          openDayCount={openDayCount}
+          severity={severity}
+          upcomingEvent={upcomingEvents[0]}
+          isWeekBlank={slotsUsed === 0}
+          prelude={(
+            <div className="grid gap-3 lg:hidden">
+              <article className="rounded-xl border border-violet-400/20 bg-[linear-gradient(145deg,rgba(38,32,58,0.92),rgba(15,20,27,0.96))] p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-200">
+                      Planner stance
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-white">
+                      {weeklyIntent?.label ?? "Balanced desk"}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-300">
+                      {weeklyIntent?.promise ?? "Keep discovery, evidence, and relationships moving without forcing an edge."}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-zinc-200">
+                    {selectedActivity ? "Opportunity selected" : "Next call"}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-
-          {(upcomingEvents.length > 0 || severity !== "ok") && (
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-2 text-[11px]">
-              {upcomingEvents[0] && (
-                <span className="text-zinc-300">
-                  Next event: <strong className="font-semibold text-white">{upcomingEvents[0].name}</strong> in W{upcomingEvents[0].startWeek}
-                </span>
-              )}
-              {severity !== "ok" && (
-                <span className={severity === "danger" ? "text-red-300" : "text-amber-300"}>
-                  {severity === "danger" ? "Accuracy at risk; recovery is urgent." : "Moderate fatigue; protect room for recovery."}
-                </span>
-              )}
+                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                    {selectedActivity ? "Selected opportunity" : "Priority live opportunity"}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-white">{featuredPlannerActivityLabel}</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-300">{featuredPlannerActivitySummary}</p>
+                </div>
+              </article>
+              <PlannerOpportunitySheet
+                open={showMobileOpportunitySheet}
+                activityCount={engineActivities.length}
+                selectedLabel={selectedActivity ? ACTIVITY_DISPLAY[selectedActivity.type]?.label : undefined}
+                onOpen={handleOpenOpportunityBoard}
+                onClose={() => setShowMobileOpportunitySheet(false)}
+              >
+                <ActivityPanel
+                  activities={engineActivities}
+                  specialization={scout.primarySpecialization}
+                  canScheduleAt={canScheduleAt}
+                  onSchedule={handleSchedule}
+                  leagueFilter={selectedLeagueId}
+                  allLeagues={allLeagues}
+                  fixtureLeagueById={fixtureLeagueById}
+                  onLeagueFilterChange={setSelectedLeagueId}
+                  resolveClubName={resolveClubName}
+                  highlightTargetId={pendingCalendarActivity?.targetId}
+                  selectedActivity={selectedActivity}
+                  openDayCount={openDayCount}
+                  onSelectActivity={handleSelectActivity}
+                />
+              </PlannerOpportunitySheet>
             </div>
           )}
-        </section>
+          onClearSelection={clearSelectedActivity}
+          onRequestOpportunitySelection={handleOpenOpportunityBoard}
+          onDaySlotClick={handleDaySlotClick}
+          onUnscheduleActivity={handleUnscheduleActivity}
+          onDaySlotDrop={handleDaySlotDrop}
+          onDragEnterDay={setDragOverDay}
+          onDragLeaveDay={() => setDragOverDay(null)}
+          onHoverDay={setHoverDay}
+          canScheduleAt={canScheduleAt}
+          translateDay={translateDayLabel}
+          receiptMessage={plannerReceipt}
+        />
 
-        <section data-tutorial-id="calendar-activities" aria-labelledby="planner-opportunity-heading">
-          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 id="planner-opportunity-heading" className="text-base font-semibold text-white">
+        <section
+          data-tutorial-id="calendar-activities"
+          aria-labelledby="planner-opportunity-heading"
+          className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]"
+        >
+          <div ref={opportunityBoardRef} className="space-y-4">
+            <div className="lg:hidden">
+              <h2 id="planner-opportunity-heading" className="sr-only">
                 Available opportunities
               </h2>
-              <p className="text-sm leading-6 text-zinc-400">
-                Compare live opportunities against fatigue, travel room, and your existing commitments before filling the week.
-              </p>
+            </div>
+
+            <div className="hidden lg:block space-y-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 id="planner-opportunity-heading" className="text-base font-semibold text-white">
+                    Available opportunities
+                  </h2>
+                  <p className="text-sm leading-6 text-zinc-400">
+                    Compare live opportunities against fatigue, travel room, and your existing commitments before filling the week.
+                  </p>
+                </div>
+              </div>
+              <ActivityPanel
+                activities={engineActivities}
+                specialization={scout.primarySpecialization}
+                canScheduleAt={canScheduleAt}
+                onSchedule={handleSchedule}
+                leagueFilter={selectedLeagueId}
+                allLeagues={allLeagues}
+                fixtureLeagueById={fixtureLeagueById}
+                onLeagueFilterChange={setSelectedLeagueId}
+                resolveClubName={resolveClubName}
+                highlightTargetId={pendingCalendarActivity?.targetId}
+                selectedActivity={selectedActivity}
+                openDayCount={openDayCount}
+                onSelectActivity={handleSelectActivity}
+              />
             </div>
           </div>
-          <ActivityPanel
-            activities={engineActivities}
-            specialization={scout.primarySpecialization}
-            canScheduleAt={canScheduleAt}
-            onSchedule={handleSchedule}
-            leagueFilter={selectedLeagueId}
-            allLeagues={allLeagues}
-            fixtureLeagueById={fixtureLeagueById}
-            onLeagueFilterChange={setSelectedLeagueId}
-            resolveClubName={resolveClubName}
-            highlightTargetId={pendingCalendarActivity?.targetId}
-            selectedActivity={selectedActivity}
-            openDayCount={openDayCount}
-            onSelectActivity={(activity) => {
-              setSelectedActivity(activity);
-            }}
-          />
-        </section>
 
-        <WeeklyStrategyPanel
-          strategy={weeklyStrategy}
-          onSelectIntent={setWeeklyIntent}
-          onSelectPolicy={setDelegationPolicy}
-        />
+          <div className="space-y-4">
+            <div className="hidden lg:block">
+              <PlannerWeeklyStanceCard
+                strategy={weeklyStrategy}
+                careerPressure={careerPressure}
+              />
+            </div>
+
+            {selectedActivity ? (
+              <PlannerCompareTray
+                selectedActivity={selectedActivity}
+                openDayCount={openDayCount}
+                canScheduleAt={canScheduleAt}
+                onClearSelection={clearSelectedActivity}
+              />
+            ) : (
+              <div className="hidden lg:block">
+                <PlannerCompareTray
+                  selectedActivity={selectedActivity}
+                  openDayCount={openDayCount}
+                  canScheduleAt={canScheduleAt}
+                  onClearSelection={clearSelectedActivity}
+                />
+              </div>
+            )}
+
+            <WeeklyStrategyPanel
+              strategy={weeklyStrategy}
+              onSelectIntent={setWeeklyIntent}
+              onSelectPolicy={setDelegationPolicy}
+            />
+          </div>
+        </section>
 
         {/* Week Preview Panel (F16) */}
         {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (

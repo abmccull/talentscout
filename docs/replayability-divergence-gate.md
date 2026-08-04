@@ -7,7 +7,25 @@ TalentScout's release gate simulates deterministic, lightweight career trajector
 - `npm run test:replayability` samples 100 seeds over three 38-week seasons. This is the pull-request and release gate and should remain below ten seconds on CI hardware.
 - `npm run test:replayability:nightly` samples 1,000 seeds over ten seasons. It runs with the nightly simulation soak.
 
-Both commands write a deterministic JSON artifact under `artifacts/replayability/`. The artifact contains configuration, thresholds, metrics, catalog distributions, exact failure reasons, and five stable trajectory fingerprints. It deliberately omits wall-clock timestamps so identical code and inputs produce byte-stable evidence.
+The authoritative release artifact is `artifacts/release/generated/replayability-release-summary.json`.
+Nightly supporting evidence remains `artifacts/replayability/nightly-summary.json`.
+The release runner refuses the legacy `artifacts/replayability/release-summary.json` target so candidate evidence cannot fork into disagreeing paths.
+
+The artifact contains configuration, thresholds, metrics, catalog distributions, exact failure reasons, stable trajectory fingerprints, and human-facing proxy fields:
+
+- quiet-streak proxy with `p95` and `maximum` sampled quiet-week streaks;
+- `rollingEightWeekPreArbitrationChoiceOpportunityDensity`, a generated choice-opportunity proxy that includes authored choice prompts plus rival opportunities before any downstream arbitration or player-visible delivery;
+- `setupCareerFingerprintProjections`, an explicitly non-gating sampled setup projection over authored identity/world inputs, not a simulated player-facing outcome fingerprint;
+- `authoredSurfaceCoverage.clubRecruitmentExpressions`, sourced from the 20-expression production catalog;
+- `authoredSurfaceCoverage.footballCulturePlaybooks`, sourced from the 22 explicit production playbooks and their authored calendar windows;
+- `authoredSurfaceCoverage.relationshipConflicts`, sourced from the production conflict-blueprint, front-family, front-structure, recurrence, recurring-front-variant, callback-variant, and stakeholder-outcome inventories;
+- `rivalCounterplay`, which retains sampled rival-organization archetype, action-signature, and organization-set telemetry under its actual meaning.
+
+Authored catalog coverage proves that the candidate contains those production surfaces. It does not prove that every surface appears in a sampled career or that a player recognizes the difference; the moderated paired-career gate measures those human-facing outcomes separately.
+
+`humanFacingProxies.authority` records the source `HEAD`, Git inspection status, dirty-entry count, evidence class, and release-certification eligibility. A clean checkout produces `clean_commit_bound`; a dirty or uninspectable checkout produces diagnostic evidence only. Diagnostic evidence may help local tuning, but the release checker rejects it as candidate evidence even when the simulation thresholds pass.
+
+The artifact deliberately omits wall-clock timestamps so identical code and inputs produce byte-stable evidence.
 
 ## Release thresholds
 

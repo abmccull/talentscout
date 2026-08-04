@@ -2,9 +2,11 @@ import type { GameState, InboxMessage } from "@/engine/core/types";
 import { addGameWeeks, gameWeeksBetween } from "@/engine/core/gameDate";
 import type { StoryCandidateV2 } from "@/engine/events/storyDirectorV2";
 import { createNamedRNG } from "@/engine/run";
+import { isAccessAgreementActive } from "./accessAgreements";
 import {
   type AuthoredConflictCast,
   type MaterializedRelationshipConflict,
+  type RelationshipConflictFrontMetadata,
   materializeAuthoredRelationshipConflict,
   registerMaterializedRelationshipConflict,
   selectAuthoredRelationshipConflict,
@@ -13,11 +15,13 @@ import {
   createStakeholderProfileRegistry,
   type StakeholderProfileRegistry,
 } from "./stakeholderProfiles";
-import type { GameDate } from "./types";
+import type { GameDate, JsonValue } from "./types";
 
 export const RELATIONSHIP_CONFLICT_TRIGGER_CHANCE = 0.065;
 export const RELATIONSHIP_CONFLICT_COOLDOWN_WEEKS = 10;
+export const RELATIONSHIP_CONFLICT_OVERLAP_CADENCE_WEEKS = 3;
 export const MAX_OPEN_PLAYER_DECISIONS = 2;
+export const MAX_ACTIVE_RELATIONSHIP_CONFLICTS = 2;
 
 export interface RelationshipConflictDirectionResult {
   state: GameState;
@@ -25,9 +29,12 @@ export interface RelationshipConflictDirectionResult {
   blockedReason?:
     | "choice-cap"
     | "unresolved-conflict"
+    | "active-conflict-cap"
+    | "active-conflict-cadence"
     | "cooldown"
     | "trigger-missed"
     | "no-subject"
+    | "no-distinct-front"
     | "no-cast"
     | "registration-failed";
 }
@@ -37,6 +44,8 @@ export interface PreparedRelationshipConflictCandidate {
   cast: AuthoredConflictCast;
   materialized: MaterializedRelationshipConflict;
   stakeholderProfiles: StakeholderProfileRegistry;
+  front: RelationshipConflictFrontMetadata;
+  quietFallback?: QuietRelationshipFallbackMetadata;
 }
 
 export interface RelationshipConflictPreparationResult {
@@ -44,23 +53,156 @@ export interface RelationshipConflictPreparationResult {
   blockedReason?: RelationshipConflictDirectionResult["blockedReason"];
 }
 
+export interface QuietRelationshipFallbackMetadata {
+  quietIntervention: true;
+  caseId?: string;
+  questionId?: string;
+  question?: string;
+  careerEraId?: string;
+}
+
 function distinctSorted(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort();
 }
 
-function candidatePlayerIds(state: GameState): string[] {
+function distinctInOrder(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    ordered.push(value);
+  }
+  return ordered;
+}
+
+interface ActiveRelationshipConflictFront {
+  decisionId: string;
+  offeredAt: GameDate;
+  frontFamilyId?: string;
+  ensembleId?: string;
+  stakeholderPairKey: string;
+}
+
+function stakeholderRefKey(entity: { kind: string; id: string }): string {
+  return `${entity.kind}:${entity.id}`;
+}
+
+function stakeholderPairKey(keys: readonly string[]): string {
+  return [...new Set(keys.filter(Boolean))].sort().join("|");
+}
+
+function hasPendingRelationshipConsequences(state: GameState, decisionId: string): boolean {
+  return Object.values(state.consequenceState.consequences ?? {})
+    .some((consequence) =>
+      consequence.decisionId === decisionId
+      && consequence.status === "pending",
+    );
+}
+
+function hasActiveRelationshipObligations(state: GameState, decisionId: string): boolean {
+  return Object.values(state.consequenceState.obligations ?? {})
+    .some((obligation) =>
+      obligation.sourceDecisionId === decisionId
+      && obligation.status === "active",
+    );
+}
+
+function hasActiveRelationshipAccess(state: GameState, decisionId: string): boolean {
+  const now = { season: state.currentSeason, week: state.currentWeek };
+  return Object.values(state.accessAgreements ?? {})
+    .some((agreement) =>
+      agreement.sourceDecisionId === decisionId
+      && isAccessAgreementActive(agreement, now),
+    );
+}
+
+function decisionHasLiveRelationshipPressure(
+  state: GameState,
+  decision: GameState["consequenceState"]["decisions"][string],
+): boolean {
+  if (decision.source.kind !== "relationshipConflict") return false;
+  if (decision.status === "offered") return true;
+  if (decision.status !== "selected" || !decision.selectedOptionId) return false;
+  return hasPendingRelationshipConsequences(state, decision.id)
+    || hasActiveRelationshipObligations(state, decision.id)
+    || hasActiveRelationshipAccess(state, decision.id);
+}
+
+function activeRelationshipConflictFronts(state: GameState): ActiveRelationshipConflictFront[] {
+  return Object.values(state.consequenceState.decisions)
+    .filter((decision) => decisionHasLiveRelationshipPressure(state, decision))
+    .map((decision) => {
+      const leftStakeholderKey = typeof decision.metadata?.leftStakeholderKey === "string"
+        ? decision.metadata.leftStakeholderKey
+        : undefined;
+      const rightStakeholderKey = typeof decision.metadata?.rightStakeholderKey === "string"
+        ? decision.metadata.rightStakeholderKey
+        : undefined;
+      const fallbackStakeholderKeys = decision.stakeholders
+        .filter((stakeholder) => stakeholder.kind !== "scout")
+        .map(stakeholderRefKey)
+        .slice(0, 2);
+      return {
+        decisionId: decision.id,
+        offeredAt: decision.offeredAt,
+        frontFamilyId: typeof decision.metadata?.frontFamilyId === "string"
+          ? decision.metadata.frontFamilyId
+          : undefined,
+        ensembleId: typeof decision.metadata?.ensembleId === "string"
+          ? decision.metadata.ensembleId
+          : undefined,
+        stakeholderPairKey: stakeholderPairKey(
+          leftStakeholderKey && rightStakeholderKey
+            ? [leftStakeholderKey, rightStakeholderKey]
+            : fallbackStakeholderKeys,
+        ),
+      };
+    });
+}
+
+function quietFallbackDecisionMetadata(
+  quietFallback: QuietRelationshipFallbackMetadata | undefined,
+): Record<string, JsonValue> | undefined {
+  if (!quietFallback) return undefined;
+  return {
+    quietIntervention: true,
+    ...(quietFallback.caseId ? { caseId: quietFallback.caseId } : {}),
+    ...(quietFallback.questionId ? { questionId: quietFallback.questionId } : {}),
+    ...(quietFallback.question ? { question: quietFallback.question } : {}),
+    ...(quietFallback.careerEraId ? { careerEraId: quietFallback.careerEraId } : {}),
+  };
+}
+
+function relevantRelationshipSubjectIds(state: GameState): string[] {
   const unsignedPlayerIds = new Set(
     Object.values(state.unsignedYouth ?? {}).map((candidate) => candidate.player.id),
+  );
+  const alumniPlayerIds = new Set(
+    (state.alumniRecords ?? []).map((record) => record.playerId),
   );
   return distinctSorted([
     ...(state.watchlist ?? []),
     ...Object.values(state.reports ?? {}).map((report) => report.playerId),
+    ...Object.values(state.scoutingCases ?? {})
+      .filter((scoutingCase) => scoutingCase.status !== "closed")
+      .map((scoutingCase) => scoutingCase.playerId),
+    ...Object.values(state.placementReports ?? {})
+      .map((report) => state.unsignedYouth?.[report.unsignedYouthId]?.player.id)
+      .filter((playerId): playerId is string => Boolean(playerId)),
     ...unsignedPlayerIds,
-    ...Object.keys(state.players ?? {}),
+    ...alumniPlayerIds,
   ]).filter((id) =>
     Boolean(state.players[id])
+    || Boolean(state.retiredPlayers?.[id])
     || unsignedPlayerIds.has(id),
   );
+}
+
+export function getRelationshipConflictCandidatePlayerIds(state: GameState): string[] {
+  const relevantIds = relevantRelationshipSubjectIds(state);
+  if (relevantIds.length > 0) return relevantIds;
+  return distinctSorted(Object.keys(state.players ?? {}));
 }
 
 function lastConflictDate(state: GameState): GameDate | undefined {
@@ -88,23 +230,31 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
   state: GameState;
   triggerChance?: number;
   forceTrigger?: boolean;
+  preferredSubjectIds?: readonly string[];
+  quietFallback?: QuietRelationshipFallbackMetadata;
 }): RelationshipConflictPreparationResult {
   const state = input.state;
+  const activeConflictFronts = activeRelationshipConflictFronts(state);
+  if (activeConflictFronts.length >= MAX_ACTIVE_RELATIONSHIP_CONFLICTS) {
+    return { blockedReason: "active-conflict-cap" };
+  }
   const openDecisions = Object.values(state.consequenceState.decisions)
     .filter((decision) => decision.status === "offered");
   if (openDecisions.length >= MAX_OPEN_PLAYER_DECISIONS) {
     return { blockedReason: "choice-cap" };
   }
-  if (openDecisions.some((decision) => decision.source.kind === "relationshipConflict")) {
-    return { blockedReason: "unresolved-conflict" };
-  }
 
   const now = { week: state.currentWeek, season: state.currentSeason };
   const previous = lastConflictDate(state);
+  const cooldownWeeks = activeConflictFronts.length > 0
+    ? RELATIONSHIP_CONFLICT_OVERLAP_CADENCE_WEEKS
+    : RELATIONSHIP_CONFLICT_COOLDOWN_WEEKS;
   if (
     previous
-    && gameWeeksBetween(state.fixtures, previous, now) < RELATIONSHIP_CONFLICT_COOLDOWN_WEEKS
-  ) return { blockedReason: "cooldown" };
+    && gameWeeksBetween(state.fixtures, previous, now) < cooldownWeeks
+  ) {
+    return { blockedReason: activeConflictFronts.length > 0 ? "active-conflict-cadence" : "cooldown" };
+  }
 
   const triggerRng = createNamedRNG(
     state.runManifest.rootSeed,
@@ -119,24 +269,56 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
     return { blockedReason: "trigger-missed" };
   }
 
-  const playerIds = candidatePlayerIds(state);
-  if (playerIds.length === 0) return { blockedReason: "no-subject" };
-  const subjectRng = createNamedRNG(
-    state.runManifest.rootSeed,
-    "weekly-relationship-conflict-subject",
-    state.currentSeason,
-    state.currentWeek,
-    playerIds.join("|"),
+  const preferredSubjectIds = distinctInOrder(
+    (input.preferredSubjectIds ?? []).filter((playerId) =>
+      Boolean(state.players[playerId])
+      || Boolean(state.retiredPlayers?.[playerId])
+      || Object.values(state.unsignedYouth ?? {})
+        .some((candidate) => candidate.player.id === playerId),
+    ),
   );
-  const subject = { kind: "player", id: subjectRng.pick(playerIds) };
+  const playerIds = preferredSubjectIds.length > 0
+    ? preferredSubjectIds
+    : getRelationshipConflictCandidatePlayerIds(state);
+  if (playerIds.length === 0) return { blockedReason: "no-subject" };
   const registry = createStakeholderProfileRegistry(state, state.stakeholderProfiles);
-  const cast = selectAuthoredRelationshipConflict({
-    rootSeed: state.runManifest.rootSeed,
-    now,
-    registry,
-    subject,
-  });
-  if (!cast) return { blockedReason: "no-cast" };
+  const candidateSubjects = preferredSubjectIds.length > 0
+    ? playerIds
+    : [createNamedRNG(
+      state.runManifest.rootSeed,
+      "weekly-relationship-conflict-subject",
+      state.currentSeason,
+      state.currentWeek,
+      playerIds.join("|"),
+    ).pick(playerIds)];
+  let cast: AuthoredConflictCast | undefined;
+  const excludedFrontFamilyIds = new Set(
+    activeConflictFronts.flatMap((front) => front.frontFamilyId ? [front.frontFamilyId] : []),
+  );
+  const excludedEnsembleIds = new Set(
+    activeConflictFronts.flatMap((front) => front.ensembleId ? [front.ensembleId] : []),
+  );
+  const excludedStakeholderPairKeys = new Set(
+    activeConflictFronts.map((front) => front.stakeholderPairKey).filter((key) => key.length > 0),
+  );
+  for (const playerId of candidateSubjects) {
+    cast = selectAuthoredRelationshipConflict({
+      rootSeed: state.runManifest.rootSeed,
+      now,
+      registry,
+      subject: { kind: "player", id: playerId },
+      excludedFrontFamilyIds,
+      excludedEnsembleIds,
+      excludedStakeholderPairKeys,
+      quietEligibleOnly: Boolean(input.quietFallback),
+      state,
+    });
+    if (cast) break;
+  }
+  if (!cast) {
+    return { blockedReason: activeConflictFronts.length > 0 ? "no-distinct-front" : "no-cast" };
+  }
+  const subject = cast.subject;
 
   const decisionId = [
     "relationship-conflict",
@@ -156,6 +338,9 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
     now,
     deadlineAt: addGameWeeks(state.fixtures, now, cast.definition.deadlineWeeks),
     outcomeRoll: outcomeRng.next(),
+    existingState: state.consequenceState,
+    advanceWeeks: (start, weeks) => addGameWeeks(state.fixtures, start, weeks),
+    decisionMetadata: quietFallbackDecisionMetadata(input.quietFallback),
   });
 
   const semanticSignature = materialized.decision.metadata?.semanticSignature;
@@ -182,6 +367,8 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
       cast,
       materialized,
       stakeholderProfiles: registry,
+      front: materialized.front,
+      quietFallback: input.quietFallback,
     },
   };
 }

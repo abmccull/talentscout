@@ -34,6 +34,7 @@ import {
   type ScoutingCaseTimeline,
 } from "@/engine/reports/scoutingCaseTimeline";
 import { ScoutingCaseTimelineView } from "./ScoutingCaseTimeline";
+import { projectCareerInterventionPortfolio } from "@/engine/career/careerInterventionPortfolio";
 
 // ─── Milestone config ─────────────────────────────────────────────────────────
 
@@ -443,6 +444,7 @@ export function AlumniDashboard() {
 
   const successRate = calculatePlacementSuccessRate(alumniRecords);
   const contactGraduates = alumniRecords.filter((r) => r.becameContact).length;
+  const interventionPortfolio = projectCareerInterventionPortfolio(gameState);
 
   return (
     <GameLayout>
@@ -517,6 +519,50 @@ export function AlumniDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {interventionPortfolio.interventions.length > 0 && (
+          <Card className="mb-8 border-violet-500/25 bg-violet-500/[0.05]" data-testid="career-intervention-portfolio">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Shield size={16} className="text-violet-300" aria-hidden="true" />
+                Pathway intervention record
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-6 text-zinc-300">{interventionPortfolio.summary}</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                These comparisons remember what you chose and what the public career evidence did next. They do not claim your intervention caused the outcome.
+              </p>
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                {interventionPortfolio.interventions.slice(0, 3).map((intervention) => (
+                  <div key={intervention.decisionId} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-white">{intervention.playerName}</p>
+                      <Badge
+                        variant="outline"
+                        className={intervention.outcome === "improved"
+                          ? "border-emerald-500/30 text-emerald-300"
+                          : intervention.outcome === "worsened"
+                            ? "border-red-500/30 text-red-300"
+                            : intervention.outcome === "monitoring"
+                              ? "border-sky-500/30 text-sky-300"
+                              : "border-amber-500/30 text-amber-300"}
+                      >
+                        {intervention.outcome}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-zinc-300">
+                      You chose “{intervention.optionLabel}.”
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">
+                      Environment {intervention.originalEnvironmentScore}/100 → {intervention.currentEnvironmentScore}/100. {intervention.currentEnvironmentSummary}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Alumni List */}
         <div data-tutorial-id="alumni-list">

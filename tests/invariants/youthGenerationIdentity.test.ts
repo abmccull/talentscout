@@ -67,6 +67,23 @@ describe("long-career youth identity and placement integrity", () => {
     expect(reconciled[youth.id].placedClubId).toBeUndefined();
   });
 
+  it("does not restore an expired prospect after a rollover signing is rejected", () => {
+    const prospect = generatedPlayer("unsigned_season-start_england_s1_w1");
+    const youth = {
+      ...unsignedYouth(prospect),
+      generatedSeason: 1,
+    };
+
+    const reconciled = reconcileYouthSigningPlacements(
+      { [youth.id]: youth },
+      [{ youthId: youth.id, clubId: "club-b" }],
+      [],
+      UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS,
+    );
+
+    expect(reconciled[youth.id]).toBeUndefined();
+  });
+
   it("removes a prospect from the active pool when the matching signing committed", () => {
     const prospect = generatedPlayer("unsigned_season-start_england_s11_w1");
     const youth = unsignedYouth(prospect);

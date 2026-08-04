@@ -1,0 +1,411 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-04T17:31:25.396Z",
+  "mode": "strict",
+  "manifestPath": "docs/steam-store-assets.json",
+  "provenancePath": "docs/asset-provenance.json",
+  "status": "Passed",
+  "summary": {
+    "requiredAssetCount": 7,
+    "presentRequiredAssetCount": 7,
+    "optionalAssetCount": 1,
+    "presentOptionalAssetCount": 1,
+    "screenshotDefinitionCount": 8,
+    "presentScreenshotCount": 8,
+    "failureCount": 0
+  },
+  "copy": {
+    "path": "STEAM_STORE_COPY.md",
+    "status": "Passed",
+    "shortDescriptionLength": 234,
+    "sections": {
+      "about": true,
+      "features": true,
+      "tags": true
+    },
+    "releaseScope": {
+      "requiredPhrasesPresent": [
+        "freelance youth scout",
+        "first team scout",
+        "regional expert",
+        "data scout",
+        "not part of this early access release"
+      ],
+      "forbiddenClaimsPresent": []
+    },
+    "failures": []
+  },
+  "assets": [
+    {
+      "id": "headerCapsule",
+      "path": "public/images/steam/steam-header-capsule.png",
+      "expectedName": null,
+      "required": true,
+      "expectedDimensions": {
+        "width": 460,
+        "height": 215
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "da4d5b8748b3ae7a829d9160b3d766e2251902a2d446fa403a95052b251a47c9",
+      "sha256": "da4d5b8748b3ae7a829d9160b3d766e2251902a2d446fa403a95052b251a47c9",
+      "png": {
+        "width": 460,
+        "height": 215,
+        "bitDepth": 8,
+        "colorType": 6,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "smallCapsule",
+      "path": "public/images/steam/steam-small-capsule.png",
+      "expectedName": null,
+      "required": true,
+      "expectedDimensions": {
+        "width": 231,
+        "height": 87
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "278b776f5eb775a42512840d04b6c4b0cd5afeb73bea333b5d79e77b02430f01",
+      "sha256": "278b776f5eb775a42512840d04b6c4b0cd5afeb73bea333b5d79e77b02430f01",
+      "png": {
+        "width": 231,
+        "height": 87,
+        "bitDepth": 8,
+        "colorType": 6,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "mainCapsule",
+      "path": "public/images/steam/steam-main-capsule.png",
+      "expectedName": null,
+      "required": true,
+      "expectedDimensions": {
+        "width": 616,
+        "height": 353
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "d5e680537beca9927dc5eff2b19003b793f0e65be90bd9f4d15bab973d86d774",
+      "sha256": "d5e680537beca9927dc5eff2b19003b793f0e65be90bd9f4d15bab973d86d774",
+      "png": {
+        "width": 616,
+        "height": 353,
+        "bitDepth": 8,
+        "colorType": 6,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "heroGraphic",
+      "path": "public/images/steam/steam-store-hero-v2.png",
+      "expectedName": null,
+      "required": true,
+      "expectedDimensions": {
+        "width": 3840,
+        "height": 1240
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "7b7f78cc0d2d4e0303a588a6a1aa45c2fe3a3c376aac0beeb9c09e4486ec8347",
+      "sha256": "7b7f78cc0d2d4e0303a588a6a1aa45c2fe3a3c376aac0beeb9c09e4486ec8347",
+      "png": {
+        "width": 3840,
+        "height": 1240,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "pageBackground",
+      "path": "public/images/steam/steam-page-background.png",
+      "expectedName": null,
+      "required": false,
+      "expectedDimensions": {
+        "width": 1438,
+        "height": 810
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "05ea5db649485bf75b94027903000131534afd6b326d812af832682be92c6684",
+      "sha256": "05ea5db649485bf75b94027903000131534afd6b326d812af832682be92c6684",
+      "png": {
+        "width": 1438,
+        "height": 810,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "libraryCapsule",
+      "path": "public/images/steam/steam-library-capsule-v2.png",
+      "expectedName": null,
+      "required": true,
+      "expectedDimensions": {
+        "width": 600,
+        "height": 900
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "bbde5295b7f6d699147047c01b402947d74242211d0929a6f334657a381a4dbd",
+      "sha256": "bbde5295b7f6d699147047c01b402947d74242211d0929a6f334657a381a4dbd",
+      "png": {
+        "width": 600,
+        "height": 900,
+        "bitDepth": 8,
+        "colorType": 6,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "libraryHero",
+      "path": "public/images/steam/steam-library-hero.png",
+      "expectedName": null,
+      "required": true,
+      "expectedDimensions": {
+        "width": 3840,
+        "height": 1240
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "725640c40a097befd5c20f590b82ca322c27a1d01979a935d0243f3a6fb7ec81",
+      "sha256": "725640c40a097befd5c20f590b82ca322c27a1d01979a935d0243f3a6fb7ec81",
+      "png": {
+        "width": 3840,
+        "height": 1240,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "transparentLogo",
+      "path": "public/images/steam/steam-logo-transparent.png",
+      "expectedName": null,
+      "required": true,
+      "expectedDimensions": {
+        "width": 1280,
+        "height": 720
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "03ccb8565872b501f74ee10e8d4829d9bf36a9b9753955f0d25038d98dde1791",
+      "sha256": "03ccb8565872b501f74ee10e8d4829d9bf36a9b9753955f0d25038d98dde1791",
+      "png": {
+        "width": 1280,
+        "height": 720,
+        "bitDepth": 8,
+        "colorType": 6,
+        "hasTransparencyChunk": false
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "id": "screenshot01",
+      "path": "public/images/steam/screenshots/01-dashboard.png",
+      "expectedName": "01-dashboard.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "367a9013ac08abefe4a60085c1fa98948234cf1735c598d7dd96fd007dc643e4",
+      "sha256": "367a9013ac08abefe4a60085c1fa98948234cf1735c598d7dd96fd007dc643e4",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "screenshot02",
+      "path": "public/images/steam/screenshots/02-observation.png",
+      "expectedName": "02-observation.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "bfb3c06fafdb260a4f7cc21baab4641ba8350386a276f9ffdd11aa91ea2e074b",
+      "sha256": "bfb3c06fafdb260a4f7cc21baab4641ba8350386a276f9ffdd11aa91ea2e074b",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "screenshot03",
+      "path": "public/images/steam/screenshots/03-report-writer.png",
+      "expectedName": "03-report-writer.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "79e700dc7d213ccf5ba77950852151d4db54915cbd99699a4827ae805c1766ef",
+      "sha256": "79e700dc7d213ccf5ba77950852151d4db54915cbd99699a4827ae805c1766ef",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "screenshot04",
+      "path": "public/images/steam/screenshots/04-prospects.png",
+      "expectedName": "04-prospects.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "88d7092c707b79fb24fb420169a638a7210c622e01c3af438aa42baaea2661e6",
+      "sha256": "88d7092c707b79fb24fb420169a638a7210c622e01c3af438aa42baaea2661e6",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "screenshot05",
+      "path": "public/images/steam/screenshots/05-world-map.png",
+      "expectedName": "05-world-map.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "fad97f1b251c1cef03f4d10fe2406cecc6ed20d32514be4f9554da5f06228398",
+      "sha256": "fad97f1b251c1cef03f4d10fe2406cecc6ed20d32514be4f9554da5f06228398",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "screenshot06",
+      "path": "public/images/steam/screenshots/06-rivals.png",
+      "expectedName": "06-rivals.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "4bc3e341d9ceb9dc7117b641c68bbaf7345b1ce3e647eae4d5e7a7fce0594af2",
+      "sha256": "4bc3e341d9ceb9dc7117b641c68bbaf7345b1ce3e647eae4d5e7a7fce0594af2",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "screenshot07",
+      "path": "public/images/steam/screenshots/07-career-progression.png",
+      "expectedName": "07-career-progression.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "f3ca5f516f7c090b9d5399ed7768fd46751772d1c904c03b2989a2c8bdd0f4b8",
+      "sha256": "f3ca5f516f7c090b9d5399ed7768fd46751772d1c904c03b2989a2c8bdd0f4b8",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    },
+    {
+      "id": "screenshot08",
+      "path": "public/images/steam/screenshots/08-calendar.png",
+      "expectedName": "08-calendar.png",
+      "required": true,
+      "expectedDimensions": {
+        "width": 1920,
+        "height": 1080
+      },
+      "exists": true,
+      "provenanceCovered": true,
+      "status": "Passed",
+      "failures": [],
+      "expectedSha256": "475e13139df49040a694301336c97566e34a1aeaa2f6d3d8c8a8883ede99d1a2",
+      "sha256": "475e13139df49040a694301336c97566e34a1aeaa2f6d3d8c8a8883ede99d1a2",
+      "png": {
+        "width": 1920,
+        "height": 1080,
+        "bitDepth": 8,
+        "colorType": 2,
+        "hasTransparencyChunk": false
+      }
+    }
+  ],
+  "failures": []
+}

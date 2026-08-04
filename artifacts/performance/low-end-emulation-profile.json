@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-18T05:55:04.934Z",
+  "generatedAt": "2026-07-29T02:29:44.210Z",
   "evidenceClass": "chromium-emulation-not-physical-low-end-hardware",
   "emulation": {
     "cpuSlowdown": 4,
@@ -30,53 +30,53 @@
     "domNodes": 18000
   },
   "measured": {
-    "coldLoadMs": 5977.12,
+    "coldLoadMs": 6655.15,
     "navigationDurationsMs": [
-      554.3,
-      450,
-      405,
-      369,
-      151.3
+      489,
+      509.4,
+      531.3,
+      349.4,
+      76.3
     ],
-    "navigationP95Ms": 554.3,
-    "oneWeekAdvanceMs": 2362.6,
+    "navigationP95Ms": 531.3,
+    "oneWeekAdvanceMs": 1895.2,
     "weeklyWorker": {
-      "computeMs": 665.6000000089407,
-      "changedFieldCount": 35,
-      "changedEntryCount": 3934,
-      "totalFieldCount": 100,
-      "responseBytes": 4104759,
+      "computeMs": 548.7000000001863,
+      "changedFieldCount": 36,
+      "changedEntryCount": 3944,
+      "totalFieldCount": 105,
+      "responseBytes": 4152121,
       "phaseTimings": [
         {
           "phase": "activity-resolution",
-          "elapsedMs": 59.70000000298023
+          "elapsedMs": 66.70000000018626
         },
         {
           "phase": "world-systems",
-          "elapsedMs": 37.5
+          "elapsedMs": 56.89999999944121
         },
         {
           "phase": "core-world-tick",
-          "elapsedMs": 420.79999999701977
+          "elapsedMs": 317.40000000037253
         },
         {
           "phase": "post-tick-accountability",
-          "elapsedMs": 4.200000002980232
+          "elapsedMs": 3.3999999994412065
         },
         {
           "phase": "season-rollover",
-          "elapsedMs": 134.29999999701977
+          "elapsedMs": 98.20000000018626
         },
         {
           "phase": "finalize",
-          "elapsedMs": 0.10000000894069672
+          "elapsedMs": 0.10000000055879354
         }
       ],
       "payloadHotspots": [
         {
           "field": "players",
           "strategy": "record-delta",
-          "bytes": 1701562
+          "bytes": 1718559
         },
         {
           "field": "fixtures",
@@ -96,32 +96,32 @@
         {
           "field": "unsignedYouth",
           "strategy": "record-delta",
-          "bytes": 123711
+          "bytes": 115292
         },
         {
           "field": "consequenceState",
           "strategy": "replace",
-          "bytes": 27461
-        },
-        {
-          "field": "inbox",
-          "strategy": "array-delta",
-          "bytes": 16508
+          "bytes": 44886
         },
         {
           "field": "youthRecruitmentBriefs",
           "strategy": "record-delta",
-          "bytes": 10272
+          "bytes": 26591
+        },
+        {
+          "field": "inbox",
+          "strategy": "array-delta",
+          "bytes": 17686
         }
       ],
       "route": "worker",
-      "roundTripMs": 2002.7999999970198
+      "roundTripMs": 1562.2000000001863
     },
-    "jsHeapUsedBytes": 42326692,
-    "jsHeapTotalBytes": 44793856,
-    "domNodes": 4805,
+    "jsHeapUsedBytes": 43732988,
+    "jsHeapTotalBytes": 45842432,
+    "domNodes": 4793,
     "documents": 2,
-    "layoutCount": 158
+    "layoutCount": 135
   },
   "simulationContext": {
     "profile": "coherent-mature-ordinary-week",

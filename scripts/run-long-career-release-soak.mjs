@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 
 const CHECKPOINT_PROTOCOL_VERSION = 1;
 const seedCount = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
+const seedStart = Number.parseInt(process.env.SOAK_SEED_START ?? "1", 10);
 const seasonCount = Number.parseInt(process.env.SOAK_SEASONS ?? "30", 10);
 const defaultConcurrency = Math.min(3, Math.max(1, availableParallelism() - 1));
 const concurrency = Number.parseInt(
@@ -22,14 +23,22 @@ const workerDirectory = resolve(
 );
 const checkpointPath = resolve(workerDirectory, "checkpoint.json");
 const vitestEntry = resolve("node_modules/vitest/vitest.mjs");
+const workerNodeArguments = [
+  "--max-old-space-size=1440",
+  "--max-semi-space-size=32",
+  "--expose-gc",
+];
+const workerHeapLimitBytes = 1536 * 1024 * 1024;
 const planOnly = process.env.SOAK_PLAN_ONLY === "true";
 const resumeRequested = process.env.SOAK_RESUME !== "false";
+const skipDeterminismReplay = process.env.SOAK_SKIP_DETERMINISM_REPLAY === "true";
 const maxSerializedBytes = Number.parseInt(
   process.env.SOAK_MAX_SERIALIZED_BYTES ?? String(80 * 1024 * 1024),
   10,
 );
 
 if (!Number.isInteger(seedCount) || seedCount <= 0) throw new Error("SOAK_SEEDS must be positive");
+if (!Number.isInteger(seedStart) || seedStart <= 0) throw new Error("SOAK_SEED_START must be positive");
 if (!Number.isInteger(seasonCount) || seasonCount <= 0) throw new Error("SOAK_SEASONS must be positive");
 if (!Number.isInteger(concurrency) || concurrency <= 0 || concurrency > seedCount) {
   throw new Error("SOAK_CONCURRENCY must be positive and no greater than SOAK_SEEDS");
@@ -76,11 +85,14 @@ const executionIdentity = {
   candidateCommitSha: currentHeadSha,
   candidateTreeSha: currentTreeSha,
   seedCount,
+  seedStart,
   seasonCount,
   concurrency,
   maxSerializedBytes,
   profileKind: "full-canonical-weekly-career",
   processIsolation: "one-seeded-career-per-process",
+  workerNodeArguments,
+  workerHeapLimitBytes,
   nodeVersion: process.version,
   nodeOptions: process.env.NODE_OPTIONS ?? "",
   platform: process.platform,
@@ -95,6 +107,13 @@ const executionIdentityHash = createHash("sha256")
 // A clean Git candidate is the content fingerprint. Supporting dirty-tree runs
 // remain useful diagnostics, but their outputs are never resumed or certified.
 const resumeEnabled = resumeRequested && sourceTreeClean;
+const requestedSeedIndices = Array.from(
+  { length: seedCount },
+  (_, index) => seedStart + index,
+);
+const seedPosition = new Map(
+  requestedSeedIndices.map((seedIndex, position) => [seedIndex, position]),
+);
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -127,6 +146,7 @@ function validateWorkerResult(result, seedIndex, requireCheckpoint) {
     || result.profile.seedCount !== 1
     || result.profile.seasonCount !== seasonCount
     || result.profile.maxSerializedBytes !== maxSerializedBytes
+    || result.profile.v8HeapLimitBytes !== workerHeapLimitBytes
     || !isRecord(result.profile.collectionByteBudgets)
   ) {
     failures.push("worker profile does not match the requested single-seed release profile");
@@ -185,6 +205,7 @@ function validateWorkerResult(result, seedIndex, requireCheckpoint) {
   }
   if (
     !isRecord(run.memory)
+    || !isFiniteNumber(run.memory.peakRuntimeHeapUsedBytes)
     || !isFiniteNumber(run.memory.peakHeapUsedBytes)
     || !isFiniteNumber(run.memory.peakRssBytes)
   ) {
@@ -260,18 +281,18 @@ async function writeJsonAtomic(path, value) {
 }
 
 const inspections = await Promise.all(
-  Array.from({ length: seedCount }, (_, index) => readReusableWorker(index + 1)),
+  requestedSeedIndices.map((seedIndex) => readReusableWorker(seedIndex)),
 );
 const reusableSeedIndices = inspections
-  .map((inspection, index) => inspection.reusable ? index + 1 : null)
+  .map((inspection, index) => inspection.reusable ? requestedSeedIndices[index] : null)
   .filter((seedIndex) => seedIndex !== null);
 const pendingSeedIndices = inspections
-  .map((inspection, index) => inspection.reusable ? null : index + 1)
+  .map((inspection, index) => inspection.reusable ? null : requestedSeedIndices[index])
   .filter((seedIndex) => seedIndex !== null);
 const rejectedCheckpoints = inspections
   .map((inspection, index) => inspection.reusable || inspection.reason === "no checkpoint"
     ? null
-    : { seedIndex: index + 1, reason: inspection.reason })
+    : { seedIndex: requestedSeedIndices[index], reason: inspection.reason })
   .filter((entry) => entry !== null);
 const plan = {
   schemaVersion: 1,
@@ -285,7 +306,7 @@ const plan = {
   reusableSeedIndices,
   pendingSeedIndices,
   rejectedCheckpoints,
-  determinismReplayRequired: true,
+  determinismReplayRequired: !skipDeterminismReplay,
 };
 
 if (planOnly) {
@@ -299,15 +320,17 @@ console.info(`SOAK_RELEASE_PLAN ${JSON.stringify(plan)}`);
 const runs = new Array(seedCount);
 let profile;
 const seedStates = new Map(
-  Array.from({ length: seedCount }, (_, index) => [
-    index + 1,
+  requestedSeedIndices.map((seedIndex, index) => [
+    seedIndex,
     inspections[index].reusable ? "Reused" : "Pending",
   ]),
 );
 for (const seedIndex of reusableSeedIndices) {
-  const result = inspections[seedIndex - 1].result;
+  const position = seedPosition.get(seedIndex);
+  if (position === undefined) throw new Error(`Unknown reusable seed ${seedIndex}`);
+  const result = inspections[position].result;
   profile ??= result.profile;
-  runs[seedIndex - 1] = result.runs[0];
+  runs[position] = result.runs[0];
 }
 
 let checkpointWrite = Promise.resolve();
@@ -361,11 +384,15 @@ async function runWorker(seedIndex, suffix = "run") {
     ].filter((state) => state === "Active").length}`,
   );
   try {
+    let workerStdout = "";
+    let workerStderr = "";
+    const retainDiagnosticTail = (current, chunk) =>
+      `${current}${chunk}`.slice(-32_768);
     await new Promise((resolveWorker, rejectWorker) => {
       const child = spawn(
         process.execPath,
         [
-          "--expose-gc",
+          ...workerNodeArguments,
           vitestEntry,
           "run",
           "--config",
@@ -382,13 +409,28 @@ async function runWorker(seedIndex, suffix = "run") {
             SOAK_WORKER_MODE: "true",
             SOAK_DIAGNOSTIC_ONLY: "false",
           },
-          stdio: "inherit",
+          stdio: ["ignore", "pipe", "pipe"],
         },
       );
+      child.stdout?.on("data", (chunk) => {
+        const text = chunk.toString();
+        workerStdout = retainDiagnosticTail(workerStdout, text);
+        process.stdout.write(text);
+      });
+      child.stderr?.on("data", (chunk) => {
+        const text = chunk.toString();
+        workerStderr = retainDiagnosticTail(workerStderr, text);
+        process.stderr.write(text);
+      });
       child.once("error", rejectWorker);
       child.once("exit", (code, signal) => {
         if (code === 0) resolveWorker();
-        else rejectWorker(new Error(`Soak worker ${seedIndex} failed (${signal ?? code})`));
+        else {
+          const diagnostic = (workerStderr || workerStdout).trim();
+          rejectWorker(new Error(
+            `Soak worker ${seedIndex} failed (${signal ?? code})${diagnostic ? `\n${diagnostic}` : ""}`,
+          ));
+        }
       });
     });
     const result = JSON.parse(await readFile(temporaryWorkerOutput, "utf8"));
@@ -455,7 +497,9 @@ try {
         try {
           const result = await runWorker(seedIndex);
           profile ??= result.profile;
-          runs[seedIndex - 1] = result.runs[0];
+          const position = seedPosition.get(seedIndex);
+          if (position === undefined) throw new Error(`Unknown completed seed ${seedIndex}`);
+          runs[position] = result.runs[0];
           seedStates.set(seedIndex, "Completed");
           await writeProgress("InProgress");
         } catch (error) {
@@ -477,9 +521,11 @@ try {
   }
   // The replay is intentionally fresh even after a resumed run. Reusing it
   // would turn checkpoint presence into a substitute for determinism proof.
-  const replayResult = await runWorker(1, "determinism-replay");
-  const persistenceReplay = replayResult.runs[0];
-  if (persistenceReplay.digest !== runs[0].digest) {
+  const replayResult = skipDeterminismReplay
+    ? null
+    : await runWorker(requestedSeedIndices[0], "determinism-replay");
+  const persistenceReplay = replayResult?.runs[0] ?? runs[0];
+  if (!skipDeterminismReplay && persistenceReplay.digest !== runs[0].digest) {
     throw new Error(
       `Determinism failure for ${runs[0].seed}: ${runs[0].digest} != ${persistenceReplay.digest}`,
     );
@@ -518,7 +564,7 @@ try {
       resumeEnabled,
       reusedSeedCount: reusableSeedIndices.length,
       executedSeedCount: pendingSeedIndices.length,
-      determinismReplayExecuted: true,
+      determinismReplayExecuted: !skipDeterminismReplay,
     },
     profile: {
       ...profile,
@@ -534,6 +580,9 @@ try {
       totalCalendarWeeksSpanned: runs.reduce((sum, run) => sum + run.calendarWeeksSpanned, 0),
       largestSaveBytes: Math.max(...runs.map((run) => run.peakBytes)),
       largestFinalToInitialRatio: Math.max(...runs.map((run) => run.finalToInitialRatio)),
+      peakRuntimeHeapUsedBytes: Math.max(
+        ...runs.map((run) => run.memory.peakRuntimeHeapUsedBytes),
+      ),
       peakHeapUsedBytes: Math.max(...runs.map((run) => run.memory.peakHeapUsedBytes)),
       peakRssBytes: Math.max(...runs.map((run) => run.memory.peakRssBytes)),
       largestSingleSeasonGrowthBytes: Math.max(

@@ -168,6 +168,16 @@ function buildCandidateQueue(
   available: Activity[],
 ): Activity[] {
   const candidates: Array<Activity & { _priority: number }> = [];
+  // Report activities are commonly exposed as one pooled card and expanded
+  // into many candidate players below. Count the observation archive once so
+  // a mature career does not rescan every observation for every candidate.
+  const observationCountByPlayerId = new Map<string, number>();
+  for (const observation of Object.values(state.observations)) {
+    observationCountByPlayerId.set(
+      observation.playerId,
+      (observationCountByPlayerId.get(observation.playerId) ?? 0) + 1,
+    );
+  }
   const strategy = normalizeWeeklyStrategyState(
     state.weeklyStrategy,
     state.currentWeek,
@@ -219,9 +229,7 @@ function buildCandidateQueue(
 
     // Report writing for well-observed players
     if (act.type === "writeReport" && priorities.writeReports && act.targetId) {
-      const obsCount = Object.values(state.observations).filter(
-        (o) => o.playerId === act.targetId,
-      ).length;
+      const obsCount = observationCountByPlayerId.get(act.targetId) ?? 0;
       if (obsCount >= MIN_OBS_FOR_REPORT) {
         priority = 70;
       }

@@ -19,4 +19,8 @@ export {
 } from "./scenarioAuthority";
 export type { ScenarioOutcomeResolution } from "./scenarioAuthority";
 
-export { applyScenarioSetup, applyScenarioOverrides } from "./scenarioSetup";
+export {
+  applyScenarioSetup,
+  applyScenarioOverrides,
+  reconcileScenarioOpeningState,
+} from "./scenarioSetup";

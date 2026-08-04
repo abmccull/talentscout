@@ -119,8 +119,7 @@ export function runHeadlessWeeklyTransaction(
 }
 
 function estimateResponseBytes(value: unknown): number {
-  const serialized = JSON.stringify(value) ?? "undefined";
-  return estimateSerializedBytes(serialized);
+  return estimateResponseBytesWithCache(value);
 }
 
 function estimateSerializedBytes(serialized: string): number {
@@ -129,13 +128,52 @@ function estimateSerializedBytes(serialized: string): number {
     : serialized.length;
 }
 
+type JsonMetricsCache = {
+  serializedObjects: WeakMap<object, string>;
+  serializedByteLengths: Map<string, number>;
+};
+
+function createJsonMetricsCache(): JsonMetricsCache {
+  return {
+    serializedObjects: new WeakMap<object, string>(),
+    serializedByteLengths: new Map<string, number>(),
+  };
+}
+
+function serializeJsonValue(value: unknown, cache?: JsonMetricsCache): string {
+  if (value !== null && typeof value === "object") {
+    const cached = cache?.serializedObjects.get(value as object);
+    if (cached !== undefined) return cached;
+    const serialized = JSON.stringify(value) ?? "undefined";
+    cache?.serializedObjects.set(value as object, serialized);
+    return serialized;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+function estimateResponseBytesWithCache(
+  value: unknown,
+  cache?: JsonMetricsCache,
+): number {
+  const serialized = serializeJsonValue(value, cache);
+  const cachedBytes = cache?.serializedByteLengths.get(serialized);
+  if (cachedBytes !== undefined) return cachedBytes;
+  const bytes = estimateSerializedBytes(serialized);
+  cache?.serializedByteLengths.set(serialized, bytes);
+  return bytes;
+}
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
 
-function areJsonValuesEqual(source: unknown, next: unknown): boolean {
+function areJsonValuesEqual(
+  source: unknown,
+  next: unknown,
+  cache?: JsonMetricsCache,
+): boolean {
   if (Object.is(source, next)) return true;
   if (
     source === null
@@ -143,17 +181,18 @@ function areJsonValuesEqual(source: unknown, next: unknown): boolean {
     || typeof source !== "object"
     || typeof next !== "object"
   ) return false;
-  return JSON.stringify(source) === JSON.stringify(next);
+  return serializeJsonValue(source, cache) === serializeJsonValue(next, cache);
 }
 
 function createRecordDelta(
   source: Record<string, unknown>,
   next: Record<string, unknown>,
   depth: number,
+  cache: JsonMetricsCache,
 ): WeeklyRecordDelta {
   const changedEntries: Record<string, WeeklyValueDelta> = {};
   for (const key of Object.keys(next)) {
-    const delta = createValueDelta(source[key], next[key], depth + 1);
+    const delta = createValueDelta(source[key], next[key], depth + 1, cache);
     if (delta) changedEntries[key] = delta;
   }
   const removedEntries = Object.keys(source)
@@ -161,10 +200,14 @@ function createRecordDelta(
   return { changedEntries, removedEntries };
 }
 
-function createArrayDelta(source: unknown[], next: unknown[]): WeeklyArrayDelta {
+function createArrayDelta(
+  source: unknown[],
+  next: unknown[],
+  cache: JsonMetricsCache,
+): WeeklyArrayDelta {
   const changedEntries: Record<string, WeeklyValueDelta> = {};
   for (let index = 0; index < next.length; index += 1) {
-    if (!areJsonValuesEqual(source[index], next[index])) {
+    if (!areJsonValuesEqual(source[index], next[index], cache)) {
       changedEntries[index] = { kind: "replace", value: next[index] };
     }
   }
@@ -182,6 +225,7 @@ const MAX_WEEKLY_DELTA_DEPTH = 2;
 function createArrayWindowDelta(
   source: unknown[],
   next: unknown[],
+  cache: JsonMetricsCache,
 ): WeeklyValueDelta | null {
   // Rolling histories are deliberately small. Bounding this optimization
   // avoids quadratic overlap searches on large presentation arrays.
@@ -191,7 +235,7 @@ function createArrayWindowDelta(
     const sourceStart = source.length - overlap;
     let matches = true;
     for (let index = 0; index < overlap; index += 1) {
-      if (!areJsonValuesEqual(source[sourceStart + index], next[index])) {
+      if (!areJsonValuesEqual(source[sourceStart + index], next[index], cache)) {
         matches = false;
         break;
       }
@@ -205,7 +249,8 @@ function createArrayWindowDelta(
       dropFirst,
       append,
     };
-    return estimateResponseBytes(delta) < estimateResponseBytes(next)
+    return estimateResponseBytesWithCache(delta, cache)
+      < estimateResponseBytesWithCache(next, cache)
       ? delta
       : null;
   }
@@ -216,33 +261,38 @@ function createValueDelta(
   source: unknown,
   next: unknown,
   depth = 0,
+  cache = createJsonMetricsCache(),
 ): WeeklyValueDelta | null {
   if (Object.is(source, next)) return null;
   if (Array.isArray(source) && Array.isArray(next)) {
-    const windowDelta = createArrayWindowDelta(source, next);
+    const windowDelta = createArrayWindowDelta(source, next, cache);
     if (windowDelta) return windowDelta;
   }
   if (depth >= MAX_WEEKLY_DELTA_DEPTH) {
-    return areJsonValuesEqual(source, next)
+    return areJsonValuesEqual(source, next, cache)
       ? null
       : { kind: "replace", value: next };
   }
   if (Array.isArray(source) && Array.isArray(next)) {
-    const delta = createArrayDelta(source, next);
+    const delta = createArrayDelta(source, next, cache);
     if (
       source.length === next.length
       && Object.keys(delta.changedEntries).length === 0
     ) return null;
     const nested: WeeklyValueDelta = { kind: "array", delta };
-    if (estimateResponseBytes(nested) < estimateResponseBytes(next)) return nested;
+    if (estimateResponseBytesWithCache(nested, cache) < estimateResponseBytesWithCache(next, cache)) {
+      return nested;
+    }
   } else if (isPlainRecord(source) && isPlainRecord(next)) {
-    const delta = createRecordDelta(source, next, depth);
+    const delta = createRecordDelta(source, next, depth, cache);
     if (
       Object.keys(delta.changedEntries).length === 0
       && delta.removedEntries.length === 0
     ) return null;
     const nested: WeeklyValueDelta = { kind: "record", delta };
-    if (estimateResponseBytes(nested) < estimateResponseBytes(next)) return nested;
+    if (estimateResponseBytesWithCache(nested, cache) < estimateResponseBytesWithCache(next, cache)) {
+      return nested;
+    }
   }
   return { kind: "replace", value: next };
 }
@@ -293,6 +343,7 @@ export function compactWeeklyWorkerCommit(
     changedFieldCount = 1;
     changedEntryCount = 1;
   } else {
+    const jsonMetricsCache = createJsonMetricsCache();
     const changedFields: Partial<typeof nextState> = {};
     const recordDeltas: Partial<Record<keyof typeof nextState, WeeklyRecordDelta>> = {};
     const arrayDeltas: Partial<Record<keyof typeof nextState, WeeklyArrayDelta>> = {};
@@ -303,7 +354,7 @@ export function compactWeeklyWorkerCommit(
       if (Object.is(sourceValue, nextValue)) continue;
 
       if (Array.isArray(sourceValue) && Array.isArray(nextValue)) {
-        const valueDelta = createValueDelta(sourceValue, nextValue);
+        const valueDelta = createValueDelta(sourceValue, nextValue, 0, jsonMetricsCache);
         if (!valueDelta) continue;
         if (valueDelta?.kind === "array") {
           const delta = valueDelta.delta;
@@ -312,14 +363,14 @@ export function compactWeeklyWorkerCommit(
           payloadHotspots.push({
             field: String(key),
             strategy: "array-delta",
-            bytes: estimateResponseBytes(delta),
+            bytes: estimateResponseBytesWithCache(delta, jsonMetricsCache),
           });
           continue;
         }
       }
 
       if (isPlainRecord(sourceValue) && isPlainRecord(nextValue)) {
-        const valueDelta = createValueDelta(sourceValue, nextValue);
+        const valueDelta = createValueDelta(sourceValue, nextValue, 0, jsonMetricsCache);
         if (!valueDelta) continue;
         const delta = valueDelta?.kind === "record" ? valueDelta.delta : null;
         if (!delta) {
@@ -328,7 +379,7 @@ export function compactWeeklyWorkerCommit(
           payloadHotspots.push({
             field: String(key),
             strategy: "replace",
-            bytes: estimateResponseBytes(nextValue),
+            bytes: estimateResponseBytesWithCache(nextValue, jsonMetricsCache),
           });
           continue;
         }
@@ -339,7 +390,7 @@ export function compactWeeklyWorkerCommit(
         payloadHotspots.push({
           field: String(key),
           strategy: "record-delta",
-          bytes: estimateResponseBytes(delta),
+          bytes: estimateResponseBytesWithCache(delta, jsonMetricsCache),
         });
         continue;
       }
@@ -349,7 +400,7 @@ export function compactWeeklyWorkerCommit(
       payloadHotspots.push({
         field: String(key),
         strategy: "replace",
-        bytes: estimateResponseBytes(nextValue),
+        bytes: estimateResponseBytesWithCache(nextValue, jsonMetricsCache),
       });
     }
     const removedFields = (Object.keys(sourceState) as Array<keyof typeof sourceState>)

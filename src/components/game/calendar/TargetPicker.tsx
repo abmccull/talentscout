@@ -152,6 +152,11 @@ function PlayerRow({ target }: { target: TargetOption }) {
             </span>
           )}
         </div>
+        {target.description && (
+          <p className="mt-1 text-[9px] text-emerald-300/80">
+            {target.description}
+          </p>
+        )}
       </div>
     </>
   );

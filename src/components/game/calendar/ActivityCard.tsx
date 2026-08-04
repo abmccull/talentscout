@@ -2,17 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import type {
-  Activity,
-  ActivityType,
-  ScoutAttribute,
-  ScoutSkill,
-} from "@/engine/core/types";
-import {
-  ACTIVITY_ATTRIBUTE_XP,
-  ACTIVITY_FATIGUE_COSTS,
-  ACTIVITY_SKILL_XP,
-} from "@/engine/core/calendar";
+import type { Activity, ActivityType } from "@/engine/core/types";
 import {
   Book,
   ChevronRight,
@@ -25,99 +15,15 @@ import {
   Video,
   type LucideIcon,
 } from "lucide-react";
-
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-const SKILL_LABELS: Record<string, string> = {
-  technicalEye: "Tech Eye",
-  physicalAssessment: "Physical",
-  psychologicalRead: "Psych Read",
-  tacticalUnderstanding: "Tactical",
-  dataLiteracy: "Data",
-  playerJudgment: "Judgment",
-  potentialAssessment: "Potential",
-};
-
-const ATTR_LABELS: Record<string, string> = {
-  networking: "Network",
-  persuasion: "Persuasion",
-  endurance: "Endurance",
-  adaptability: "Adapt",
-  memory: "Memory",
-  intuition: "Intuition",
-};
-
-type ActivityGuide = {
-  context: string;
-  question: string;
-};
-
-const ACTIVITY_GUIDANCE: Partial<Record<ActivityType, ActivityGuide>> = {
-  attendMatch: {
-    context: "Full match context with team structure and level of opponent.",
-    question: "Who actually changes the game when the rhythm and stakes rise?",
-  },
-  trainingVisit: {
-    context: "Controlled environment for repetitions, habits, and coach demands.",
-    question: "Does the player's technique and focus survive repetition?",
-  },
-  watchVideo: {
-    context: "Desk review that sharpens the next live assignment.",
-    question: "What should you verify in person before writing anything firm?",
-  },
-  schoolMatch: {
-    context: "Raw youth football where physical edge and instinct show quickly.",
-    question: "Is the player simply ahead early, or carrying traits that travel?",
-  },
-  grassrootsTournament: {
-    context: "Dense prospect pool across multiple games and contrasting styles.",
-    question: "Who keeps standing out when the samples stack up?",
-  },
-  streetFootball: {
-    context: "Loose environment that exposes improvisation and technical bravery.",
-    question: "Which actions come naturally without structure doing the work?",
-  },
-  academyTrialDay: {
-    context: "Organised trial setting with stronger coaching scrutiny.",
-    question: "Does the player look coachable as well as talented?",
-  },
-  youthFestival: {
-    context: "Higher-profile youth gathering with broader comparison points.",
-    question: "Who looks repeatable against better-calibrated opposition?",
-  },
-  youthTournament: {
-    context: "Tournament football with faster reads, fatigue, and pressure.",
-    question: "Which players hold their level across short-turnaround games?",
-  },
-  followUpSession: {
-    context: "A narrow revisit to test whether the first impression still holds.",
-    question: "What remains unresolved after your first watch?",
-  },
-  parentCoachMeeting: {
-    context: "Off-pitch background on mentality, habits, and support structure.",
-    question: "What character or context could change the projection?",
-  },
-  writeReport: {
-    context: "Convert observations into a call somebody else can act on.",
-    question: "What are you prepared to say clearly, and with how much conviction?",
-  },
-  writePlacementReport: {
-    context: "Match a prospect to a club environment and pathway.",
-    question: "Which destination makes the recommendation believable right now?",
-  },
-  networkMeeting: {
-    context: "Relationship work that unlocks future leads and private intel.",
-    question: "Which contact can improve next week's opportunity quality?",
-  },
-  study: {
-    context: "Quiet development time that improves future reads.",
-    question: "Which weakness in your craft is costing you the most today?",
-  },
-  rest: {
-    context: "Recovery time that protects observation accuracy and judgment.",
-    question: "Are you risking poor reads by pushing through fatigue?",
-  },
-};
+import {
+  DAY_LABELS,
+  getActivityFatigueSummary,
+  getActivityGuide,
+  getAvailabilitySummary,
+  getBestReturns,
+  getOpportunityCostLabel,
+  getTargetPoolLabel,
+} from "./activityPlanning";
 
 /** Icon + color per activity type for display. */
 export const ACTIVITY_DISPLAY: Record<
@@ -292,49 +198,6 @@ interface ActivityCardProps {
   openDayCount: number;
 }
 
-function getBestReturns(activity: Activity): string[] {
-  const skillXp = ACTIVITY_SKILL_XP[activity.type];
-  const attrXp = ACTIVITY_ATTRIBUTE_XP[activity.type];
-
-  const skillReturns = skillXp
-    ? (Object.entries(skillXp) as [ScoutSkill, number][])
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 2)
-        .map(([skill, xp]) => `${SKILL_LABELS[skill] ?? skill} +${xp}`)
-    : [];
-
-  const attrReturns = attrXp
-    ? (Object.entries(attrXp) as [ScoutAttribute, number][])
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 1)
-        .map(([attr, xp]) => `${ATTR_LABELS[attr] ?? attr} +${xp}`)
-    : [];
-
-  return [...skillReturns, ...attrReturns].slice(0, 3);
-}
-
-function getTargetPoolLabel(activity: Activity): string | null {
-  if (!activity.targetPool?.length) return null;
-
-  const suffix =
-    activity.type === "networkMeeting"
-      ? "contacts"
-      : activity.type === "watchVideo"
-        ? "clips"
-        : "targets";
-
-  return `${activity.targetPool.length} ${suffix}`;
-}
-
-function getGuide(activity: Activity): ActivityGuide {
-  return (
-    ACTIVITY_GUIDANCE[activity.type] ?? {
-      context: activity.description || "A scouting task for the current week.",
-      question: "What new information can this slot buy for you this week?",
-    }
-  );
-}
-
 export function ActivityCard({
   activity,
   canScheduleAt,
@@ -346,20 +209,15 @@ export function ActivityCard({
 }: ActivityCardProps) {
   const display = ACTIVITY_DISPLAY[activity.type];
   const Icon = display.icon;
-  const fatigueCost = ACTIVITY_FATIGUE_COSTS[activity.type];
-  const guide = getGuide(activity);
+  const guide = getActivityGuide(activity);
   const returns = getBestReturns(activity);
   const targetPoolLabel = getTargetPoolLabel(activity);
-
-  const availableDays = useMemo(
-    () => DAY_LABELS.filter((_, dayIndex) => canScheduleAt(activity, dayIndex)),
+  const { availableDays, firstAvailableDayIndex, availabilityLabel } = useMemo(
+    () => getAvailabilitySummary(activity, canScheduleAt),
     [activity, canScheduleAt],
   );
-
-  const firstAvailableDayIndex = useMemo(
-    () => DAY_LABELS.findIndex((_, dayIndex) => canScheduleAt(activity, dayIndex)),
-    [activity, canScheduleAt],
-  );
+  const { fatigueCost, fatigueLabel, fatigueTone } = getActivityFatigueSummary(activity);
+  const opportunityCost = getOpportunityCostLabel(activity, openDayCount);
 
   const handlePrimaryAction = useCallback(() => {
     if (onSelect) {
@@ -379,28 +237,6 @@ export function ActivityCard({
     },
     [activity],
   );
-
-  const availabilityLabel =
-    availableDays.length === 0
-      ? "No open window this week"
-      : availableDays.length === 1
-        ? `Open ${availableDays[0]} only`
-        : `${availableDays.length} start windows`;
-
-  const fatigueTone =
-    fatigueCost < 0
-      ? "text-emerald-300"
-      : fatigueCost <= 5
-        ? "text-zinc-300"
-        : fatigueCost <= 8
-          ? "text-amber-300"
-          : "text-red-300";
-
-  const opportunityCost = openDayCount === 0
-    ? `Needs ${activity.slots} day${activity.slots === 1 ? "" : "s"}; none open`
-    : activity.slots === 1
-      ? `Uses 1 of ${openDayCount} open day${openDayCount === 1 ? "" : "s"}`
-      : `Uses ${activity.slots} of ${openDayCount} open days`;
 
   return (
     <article
@@ -445,9 +281,7 @@ export function ActivityCard({
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-400">
             <span>{opportunityCost}</span>
-            <span className={fatigueTone}>
-              {fatigueCost < 0 ? `${Math.abs(fatigueCost)} fatigue recovered` : `+${fatigueCost} fatigue`}
-            </span>
+            <span className={fatigueTone}>{fatigueLabel}</span>
             <span>{availabilityLabel}</span>
           </span>
         </span>
@@ -481,9 +315,7 @@ export function ActivityCard({
           </div>
 
           <div className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-3 sm:flex-row sm:items-center sm:justify-between">
-            <span
-              className="text-xs leading-5 text-amber-100/85"
-            >
+            <span className="text-xs leading-5 text-amber-100/85">
               <strong className="font-semibold text-amber-200">Tradeoff:</strong>{" "}
               {opportunityCost}; {fatigueCost < 0
                 ? `recovers ${Math.abs(fatigueCost)} fatigue but gathers no new evidence.`

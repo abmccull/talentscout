@@ -283,6 +283,7 @@ test.describe("Youth Early Access accessibility", () => {
       store.getState().setScreen("career");
     });
 
+    await gamePage.page.getByText("Club politics", { exact: true }).first().click();
     const managerEvidence = gamePage.page.getByRole("radio", { name: /Present the evidence/i });
     const managerListen = gamePage.page.getByRole("radio", { name: /Listen & align/i });
     await managerListen.focus();

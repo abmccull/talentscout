@@ -2,6 +2,7 @@ import type {
   GameState,
   InboxMessage,
   NarrativeEvent,
+  YouthRecruitmentBrief,
 } from "@/engine/core/types";
 import { getSeasonLength } from "@/engine/core/gameLoop";
 import { resolveClubDecision } from "@/engine/reports/scoutingCases";
@@ -43,6 +44,34 @@ export interface WeeklyRivalLifecycleResult {
   rivalAlertCount: number;
 }
 
+function collectScoutInterestPlayerIds(
+  state: Pick<GameState, "observations" | "reports">,
+): Set<string> {
+  const playerIds = new Set<string>();
+  for (const observation of Object.values(state.observations)) {
+    playerIds.add(observation.playerId);
+  }
+  for (const report of Object.values(state.reports)) {
+    playerIds.add(report.playerId);
+  }
+  return playerIds;
+}
+
+function indexOpenBriefIdsByPosition(
+  briefs: Record<string, YouthRecruitmentBrief>,
+): Map<string, string[]> {
+  const briefIdsByPosition = new Map<string, string[]>();
+  for (const brief of Object.values(briefs)) {
+    if (brief.status !== "open") continue;
+    for (const position of brief.requiredPositions) {
+      const matching = briefIdsByPosition.get(position) ?? [];
+      matching.push(brief.id);
+      briefIdsByPosition.set(position, matching);
+    }
+  }
+  return briefIdsByPosition;
+}
+
 function applyYouthRivalClaims(
   state: GameState,
   organizationResult: ProcessRivalOrganizationWeekResult,
@@ -57,6 +86,8 @@ function applyYouthRivalClaims(
   let reportDeliveries = { ...state.reportDeliveries };
   let clubDecisions = { ...state.clubDecisions };
   const youthRecruitmentBriefs = { ...state.youthRecruitmentBriefs };
+  const scoutInterestPlayerIds = collectScoutInterestPlayerIds(state);
+  const briefIdsByPosition = indexOpenBriefIdsByPosition(youthRecruitmentBriefs);
 
   for (const rival of Object.values(rivalScouts).filter(
     (candidate) => candidate.specialization === "youth",
@@ -72,12 +103,7 @@ function applyYouthRivalClaims(
     const youth = unsignedYouth[target.youthId];
     if (!youth) continue;
     const scoutHasInterest = youth.discoveredBy.includes(state.scout.id)
-      || Object.values(state.observations).some(
-        (observation) => observation.playerId === youth.player.id,
-      )
-      || Object.values(state.reports).some(
-        (report) => report.playerId === youth.player.id,
-      );
+      || scoutInterestPlayerIds.has(youth.player.id);
     const pressureResult = advanceYouthRivalPressure({
       rival,
       youth,
@@ -99,15 +125,16 @@ function applyYouthRivalClaims(
     rivalActivities = pressureResult.activities;
     inbox = pressureResult.messages;
 
-    for (const brief of Object.values(youthRecruitmentBriefs)) {
+    const matchingBriefIds = new Set(
+      [youth.player.position, ...youth.player.secondaryPositions].flatMap(
+        (position) => briefIdsByPosition.get(position) ?? [],
+      ),
+    );
+    for (const briefId of matchingBriefIds) {
+      const brief = youthRecruitmentBriefs[briefId];
+      if (!brief) continue;
       if (
         brief.status === "open"
-        && (
-          brief.requiredPositions.includes(youth.player.position)
-          || youth.player.secondaryPositions.some(
-            (position) => brief.requiredPositions.includes(position),
-          )
-        )
         && pressureResult.pressure > brief.competitionPressure
       ) {
         youthRecruitmentBriefs[brief.id] = {

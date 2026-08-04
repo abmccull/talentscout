@@ -16,6 +16,7 @@ import {
 } from "@/engine/world/worldConditions";
 import { normalizeCountryKey } from "@/lib/country";
 import { deriveClubRecruitmentDoctrine } from "@/engine/world/recruitmentIdentity";
+import type { WorldFact } from "@/engine/consequences";
 
 export type DevelopmentEnvironmentBand =
   | "excellent"
@@ -40,6 +41,7 @@ export type DevelopmentEnvironmentFactorId =
   | "form-and-morale"
   | "health"
   | "loan-plan"
+  | "pathway-intervention"
   | "world-context";
 
 /**
@@ -107,7 +109,7 @@ type DevelopmentEnvironmentState = Pick<
   | "matchRatings"
   | "activeLoans"
   | "worldConditionState"
-> & Partial<Pick<GameState, "seed">>;
+> & Partial<Pick<GameState, "seed" | "runManifest" | "consequenceState">>;
 
 interface EvaluationOptions {
   /** Evaluate a proposed destination before the player has joined it. */
@@ -134,6 +136,7 @@ export interface DevelopmentEnvironmentIndex {
     string,
     ReturnType<typeof deriveClubRecruitmentDoctrine>
   >;
+  activePathwayInterventionByPlayer: ReadonlyMap<string, ActivePathwayIntervention>;
   worldContextByCountry: Map<string, CachedWorldConditionContext>;
 }
 
@@ -144,6 +147,23 @@ interface FactorDraft extends DevelopmentEnvironmentFactor {
 interface CachedWorldConditionContext {
   factor: FactorDraft | null;
   modifiers: WorldConditionModifiers;
+}
+
+type ActivePathwayInterventionOption =
+  | "back-pathway"
+  | "reopen-route"
+  | "revise-call";
+
+interface ActivePathwayIntervention {
+  factId: string;
+  optionId: ActivePathwayInterventionOption;
+  observedAt: WorldFact["observedAt"];
+  expiresAt: NonNullable<WorldFact["expiresAt"]>;
+}
+
+interface ActivePathwayInterventionEffect {
+  factor: FactorDraft;
+  mechanics: Omit<DevelopmentEnvironmentMechanics, "decisionWeight">;
 }
 
 export const PLAYER_DEVELOPMENT_HISTORY_LIMIT = 8;
@@ -192,6 +212,129 @@ function makeFactor(
   summary: string,
 ): FactorDraft {
   return { id, label, points, impact: impactFor(points), summary };
+}
+
+function compareGameDate(
+  left: WorldFact["observedAt"],
+  right: WorldFact["observedAt"],
+): number {
+  return left.season - right.season || left.week - right.week;
+}
+
+function isActivePathwayInterventionFact(
+  fact: WorldFact,
+  currentSeason: number,
+  currentWeek: number,
+): fact is WorldFact & {
+  subject: { kind: "player"; id: string };
+  value: ActivePathwayInterventionOption;
+  expiresAt: NonNullable<WorldFact["expiresAt"]>;
+} {
+  if (
+    fact.kind !== "activeCareerFrontResponse"
+    || fact.subject?.kind !== "player"
+    || fact.metadata?.routeEffectVersion !== 1
+    || !fact.expiresAt
+    || (
+      fact.value !== "back-pathway"
+      && fact.value !== "reopen-route"
+      && fact.value !== "revise-call"
+    )
+  ) return false;
+  const now = { season: currentSeason, week: currentWeek };
+  return compareGameDate(fact.observedAt, now) <= 0
+    && compareGameDate(now, fact.expiresAt) < 0;
+}
+
+function selectLatestActivePathwayInterventions(
+  state: DevelopmentEnvironmentState,
+): ReadonlyMap<string, ActivePathwayIntervention> {
+  const selected = new Map<string, ActivePathwayIntervention>();
+  for (const fact of Object.values(state.consequenceState?.facts ?? {})) {
+    if (!isActivePathwayInterventionFact(
+      fact,
+      state.currentSeason,
+      state.currentWeek,
+    )) continue;
+    const playerId = fact.subject.id;
+    const current = selected.get(playerId);
+    if (
+      current
+      && (
+        compareGameDate(current.observedAt, fact.observedAt) > 0
+        || (
+          compareGameDate(current.observedAt, fact.observedAt) === 0
+          && current.factId.localeCompare(fact.id) >= 0
+        )
+      )
+    ) continue;
+    selected.set(playerId, {
+      factId: fact.id,
+      optionId: fact.value,
+      observedAt: fact.observedAt,
+      expiresAt: fact.expiresAt,
+    });
+  }
+  return selected;
+}
+
+function activePathwayInterventionEffect(
+  state: DevelopmentEnvironmentState,
+  playerId: string,
+  index?: DevelopmentEnvironmentIndex,
+): ActivePathwayInterventionEffect | undefined {
+  const intervention = index
+    ? index.activePathwayInterventionByPlayer.get(playerId)
+    : selectLatestActivePathwayInterventions(state).get(playerId);
+  if (!intervention) return undefined;
+
+  switch (intervention.optionId) {
+    case "back-pathway":
+      return {
+        factor: makeFactor(
+          "pathway-intervention",
+          "Scout pathway intervention",
+          4,
+          "The scout has backed an eight-week stability window, reinforcing development continuity while the existing route is held accountable.",
+        ),
+        mechanics: {
+          growthChanceMultiplier: 1.06,
+          growthQualityMultiplier: 1.05,
+          declineRiskMultiplier: 0.94,
+          breakthroughMultiplier: 1,
+        },
+      };
+    case "reopen-route":
+      return {
+        factor: makeFactor(
+          "pathway-intervention",
+          "Scout pathway intervention",
+          1,
+          "The scout has opened an eight-week exposure window: showcase work raises breakthrough opportunity while disrupting training continuity.",
+        ),
+        mechanics: {
+          growthChanceMultiplier: 1.02,
+          growthQualityMultiplier: 0.98,
+          declineRiskMultiplier: 1.04,
+          breakthroughMultiplier: 1.15,
+        },
+      };
+    case "revise-call":
+      return {
+        factor: makeFactor(
+          "pathway-intervention",
+          "Scout pathway intervention",
+          -2,
+          "The scout has withdrawn active route advocacy for eight weeks while the original pathway judgment is recalibrated.",
+        ),
+        mechanics: {
+          growthChanceMultiplier: 0.96,
+          growthQualityMultiplier: 1,
+          declineRiskMultiplier: 1,
+          breakthroughMultiplier: 0.92,
+        },
+      };
+  }
 }
 
 export function createDevelopmentEnvironmentIndex(
@@ -271,6 +414,7 @@ export function createDevelopmentEnvironmentIndex(
       seed: state.seed ?? `development:${club.id}`,
       season: state.currentSeason,
       manager: state.managerProfiles[club.id],
+      runManifest: state.runManifest,
     }));
   }
 
@@ -284,6 +428,7 @@ export function createDevelopmentEnvironmentIndex(
     fitPlayerOccurrencesByClub,
     activeLoanByPlayerAndClub,
     recruitmentDoctrineByClub,
+    activePathwayInterventionByPlayer: selectLatestActivePathwayInterventions(state),
     worldContextByCountry: new Map<string, CachedWorldConditionContext>(),
   };
 }
@@ -433,6 +578,7 @@ function philosophyFactor(
       seed: state.seed ?? `development:${club.id}`,
       season: state.currentSeason,
       manager,
+      runManifest: state.runManifest,
     });
   const developing = player.age <= doctrine.preferredSeniorAgeRange[1];
   const patienceContribution = developing
@@ -770,6 +916,9 @@ export function evaluatePlayerDevelopmentEnvironment(
   const league = club ? state.leagues[club.leagueId] : undefined;
   const prospective = options.prospectiveClubId !== undefined;
   const index = currentDevelopmentIndex(state, options.index);
+  const pathwayIntervention = prospective
+    ? undefined
+    : activePathwayInterventionEffect(state, player.id, index);
   const factors: FactorDraft[] = [
     academyFactor(player, club),
     philosophyFactor(state, player, club, manager, index),
@@ -779,6 +928,7 @@ export function evaluatePlayerDevelopmentEnvironment(
     formFactor(player),
     healthFactor(player),
   ];
+  if (pathwayIntervention) factors.push(pathwayIntervention.factor);
   const loanPlan = loanPlanFactor(state, player, club, prospective, index);
   if (loanPlan) factors.push(loanPlan);
   const worldCountry = league?.country ?? player.nationality;
@@ -817,6 +967,24 @@ export function evaluatePlayerDevelopmentEnvironment(
       ? "Review after medical clearance and a sustained training block."
       : "Review when the manager, club, loan role, or run of appearances changes.";
 
+  const baseMechanics: DevelopmentEnvironmentMechanics = {
+    growthChanceMultiplier: round(
+      (0.72 + (structuralScore / 100) * 0.62)
+        * worldModifiers.developmentMultiplier,
+    ),
+    growthQualityMultiplier: round(
+      (0.88 + (structuralScore / 100) * 0.26)
+        * worldModifiers.developmentMultiplier,
+    ),
+    declineRiskMultiplier: round(1.13 - (structuralScore / 100) * 0.26),
+    breakthroughMultiplier: round(
+      (0.65 + (structuralScore / 100) * 0.7)
+        * worldModifiers.breakthroughMultiplier,
+    ),
+    decisionWeight: round(0.65 + (score / 100) * 0.8),
+  };
+  const interventionMechanics = pathwayIntervention?.mechanics;
+
   return {
     projection: {
       ...(club ? { clubId: club.id } : {}),
@@ -828,22 +996,27 @@ export function evaluatePlayerDevelopmentEnvironment(
       factors: factors.map(({ points: _points, ...factor }) => factor),
       reviewPrompt,
     },
-    mechanics: {
-      growthChanceMultiplier: round(
-        (0.72 + (structuralScore / 100) * 0.62)
-          * worldModifiers.developmentMultiplier,
-      ),
-      growthQualityMultiplier: round(
-        (0.88 + (structuralScore / 100) * 0.26)
-          * worldModifiers.developmentMultiplier,
-      ),
-      declineRiskMultiplier: round(1.13 - (structuralScore / 100) * 0.26),
-      breakthroughMultiplier: round(
-        (0.65 + (structuralScore / 100) * 0.7)
-          * worldModifiers.breakthroughMultiplier,
-      ),
-      decisionWeight: round(0.65 + (score / 100) * 0.8),
-    },
+    mechanics: interventionMechanics
+      ? {
+          growthChanceMultiplier: round(
+            baseMechanics.growthChanceMultiplier
+              * interventionMechanics.growthChanceMultiplier,
+          ),
+          growthQualityMultiplier: round(
+            baseMechanics.growthQualityMultiplier
+              * interventionMechanics.growthQualityMultiplier,
+          ),
+          declineRiskMultiplier: round(
+            baseMechanics.declineRiskMultiplier
+              * interventionMechanics.declineRiskMultiplier,
+          ),
+          breakthroughMultiplier: round(
+            baseMechanics.breakthroughMultiplier
+              * interventionMechanics.breakthroughMultiplier,
+          ),
+          decisionWeight: baseMechanics.decisionWeight,
+        }
+      : baseMechanics,
   };
 }
 
@@ -853,6 +1026,35 @@ export function projectPlayerDevelopmentEnvironment(
   options: EvaluationOptions = {},
 ): PlayerDevelopmentEnvironmentProjection {
   return evaluatePlayerDevelopmentEnvironment(state, player, options).projection;
+}
+
+/**
+ * Public career-route projection shared by active fronts and their callbacks.
+ * An unattached player remains adverse until a real registration changes the
+ * canonical player/club state; temporary scout advocacy cannot imply a route.
+ */
+export function projectCurrentPlayerCareerEnvironment(
+  state: DevelopmentEnvironmentState,
+  player: Player,
+  options: EvaluationOptions = {},
+): PlayerDevelopmentEnvironmentProjection {
+  if (!player.clubId) {
+    return {
+      clubName: "Unattached football",
+      score: 15,
+      band: "adverse",
+      headline: "Adverse environment",
+      summary: "No registered club, coaching programme, or competitive route is currently attached to the player.",
+      factors: [{
+        id: "playing-pathway",
+        label: "Playing pathway",
+        impact: "strong-negative",
+        summary: "There is currently no registered club or competitive route.",
+      }],
+      reviewPrompt: "Review after a trial, signing, or other credible route enters the world state.",
+    };
+  }
+  return projectPlayerDevelopmentEnvironment(state, player, options);
 }
 
 export function projectProspectiveDevelopmentEnvironment(

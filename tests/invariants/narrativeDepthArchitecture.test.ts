@@ -19,13 +19,21 @@ import {
   type StakeholderProfileRole,
 } from "@/engine/consequences/stakeholderProfiles";
 import {
+  getAuthoredRelationshipConflictCoverage,
   getAuthoredRelationshipConflictDefinitions,
   materializeAuthoredRelationshipConflict,
   registerMaterializedRelationshipConflict,
   selectAuthoredRelationshipConflict,
   validateAuthoredRelationshipConflicts,
 } from "@/engine/consequences/authoredRelationshipConflicts";
-import { directWeeklyRelationshipConflict } from "@/engine/consequences/relationshipConflictDirector";
+import {
+  getRelationshipFrontEnsembleCoverage,
+  getRecurringRelationshipFrontEnsembles,
+} from "@/engine/consequences";
+import {
+  directWeeklyRelationshipConflict,
+  getRelationshipConflictCandidatePlayerIds,
+} from "@/engine/consequences/relationshipConflictDirector";
 import {
   archiveMaterialCareerStories,
   createCareerStoryArchiveState,
@@ -224,8 +232,74 @@ describe("persistent stakeholder profiles and authored conflicts", () => {
     expect([cast?.left.entity.id, cast?.right.entity.id]).not.toContain("employee-gone");
   });
 
+  it("derives a fallback ensemble identity from legacy relationship-conflict saves", () => {
+    const legacyState = createConsequenceEngineState({
+      decisions: {
+        "legacy:relationship": {
+          id: "legacy:relationship",
+          source: { kind: "relationshipConflict", id: "legacy-front" },
+          offeredAt: week1,
+          deadlineAt: { season: 1, week: 2 },
+          status: "offered",
+          visibility: "stakeholders",
+          stakeholders: [
+            { kind: "family", id: "prospect" },
+            { kind: "contact", id: "reporter" },
+          ],
+          options: [
+            {
+              id: "protect",
+              label: "Protect",
+              knownTradeoffs: ["Keeps the family safe", "Frustrates the reporter"],
+              immediateEffects: [],
+              scheduledConsequences: [],
+            },
+            {
+              id: "publish",
+              label: "Publish",
+              knownTradeoffs: ["Builds publicity", "Damages trust"],
+              immediateEffects: [],
+              scheduledConsequences: [],
+            },
+          ],
+          defaultOptionId: "protect",
+          outcomeRoll: 0.5,
+          consequenceIds: [],
+          metadata: {
+            title: "Legacy Front",
+            relatedPlayerId: "prospect",
+          },
+        },
+      },
+    });
+    const ensembles = getRecurringRelationshipFrontEnsembles({
+      ...relationshipFixture(),
+      consequenceState: legacyState,
+    } as GameState);
+
+    expect(ensembles).toHaveLength(1);
+    expect(ensembles[0]).toMatchObject({
+      frontFamilyId: "legacy-front",
+      recurrenceName: "Legacy Front",
+      activeDecisionIds: ["legacy:relationship"],
+      recurrenceCount: 1,
+    });
+  });
+
   it("covers every recurring role family with validated, non-equivalent conflicts", () => {
     expect(validateAuthoredRelationshipConflicts()).toEqual([]);
+    const coverage = getAuthoredRelationshipConflictCoverage();
+    expect(coverage).toMatchObject({
+      blueprintCount: 13,
+      frontFamilyCount: 13,
+      frontStructureCount: 7,
+      recurringFrontVariantCount: 39,
+      callbackVariantCount: 33,
+      stakeholderOutcomeVariantCount: 78,
+      authoredCallbackOutcomeVariantCount: 111,
+    });
+    expect(coverage.recurringFrontVariantCount).toBeGreaterThanOrEqual(36);
+    expect(coverage.authoredCallbackOutcomeVariantCount).toBeGreaterThanOrEqual(72);
     const roles = new Set<StakeholderProfileRole>();
     for (const definition of getAuthoredRelationshipConflictDefinitions()) {
       roles.add(definition.leftRole);
@@ -252,6 +326,105 @@ describe("persistent stakeholder profiles and authored conflicts", () => {
       "rival",
       "scout",
     ]);
+  });
+
+  it("derives deterministic recurring front ensembles across active and compacted history", () => {
+    const game = relationshipFixture();
+    const registry = createStakeholderProfileRegistry(game);
+    const cast = selectAuthoredRelationshipConflict({
+      rootSeed: game.runManifest.rootSeed,
+      now: week1,
+      registry,
+      subject: { kind: "player", id: "prospect" },
+      state: game,
+    });
+    expect(cast?.definition.id).toBe("family-versus-journalist-privacy");
+
+    const first = materializeAuthoredRelationshipConflict({
+      id: "conflict:embargo:1",
+      cast: cast!,
+      scoutId: "scout",
+      now: week1,
+      deadlineAt: { season: 1, week: 2 },
+      outcomeRoll: 0.42,
+      existingState: createConsequenceEngineState(),
+    });
+    const replay = materializeAuthoredRelationshipConflict({
+      id: "conflict:embargo:1",
+      cast: cast!,
+      scoutId: "scout",
+      now: week1,
+      deadlineAt: { season: 1, week: 2 },
+      outcomeRoll: 0.42,
+      existingState: createConsequenceEngineState(),
+    });
+    expect(first.front).toEqual(replay.front);
+    expect(first.front.recurrenceIndex).toBe(1);
+
+    const registered = registerMaterializedRelationshipConflict(
+      createConsequenceEngineState(),
+      first,
+    ).state;
+    const selected = selectDecisionOption(
+      registered,
+      first.decision.id,
+      "protect-family",
+      week1,
+    ).state;
+    const resolved = processDueConsequences(selected, week1).state;
+
+    const second = materializeAuthoredRelationshipConflict({
+      id: "conflict:embargo:2",
+      cast: cast!,
+      scoutId: "scout",
+      now: { season: 1, week: 2 },
+      deadlineAt: { season: 1, week: 3 },
+      outcomeRoll: 0.24,
+      existingState: resolved,
+    });
+    expect(second.front.recurrenceIndex).toBe(2);
+
+    const withSecond = registerMaterializedRelationshipConflict(resolved, second).state;
+    const ensembleState = {
+      ...game,
+      currentWeek: 2,
+      consequenceState: withSecond,
+    } as GameState;
+    const ensembles = getRecurringRelationshipFrontEnsembles(ensembleState);
+    expect(ensembles).toHaveLength(1);
+    expect(ensembles[0]).toMatchObject({
+      frontFamilyId: "family-journalist-media",
+      recurrenceName: "The Embargo Triangle",
+      recurrenceCount: 2,
+      activeDecisionIds: ["conflict:embargo:2"],
+    });
+    expect(ensembles[0]?.historyDecisionIds).toContain("conflict:embargo:1");
+    expect(getRelationshipFrontEnsembleCoverage(ensembleState)).toMatchObject({
+      totalEnsembles: 1,
+      activeEnsembles: 1,
+      totalActiveDecisions: 1,
+      activeFrontFamilyIds: ["family-journalist-media"],
+    });
+
+    const compacted = maintainConsequenceLifecycle(
+      withSecond,
+      { season: 1, week: 6 },
+      38,
+      {
+        executionRetentionWeeks: 100,
+        maxTerminalDecisions: 0,
+        maxHistoryEntries: 6,
+      },
+    );
+    const compactedEnsembles = getRecurringRelationshipFrontEnsembles({
+      ...ensembleState,
+      consequenceState: compacted.state,
+    } as GameState);
+    expect(compactedEnsembles[0]).toMatchObject({
+      recurrenceCount: 2,
+      activeDecisionIds: ["conflict:embargo:2"],
+    });
+    expect(compactedEnsembles[0]?.historyDecisionIds).toContain("conflict:embargo:1");
   });
 
   it("registers both opposed obligations atomically and resolves distinct memories", () => {
@@ -317,40 +490,185 @@ describe("persistent stakeholder profiles and authored conflicts", () => {
     expect(refreshed.stakeholderProfiles!.profiles["contact:coach"].role).toBe("coach");
   });
 
-  it("offers at most one deterministic weekly conflict under the shared choice cap", () => {
+  it("limits recurring conflict subjects to live scouting links before falling back", () => {
+    const linked = relationshipFixture();
+    linked.watchlist = ["watchlisted"];
+    linked.players = {
+      watchlisted: { id: "watchlisted", firstName: "Niko", lastName: "Stone" },
+      reported: { id: "reported", firstName: "Milan", lastName: "Vale" },
+      caseLinked: { id: "caseLinked", firstName: "Pavel", lastName: "North" },
+      obscure: { id: "obscure", firstName: "Rian", lastName: "Hidden" },
+    } as unknown as GameState["players"];
+    linked.reports = {
+      "report:reported": { id: "report:reported", playerId: "reported" },
+    } as unknown as GameState["reports"];
+    linked.scoutingCases = {
+      "case:linked": {
+        id: "case:linked",
+        playerId: "caseLinked",
+        scoutId: "scout",
+        openedWeek: 1,
+        openedSeason: 1,
+        lastUpdatedWeek: 1,
+        lastUpdatedSeason: 1,
+        status: "open",
+        reportIds: [],
+        listingIds: [],
+        deliveryIds: [],
+        decisionIds: [],
+        placementReportIds: [],
+      },
+    } as GameState["scoutingCases"];
+    linked.unsignedYouth = {
+      unsigned: {
+        id: "unsigned",
+        player: { id: "unsigned", firstName: "Uma", lastName: "Trialist" },
+      },
+    } as unknown as GameState["unsignedYouth"];
+    linked.alumniRecords = [
+      { id: "alumni:1", playerId: "alumni" },
+    ] as unknown as GameState["alumniRecords"];
+    linked.retiredPlayers = {
+      alumni: { id: "alumni", firstName: "Ari", lastName: "Legacy" },
+    } as unknown as GameState["retiredPlayers"];
+
+    expect(getRelationshipConflictCandidatePlayerIds(linked)).toEqual([
+      "alumni",
+      "caseLinked",
+      "reported",
+      "unsigned",
+      "watchlisted",
+    ]);
+
+    const fallback = relationshipFixture();
+    fallback.watchlist = [];
+    fallback.players = linked.players;
+    fallback.reports = {} as GameState["reports"];
+    fallback.scoutingCases = {} as GameState["scoutingCases"];
+    fallback.unsignedYouth = {} as GameState["unsignedYouth"];
+    fallback.alumniRecords = [] as GameState["alumniRecords"];
+    fallback.retiredPlayers = linked.retiredPlayers;
+
+    expect(getRelationshipConflictCandidatePlayerIds(fallback)).toEqual([
+      "caseLinked",
+      "obscure",
+      "reported",
+      "watchlisted",
+    ]);
+  });
+
+  it("allows a distinct second front after three weeks when the first selected front is still live", () => {
+    const managerState = {
+      ...relationshipFixture(),
+      scout: {
+        ...relationshipFixture().scout,
+        currentClubId: "club-1",
+      },
+      contacts: {},
+      clubs: {
+        "club-1": { id: "club-1", name: "Northbridge" },
+      } as unknown as GameState["clubs"],
+      managerProfiles: {
+        "club-1": { clubId: "club-1", managerId: "manager-1", managerName: "Asha Morgan" },
+      } as unknown as GameState["managerProfiles"],
+    } as GameState;
     const first = directWeeklyRelationshipConflict({
-      state: relationshipFixture(),
+      state: managerState,
       forceTrigger: true,
     });
     const replay = directWeeklyRelationshipConflict({
-      state: relationshipFixture(),
+      state: managerState,
       forceTrigger: true,
     });
     expect(first.offeredDecisionId).toBe(replay.offeredDecisionId);
     expect(first.offeredDecisionId).toBeTruthy();
+    expect(first.state.consequenceState.decisions[first.offeredDecisionId!]?.source.id)
+      .toBe("manager-versus-family-readiness");
     expect(first.state.inbox.at(-1)).toMatchObject({
       actionRequired: true,
       relatedId: first.offeredDecisionId,
     });
     expect(Object.values(first.state.consequenceState.obligations)).toHaveLength(2);
 
-    const blocked = directWeeklyRelationshipConflict({
-      state: first.state,
+    const selectedFirst = selectDecisionOption(
+      first.state.consequenceState,
+      first.offeredDecisionId!,
+      "staged-pathway",
+      week1,
+    ).state;
+    expect(Object.values(selectedFirst.consequences).some((consequence) =>
+      consequence.decisionId === first.offeredDecisionId && consequence.status === "pending",
+    )).toBe(true);
+
+    const liveSelectedState = {
+      state: {
+        ...first.state,
+        consequenceState: selectedFirst,
+        currentWeek: 2,
+      },
+      forceTrigger: true,
+    };
+    expect(directWeeklyRelationshipConflict(liveSelectedState).blockedReason)
+      .toBe("active-conflict-cadence");
+
+    expect(directWeeklyRelationshipConflict({
+      state: {
+        ...first.state,
+        consequenceState: selectedFirst,
+        currentWeek: 4,
+      },
+      forceTrigger: true,
+    }).blockedReason).toBe("no-distinct-front");
+
+    const overlappingState = {
+      ...first.state,
+      consequenceState: selectedFirst,
+      currentWeek: 4,
+      contacts: {
+        reporter: {
+          id: "reporter",
+          name: "Mara Vale",
+          type: "journalist",
+          relationship: 58,
+          trustLevel: 61,
+          organization: "Northbridge Chronicle",
+          reliability: 72,
+          knownPlayerIds: [],
+        },
+      } as unknown as GameState["contacts"],
+    } as GameState;
+    const overlapping = directWeeklyRelationshipConflict({
+      state: overlappingState,
       forceTrigger: true,
     });
-    expect(blocked.blockedReason).toBe("unresolved-conflict");
-    expect(blocked.state).toBe(first.state);
+
+    expect(overlapping.offeredDecisionId).toBeTruthy();
+    expect(overlapping.offeredDecisionId).not.toBe(first.offeredDecisionId);
+    const activeRelationshipDecisions = Object.values(overlapping.state.consequenceState.decisions)
+      .filter((decision) => decision.source.kind === "relationshipConflict");
+    expect(activeRelationshipDecisions).toHaveLength(2);
+    expect(new Set(activeRelationshipDecisions.map((decision) => decision.metadata?.frontFamilyId)).size)
+      .toBe(2);
+
+    expect(directWeeklyRelationshipConflict({
+      state: {
+        ...overlapping.state,
+        currentWeek: 7,
+      },
+      forceTrigger: true,
+    }).blockedReason).toBe("active-conflict-cap");
 
     const decisionId = first.offeredDecisionId!;
+    const processedFirst = processDueConsequences(selectedFirst, { season: 1, week: 8 }).state;
     const recentResolved = {
       ...first.state,
       currentWeek: 5,
       consequenceState: {
-        ...first.state.consequenceState,
+        ...processedFirst,
         decisions: {
-          ...first.state.consequenceState.decisions,
+          ...processedFirst.decisions,
           [decisionId]: {
-            ...first.state.consequenceState.decisions[decisionId],
+            ...processedFirst.decisions[decisionId],
             status: "resolved" as const,
             resolvedAt: { season: 1, week: 2 },
           },
@@ -505,6 +823,37 @@ describe("Story Director v2", () => {
     });
     expect(first.accepted).toHaveLength(1);
     expect(first.accepted[0].candidate.id).toBe(reordered.accepted[0].candidate.id);
+  });
+
+  it("applies one shared candidate transform after every story source is normalized", () => {
+    const directed = directWeeklyStoryEmissionsV2({
+      rootSeed: "shared-candidate-shaping",
+      state: createStoryDirectorStateV2(),
+      now: week1,
+      priorEvents: [],
+      emissions: [{ event: narrativeEvent("shaped-opening") }],
+      candidates: [{
+        id: "shaped-world-pulse",
+        templateId: "world-pulse",
+        kind: "worldPulse",
+        category: "world-pulse",
+        semanticSignature: "world-pulse:test",
+        baseWeight: 1,
+        cast: [],
+        topics: [],
+      }],
+      candidateTransform: (candidate) => ({
+        ...candidate,
+        relevanceMultipliers: [...(candidate.relevanceMultipliers ?? []), 1.5],
+      }),
+    });
+
+    const scores = [...directed.accepted, ...directed.rejected,
+      ...directed.acceptedCandidates, ...directed.rejectedCandidates];
+    expect(scores).toHaveLength(2);
+    expect(scores.every((entry) =>
+      entry.candidate.relevanceMultipliers?.at(-1) === 1.5,
+    )).toBe(true);
   });
 
   it("resolves actual related entities into cast and topic novelty ledgers", () => {

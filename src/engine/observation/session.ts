@@ -238,6 +238,7 @@ export function createSession(
     venueType: config.venueType,
     countryId: config.countryId,
     culturalInsights: config.culturalInsights,
+    calendarEffects: config.culturalCalendarEffects,
     travelPosture: config.travelPosture,
   });
   const players = buildSessionPlayers(config);
@@ -307,6 +308,16 @@ export function createSession(
           }
         : undefined,
     })),
+    culturalCalendarEffects: config.culturalCalendarEffects
+      ? {
+          ...config.culturalCalendarEffects,
+          activeWindowIds: [...config.culturalCalendarEffects.activeWindowIds],
+          signalByDomain: { ...config.culturalCalendarEffects.signalByDomain },
+          contextTags: [...config.culturalCalendarEffects.contextTags],
+          biasWarnings: [...config.culturalCalendarEffects.biasWarnings],
+          reasons: [...config.culturalCalendarEffects.reasons],
+        }
+      : undefined,
     players,
     startedAtWeek: config.week,
     startedAtSeason: config.season,

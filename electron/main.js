@@ -261,6 +261,7 @@ const DEV_CSP =
   "font-src 'self' http://localhost:3000 data:; " +
   "connect-src 'self' http://localhost:3000 https://*.supabase.co https: ws: wss:; " +
   "media-src 'self' http://localhost:3000 data: blob:; " +
+  "worker-src 'self' http://localhost:3000 blob:; " +
   "object-src 'none'; frame-src 'none'; child-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';";
 
 const PROD_CSP =
@@ -271,6 +272,7 @@ const PROD_CSP =
   "font-src 'self' app: data:; " +
   "connect-src 'self' app: https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; " +
   "media-src 'self' app: data: blob:; " +
+  "worker-src 'self' app: blob:; " +
   "object-src 'none'; frame-src 'none'; child-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';";
 
 let cspInstalled = false;

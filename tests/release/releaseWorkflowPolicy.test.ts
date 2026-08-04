@@ -11,6 +11,7 @@ function workflow(name: string): string {
 describe("release workflow policy", () => {
   it("constructs immutable candidates without publishing or uploading to Steam", () => {
     const build = workflow("build.yml");
+    const acceptedCandidate = workflow("package-accepted-candidate.yml");
 
     expect(build).toContain("candidate-bundle:");
     expect(build).toContain("name: candidate-build-evidence");
@@ -22,6 +23,39 @@ describe("release workflow policy", () => {
     expect(build).toContain("Critical coverage summary is missing from quality evidence");
     expect(build).not.toContain("softprops/action-gh-release");
     expect(build).not.toContain("steamcmd +login");
+
+    expect(acceptedCandidate).toMatch(/^on:\s*\r?\n\s+workflow_dispatch:/m);
+    expect(acceptedCandidate).toContain("candidate_sha:");
+    expect(acceptedCandidate).toContain("candidate_tree_sha:");
+    expect(acceptedCandidate).toContain("candidate_tag:");
+    expect(acceptedCandidate).toContain("accepted_source_run_id:");
+    expect(acceptedCandidate).toContain("verification_only:");
+    expect(acceptedCandidate).toContain("path: candidate");
+    expect(acceptedCandidate).toContain("release/youth-ea-rc2");
+    expect(acceptedCandidate).toContain("Pushing any v* tag still triggers legacy build.yml");
+    expect(acceptedCandidate).toContain("run: node scripts/validate-steam-store-assets.mjs");
+    expect(acceptedCandidate).toContain("name: release-control-store-readiness");
+    expect(acceptedCandidate).toContain("node ../scripts/check-release-preflight.mjs --mode \"$mode\" --json");
+    expect(acceptedCandidate).toContain("NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}");
+    expect(acceptedCandidate).toContain("run: npm run test:e2e:opening");
+    expect(acceptedCandidate).toContain("run: npm run test:e2e:performance");
+    expect(acceptedCandidate).toContain("run: npm run test:e2e:youth-ea");
+    expect(acceptedCandidate).toContain("run: npm run test:e2e:smoke");
+    expect(acceptedCandidate).toContain("run: npm run test:e2e:accessibility");
+    expect(acceptedCandidate).not.toContain("npm run test:release-soak");
+    expect(acceptedCandidate).toContain("if: inputs.verification_only != true");
+    expect(acceptedCandidate).toContain("name: accepted-candidate-bundle");
+    expect(acceptedCandidate).toContain("node ../scripts/validate-release-artifacts.mjs --out=artifacts/release/release-artifact-inventory.json --promote=artifacts/release/promotion-files.txt");
+    expect(acceptedCandidate.match(/node \.\.\/scripts\/validate-release-artifacts\.mjs --out=artifacts\/release\/release-artifact-inventory\.json --promote=artifacts\/release\/promotion-files\.txt/g)).toHaveLength(2);
+    expect(acceptedCandidate).toContain('fs.rmSync("artifacts/release/release-artifact-inventory.json")');
+    expect(acceptedCandidate).toContain("artifacts/release/release-artifact-inventory.json");
+    expect(acceptedCandidate).toContain("artifacts/release/promotion-files.txt");
+    expect(acceptedCandidate).toContain("artifacts/release/generated/steam-depot-inventories.json");
+    expect(acceptedCandidate).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100"');
+    expect(acceptedCandidate).not.toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"');
+    expect(acceptedCandidate).not.toContain("${CANDIDATE_TAG}^{commit}");
+    expect(acceptedCandidate).not.toContain("softprops/action-gh-release");
+    expect(acceptedCandidate).not.toContain("steamcmd +login");
   });
 
   it("runs the critical coverage floor in CI and a full browser suite nightly", () => {
@@ -34,17 +68,49 @@ describe("release workflow policy", () => {
     expect(nightly).toMatch(/^\s*- run: npm run test:e2e\s*$/m);
   });
 
-  it("certifies original-run artifacts and makes promotion explicitly manual", () => {
+  it("certifies accepted candidate bundles from control policy and promotes only explicit files", () => {
     const certification = workflow("certify-release.yml");
 
     expect(certification).toMatch(/^on:\s*\r?\n\s+workflow_dispatch:/m);
     expect(certification).not.toMatch(/^\s+push:/m);
+    expect(certification).toContain("release/youth-ea-rc2");
     expect(certification).toContain("run-id: ${{ inputs.candidate_run_id }}");
     expect(certification).toContain("environment: release-certification");
     expect(certification).toContain("environment: production-release");
+    expect(certification).toContain("name: accepted-candidate-bundle");
+    expect(certification).toContain("id: bundle_metadata");
+    expect(certification).toContain("controlWorkflowSha does not match the current certification control SHA");
+    expect(certification).toContain("ref: ${{ steps.bundle_metadata.outputs.candidate_sha }}");
+    expect(certification).toContain("path: candidate");
+    expect(certification).toContain("RELEASE_EVIDENCE_STATUS: ../docs/release/release-evidence-status.json");
+    expect(certification).toContain("working-directory: candidate");
+    expect(certification).toContain("node ../scripts/check-release-preflight.mjs --mode certify --json");
+    expect(certification).toContain("run: node ../scripts/check-release-evidence.mjs");
+    expect(certification).toContain("RELEASE_TAG_BINDING_MODE: intended");
+    expect(certification).toContain("node scripts/install-release-certification.mjs");
+    expect(certification).toContain("--destination=candidate/artifacts/release/generated/certifications");
+    expect(certification).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" > candidate/artifacts/release/generated/certifications/package-workflow-run.json');
+    expect(certification).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}/jobs?per_page=100" > candidate/artifacts/release/generated/certifications/package-workflow-jobs.json');
+    expect(certification).toContain("release-artifact-inventory.json");
+    expect(certification).toContain("promotion-files.txt");
+    expect(certification).toContain("promotion file byte identity does not match the accepted inventory");
+    expect(certification).toContain("blockmapSha256");
+    expect(certification).toContain("files: ${{ steps.promotion_manifest.outputs.files }}");
+    expect(certification).toContain("accepted candidate bundle is missing artifacts/release/release-artifact-inventory.json");
     expect(certification).toContain("Prerelease/RC tags can never be uploaded to Steam");
+    expect(certification).toContain("bind-tag:");
+    expect(certification).toContain("Bind certified candidate tag without recursive workflows");
+    expect(certification).toContain("refs/tags/${tag}");
+    expect(certification).toContain("needs: [certify, bind-tag]");
+    expect(certification).toContain("GitHub release tag is not bound to certified commit");
     expect(certification).toContain(
       "if: inputs.publish_steam == true && needs.certify.outputs.prerelease == 'false'",
     );
+    expect(certification).toContain("ref: ${{ needs.certify.outputs.candidate_sha }}");
+    expect(certification).toContain("node ../scripts/check-release-preflight.mjs --mode promote-steam --json");
+    expect(certification).toContain("$GITHUB_WORKSPACE/candidate/steamcmd/app_build_4455570.vdf");
+    expect(certification).not.toContain('pattern: "*-build"');
+    expect(certification).not.toContain("release-artifacts/windows-build/*");
+    expect(certification).not.toContain("ref: ${{ inputs.candidate_tag }}");
   });
 });

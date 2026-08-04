@@ -39,6 +39,23 @@ body {
   scroll-margin: 5rem;
 }
 
+/* A visible keyboard focus fallback is part of the gameplay contract. Local
+   workspace accents may override the colour, but no interactive control may
+   remove the shape entirely. */
+:where(
+  button,
+  a[href],
+  input,
+  select,
+  textarea,
+  summary,
+  [role="button"],
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+
 /* Keep focused controls and the end of scrollable gameplay clear of the
    fixed mobile workspace navigation, including iOS safe-area insets. */
 .game-mobile-safe-scroll {
@@ -145,4 +162,47 @@ html.reduced-motion .game-screen-enter {
 }
 .tooltip-fade-in {
   animation: tooltip-fade-in 150ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-interactive {
+    transition:
+      transform 140ms ease,
+      box-shadow 140ms ease,
+      border-color 140ms ease,
+      background-color 140ms ease;
+  }
+
+  .workspace-interactive:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  .workspace-interactive:active {
+    transform: translateY(1px) scale(0.995);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+  }
+
+  @keyframes workspace-receipt-pulse {
+    0% {
+      opacity: 0;
+      transform: translateY(0.35rem);
+    }
+    18% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    82% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-0.2rem);
+    }
+  }
+
+  .workspace-receipt-pulse {
+    animation: workspace-receipt-pulse 2600ms ease both;
+  }
 }

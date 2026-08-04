@@ -36,6 +36,8 @@ import { getUnlockedPerks } from "@/engine/specializations/perks";
 import { migrateObservationSessionInteractions } from "@/engine/observation/interactionSelection";
 import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
 import { migrateClubPhilosophyTransitionState } from "@/engine/world/clubPhilosophyTransitions";
+import { migrateCulturalCalendarState } from "@/engine/world/culturalCalendarState";
+import { migrateHistoricalRecruitmentSnapshots } from "@/engine/world/recruitmentIdentity";
 import { compactLongCareerHistory } from "@/engine/world/saveRetention";
 import {
   getTravelEligibleCountryKeys,
@@ -48,6 +50,7 @@ import { reconcileScenarioAuthority } from "@/engine/scenarios/scenarioAuthority
 import { getCountryDisplayName, normalizeCountryKey } from "@/lib/country";
 import { resetRebuildableGameStateCaches } from "@/engine/core/gameStatePartitions";
 import { createStoryDirectorStateV2 } from "@/engine/events/storyDirectorV2";
+import { migrateCareerEraDirectorState } from "@/engine/events/careerEraDirector";
 import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
 import { createCareerStoryArchiveState } from "@/engine/consequences/careerStoryArchive";
 import {
@@ -883,6 +886,11 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
 
   state.disciplinaryRecords ??= {};
   migrateScoutingCases(state);
+  state.clubPhilosophyTransitionState = migrateClubPhilosophyTransitionState(
+    state.clubPhilosophyTransitionState,
+    state.currentSeason,
+  );
+  migrateHistoricalRecruitmentSnapshots(state);
   state.managerDirectives ??= [];
   state.clubResponses ??= [];
   state.transferRecords ??= [];
@@ -952,10 +960,8 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
   state.loanHistory ??= [];
   state.loanRecommendations ??= [];
   state.storyDirectorV2 = createStoryDirectorStateV2(state.storyDirectorV2);
-  state.clubPhilosophyTransitionState = migrateClubPhilosophyTransitionState(
-    state.clubPhilosophyTransitionState,
-    state.currentSeason,
-  );
+  state.careerEraDirectorState = migrateCareerEraDirectorState(state.careerEraDirectorState);
+  state.culturalCalendarState = migrateCulturalCalendarState(state);
   state.careerChronology = state.careerChronology
     ? createCareerChronologyState({
         currentSeason: state.currentSeason,

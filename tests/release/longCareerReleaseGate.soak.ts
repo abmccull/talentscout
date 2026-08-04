@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { getSeasonLength } from "@/engine/core/gameDate";
@@ -29,6 +30,7 @@ import {
   stabilizeAutonomousCareerState,
 } from "./autonomousYouthCareerDriver";
 import type {
+  AutonomousCareerChooserProfileId,
   AutonomousCareerTelemetry,
   AutonomousWorldHealthSnapshot,
 } from "./autonomousYouthCareerDriver";
@@ -62,20 +64,56 @@ const OUTPUT_PATH = resolve(
   process.env.SOAK_OUTPUT
     ?? "artifacts/release/generated/long-career-release-summary.json",
 );
+const DIAGNOSTIC_CHECKPOINT_PATH = process.env.SOAK_DIAGNOSTIC_CHECKPOINT_PATH
+  ? resolve(process.env.SOAK_DIAGNOSTIC_CHECKPOINT_PATH)
+  : undefined;
 const MAX_SERIALIZED_BYTES = Number.parseInt(
   process.env.SOAK_MAX_SERIALIZED_BYTES ?? String(80 * 1024 * 1024),
   10,
 );
 const MAX_GROWTH_MULTIPLIER = 64;
-const MAX_SINGLE_BATCH_MS = 30_000;
+// These guards detect a stalled autonomous certification batch; they are not
+// player-facing frame-time budgets. Hosted runner CPU generations and GC
+// scheduling vary, while the dedicated browser performance suite owns the
+// interactive latency contract.
+const MAX_SINGLE_BATCH_CPU_MS = Number.parseInt(
+  process.env.SOAK_MAX_SINGLE_BATCH_CPU_MS ?? "45000",
+  10,
+);
+const MAX_SINGLE_BATCH_WALL_MS = Number.parseInt(
+  process.env.SOAK_MAX_SINGLE_BATCH_WALL_MS ?? "60000",
+  10,
+);
 const DIAGNOSTIC_ONLY = process.env.SOAK_DIAGNOSTIC_ONLY === "true";
 const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
+// Heap samples are taken after an explicit collection so the release gate
+// measures retained game state instead of garbage from its own repeated
+// full-save serialization and round-trip assertions. RSS remains the guard
+// for the complete process footprint, including those temporary allocations.
 const MAX_HEAP_USED_BYTES = 1536 * 1024 * 1024;
 const MAX_RSS_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_POST_GC_HEAP_GROWTH_BYTES = 1024 * 1024 * 1024;
+const V8_HEAP_LIMIT_BYTES = getHeapStatistics().heap_size_limit;
+const SUPPLEMENTAL_CHOOSER_PROFILES = ["cautious", "aggressive"] as const satisfies readonly AutonomousCareerChooserProfileId[];
+const PROFILE_MATRIX_SEED_COUNT = Number.parseInt(process.env.SOAK_PROFILE_MATRIX_SEEDS ?? "1", 10);
+const PROFILE_MATRIX_SEASON_COUNT = Number.parseInt(
+  process.env.SOAK_PROFILE_MATRIX_SEASONS ?? String(Math.min(RELEASE_SEASON_COUNT, 6)),
+  10,
+);
+const PROFILE_MATRIX_ONLY = process.env.SOAK_PROFILE_MATRIX_ONLY === "true";
+const PROFILE_MATRIX_OUTPUT_PATH = resolve(
+  process.env.SOAK_PROFILE_MATRIX_OUTPUT
+    ?? "artifacts/release/generated/long-career-chooser-profile-matrix.json",
+);
 const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
   players: 32 * 1024 * 1024,
-  // Five recent seasons keep broad 500-player comparison detail; older
+  // Historical evidence keeps numeric truth and narrative while completed
+  // calculation inputs are compacted after the five-season working window.
+  observations: 12 * 1024 * 1024,
+  // Every transaction remains for audit/idempotency; only old routine labels
+  // are normalized, so this guard is intentionally broader than observations.
+  finances: 20 * 1024 * 1024,
+  // Five recent seasons keep broad 400-player comparison detail; older
   // seasons keep an elite public archive plus every scout-causal career.
   worldHistory: 24 * 1024 * 1024,
   fixtures: 8 * 1024 * 1024,
@@ -124,6 +162,7 @@ interface RunEvidence {
   memory: {
     initial: MemorySample;
     final: MemorySample;
+    peakRuntimeHeapUsedBytes: number;
     peakHeapUsedBytes: number;
     peakRssBytes: number;
     samples: MemorySample[];
@@ -148,6 +187,18 @@ function percentile(values: readonly number[], fraction: number): number {
 function round(value: number, precision = 2): number {
   const scale = 10 ** precision;
   return Math.round(value * scale) / scale;
+}
+
+function formatWeeklyDiagnostics(
+  diagnostics?: WeeklySimulationTelemetry["diagnostics"],
+): string {
+  if (!diagnostics) return "unavailable";
+  const entries = Object.entries(diagnostics);
+  if (entries.length === 0) return "none";
+  return entries
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(", ");
 }
 
 function collectMemorySample(season: number): MemorySample {
@@ -641,7 +692,13 @@ function assertAutonomousCareerHealth(
     `seed ${seed} never accepted an organically generated marketplace bid`,
   ).toBeGreaterThan(0);
   expect(final.careerPathChosen, `seed ${seed} never committed to a career path`).toBe(true);
-  expect(final.careerPath, `seed ${seed} diverged from the independent commercial path`).toBe("independent");
+  const expectedCareerPath = telemetry.chooserProfile === "cautious"
+    ? "club"
+    : "independent";
+  expect(
+    final.careerPath,
+    `seed ${seed} diverged from the ${telemetry.chooserProfile} chooser path`,
+  ).toBe(expectedCareerPath);
   expect(final.careerTier, `seed ${seed} did not progress beyond the opening tier gates`).toBeGreaterThanOrEqual(2);
   expect(final.completedCourses, `seed ${seed} never completed a course`).toBeGreaterThan(0);
 }
@@ -649,6 +706,7 @@ function assertAutonomousCareerHealth(
 async function simulateCareer(
   seed: string,
   seasonCount: number,
+  chooserProfile: AutonomousCareerChooserProfileId = "commercial",
 ): Promise<RunEvidence> {
   const { useGameStore } = await import("@/stores/gameStore");
   await useGameStore.getState().startNewGame({
@@ -679,6 +737,7 @@ async function simulateCareer(
   requestGarbageCollection();
   const initialMemory = collectMemorySample(initial.currentSeason);
   const memorySamples: MemorySample[] = [initialMemory];
+  let peakRuntimeHeapUsedBytes = initialMemory.heapUsedBytes;
   let peakHeapUsedBytes = initialMemory.heapUsedBytes;
   let peakRssBytes = initialMemory.rssBytes;
   let peakBytes = initialBytes;
@@ -692,7 +751,7 @@ async function simulateCareer(
   let latestWeeklyTelemetry: WeeklySimulationTelemetry | undefined;
   const seasonGrowth: RunEvidence["seasonGrowth"] = [];
   const worldHealth: RunEvidence["worldHealth"] = [];
-  const careerTelemetry = createAutonomousCareerTelemetry();
+  const careerTelemetry = createAutonomousCareerTelemetry(chooserProfile);
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
     compactionSamples.push(sample);
     pendingCompactionSamples.push(sample);
@@ -705,8 +764,11 @@ async function simulateCareer(
     const before = useGameStore.getState().gameState;
     if (!before) throw new Error(`Seed ${seed} lost game state`);
     const started = performance.now();
-    await driveAutonomousYouthCareerWeek(careerTelemetry);
+    const cpuStarted = process.cpuUsage();
+    const driverTiming = await driveAutonomousYouthCareerWeek(careerTelemetry);
     const elapsed = performance.now() - started;
+    const cpuUsage = process.cpuUsage(cpuStarted);
+    const cpuElapsed = (cpuUsage.user + cpuUsage.system) / 1_000;
     // The real UI yields after every command. Without this yield, mocked
     // checkpoint/autosave promises retain every prior serialized state and the
     // soak measures its own synchronous harness rather than game heap.
@@ -723,20 +785,47 @@ async function simulateCareer(
         `Seed ${seed} stalled at S${before.currentSeason} W${before.currentWeek}`,
       );
     }
+    // Sample the product path after its persistence yield and before the
+    // release harness performs several whole-save serialization passes. The
+    // worker's V8 ceiling remains the hard guard for spikes between samples.
+    const runtimeMemory = collectMemorySample(after.currentSeason);
+    peakRuntimeHeapUsedBytes = Math.max(
+      peakRuntimeHeapUsedBytes,
+      runtimeMemory.heapUsedBytes,
+    );
+    peakRssBytes = Math.max(peakRssBytes, runtimeMemory.rssBytes);
     canonicalTicks++;
     calendarWeeksSpanned += 1;
     weeklyLatency.push(elapsed);
-    const phaseBreakdown = latestWeeklyTelemetry
+    const matchingWeeklyTelemetry = latestWeeklyTelemetry
       && latestWeeklyTelemetry.sourceSeason === before.currentSeason
       && latestWeeklyTelemetry.sourceWeek === before.currentWeek
-      ? latestWeeklyTelemetry.phases
+      ? latestWeeklyTelemetry
+      : undefined;
+    const phaseElapsed = matchingWeeklyTelemetry?.phases.reduce(
+      (sum, phase) => sum + phase.elapsedMs,
+      0,
+    );
+    const phaseBreakdown = matchingWeeklyTelemetry
+      ? matchingWeeklyTelemetry.phases
         .map((phase) => `${phase.phase}=${phase.elapsedMs.toFixed(1)}ms`)
         .join(", ")
       : "unavailable";
+    const diagnosticBreakdown = formatWeeklyDiagnostics(matchingWeeklyTelemetry?.diagnostics);
+    const driverBreakdown = [
+      `stabilization=${driverTiming.stabilizationMs.toFixed(1)}ms`,
+      `scheduling=${driverTiming.schedulingMs.toFixed(1)}ms`,
+      `simulation=${driverTiming.simulationMs.toFixed(1)}ms`,
+      `total=${driverTiming.totalMs.toFixed(1)}ms`,
+    ].join(", ");
     expect(
       elapsed,
-      `seed ${seed} batch latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
-    ).toBeLessThan(MAX_SINGLE_BATCH_MS);
+      `seed ${seed} batch wall latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; driver: ${driverBreakdown}; phases: ${phaseBreakdown}; diagnostics: ${diagnosticBreakdown}`,
+    ).toBeLessThan(MAX_SINGLE_BATCH_WALL_MS);
+    expect(
+      cpuElapsed,
+      `seed ${seed} batch CPU latency indicates excessive work at S${before.currentSeason} W${before.currentWeek}; wall=${elapsed.toFixed(1)}ms; driver: ${driverBreakdown}; phases=${phaseElapsed?.toFixed(1) ?? "unavailable"}ms (${phaseBreakdown}); diagnostics: ${diagnosticBreakdown}`,
+    ).toBeLessThan(MAX_SINGLE_BATCH_CPU_MS);
 
     if (after.currentSeason !== lastCheckedSeason) {
       stabilizeAutonomousCareerState(careerTelemetry);
@@ -756,6 +845,22 @@ async function simulateCareer(
         Object.keys(stabilized.unsignedYouth ?? {}).length,
         `seed ${seed} exhausted the unsigned youth pool`,
       ).toBeGreaterThan(0);
+      if (DIAGNOSTIC_CHECKPOINT_PATH) {
+        await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
+        await writeFile(
+          DIAGNOSTIC_CHECKPOINT_PATH,
+          JSON.stringify({
+            schemaVersion: 1,
+            evidenceKind: "long-career-diagnostic-season-checkpoint",
+            seed,
+            seasonCount,
+            completedCanonicalTicks: canonicalTicks,
+            careerTelemetry,
+            gameState: stabilized,
+          }),
+          "utf8",
+        );
+      }
       const bytes = footprint.totalBytes;
       const boundaryCompactions = pendingCompactionSamples.splice(
         0,
@@ -777,7 +882,6 @@ async function simulateCareer(
       peakBytes = Math.max(peakBytes, bytes);
       lastCheckedSeason = stabilized.currentSeason;
       const beforeCollection = collectMemorySample(stabilized.currentSeason);
-      peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeCollection.heapUsedBytes);
       peakRssBytes = Math.max(peakRssBytes, beforeCollection.rssBytes);
       requestGarbageCollection();
       const afterCollection = collectMemorySample(stabilized.currentSeason);
@@ -816,13 +920,12 @@ async function simulateCareer(
     `seed ${seed} changed during JSON save round trip`,
   ).toBe(finalDigest);
   const beforeFinalCollection = collectMemorySample(stabilizedFinalState.currentSeason);
-  peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeFinalCollection.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, beforeFinalCollection.rssBytes);
   requestGarbageCollection();
   const finalMemory = collectMemorySample(stabilizedFinalState.currentSeason);
   peakHeapUsedBytes = Math.max(peakHeapUsedBytes, finalMemory.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, finalMemory.rssBytes);
-  expect(peakHeapUsedBytes, `seed ${seed} exceeded the heap release budget`).toBeLessThanOrEqual(
+  expect(peakHeapUsedBytes, `seed ${seed} exceeded the retained heap release budget`).toBeLessThanOrEqual(
     MAX_HEAP_USED_BYTES,
   );
   expect(peakRssBytes, `seed ${seed} exceeded the RSS release budget`).toBeLessThanOrEqual(
@@ -862,6 +965,7 @@ async function simulateCareer(
     memory: {
       initial: initialMemory,
       final: finalMemory,
+      peakRuntimeHeapUsedBytes,
       peakHeapUsedBytes,
       peakRssBytes,
       samples: memorySamples,
@@ -878,10 +982,53 @@ async function simulateCareer(
   };
 }
 
+async function simulateChooserProfileMatrix(): Promise<Array<{
+  chooserProfile: AutonomousCareerChooserProfileId;
+  seedCount: number;
+  seasonCount: number;
+  runs: RunEvidence[];
+}>> {
+  const chooserProfileMatrix: Array<{
+    chooserProfile: AutonomousCareerChooserProfileId;
+    seedCount: number;
+    seasonCount: number;
+    runs: RunEvidence[];
+  }> = [];
+  for (const chooserProfile of SUPPLEMENTAL_CHOOSER_PROFILES) {
+    const profileRuns: RunEvidence[] = [];
+    for (let index = 0; index < PROFILE_MATRIX_SEED_COUNT; index += 1) {
+      const seed = `release-soak-${chooserProfile}-${String(index + 1).padStart(2, "0")}`;
+      profileRuns.push(await simulateCareer(seed, PROFILE_MATRIX_SEASON_COUNT, chooserProfile));
+    }
+    chooserProfileMatrix.push({
+      chooserProfile,
+      seedCount: PROFILE_MATRIX_SEED_COUNT,
+      seasonCount: PROFILE_MATRIX_SEASON_COUNT,
+      runs: profileRuns,
+    });
+  }
+  return chooserProfileMatrix;
+}
+
+const canonicalReleaseSoak = PROFILE_MATRIX_ONLY ? it.skip : it;
+const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY ? it : it.skip;
+
 describe("full canonical-week release soak", () => {
-  it("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
+  canonicalReleaseSoak("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
     expect(RELEASE_SEED_COUNT).toBeGreaterThan(0);
     expect(RELEASE_SEASON_COUNT).toBeGreaterThan(0);
+    expect(PROFILE_MATRIX_SEED_COUNT).toBeGreaterThanOrEqual(0);
+    expect(PROFILE_MATRIX_SEASON_COUNT).toBeGreaterThan(0);
+    if (WORKER_MODE) {
+      expect(
+        V8_HEAP_LIMIT_BYTES,
+        "isolated release worker must enforce the certified V8 heap ceiling",
+      ).toBe(MAX_HEAP_USED_BYTES);
+      expect(
+        typeof (globalThis as typeof globalThis & { gc?: () => void }).gc,
+        "isolated release worker must expose explicit garbage collection",
+      ).toBe("function");
+    }
     const seeds = Array.from(
       { length: RELEASE_SEED_COUNT },
       (_, index) => `release-soak-${String(index + RELEASE_SEED_START).padStart(2, "0")}`,
@@ -905,10 +1052,12 @@ describe("full canonical-week release soak", () => {
         skippedOrdinaryWeeks: false,
         seedCount: RELEASE_SEED_COUNT,
         seasonCount: RELEASE_SEASON_COUNT,
+        chooserProfilesExercised: ["commercial"],
         deterministicReplaySeed: seeds[0],
         maxSerializedBytes: MAX_SERIALIZED_BYTES,
         maxGrowthMultiplier: MAX_GROWTH_MULTIPLIER,
         maxHeapUsedBytes: MAX_HEAP_USED_BYTES,
+        v8HeapLimitBytes: V8_HEAP_LIMIT_BYTES,
         maxRssBytes: MAX_RSS_BYTES,
         maxPostGcHeapGrowthBytes: MAX_POST_GC_HEAP_GROWTH_BYTES,
         collectionByteBudgets: COLLECTION_BYTE_BUDGETS,
@@ -918,6 +1067,9 @@ describe("full canonical-week release soak", () => {
         totalCalendarWeeksSpanned: runs.reduce((sum, run) => sum + run.calendarWeeksSpanned, 0),
         largestSaveBytes: Math.max(...runs.map((run) => run.peakBytes)),
         largestFinalToInitialRatio: Math.max(...runs.map((run) => run.finalToInitialRatio)),
+        peakRuntimeHeapUsedBytes: Math.max(
+          ...runs.map((run) => run.memory.peakRuntimeHeapUsedBytes),
+        ),
         peakHeapUsedBytes: Math.max(...runs.map((run) => run.memory.peakHeapUsedBytes)),
         peakRssBytes: Math.max(...runs.map((run) => run.memory.peakRssBytes)),
         largestSingleSeasonGrowthBytes: Math.max(
@@ -965,5 +1117,47 @@ describe("full canonical-week release soak", () => {
     await mkdir(dirname(OUTPUT_PATH), { recursive: true });
     await writeFile(OUTPUT_PATH, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
     console.info(`LONG_CAREER_RELEASE_GATE ${JSON.stringify(summary.aggregate)}`);
+  });
+
+  chooserProfileMatrixReleaseSoak("captures supplemental chooser divergence once as non-gating evidence", async () => {
+    expect(PROFILE_MATRIX_SEED_COUNT).toBeGreaterThan(0);
+    expect(PROFILE_MATRIX_SEASON_COUNT).toBeGreaterThan(0);
+
+    const chooserProfileMatrix = await simulateChooserProfileMatrix();
+    const allRuns = chooserProfileMatrix.flatMap((entry) => entry.runs);
+    const summary = {
+      schemaVersion: 1,
+      evidenceKind: "long-career-chooser-profile-matrix",
+      generatedAt: new Date().toISOString(),
+      profile: {
+        kind: "supplemental-chooser-profile-matrix",
+        gating: false,
+        canonicalReleaseSoakArtifactPath: OUTPUT_PATH,
+        chooserProfilesExercised: [...SUPPLEMENTAL_CHOOSER_PROFILES],
+        seedCountPerProfile: PROFILE_MATRIX_SEED_COUNT,
+        seasonCount: PROFILE_MATRIX_SEASON_COUNT,
+      },
+      aggregate: {
+        totalRuns: allRuns.length,
+        totalCanonicalTicks: allRuns.reduce((sum, run) => sum + run.canonicalTicks, 0),
+        chooserProfilesValidated: chooserProfileMatrix
+          .filter((entry) => entry.runs.length > 0)
+          .map((entry) => entry.chooserProfile),
+        maxUnresolvedActionBacklog: Math.max(
+          ...allRuns.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.unresolvedActionBacklog)),
+        ),
+        maxFreeAgentRatio: round(Math.max(
+          ...allRuns.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.freeAgentRatio)),
+        ), 3),
+        maxActiveLoanRatio: round(Math.max(
+          ...allRuns.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.activeLoanRatio)),
+        ), 3),
+      },
+      chooserProfileMatrix,
+    };
+
+    await mkdir(dirname(PROFILE_MATRIX_OUTPUT_PATH), { recursive: true });
+    await writeFile(PROFILE_MATRIX_OUTPUT_PATH, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+    console.info(`LONG_CAREER_CHOOSER_PROFILE_MATRIX ${JSON.stringify(summary.aggregate)}`);
   });
 });

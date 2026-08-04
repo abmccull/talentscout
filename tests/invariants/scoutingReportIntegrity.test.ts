@@ -13,6 +13,7 @@ import { RNG } from "@/engine/rng";
 import { createScout } from "@/engine/scout/creation";
 import {
   createObservationEvidenceIndex,
+  createObservationEvidenceIndexFromRecord,
   getPlayerObservationEvidence,
   observePlayer,
   observePlayerLight,
@@ -67,6 +68,20 @@ function makePlayer(): Player {
 function withDate(observation: Observation, index: number): Observation {
   return { ...observation, week: index + 1, season: 1 };
 }
+
+const LEGACY_RECRUITMENT_MANIFEST = {
+  manifestVersion: 2 as const,
+  contentDefinitionIds: [
+    "career-era:proveJudgment@career-eras.1",
+  ],
+};
+
+const EXPANDED_RECRUITMENT_MANIFEST = {
+  manifestVersion: 3 as const,
+  contentDefinitionIds: [
+    "recruitment-doctrine:winNow@recruitment-doctrines.1",
+  ],
+};
 
 describe("scouting evidence invariants", () => {
   it("keeps indexed transaction evidence outcome- and RNG-equivalent", () => {
@@ -157,6 +172,154 @@ describe("scouting evidence invariants", () => {
     upsertObservationEvidence(index, replacement);
 
     expect(getPlayerObservationEvidence(index, player.id)).toEqual([replacement]);
+  });
+
+  it("builds record-backed evidence indexes in insertion order and tracks observed players through moves", () => {
+    const player = makePlayer();
+    const teammate = generatePlayer(new RNG("record-index-teammate"), {
+      position: "CB",
+      ageRange: [18, 18],
+      abilityRange: [86, 86],
+      nationality: "English",
+      clubId: "",
+    });
+    const scout = makeScout();
+    const playerFirst = withDate(observePlayerLight(
+      new RNG("record-index-player-first"),
+      player,
+      scout,
+      "academyVisit",
+      [],
+    ), 0);
+    const teammateFirst = withDate(observePlayerLight(
+      new RNG("record-index-teammate-first"),
+      teammate,
+      scout,
+      "trainingGround",
+      [],
+    ), 0);
+    const playerSecond = withDate(observePlayerLight(
+      new RNG("record-index-player-second"),
+      player,
+      scout,
+      "videoAnalysis",
+      [playerFirst],
+    ), 1);
+    const teammateSecond = withDate(observePlayerLight(
+      new RNG("record-index-teammate-second"),
+      teammate,
+      scout,
+      "statsBriefing",
+      [teammateFirst],
+    ), 1);
+
+    const record = {
+      [playerFirst.id]: playerFirst,
+      [teammateFirst.id]: teammateFirst,
+      [playerSecond.id]: playerSecond,
+      [teammateSecond.id]: teammateSecond,
+    };
+    const index = createObservationEvidenceIndexFromRecord(record);
+
+    expect(getPlayerObservationEvidence(index, player.id)).toEqual([playerFirst, playerSecond]);
+    expect(getPlayerObservationEvidence(index, teammate.id)).toEqual([teammateFirst, teammateSecond]);
+    expect(Array.from(index.observedPlayerIds)).toEqual([player.id, teammate.id]);
+
+    upsertObservationEvidence(index, { ...teammateFirst, playerId: player.id });
+    expect(Array.from(index.observedPlayerIds)).toEqual([player.id, teammate.id]);
+    expect(getPlayerObservationEvidence(index, teammate.id)).toEqual([teammateSecond]);
+
+    upsertObservationEvidence(index, { ...teammateSecond, playerId: player.id });
+    expect(Array.from(index.observedPlayerIds)).toEqual([player.id]);
+    expect(getPlayerObservationEvidence(index, teammate.id)).toEqual([]);
+  });
+
+  it("keeps mature mixed-history light observations outcome- and RNG-equivalent", () => {
+    const player = makePlayer();
+    const otherPlayer = generatePlayer(new RNG("mature-history-other"), {
+      position: "RW",
+      ageRange: [18, 18],
+      abilityRange: [88, 88],
+      nationality: "English",
+      clubId: "",
+    });
+    const scout = makeScout();
+    const history: Observation[] = [];
+    const targetContexts = [
+      "academyVisit",
+      "trainingGround",
+      "videoAnalysis",
+      "schoolMatch",
+      "followUpSession",
+    ] as const;
+    const otherContexts = [
+      "statsBriefing",
+      "academyTrialDay",
+      "deepVideoAnalysis",
+      "youthFestival",
+      "grassrootsTournament",
+    ] as const;
+
+    for (let index = 0; index < targetContexts.length; index++) {
+      const targetObservation = withDate(observePlayerLight(
+        new RNG(`mature-target-${index}`),
+        player,
+        scout,
+        targetContexts[index],
+        history,
+        index % 2,
+        {
+          evidenceAttributes: index % 2 === 0 ? ["passing", "vision"] : ["agility", "teamwork"],
+          focusLens: index % 2 === 0 ? "tactical" : "technical",
+          confidenceBonus: 0.03,
+        },
+      ), history.length);
+      history.push(targetObservation);
+
+      const otherObservation = withDate(observePlayerLight(
+        new RNG(`mature-other-${index}`),
+        otherPlayer,
+        scout,
+        otherContexts[index],
+        history,
+      ), history.length);
+      history.push(otherObservation);
+    }
+
+    const index = createObservationEvidenceIndex(history);
+    const legacyRng = new RNG("mature-indexed-equivalence");
+    const indexedRng = new RNG("mature-indexed-equivalence");
+    const legacyObservation = observePlayerLight(
+      legacyRng,
+      player,
+      scout,
+      "youthTournament",
+      history,
+      2,
+      {
+        evidenceAttributes: ["passing", "vision", "anticipation"],
+        focusLens: "tactical",
+        confidenceBonus: 0.04,
+        evidencePasses: 2,
+      },
+    );
+    const indexedObservation = observePlayerLight(
+      indexedRng,
+      player,
+      scout,
+      "youthTournament",
+      getPlayerObservationEvidence(index, player.id),
+      2,
+      {
+        evidenceAttributes: ["passing", "vision", "anticipation"],
+        focusLens: "tactical",
+        confidenceBonus: 0.04,
+        evidencePasses: 2,
+      },
+    );
+
+    expect(indexedObservation).toEqual(legacyObservation);
+    expect(indexedRng.nextFloat(0, 1)).toBe(legacyRng.nextFloat(0, 1));
   });
 
   it("increments light-observation depth linearly from distinct records", () => {
@@ -265,7 +428,6 @@ describe("scouting evidence invariants", () => {
       .toEqual(generateReportContent(player, [observation], scout).attributeAssessments);
   });
 });
-
 describe("report submission invariants", () => {
   it("persists the same craft score prepared for preview and applies side effects once", () => {
     const player = makePlayer();
@@ -520,6 +682,123 @@ describe("report submission invariants", () => {
     expect(store.gameState?.clubResponses).toHaveLength(1);
     expect(store.gameState?.clubResponses[0].response).toBe("ignored");
     expect(Object.values(store.gameState?.reports ?? {})[0].clubResponse).toBe("ignored");
+  });
+
+  it("threads the saved run manifest into cached first-team system-fit weaknesses", () => {
+    const player = {
+      ...makePlayer(),
+      id: "system-fit-player",
+      position: "ST" as const,
+      attributes: {
+        ...makePlayer().attributes,
+        consistency: 8,
+        injuryProneness: 6,
+      },
+    };
+    const runSubmission = (
+      runManifest: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds">,
+    ) => {
+      const scout = {
+        ...makeScout(),
+        primarySpecialization: "firstTeam" as const,
+        careerPath: "club" as const,
+        currentClubId: "winNow-1",
+      };
+      const observation = withDate(observePlayerLight(
+        new RNG("first-team-system-fit-observation"),
+        player,
+        scout,
+        "liveMatch",
+        [],
+      ), 0);
+      const draft = generateReportContent(player, [observation], scout);
+      const gameState = {
+        seed: "first-team-system-fit",
+        runManifest,
+        currentWeek: 1,
+        currentSeason: 1,
+        difficulty: "normal",
+        scout,
+        players: { [player.id]: player },
+        unsignedYouth: {},
+        retiredPlayers: {},
+        observations: { [observation.id]: observation },
+        reports: {},
+        scoutingCases: {},
+        discoveryRecords: [],
+        clubResponses: [],
+        systemFitCache: {},
+        predictions: [],
+        inbox: [],
+        clubs: {
+          "winNow-1": {
+            id: "winNow-1",
+            name: "Home United",
+            shortName: "HOM",
+            leagueId: "league-home",
+            scoutingPhilosophy: "winNow",
+            playerIds: [],
+            academyPlayerIds: [],
+            youthAcademyRating: 10,
+            reputation: 60,
+            budget: 2_500_000,
+            managerId: "case-manager",
+          },
+        },
+        leagues: {
+          "league-home": { id: "league-home", country: "England" },
+        },
+        managerProfiles: {
+          "winNow-1": {
+            clubId: "winNow-1",
+            managerName: "Case Manager",
+            preference: "balanced",
+            reportInfluence: 0.5,
+            preferredFormation: "4-3-3",
+          },
+        },
+        managerDirectives: [],
+        youthRecruitmentBriefs: {},
+        scoutingInfrastructure: {
+          dataSubscription: "none",
+          travelBudget: "economy",
+          officeEquipment: "basic",
+          investmentCosts: { weekly: 0, oneTime: 0 },
+        },
+      } as unknown as GameState;
+      let store = {
+        gameState,
+        selectedPlayerId: player.id,
+        currentScreen: "reportWriter",
+        pendingListingReportId: null,
+      } as unknown as GameStoreState;
+      const get = (() => store) as GetState;
+      const set = ((partial) => {
+        const update = typeof partial === "function" ? partial(store) : partial;
+        store = { ...store, ...update };
+      }) as SetState;
+
+      createReportActions(get, set).submitReport(
+        "recommend",
+        "A recommendation submitted without an active manager directive.",
+        draft.suggestedStrengths.slice(0, 3),
+        draft.suggestedWeaknesses.slice(0, 2),
+      );
+
+      return store.gameState!.systemFitCache[`${player.id}:winNow-1`];
+    };
+
+    const legacyFit = runSubmission(LEGACY_RECRUITMENT_MANIFEST);
+    const expandedFit = runSubmission(EXPANDED_RECRUITMENT_MANIFEST);
+
+    expect(legacyFit.overallFit).toBe(expandedFit.overallFit);
+    expect(legacyFit.tacticalFit).toBe(expandedFit.tacticalFit);
+    expect(legacyFit.fitWeaknesses.some((weakness) =>
+      weakness.includes("Inconsistent performer"),
+    )).toBe(true);
+    expect(expandedFit.fitWeaknesses.some((weakness) =>
+      weakness.includes("Inconsistent performer"),
+    )).toBe(false);
   });
 
   it("requires new evidence for revisions and never turns revisions into report-volume rewards", () => {

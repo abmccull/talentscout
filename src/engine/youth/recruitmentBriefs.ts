@@ -13,11 +13,15 @@ import type {
   Player,
   PlayerMovementEvent,
   Position,
+  RunManifest,
   ScoutReport,
   ScoutingCase,
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
-import { deriveClubRecruitmentDoctrine } from "@/engine/world/recruitmentIdentity";
+import {
+  captureRecruitmentDoctrineSnapshot,
+  deriveAcademyBriefRecruitmentDoctrine,
+} from "@/engine/world/recruitmentIdentity";
 
 const DEFAULT_SEASON_LENGTH = 38;
 
@@ -74,6 +78,7 @@ export interface AcademyRecruitmentBriefGenerationOptions {
   /** Maximum concurrently active briefs for this club. Defaults to two. */
   maxActiveBriefs?: number;
   seasonLength?: number;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
 }
 
 export type AcademyBriefFulfillmentFailure =
@@ -223,10 +228,23 @@ function deterministicNonce(rng: RNG): string {
   return rng.nextInt(0, 0x7fffffff).toString(36).padStart(6, "0");
 }
 
-function weeklyWageBudgetForClub(club: Club): number {
+function weeklyWageBudgetForClub(
+  club: Club,
+  doctrine?: ReturnType<typeof deriveAcademyBriefRecruitmentDoctrine>,
+): number {
   const reputationAllowance = club.reputation * 35;
   const academyAllowance = club.youthAcademyRating * 75;
-  return clamp(Math.round((reputationAllowance + academyAllowance) / 100) * 100, 500, 5_000);
+  const evidenceModifier = doctrine?.minimumEvidenceQuality
+    ? (doctrine.minimumEvidenceQuality - 60) * 8
+    : 0;
+  const patienceModifier = doctrine?.pathwayPatience
+    ? (doctrine.pathwayPatience - 50) * 4
+    : 0;
+  return clamp(
+    Math.round((reputationAllowance + academyAllowance + evidenceModifier + patienceModifier) / 100) * 100,
+    500,
+    5_000,
+  );
 }
 
 /**
@@ -275,16 +293,21 @@ export function generateAcademyRecruitmentBriefs(
     )
     .slice(0, slotsAvailable);
 
-  const doctrine = deriveClubRecruitmentDoctrine({
+  const doctrine = deriveAcademyBriefRecruitmentDoctrine({
     club,
-    seed: `academy-brief:${club.id}`,
     season,
+    runManifest: options.runManifest,
   });
   const ageRange = doctrine.academyIntakeAgeRange;
   const minimumReportQuality = Math.min(76, doctrine.minimumEvidenceQuality);
   const minimumConviction: ConvictionLevel = minimumReportQuality >= 68
     ? "strongRecommend"
     : "recommend";
+  const recruitmentSnapshot = captureRecruitmentDoctrineSnapshot({
+    doctrine,
+    capturedWeek: week,
+    capturedSeason: season,
+  });
 
   return rankedGaps.map((gap) => {
     const priority = priorityForGap(gap.coverage, gap.target);
@@ -310,12 +333,22 @@ export function generateAcademyRecruitmentBriefs(
       developmentPriority: doctrine.seasonalObjective,
       maxAge: ageRange[1],
       riskTolerance: doctrine.riskTolerance,
-      weeklyWageBudget: weeklyWageBudgetForClub(club),
-      competitionPressure: clamp(Math.round(club.reputation * 0.55 + rng.nextInt(5, 35)), 0, 100),
+      weeklyWageBudget: weeklyWageBudgetForClub(club, doctrine),
+      competitionPressure: clamp(
+        Math.round(
+          club.reputation * 0.45
+          + doctrine.tacticalRoleRigidity * 0.18
+          + doctrine.sellingPressure * 0.12
+          + rng.nextInt(5, 35),
+        ),
+        0,
+        100,
+      ),
       minimumReportQuality,
       minimumConviction,
       issuedWeek: week,
       issuedSeason: season,
+      recruitmentSnapshot,
       expiresWeek: expiry.week,
       expiresSeason: expiry.season,
       status: "open",

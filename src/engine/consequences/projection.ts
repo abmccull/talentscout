@@ -9,9 +9,10 @@ export type ScoutConsequenceMetricKey =
   | "scout:reputation"
   | "scout:fatigue"
   | "scout:clubTrust"
-  | "scout:specializationReputation";
+  | "scout:specializationReputation"
+  | "scout:persuasion";
 
-export type ContactConsequenceMetricName = "relationship" | "trust" | "loyalty";
+export type ContactConsequenceMetricName = "relationship" | "trust" | "loyalty" | "reliability";
 export type ContactConsequenceMetricKey =
   `contact:${string}:${ContactConsequenceMetricName}`;
 export type EmployeeConsequenceMetricKey = `employee:${string}:morale`;
@@ -23,7 +24,7 @@ export type KnownConsequenceMetricKey =
   | RivalConsequenceMetricKey;
 
 const SCOUT_METRICS: Record<
-  ScoutConsequenceMetricKey,
+  Exclude<ScoutConsequenceMetricKey, "scout:persuasion">,
   keyof Pick<Scout, "reputation" | "fatigue" | "clubTrust" | "specializationReputation">
 > = {
   "scout:reputation": "reputation",
@@ -31,6 +32,8 @@ const SCOUT_METRICS: Record<
   "scout:clubTrust": "clubTrust",
   "scout:specializationReputation": "specializationReputation",
 };
+
+type ProjectedScoutMetricKey = keyof typeof SCOUT_METRICS;
 
 interface ContactMetricTarget {
   contactId: string;
@@ -46,7 +49,7 @@ function rivalMetricTarget(metricKey: string): string | undefined {
 }
 
 function contactMetricTarget(metricKey: string): ContactMetricTarget | undefined {
-  const match = /^contact:(.+):(relationship|trust|loyalty)$/.exec(metricKey);
+  const match = /^contact:(.+):(relationship|trust|loyalty|reliability)$/.exec(metricKey);
   if (!match) return undefined;
   return {
     contactId: match[1],
@@ -55,6 +58,11 @@ function contactMetricTarget(metricKey: string): ContactMetricTarget | undefined
 }
 
 function isScoutMetricKey(metricKey: string): metricKey is ScoutConsequenceMetricKey {
+  return metricKey === "scout:persuasion"
+    || Object.prototype.hasOwnProperty.call(SCOUT_METRICS, metricKey);
+}
+
+function isProjectedScoutMetricKey(metricKey: string): metricKey is ProjectedScoutMetricKey {
   return Object.prototype.hasOwnProperty.call(SCOUT_METRICS, metricKey);
 }
 
@@ -64,6 +72,10 @@ function boundedMetric(value: number): number {
 
 function boundedReputation(value: number): number {
   return Math.round(Math.min(100, Math.max(0, value)) * 1_000) / 1_000;
+}
+
+function boundedAttribute(value: number): number {
+  return Math.round(Math.min(20, Math.max(1, value)));
 }
 
 function authoritativeContactMetric(
@@ -77,6 +89,8 @@ function authoritativeContactMetric(
       return contact.trustLevel ?? contact.relationship;
     case "loyalty":
       return contact.loyalty ?? 50;
+    case "reliability":
+      return contact.reliability;
   }
 }
 
@@ -135,7 +149,9 @@ export function synchronizeConsequenceMetrics(
 
   for (const metricKey of referencedMetricKeys(consequenceState)) {
     let authoritativeValue: number | undefined;
-    if (isScoutMetricKey(metricKey)) {
+    if (metricKey === "scout:persuasion") {
+      authoritativeValue = gameState.scout.attributes?.persuasion ?? 10;
+    } else if (isProjectedScoutMetricKey(metricKey)) {
       authoritativeValue = gameState.scout[SCOUT_METRICS[metricKey]];
     } else {
       const target = contactMetricTarget(metricKey);
@@ -180,8 +196,20 @@ export function projectConsequenceMetrics(
     if (!Number.isFinite(rawValue)) continue;
     const value = metricKey === "scout:reputation"
       ? boundedReputation(rawValue)
+      : metricKey === "scout:persuasion"
+        ? boundedAttribute(rawValue)
       : boundedMetric(rawValue);
-    if (isScoutMetricKey(metricKey)) {
+    if (metricKey === "scout:persuasion") {
+      const nextAttributes = {
+        ...(scout.attributes ?? {} as Partial<Scout["attributes"]>),
+        persuasion: value,
+      } as Scout["attributes"];
+      if (scout.attributes?.persuasion !== value) {
+        scout = { ...scout, attributes: nextAttributes };
+      }
+      continue;
+    }
+    if (isProjectedScoutMetricKey(metricKey)) {
       const field = SCOUT_METRICS[metricKey];
       if (scout[field] !== value) {
         scout = { ...scout, [field]: value };
@@ -193,7 +221,7 @@ export function projectConsequenceMetrics(
     if (target) {
       const contact = contacts[target.contactId];
       if (!contact) continue;
-      const field: "relationship" | "trustLevel" | "loyalty" = target.metric === "trust"
+      const field: "relationship" | "trustLevel" | "loyalty" | "reliability" = target.metric === "trust"
         ? "trustLevel"
         : target.metric;
       const relationship = target.metric === "relationship" ? value : contact.relationship;

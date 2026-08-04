@@ -30,6 +30,7 @@ import type {
   TargetOption,
   TournamentEvent,
   ScoutReport,
+  GameState,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 import {
@@ -38,6 +39,10 @@ import {
 } from "@/engine/core/activityQuality";
 import { calculateAccumulation } from "@/engine/insight/insight";
 import { getTournamentActivities } from "@/engine/youth/tournaments";
+import {
+  getActiveProfessionalCaseOpportunities,
+  prioritizeProfessionalCaseTargets,
+} from "@/engine/youth/professionalCaseOpportunities";
 import {
   getUnlockedPerks,
   resolveScoutPerkModifiers,
@@ -744,14 +749,23 @@ export function removeActivity(
   return { ...schedule, activities: updatedActivities };
 }
 
-function collectObservedPlayerCounts(
+function collectObservationSummary(
   observations?: Record<string, Observation>,
-): Map<string, number> {
+): {
+  countsByPlayerId: Map<string, number>;
+  bestAbilityByPlayerId: Map<string, AbilityReading>;
+} {
   const counts = new Map<string, number>();
+  const bestAbilityByPlayerId = new Map<string, AbilityReading>();
   for (const obs of Object.values(observations ?? {})) {
     counts.set(obs.playerId, (counts.get(obs.playerId) ?? 0) + 1);
+    if (!obs.abilityReading) continue;
+    const best = bestAbilityByPlayerId.get(obs.playerId);
+    if (!best || obs.abilityReading.caConfidence > best.caConfidence) {
+      bestAbilityByPlayerId.set(obs.playerId, obs.abilityReading);
+    }
   }
-  return counts;
+  return { countsByPlayerId: counts, bestAbilityByPlayerId };
 }
 
 function topObservedPlayers(
@@ -778,21 +792,6 @@ function topObservedUnsignedYouth(
     .filter((entry) => entry.observations > 0)
     .sort((a, b) => b.observations - a.observations);
   return results.slice(0, maxCount);
-}
-
-/** Find the highest-confidence ability reading for a player across all observations. */
-function getBestAbilityReading(
-  playerId: string,
-  observations?: Record<string, Observation>,
-): AbilityReading | undefined {
-  let best: AbilityReading | undefined;
-  for (const obs of Object.values(observations ?? {})) {
-    if (obs.playerId !== playerId || !obs.abilityReading) continue;
-    if (!best || obs.abilityReading.caConfidence > best.caConfidence) {
-      best = obs.abilityReading;
-    }
-  }
-  return best;
 }
 
 /**
@@ -832,10 +831,17 @@ export function getAvailableActivities(
   },
   youthTournaments?: Record<string, TournamentEvent>,
   reports?: Record<string, ScoutReport>,
+  opportunityContext?: {
+    currentSeason: number;
+    consequenceState?: GameState["consequenceState"];
+  },
 ): Activity[] {
   const activities: Activity[] = [];
   const perkModifiers = resolveScoutPerkModifiers(scout);
-  const observedCounts = collectObservedPlayerCounts(observations);
+  const {
+    countsByPlayerId: observedCounts,
+    bestAbilityByPlayerId,
+  } = collectObservationSummary(observations);
   const reportCandidates = topObservedPlayers(
     new Map(
       [...observedCounts.entries()].filter(([playerId]) => players?.[playerId] !== undefined),
@@ -895,7 +901,7 @@ export function getAvailableActivities(
       description: "Write a scouting report on an observed player",
       targetPool: reportCandidates.map((c) => {
         const p = players?.[c.playerId];
-        const bestAbility = getBestAbilityReading(c.playerId, observations);
+        const bestAbility = bestAbilityByPlayerId.get(c.playerId);
         return {
           id: c.playerId,
           name: p ? `${p.firstName} ${p.lastName}` : `Player ${c.playerId.slice(0, 6)}`,
@@ -1053,13 +1059,21 @@ export function getAvailableActivities(
   // followUpSession / parentCoachMeeting / writePlacementReport:
   // requires at least 1 observation of an unsigned (unplaced) youth player
   // Deduplicated — one card per activity type, target picker selects player
+  const activeProfessionalCaseOpportunities = opportunityContext
+    ? getActiveProfessionalCaseOpportunities({
+        consequenceState: opportunityContext.consequenceState,
+        currentWeek: week,
+        currentSeason: opportunityContext.currentSeason,
+      })
+    : [];
   const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, 5);
 
-  if (targetedYouth.length > 0) {
-    const youthPool: TargetOption[] = targetedYouth.map((entry) => {
+  if (targetedYouth.length > 0 || activeProfessionalCaseOpportunities.length > 0) {
+    const youthPoolByPlayerId = new Map<string, TargetOption>();
+    for (const entry of targetedYouth) {
       const p = entry.youth.player;
-      const bestAbility = getBestAbilityReading(p.id, observations);
-      return {
+      const bestAbility = bestAbilityByPlayerId.get(p.id);
+      youthPoolByPlayerId.set(p.id, {
         id: p.id,
         name: `${p.firstName} ${p.lastName}`,
         age: p.age,
@@ -1069,20 +1083,45 @@ export function getAvailableActivities(
           ? ([bestAbility.perceivedPALow, bestAbility.perceivedPAHigh] as [number, number])
           : undefined,
         observations: entry.observations,
-      };
-    });
+      });
+    }
+    for (const opportunity of activeProfessionalCaseOpportunities) {
+      if (youthPoolByPlayerId.has(opportunity.playerId)) continue;
+      const youth = Object.values(unsignedYouth ?? {}).find((candidate) =>
+        candidate.player.id === opportunity.playerId
+        && !candidate.placed
+        && !candidate.retired,
+      );
+      if (!youth) continue;
+      youthPoolByPlayerId.set(opportunity.playerId, {
+        id: youth.player.id,
+        name: `${youth.player.firstName} ${youth.player.lastName}`,
+        age: youth.player.age,
+        position: youth.player.position,
+        observations: observedCounts.get(youth.player.id) ?? 0,
+      });
+    }
+    const youthPool = [...youthPoolByPlayerId.values()];
 
     activities.push({
       type: "followUpSession",
       slots: ACTIVITY_SLOT_COSTS.followUpSession,
       description: "Follow up on a previously observed youth player",
-      targetPool: youthPool,
+      targetPool: prioritizeProfessionalCaseTargets(
+        youthPool,
+        activeProfessionalCaseOpportunities,
+        "followUpSession",
+      ),
     });
     activities.push({
       type: "parentCoachMeeting",
       slots: ACTIVITY_SLOT_COSTS.parentCoachMeeting,
       description: "Meet the parent or coach of a youth prospect",
-      targetPool: youthPool,
+      targetPool: prioritizeProfessionalCaseTargets(
+        youthPool,
+        activeProfessionalCaseOpportunities,
+        "parentCoachMeeting",
+      ),
     });
     const authoredPlayerIds = new Set(
       Object.values(reports ?? {})
@@ -1095,7 +1134,11 @@ export function getAvailableActivities(
         type: "writePlacementReport",
         slots: ACTIVITY_SLOT_COSTS.writePlacementReport,
         description: "Pitch a filed youth report to a suitable club",
-        targetPool: pitchPool,
+        targetPool: prioritizeProfessionalCaseTargets(
+          pitchPool,
+          activeProfessionalCaseOpportunities,
+          "writePlacementReport",
+        ),
       });
     }
   }

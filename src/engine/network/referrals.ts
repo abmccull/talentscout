@@ -136,7 +136,11 @@ export function generateReferralOpportunity(
   // Higher trust and loyalty increase referral chance
   const trustBonus = (trustLevel - MIN_TRUST_FOR_REFERRAL) / 300; // 0 to ~0.13
   const loyaltyBonus = ((contact.loyalty ?? 50) - 50) / 500; // -0.1 to 0.1
-  const referralChance = BASE_REFERRAL_CHANCE + trustBonus + loyaltyBonus;
+  const referralChance = clamp(
+    BASE_REFERRAL_CHANCE + trustBonus + loyaltyBonus,
+    0,
+    1,
+  );
 
   if (!rng.chance(referralChance)) return null;
 

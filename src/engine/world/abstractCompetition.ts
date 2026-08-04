@@ -71,6 +71,7 @@ interface FixtureLookupIndex {
 
 type FixtureLookupResolver = () => FixtureLookupIndex | undefined;
 
+const ABSTRACT_ROUND_CACHE_LIMIT = 64;
 const ABSTRACT_ROUND_CACHE = new Map<string, ScheduledFixture[][]>();
 
 const WEATHER_BY_PHASE: ReadonlyArray<ReadonlyArray<Weather>> = [
@@ -153,7 +154,12 @@ function buildSingleRoundRobin(clubIds: readonly string[]): ScheduledFixture[][]
 function buildDoubleRoundRobin(clubIds: readonly string[]): ScheduledFixture[][] {
   const cacheKey = uniqueSorted(clubIds).join("|");
   const cached = ABSTRACT_ROUND_CACHE.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    // Refresh insertion order so active league compositions remain resident.
+    ABSTRACT_ROUND_CACHE.delete(cacheKey);
+    ABSTRACT_ROUND_CACHE.set(cacheKey, cached);
+    return cached;
+  }
 
   const firstLeg = buildSingleRoundRobin(clubIds);
   const secondLeg = firstLeg.map((round) =>
@@ -163,6 +169,10 @@ function buildDoubleRoundRobin(clubIds: readonly string[]): ScheduledFixture[][]
     })),
   );
   const rounds = [...firstLeg, ...secondLeg];
+  if (ABSTRACT_ROUND_CACHE.size >= ABSTRACT_ROUND_CACHE_LIMIT) {
+    const oldestKey = ABSTRACT_ROUND_CACHE.keys().next().value;
+    if (oldestKey !== undefined) ABSTRACT_ROUND_CACHE.delete(oldestKey);
+  }
   ABSTRACT_ROUND_CACHE.set(cacheKey, rounds);
   return rounds;
 }

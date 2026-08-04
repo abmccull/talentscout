@@ -41,6 +41,8 @@ interface ReleaseSoakPlan {
     candidateCommitSha: string;
     candidateTreeSha: string;
     maxSerializedBytes: number;
+    workerHeapLimitBytes: number;
+    workerNodeArguments: string[];
   };
   sourceTreeClean: boolean;
   resumeEnabled: boolean;
@@ -131,6 +133,7 @@ function releaseNeutralEnvironment(overrides: Record<string, string> = {}) {
     "GITHUB_SHA",
     "RELEASE_CANDIDATE_SHA",
     "RELEASE_CANDIDATE_TAG",
+    "RELEASE_TAG_BINDING_MODE",
     "RELEASE_WORKFLOW_RUN_ID",
   ]) {
     delete env[key];
@@ -192,6 +195,7 @@ function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
       seedCount: 1,
       seasonCount: 1,
       maxSerializedBytes: plan.executionIdentity.maxSerializedBytes,
+      v8HeapLimitBytes: plan.executionIdentity.workerHeapLimitBytes,
       collectionByteBudgets: { players: 1024 },
     },
     runs: [{
@@ -224,6 +228,7 @@ function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
       memory: {
         initial: memorySample,
         final: memorySample,
+        peakRuntimeHeapUsedBytes: 1,
         peakHeapUsedBytes: 1,
         peakRssBytes: 1,
         samples: [memorySample],
@@ -333,6 +338,14 @@ describe("release evidence checker", () => {
       resumeEnabled: true,
       reusableSeedIndices: [],
       pendingSeedIndices: [1],
+      executionIdentity: {
+        workerHeapLimitBytes: 1536 * 1024 * 1024,
+        workerNodeArguments: [
+          "--max-old-space-size=1440",
+          "--max-semi-space-size=32",
+          "--expose-gc",
+        ],
+      },
     });
 
     const stale = validSoakWorkerCheckpoint(initial);
@@ -508,6 +521,37 @@ describe("release evidence checker", () => {
     );
   }, RELEASE_CHECK_TIMEOUT_MS);
 
+  it("validates an intended version tag before the post-certification binding step", () => {
+    const { cwd } = fixture();
+    const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.candidateTag = "v1.0.0-rc.7";
+    writeJson(manifestPath, manifest);
+    const statusPath = join(cwd, "docs", "release", "release-evidence-status.json");
+    const status = JSON.parse(readFileSync(statusPath, "utf8"));
+    status.candidate.requireVersionTag = true;
+    writeJson(statusPath, status);
+    run(cwd, "git", ["add", "docs/release/release-evidence-status.json"]);
+    run(cwd, "git", ["commit", "-m", "require intended release tag"]);
+    const updatedSha = run(cwd, "git", ["rev-parse", "HEAD"]);
+    manifest.candidateCommitSha = updatedSha;
+    writeJson(manifestPath, manifest);
+
+    const unresolved = check(cwd, { RELEASE_CANDIDATE_TAG: "v1.0.0-rc.7" });
+    expect(unresolved.status).toBe("Failed");
+    expect(unresolved.failures).toContain("candidate tag v1.0.0-rc.7 cannot be resolved");
+
+    const intended = check(cwd, {
+      RELEASE_CANDIDATE_TAG: "v1.0.0-rc.7",
+      RELEASE_TAG_BINDING_MODE: "intended",
+    });
+    expect(intended.status).toBe("Passed");
+    expect(intended.candidate).toMatchObject({
+      tag: "v1.0.0-rc.7",
+      tagBindingMode: "intended",
+    });
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
   it("promotes long-save policy only for clean exact-candidate 20x30 evidence", () => {
     const { cwd, commitSha } = fixture();
     const statusPath = join(cwd, "docs", "release", "release-evidence-status.json");
@@ -550,6 +594,12 @@ describe("release evidence checker", () => {
       maxSerializedBytes: 80 * 1024 * 1024,
       profileKind: "full-canonical-weekly-career",
       processIsolation: "one-seeded-career-per-process",
+      workerNodeArguments: [
+        "--max-old-space-size=1440",
+        "--max-semi-space-size=32",
+        "--expose-gc",
+      ],
+      workerHeapLimitBytes: 1536 * 1024 * 1024,
       nodeVersion: process.version,
       nodeOptions: "",
       platform: process.platform,
@@ -584,6 +634,7 @@ describe("release evidence checker", () => {
         seedCount: 20,
         seasonCount: 30,
         processIsolation: "one-seeded-career-per-process",
+        v8HeapLimitBytes: 1536 * 1024 * 1024,
       },
       runs,
       persistenceReplay: { seed: runs[0].seed, digest: runs[0].digest },
@@ -595,6 +646,32 @@ describe("release evidence checker", () => {
       .toMatchObject({ configuredStatus: "Unverified", status: "Passed" });
 
     const evidencePath = join(cwd, "artifacts", "release", "generated", "long-career.json");
+    const cleanEvidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+    const removeCertifiedHeapEvidence = [
+      (evidence: typeof cleanEvidence) => {
+        delete evidence.profile.v8HeapLimitBytes;
+      },
+      (evidence: typeof cleanEvidence) => {
+        delete evidence.checkpoint.executionIdentity.workerHeapLimitBytes;
+      },
+      (evidence: typeof cleanEvidence) => {
+        evidence.checkpoint.executionIdentity.workerNodeArguments = ["--expose-gc"];
+      },
+    ];
+    for (const mutate of removeCertifiedHeapEvidence) {
+      const uncapped = JSON.parse(JSON.stringify(cleanEvidence));
+      mutate(uncapped);
+      uncapped.checkpoint.executionIdentityHash = createHash("sha256")
+        .update(JSON.stringify(uncapped.checkpoint.executionIdentity))
+        .digest("hex");
+      writeJson(evidencePath, uncapped);
+      const rejected = check(cwd);
+      expect(rejected.status).toBe("Failed");
+      expect(rejected.failures).toEqual(expect.arrayContaining([
+        expect.stringContaining("certified 1.5 GiB heap ceiling"),
+      ]));
+    }
+    writeJson(evidencePath, cleanEvidence);
     const stale = JSON.parse(readFileSync(evidencePath, "utf8"));
     stale.candidateCommitSha = "a".repeat(40);
     stale.profile.seedCount = 2;
@@ -608,6 +685,371 @@ describe("release evidence checker", () => {
     ]));
   }, RELEASE_CHECK_TIMEOUT_MS);
 
+  it("accepts only the exact bounded long-career timing risk decision", () => {
+    const { cwd, commitSha } = fixture();
+    const treeSha = run(cwd, "git", ["rev-parse", "HEAD^{tree}"]);
+    const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.workflowRunId = "4242";
+    writeJson(manifestPath, manifest);
+
+    const certificationDirectory = join(cwd, "artifacts", "release", "generated", "certifications");
+    mkdirSync(certificationDirectory, { recursive: true });
+    const coreEvidencePath = join(cwd, "artifacts", "release", "generated", "candidate-core-suites.json");
+    writeJson(coreEvidencePath, {
+      schemaVersion: 1,
+      evidenceKind: "candidate-core-suites",
+      candidateCommitSha: commitSha,
+      workflowRunId: "4242",
+      candidateBound: true,
+      sourceTreeCleanAtStart: true,
+      sourceAndConfigUnchangedAtCompletion: true,
+      status: "Passed",
+      commands: [{ command: "npm run test:unit", status: "Passed" }],
+    });
+    const sourceRunPath = join(certificationDirectory, "source-workflow-run.json");
+    writeJson(sourceRunPath, {
+      id: 30902995422,
+      head_sha: commitSha,
+      event: "workflow_dispatch",
+      status: "completed",
+      conclusion: "cancelled",
+    });
+    const successfulSeedIndices = Array.from({ length: 19 }, (_, index) => index + 2)
+      .filter((seedIndex) => seedIndex !== 17);
+    const sourceJobsPath = join(certificationDirectory, "source-workflow-jobs.json");
+    writeJson(sourceJobsPath, {
+      jobs: [
+        ...["Release quality gate", "Build Windows", "Build macOS", "Build Linux"]
+          .map((name) => ({ name, conclusion: "success" })),
+        ...Array.from({ length: 20 }, (_, index) => index + 1).map((seedIndex) => ({
+          name: `Exact candidate seed ${seedIndex} x 30 seasons`,
+          conclusion: seedIndex === 1 ? "cancelled" : seedIndex === 17 ? "failure" : "success",
+        })),
+      ],
+    });
+    const sourceShardDirectory = join(certificationDirectory, "source-long-career-shards");
+    mkdirSync(sourceShardDirectory, { recursive: true });
+    const sourceShardPaths = successfulSeedIndices.map((seedIndex) => {
+      const executionIdentity = {
+        protocolVersion: 1,
+        candidateCommitSha: commitSha,
+        candidateTreeSha: treeSha,
+        seedCount: 1,
+        seedStart: seedIndex,
+        seasonCount: 30,
+        profileKind: "full-canonical-weekly-career",
+        processIsolation: "one-seeded-career-per-process",
+        workerNodeArguments: [
+          "--max-old-space-size=1440",
+          "--max-semi-space-size=32",
+          "--expose-gc",
+        ],
+        workerHeapLimitBytes: 1610612736,
+      };
+      const shardPath = join(
+        sourceShardDirectory,
+        `long-career-release-summary-seed-${seedIndex}.json`,
+      );
+      writeJson(shardPath, {
+        schemaVersion: 3,
+        evidenceKind: "long-career-release-soak",
+        candidateCommitSha: commitSha,
+        candidateTreeSha: treeSha,
+        candidateBound: true,
+        sourceTreeClean: true,
+        status: "Passed",
+        checkpoint: {
+          protocolVersion: 1,
+          executionIdentity,
+          executionIdentityHash: createHash("sha256")
+            .update(JSON.stringify(executionIdentity))
+            .digest("hex"),
+          reusedSeedCount: 0,
+          executedSeedCount: 1,
+          determinismReplayExecuted: false,
+        },
+        profile: {
+          kind: "full-canonical-weekly-career",
+          skippedOrdinaryWeeks: false,
+          seedCount: 1,
+          seasonCount: 30,
+          processIsolation: "one-seeded-career-per-process",
+          v8HeapLimitBytes: 1610612736,
+        },
+        runs: [{
+          seed: `release-soak-${String(seedIndex).padStart(2, "0")}`,
+          reachedSeason: 31,
+          canonicalTicks: 900,
+          calendarWeeksSpanned: 900,
+          digest: "a".repeat(64),
+        }],
+      });
+      return shardPath;
+    });
+    const failedSeedPath = join(sourceShardDirectory, "seed-17-run-failure.json");
+    writeJson(failedSeedPath, {
+      schemaVersion: 2,
+      evidenceKind: "long-career-worker-failure",
+      candidateCommitSha: commitSha,
+      candidateTreeSha: treeSha,
+      seedIndex: 17,
+      seed: "release-soak-17",
+      seasonCount: 30,
+      message:
+        "batch CPU latency at S30 W46; wall=44278.6ms; expected 45174.415 to be less than 45000",
+    });
+
+    const generatedEvidence = {
+      kind: "long-career-release-soak",
+      path: "artifacts/release/generated/missing-long-career.json",
+      minimumSeedCount: 20,
+      minimumSeasonCount: 30,
+      requireProcessIsolation: true,
+      requireDeterministicReplay: true,
+    };
+    const releaseException = {
+      kind: "long-career-timing-exception",
+      path: "artifacts/release/generated/certifications/long-career-timing-exception.json",
+      sourceWorkflowRunId: "30902995422",
+      sourceCandidateCommitSha: commitSha,
+      sourceCandidateTreeSha: treeSha,
+      candidateCoreEvidencePath: "artifacts/release/generated/candidate-core-suites.json",
+      maximumValidityDays: 30,
+      allowedReasonCodes: ["release-owner-accepted-bounded-hosted-runner-variance"],
+      requiredSeedCount: 20,
+      minimumSuccessfulSeedCount: 18,
+      maximumAffectedSeedCount: 2,
+      maximumCpuOverrunRatio: 0.005,
+      minimumReachedSeason: 30,
+      sourceEvidence: {
+        workflowRunPath: "artifacts/release/generated/certifications/source-workflow-run.json",
+        workflowJobsPath: "artifacts/release/generated/certifications/source-workflow-jobs.json",
+        successfulShardDirectory:
+          "artifacts/release/generated/certifications/source-long-career-shards",
+        failedSeedPath:
+          "artifacts/release/generated/certifications/source-long-career-shards/seed-17-run-failure.json",
+      },
+      expectedAffectedSeeds: [
+        {
+          seedIndex: 1,
+          classification: "operator-cancelled-after-risk-acceptance",
+          status: "Cancelled",
+        },
+        {
+          seedIndex: 17,
+          classification: "hosted-runner-cpu-timing-variance",
+          status: "Failed",
+        },
+      ],
+      requiredControls: [
+        "qualityAndPlatformBuildsPassed",
+        "noCorrectnessCrashMemoryOrSaveFailure",
+        "timingVarianceBelowHalfPercent",
+        "wallGuardRemainedWithinLimit",
+        "candidateAndSourceRunMatch",
+        "ownerDirectedCancellationRecorded",
+        "rollbackAndMonitoringPlanPresent",
+      ],
+    };
+    const controlDirectory = mkdtempSync(join(tmpdir(), "talentscout-release-control-"));
+    tempDirs.push(controlDirectory);
+    const controlStatusPath = join(controlDirectory, "release-evidence-status.json");
+    const controlStatus = {
+      schemaVersion: 2,
+      candidate: {
+        tag: null,
+        requireVersionTag: false,
+        packageManifest: "artifacts/release/candidate-package-manifest.json",
+        requiredPackageKinds: ["test-package"],
+      },
+      gates: {
+        automated: { status: "Passed", evidence: ["evidence.txt"] },
+        longSaveGrowthAndCompaction: {
+          status: "Unverified",
+          evidence: [],
+          generatedEvidence,
+          releaseException,
+        },
+      },
+    };
+    writeJson(controlStatusPath, controlStatus);
+
+    const now = Date.now();
+    const exceptionPath = join(certificationDirectory, "long-career-timing-exception.json");
+    const validException = {
+      schemaVersion: 1,
+      evidenceKind: "release-gate-exception",
+      exceptionKind: "long-career-timing-exception",
+      gateId: "longSaveGrowthAndCompaction",
+      candidateCommitSha: commitSha,
+      candidateTreeSha: treeSha,
+      candidateTag: null,
+      candidateWorkflowRunId: "4242",
+      sourceWorkflowRunId: "30902995422",
+      packageManifestSha256: createHash("sha256").update(readFileSync(manifestPath)).digest("hex"),
+      candidateCoreEvidenceSha256: createHash("sha256")
+        .update(readFileSync(coreEvidencePath))
+        .digest("hex"),
+      generatedPolicySha256: createHash("sha256")
+        .update(JSON.stringify(generatedEvidence))
+        .digest("hex"),
+      status: "Accepted",
+      approvedBy: "Release Owner",
+      approvalReference: "decision-2026-08-04",
+      approvedAt: new Date(now - 60_000).toISOString(),
+      expiresAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      reasonCode: "release-owner-accepted-bounded-hosted-runner-variance",
+      metrics: {
+        totalSeedCount: 20,
+        successfulSeedCount: 18,
+        affectedSeedCount: 2,
+        maximumCpuOverrunRatio: (45174.415 - 45000) / 45000,
+      },
+      affectedSeeds: [
+        {
+          seedIndex: 1,
+          seed: "release-soak-01",
+          classification: "operator-cancelled-after-risk-acceptance",
+          status: "Cancelled",
+        },
+        {
+          seedIndex: 17,
+          seed: "release-soak-17",
+          classification: "hosted-runner-cpu-timing-variance",
+          status: "Failed",
+          reachedSeason: 30,
+          reachedWeek: 46,
+          cpuElapsedMs: 45174.415,
+          cpuLimitMs: 45000,
+          wallElapsedMs: 44278.6,
+          wallLimitMs: 60000,
+        },
+      ],
+      controls: Object.fromEntries(
+        releaseException.requiredControls.map((controlId) => [controlId, { status: "Passed" }]),
+      ),
+      evidence: [sourceRunPath, sourceJobsPath, ...sourceShardPaths, failedSeedPath].map((path) => ({
+        path: path.slice(cwd.length + 1).replaceAll("\\", "/"),
+        sha256: createHash("sha256").update(readFileSync(path)).digest("hex"),
+      })),
+    };
+    writeJson(exceptionPath, validException);
+
+    const overrides = {
+      RELEASE_EVIDENCE_STATUS: controlStatusPath,
+      RELEASE_WORKFLOW_RUN_ID: "4242",
+    };
+    const accepted = check(cwd, overrides);
+    expect(accepted.status).toBe("PassedWithAcceptedRisk");
+    expect(accepted.acceptedRisks).toEqual([expect.objectContaining({
+      gateId: "longSaveGrowthAndCompaction",
+      kind: "long-career-timing-exception",
+    })]);
+    expect(accepted.gateResults.find(
+      (gate: { gateId: string }) => gate.gateId === "longSaveGrowthAndCompaction",
+    )).toMatchObject({
+      configuredStatus: "Unverified",
+      status: "Passed",
+      resolution: "AcceptedRisk",
+      exceptionApplied: true,
+    });
+
+    const wrongRun = structuredClone(validException);
+    wrongRun.sourceWorkflowRunId = "30902995423";
+    writeJson(exceptionPath, wrongRun);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("not bound to the approved source workflow run"),
+    ]));
+
+    const excessiveVariance = structuredClone(validException);
+    excessiveVariance.affectedSeeds[1].cpuElapsedMs = 45300;
+    excessiveVariance.metrics.maximumCpuOverrunRatio = (45300 - 45000) / 45000;
+    writeJson(exceptionPath, excessiveVariance);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("exceeds the approved bounded variance"),
+    ]));
+
+    const missingControl = structuredClone(validException);
+    delete missingControl.controls.rollbackAndMonitoringPlanPresent;
+    writeJson(exceptionPath, missingControl);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("rollbackAndMonitoringPlanPresent did not pass"),
+    ]));
+
+    const missingFailureEvidence = structuredClone(validException);
+    missingFailureEvidence.evidence = missingFailureEvidence.evidence.filter(
+      (entry) => !entry.path.endsWith("seed-17-run-failure.json"),
+    );
+    writeJson(exceptionPath, missingFailureEvidence);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("source seed 17 failure evidence is not hash-bound"),
+    ]));
+
+    const tamperedFailure = JSON.parse(readFileSync(failedSeedPath, "utf8"));
+    tamperedFailure.message =
+      "batch CPU latency at S30 W46; wall=44278.6ms; expected 44000 to be less than 45000";
+    writeJson(failedSeedPath, tamperedFailure);
+    const tamperedFailureException = structuredClone(validException);
+    const failureEntry = tamperedFailureException.evidence.find(
+      (entry) => entry.path.endsWith("seed-17-run-failure.json"),
+    );
+    expect(failureEntry).toBeDefined();
+    failureEntry!.sha256 = createHash("sha256").update(readFileSync(failedSeedPath)).digest("hex");
+    writeJson(exceptionPath, tamperedFailureException);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("does not match the accepted timing variance"),
+    ]));
+    tamperedFailure.message =
+      "batch CPU latency at S30 W46; wall=44278.6ms; expected 45174.415 to be less than 45000";
+    writeJson(failedSeedPath, tamperedFailure);
+
+    const invalidCoreEvidence = JSON.parse(readFileSync(coreEvidencePath, "utf8"));
+    invalidCoreEvidence.sourceTreeCleanAtStart = false;
+    writeJson(coreEvidencePath, invalidCoreEvidence);
+    const invalidCoreException = structuredClone(validException);
+    invalidCoreException.candidateCoreEvidenceSha256 = createHash("sha256")
+      .update(readFileSync(coreEvidencePath))
+      .digest("hex");
+    writeJson(exceptionPath, invalidCoreException);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("invalid or non-passing candidate core evidence"),
+    ]));
+    invalidCoreEvidence.sourceTreeCleanAtStart = true;
+    writeJson(coreEvidencePath, invalidCoreEvidence);
+
+    const weakPolicyStatus = structuredClone(controlStatus);
+    weakPolicyStatus.gates.longSaveGrowthAndCompaction.generatedEvidence.minimumSeedCount = 1;
+    weakPolicyStatus.gates.longSaveGrowthAndCompaction.generatedEvidence.minimumSeasonCount = 1;
+    weakPolicyStatus.gates.longSaveGrowthAndCompaction.generatedEvidence.requireProcessIsolation = false;
+    weakPolicyStatus.gates.longSaveGrowthAndCompaction.generatedEvidence.requireDeterministicReplay = false;
+    writeJson(controlStatusPath, weakPolicyStatus);
+    const weakPolicyException = structuredClone(validException);
+    weakPolicyException.generatedPolicySha256 = createHash("sha256")
+      .update(JSON.stringify(weakPolicyStatus.gates.longSaveGrowthAndCompaction.generatedEvidence))
+      .digest("hex");
+    writeJson(exceptionPath, weakPolicyException);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("requires the canonical 20-seed, 30-season"),
+    ]));
+
+    writeJson(exceptionPath, validException);
+    writeJson(controlStatusPath, controlStatus);
+    const wrongGateStatus: { gates: Record<string, unknown> } = structuredClone(controlStatus);
+    wrongGateStatus.gates.manualNvda = {
+      ...(wrongGateStatus.gates.longSaveGrowthAndCompaction as object),
+      generatedEvidence: {
+        kind: "release-gate-attestation",
+        path: "artifacts/release/generated/certifications/missing-nvda.json",
+      },
+    };
+    delete wrongGateStatus.gates.longSaveGrowthAndCompaction;
+    writeJson(controlStatusPath, wrongGateStatus);
+    expect(check(cwd, overrides).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("release exceptions are supported only for the long-career timing gate"),
+    ]));
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
   it("accepts core suites only from the exact clean-start, source-unchanged candidate", () => {
     const { cwd } = fixture();
     const statusPath = join(cwd, "docs", "release", "release-evidence-status.json");
@@ -618,6 +1060,8 @@ describe("release evidence checker", () => {
       generatedEvidence: {
         kind: "candidate-core-suites",
         path: "artifacts/release/generated/candidate-core-suites.json",
+        replayabilityArtifact:
+          "artifacts/release/generated/replayability-release-summary.json",
       },
     };
     writeJson(statusPath, status);
@@ -647,9 +1091,47 @@ describe("release evidence checker", () => {
       status: "Passed",
       commands: [{ command: "npm run test:unit", status: "Passed" }],
     });
+    const replayabilityPath = join(
+      cwd,
+      "artifacts",
+      "release",
+      "generated",
+      "replayability-release-summary.json",
+    );
+    const cleanReplayability = {
+      passed: true,
+      humanFacingProxies: {
+        authority: {
+          sourceHeadSha: candidateSha,
+          sourceTreeClean: true,
+          sourceDirtyEntryCount: 0,
+          gitInspectionSucceeded: true,
+          evidenceClass: "clean_commit_bound",
+          releaseCertificationEligible: true,
+        },
+      },
+    };
+    writeJson(replayabilityPath, cleanReplayability);
     expect(check(cwd).gateResults.find(
       (gate: { gateId: string }) => gate.gateId === "automated",
     )).toMatchObject({ configuredStatus: "Unverified", status: "Passed" });
+
+    writeJson(replayabilityPath, {
+      ...cleanReplayability,
+      humanFacingProxies: {
+        authority: {
+          ...cleanReplayability.humanFacingProxies.authority,
+          sourceTreeClean: false,
+          sourceDirtyEntryCount: 2,
+          evidenceClass: "diagnostic_dirty_worktree",
+          releaseCertificationEligible: false,
+        },
+      },
+    });
+    expect(check(cwd).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("replayability artifact is diagnostic-only"),
+    ]));
+    writeJson(replayabilityPath, cleanReplayability);
 
     const invalid = JSON.parse(readFileSync(evidencePath, "utf8"));
     invalid.sourceAndConfigUnchangedAtCompletion = false;

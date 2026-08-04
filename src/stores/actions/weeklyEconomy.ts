@@ -74,6 +74,9 @@ export function processWeeklyEconomy(
     : { ...state.finances, careerPath: state.scout.careerPath };
   const agencyStrategy = normalizeAgencyStrategyState(econFinances.agencyStrategyState);
   const agencyPolicyModifiers = getAgencyPolicyWeeklyModifiers(agencyStrategy?.policy);
+  const transactionReferenceIds = new Set(
+    econFinances.transactions.map((transaction) => transaction.referenceId),
+  );
   const economicSeasonLength = getSeasonLength(
     nextState.fixtures,
     nextState.currentSeason,
@@ -540,7 +543,7 @@ export function processWeeklyEconomy(
   econFinances = agencyPolicyWeek.finances;
   if (agencyPolicyWeek.changed && agencyPolicyWeek.operatingCost > 0 && agencyPolicyWeek.policy) {
     const referenceId = `agency-policy:${agencyPolicyWeek.policy}:s${nextState.currentSeason}w${nextState.currentWeek}`;
-    if (!econFinances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+    if (!transactionReferenceIds.has(referenceId)) {
       econFinances = applyBalanceTransaction(
         econFinances,
         -agencyPolicyWeek.operatingCost,
@@ -549,6 +552,7 @@ export function processWeeklyEconomy(
         `Agency operating policy: ${agencyPolicyWeek.policy}`,
         referenceId,
       );
+      transactionReferenceIds.add(referenceId);
     }
   }
 
@@ -564,9 +568,7 @@ export function processWeeklyEconomy(
   const lifestyleReferenceId = `lifestyle-reputation:s${nextState.currentSeason}w${nextState.currentWeek}`;
   if (
     lifestyleRepPenalty !== 0
-    && !econFinances.transactions.some((transaction) =>
-      transaction.referenceId === lifestyleReferenceId
-    )
+    && !transactionReferenceIds.has(lifestyleReferenceId)
   ) {
     const newReputation = Math.max(
       0,
@@ -590,6 +592,7 @@ export function processWeeklyEconomy(
         },
       ],
     };
+    transactionReferenceIds.add(lifestyleReferenceId);
   }
 
   return { ...nextState, finances: econFinances };

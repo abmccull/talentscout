@@ -184,24 +184,74 @@ function computeQualityWeight(data: ScoutQualityData): number {
   return Math.min(0.65, Math.max(0.05, weight));
 }
 
+interface WeightedVenueCandidate {
+  youth: UnsignedYouth;
+  score: number;
+  index: number;
+}
+
+function compareWeightedVenueCandidatesDesc(
+  a: WeightedVenueCandidate,
+  b: WeightedVenueCandidate,
+): number {
+  const scoreDelta = b.score - a.score;
+  return scoreDelta !== 0 ? scoreDelta : a.index - b.index;
+}
+
+function findWorstWeightedVenueCandidateIndex(
+  candidates: WeightedVenueCandidate[],
+): number {
+  let worstIndex = 0;
+
+  for (let i = 1; i < candidates.length; i += 1) {
+    const current = candidates[i];
+    const worst = candidates[worstIndex];
+    if (
+      current.score < worst.score ||
+      (current.score === worst.score && current.index > worst.index)
+    ) {
+      worstIndex = i;
+    }
+  }
+
+  return worstIndex;
+}
+
 /**
- * Weighted shuffle: biases selection toward higher-PA youth based on
- * the scout's quality weight. Each youth gets a sort score that blends
- * their PA rank with randomness. Higher quality weight = less randomness.
+ * Deterministically selects the same score-desc slice a stable full sort would
+ * return, while only retaining the top k candidates in memory.
  */
-function weightedShuffle(
+function selectWeightedTopK(
   rng: RNG,
   pool: UnsignedYouth[],
   qualityWeight: number,
+  count: number,
 ): UnsignedYouth[] {
-  const scored = pool.map((y) => ({
-    youth: y,
-    score:
-      (y.player.potentialAbility / 200) * qualityWeight +
-      rng.next() * (1 - qualityWeight),
-  }));
-  scored.sort((a, b) => b.score - a.score);
-  return scored.map((s) => s.youth);
+  const selected: WeightedVenueCandidate[] = [];
+
+  for (let index = 0; index < pool.length; index += 1) {
+    const youth = pool[index];
+    const candidate: WeightedVenueCandidate = {
+      youth,
+      index,
+      score:
+        (youth.player.potentialAbility / 200) * qualityWeight +
+        rng.next() * (1 - qualityWeight),
+    };
+
+    if (selected.length < count) {
+      selected.push(candidate);
+      continue;
+    }
+
+    const worstIndex = findWorstWeightedVenueCandidateIndex(selected);
+    if (candidate.score > selected[worstIndex].score) {
+      selected[worstIndex] = candidate;
+    }
+  }
+
+  selected.sort(compareWeightedVenueCandidatesDesc);
+  return selected.map((candidate) => candidate.youth);
 }
 
 // =============================================================================
@@ -336,7 +386,12 @@ export function getYouthVenuePool(
   // If scout quality data is provided, use weighted shuffle to bias toward higher-PA youth.
   // Otherwise, fall back to pure random shuffle (backwards compatible).
   const sorted = scoutQualityData
-    ? weightedShuffle(rng, filtered, computeQualityWeight(scoutQualityData))
+    ? selectWeightedTopK(
+      rng,
+      filtered,
+      computeQualityWeight(scoutQualityData),
+      poolSize,
+    )
     : rng.shuffle(filtered);
   return sorted.slice(0, poolSize);
 }

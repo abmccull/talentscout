@@ -245,6 +245,11 @@ export function rollGutFeeling(
     chance *= 1 + equipmentGutFeelingBonus;
   }
 
+  // Stacked progression, context, perk, and equipment modifiers can exceed a
+  // certainty threshold in long careers. RNG.chance intentionally rejects
+  // invalid probabilities, so saturate the derived gameplay chance here.
+  chance = Math.max(0, Math.min(1, chance));
+
   // --- Roll ---
   if (!rng.chance(chance)) {
     return null;

@@ -30,6 +30,7 @@ import {
   formatGutFeelingWithPA,
   rollGutFeeling,
 } from "@/engine/youth";
+import { applyProfessionalCaseOpportunityActivity } from "@/engine/youth/professionalCaseOpportunities";
 import {
   getYouthVenuePool,
   mapVenueTypeToContext,
@@ -40,6 +41,7 @@ import { buildScoutQualityDataForState } from "./weeklySimulationSupport";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import { produceWeeklyVenueObservation } from "./weeklyObservationProducer";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
+import { resolveUnsignedYouth } from "@/lib/playerResolution";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -93,6 +95,7 @@ export interface WeeklyYouthObservationInput {
   observationsGenerated: number;
   playerEvidence: (playerId: string) => Observation[];
   recordObservation: (observation: Observation) => void;
+  hasNewObservations: () => boolean;
   discoveryModifier: (activityType: Activity["type"]) => number;
   focusDepth: (activityType: Activity["type"]) => number;
   focusPlayers: (activityType: Activity["type"]) => string[];
@@ -121,6 +124,7 @@ export function processWeeklyYouthObservationActivities(
     effectiveScoutCountry,
     playerEvidence,
     recordObservation,
+    hasNewObservations,
     completedInteractiveIds,
     completedLiveActivityTypes,
   } = input;
@@ -160,8 +164,13 @@ export function processWeeklyYouthObservationActivities(
     context,
     existingObservations,
     extraAttributes,
-    tournament,
+      tournament,
   });
+
+  const resolveTargetYouth = (
+    targetId: string,
+    youthMap: Record<string, UnsignedYouth>,
+  ): UnsignedYouth | null => resolveUnsignedYouth({ unsignedYouth: youthMap }, targetId);
 
   // ── Youth-exclusive activity observation handlers ──────────────────────
   // These use the proper youth venue system (getYouthVenuePool + processVenueObservation)
@@ -206,14 +215,15 @@ export function processWeeklyYouthObservationActivities(
         .filter((a) => a.type === "followUpSession" && !!a.targetId);
       for (const followUpAct of followUpActivities) {
         if (!followUpAct.targetId) continue;
-        const targetYouthId = followUpAct.targetId;
+        const targetYouth = resolveTargetYouth(followUpAct.targetId, updatedUnsignedYouthObs);
+        if (!targetYouth) continue;
         const pool = getYouthVenuePool(
           actObsRng,
           "followUpSession",
           updatedUnsignedYouthObs,
           currentScout,
           undefined,
-          targetYouthId,
+          targetYouth.id,
           undefined,
           stateWithScheduleApplied.currentWeek,
           undefined,
@@ -269,8 +279,7 @@ export function processWeeklyYouthObservationActivities(
         .filter((a) => a.type === "parentCoachMeeting" && !!a.targetId);
       for (const meetingAct of meetingActivities) {
         if (!meetingAct.targetId) continue;
-        const targetYouthId = meetingAct.targetId;
-        const youth = updatedUnsignedYouthObs[targetYouthId];
+        const youth = resolveTargetYouth(meetingAct.targetId, updatedUnsignedYouthObs);
         if (!youth || youth.placed || youth.retired) continue;
 
         const meetingResult = processParentCoachMeeting(actObsRng, currentScout, youth);
@@ -699,17 +708,18 @@ export function processWeeklyYouthObservationActivities(
         .filter((a) => a.type === "followUpSession" && !!a.targetId);
       for (const followUpAct of followUpActivities) {
         if (!followUpAct?.targetId) continue;
-        const targetYouthId = followUpAct.targetId;
-      const pool = getYouthVenuePool(
-        actObsRng,
-        "followUpSession",
-        updatedUnsignedYouthObs,
-        currentScout,
-        undefined,
-        targetYouthId,
-        undefined,
-        stateWithScheduleApplied.currentWeek,
-        undefined,
+        const targetYouth = resolveTargetYouth(followUpAct.targetId, updatedUnsignedYouthObs);
+        if (!targetYouth) continue;
+        const pool = getYouthVenuePool(
+          actObsRng,
+          "followUpSession",
+          updatedUnsignedYouthObs,
+          currentScout,
+          undefined,
+          targetYouth.id,
+          undefined,
+          stateWithScheduleApplied.currentWeek,
+          undefined,
         buildScoutQualityDataForState(
           stateWithScheduleApplied,
           effectiveScoutCountry,
@@ -785,8 +795,7 @@ export function processWeeklyYouthObservationActivities(
         .filter((a) => a.type === "parentCoachMeeting" && !!a.targetId);
       for (const meetingAct of meetingActivities) {
         if (!meetingAct?.targetId) continue;
-      const targetYouthId = meetingAct.targetId;
-      const youth = updatedUnsignedYouthObs[targetYouthId];
+      const youth = resolveTargetYouth(meetingAct.targetId, updatedUnsignedYouthObs);
       if (!youth || youth.placed || youth.retired) continue;
 
       const meetingResult = processParentCoachMeeting(actObsRng, currentScout, youth);
@@ -817,7 +826,7 @@ export function processWeeklyYouthObservationActivities(
     unsignedYouth: updatedUnsignedYouthObs,
   };
 
-  if (actObsMessages.length > 0 || Object.keys(updatedObservations).length !== Object.keys(stateWithScheduleApplied.observations).length) {
+  if (actObsMessages.length > 0 || hasNewObservations()) {
     stateWithScheduleApplied = {
       ...stateWithScheduleApplied,
       observations: updatedObservations,
@@ -834,6 +843,24 @@ export function processWeeklyYouthObservationActivities(
     };
   }
   } // end else (fallback for old saves)
+
+  const completedTargetedActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+    .map((entry) => entry.activity)
+    .filter((activity) =>
+      Boolean(activity.targetId) && (
+        (activity.type === "followUpSession" && weekResult.followUpSessionsExecuted > 0)
+        || (activity.type === "parentCoachMeeting" && weekResult.parentCoachMeetingsExecuted > 0)
+        || (activity.type === "writePlacementReport" && weekResult.writePlacementReportsExecuted > 0)
+      ),
+    );
+  for (const activity of completedTargetedActivities) {
+    if (!activity.targetId) continue;
+    stateWithScheduleApplied = applyProfessionalCaseOpportunityActivity(
+      stateWithScheduleApplied,
+      activity.type,
+      activity.targetId,
+    );
+  }
 
   return {
     state: stateWithScheduleApplied,

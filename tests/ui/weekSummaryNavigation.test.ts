@@ -59,4 +59,63 @@ describe("week summary continuation", () => {
     expect(state.lastWeekSummary).toBeNull();
     expect(setScreen).not.toHaveBeenCalled();
   });
+
+  it("stores dashboard navigation focus before changing screens", () => {
+    const selectPlayer = vi.fn();
+    const state = {
+      currentScreen: "dashboard",
+      activeMatch: null,
+      gameState: {
+        countries: ["england"],
+        currentSeason: 1,
+        currentWeek: 4,
+        contacts: {
+          reporter: {
+            id: "reporter",
+            name: "Mara Vale",
+            type: "journalist",
+            relationship: 55,
+            reliability: 60,
+            knownPlayerIds: [],
+          },
+        },
+        players: {
+          "player-1": {
+            id: "player-1",
+            firstName: "Milo",
+            lastName: "Hart",
+          },
+        },
+        retiredPlayers: {},
+      },
+      selectPlayer,
+    } as unknown as GameStoreState;
+    const set: SetState = (partial) => {
+      const update = typeof partial === "function" ? partial(state) : partial;
+      Object.assign(state, update);
+    };
+    const actions = createNavigationActions(() => state, set);
+
+    actions.openDashboardTarget({ screen: "network", contactId: "reporter", playerId: "player-1" });
+    expect(state.pendingNetworkContactId).toBe("reporter");
+    expect(state.currentScreen).toBe("network");
+    expect(selectPlayer).toHaveBeenCalledWith("player-1");
+
+    actions.openDashboardTarget({
+      screen: "calendar",
+      week: 4,
+      season: 1,
+      playerId: "player-1",
+      focusActivityType: "trainingVisit",
+    });
+    expect(state.pendingCalendarActivity).toMatchObject({
+      type: "trainingVisit",
+      targetId: "player-1",
+    });
+    expect(state.currentScreen).toBe("calendar");
+
+    actions.openDashboardTarget({ screen: "rivals", opportunityId: "opp-social", playerId: "player-1" });
+    expect(state.pendingRivalOpportunityId).toBe("opp-social");
+    expect(state.currentScreen).toBe("rivals");
+  });
 });

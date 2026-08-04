@@ -162,6 +162,7 @@ describe("Electron desktop trust boundary", () => {
     expect(mainSource).toContain('contents.on("will-attach-webview"');
     expect(mainSource).toContain("frame-src 'none'");
     expect(mainSource).toContain("child-src 'none'");
+    expect(mainSource).toContain("worker-src 'self' app: blob:");
     expect(mainSource).toContain("await atomicWriteUtf8File(");
     expect(mainSource).toContain("await readBoundedUtf8Buffer(");
     expect(mainSource).toContain("await createStaticFileResponse(");

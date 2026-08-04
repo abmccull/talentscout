@@ -82,23 +82,6 @@ const ASSETS = [
   },
 
   // ── STEAM STORE CAPSULE ART ──────────────────────────────────────────────
-  {
-    id: "steam-hero",
-    filename: "steam-hero.png",
-    subdir: "steam",
-    aspect: "16:9",
-    model: "nano-banana-pro",
-    prompt: `Wide cinematic shot of a solitary figure in a dark coat standing in the rain at an empty football stadium, holding a notebook, distant floodlights creating dramatic god-rays through the rain, emerald glow from the pitch, ultra-wide panoramic composition, epic scale, ${BRAND}`,
-  },
-  {
-    id: "steam-capsule",
-    filename: "steam-capsule.png",
-    subdir: "steam",
-    aspect: "3:4",
-    model: "nano-banana-pro",
-    prompt: `A scout's leather notebook cover with handwritten notes visible, a fountain pen, and a magnifying glass over a player profile photograph, all on a dark wooden desk, dramatic overhead lighting, emerald accent strip, vertical composition, ${BRAND}`,
-  },
-
   // ── SEASON END / HALL OF FAME ────────────────────────────────────────────
   {
     id: "season-end",

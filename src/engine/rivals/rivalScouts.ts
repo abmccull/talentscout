@@ -465,17 +465,14 @@ export function processRivalScoutWeek(
   const challenge = getDifficultyChallengeProfile(state.difficulty);
 
   // Build the set of player IDs the scout has reported on (for poach logic)
-  const reportedPlayerIds = new Set<string>(
-    Object.values(state.reports).map((r) => r.playerId),
-  );
-
-  // Build the set of players the scout is actively tracking (for urgency boost)
+  const reportedPlayerIds = new Set<string>();
   const scoutPlayerIds = new Set<string>();
+  for (const report of Object.values(state.reports)) {
+    reportedPlayerIds.add(report.playerId);
+    scoutPlayerIds.add(report.playerId);
+  }
   for (const obs of Object.values(state.observations)) {
     scoutPlayerIds.add(obs.playerId);
-  }
-  for (const report of Object.values(state.reports)) {
-    scoutPlayerIds.add(report.playerId);
   }
 
   // Historical fixture records remain available for world history, so rival
@@ -1110,19 +1107,14 @@ export function generateRivalIntelligence(
   const helpfulContacts = Object.values(contacts).filter(
     (c) => c.relationship >= 50,
   );
-
-  if (helpfulContacts.length === 0) return messages;
+  const activeRivals = Object.values(state.rivalScouts).filter(
+    (r) => r.currentTarget !== undefined,
+  );
+  if (helpfulContacts.length === 0 || activeRivals.length === 0) return messages;
 
   // 15% chance per helpful contact to share intel each week
   for (const contact of helpfulContacts) {
     if (!rng.chance(0.15)) continue;
-
-    // Find a rival who is actively scouting a player the scout cares about
-    const activeRivals = Object.values(state.rivalScouts).filter(
-      (r) => r.currentTarget !== undefined,
-    );
-
-    if (activeRivals.length === 0) continue;
 
     const rival = rng.pick(activeRivals);
     if (!rival.currentTarget) continue;

@@ -131,7 +131,7 @@ export function ScoutingCaseTimelineView({
               {latestCallback ? (
                 <>
                   <p className="mt-2 text-[11px] font-semibold text-zinc-200">{latestCallback.title}</p>
-                  <p className="mt-1 text-[11px] leading-4 text-zinc-400">{latestCallback.detail}</p>
+                  <p className="mt-1 whitespace-pre-line text-[11px] leading-5 text-zinc-400">{latestCallback.detail}</p>
                 </>
               ) : <p className="mt-2 text-[11px] text-zinc-500">No later career consequence has arrived yet.</p>}
             </div>
@@ -157,7 +157,7 @@ export function ScoutingCaseTimelineView({
                   S{entry.season} W{entry.week} · {KIND_LABELS[entry.kind]}
                 </span>
               </div>
-              <p className="mt-1 text-xs leading-5 text-zinc-300">{entry.description}</p>
+              <p className="mt-1 whitespace-pre-line text-xs leading-5 text-zinc-300">{entry.description}</p>
               {entry.details && entry.details.length > 0 && (
                 <ul className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-400">
                   {entry.details.map((detail) => (

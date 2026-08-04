@@ -272,10 +272,10 @@ export function generateAbilityReading(
   scout: Scout,
   existingObservations: Observation[],
   context: ObservationContext,
+  playerObservations?: readonly Observation[],
 ): AbilityReading {
-  const playerObs = existingObservations.filter(
-    (o) => o.playerId === player.id,
-  );
+  const playerObs = playerObservations
+    ?? existingObservations.filter((o) => o.playerId === player.id);
   const obsCount = playerObs.length + 1; // +1 for current observation
   const contextDiversity = Math.min(1, new Set(playerObs.map(o => o.context)).size / 5);
 

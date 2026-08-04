@@ -14,7 +14,11 @@ export type ContentKind =
   | "event-template"
   | "scenario"
   | "game-mode"
+  | "career-era"
+  | "football-culture-playbook"
+  | "recruitment-doctrine"
   | "insight-narrative"
+  | "observation-situation"
   | "observation-atmosphere-event"
   | "investigation-consequence-narrative";
 
@@ -22,7 +26,11 @@ const CONTENT_KINDS = new Set<ContentKind>([
   "event-template",
   "scenario",
   "game-mode",
+  "career-era",
+  "football-culture-playbook",
+  "recruitment-doctrine",
   "insight-narrative",
+  "observation-situation",
   "observation-atmosphere-event",
   "investigation-consequence-narrative",
 ]);
@@ -64,6 +72,7 @@ export interface VersionedContentPack<
 > {
   manifest: Readonly<ContentPackManifest<Kind>>;
   entries: readonly Definition[];
+  byId: Readonly<Record<string, Definition>>;
   /** Extracts the stable authored ID without forcing domain models to duplicate it. */
   getDefinitionId: (definition: Definition) => string;
 }
@@ -118,6 +127,7 @@ export function defineContentPack<
 >(input: DefineContentPackInput<Kind, Definition>): VersionedContentPack<Kind, Definition> {
   const issues = validateManifest(input.manifest);
   const seenIds = new Set<string>();
+  const byId: Record<string, Definition> = {};
 
   if (input.entries.length === 0) {
     issues.push({
@@ -156,6 +166,7 @@ export function defineContentPack<
       });
     }
     seenIds.add(definitionId);
+    byId[definitionId] = definition;
 
     for (const issue of input.validateDefinition(definition)) {
       issues.push({
@@ -173,6 +184,7 @@ export function defineContentPack<
   return Object.freeze({
     manifest: Object.freeze({ ...input.manifest }),
     entries: Object.freeze([...input.entries]),
+    byId: Object.freeze({ ...byId }),
     getDefinitionId: input.getDefinitionId,
   });
 }
@@ -181,7 +193,7 @@ export function getContentEntry<Definition>(
   pack: VersionedContentPack<ContentKind, Definition>,
   id: string,
 ): Definition | undefined {
-  return pack.entries.find((entry) => pack.getDefinitionId(entry) === id);
+  return pack.byId[id];
 }
 
 /** Stable IDs suitable for a run content fingerprint or release diagnostics. */

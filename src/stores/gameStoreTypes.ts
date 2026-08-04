@@ -52,6 +52,7 @@ import type {
 import type { WeeklyWorkerTelemetry } from "@/engine/core/weeklyTransactionProtocol";
 import type { LeadershipResponsibilityChoice } from "@/engine/career/leadership";
 import type { CareerRecoveryPlanId } from "@/engine/career/recovery";
+import type { DashboardActionTarget } from "@/engine/dashboard/types";
 import type { EquipmentItemId } from "@/engine/finance";
 import type { InsightActionId, InsightActionResult } from "@/engine/insight/types";
 import type {
@@ -182,9 +183,17 @@ export interface ClubStanding {
 export interface GameStoreState {
   currentScreen: GameScreen;
   setScreen: (screen: GameScreen) => void;
+  openDashboardTarget: (target: DashboardActionTarget) => void;
 
   gameState: GameState | null;
   isLoaded: boolean;
+  markDashboardItemViewed: (itemId: string, fingerprint?: string) => void;
+  snoozeDashboardItemUntilNextWeek: (itemId: string, fingerprint?: string) => void;
+  toggleDashboardItemPinned: (itemId: string, fingerprint?: string) => void;
+  dismissDashboardItem: (itemId: string, fingerprint?: string) => void;
+  syncDashboardVisibleItems: (visibleItemIds: string[]) => void;
+  dismissDashboardInsight: (insightId: string, fingerprint?: string) => void;
+  syncDashboardInsights: (insights: Array<{ id: string; fingerprint?: string }>) => void;
 
   activeMatch: {
     fixtureId: string;
@@ -480,6 +489,10 @@ export interface GameStoreState {
   setPendingCalendarActivity: (
     pending: { type: string; targetId: string; label: string } | null,
   ) => void;
+  pendingNetworkContactId: string | null;
+  setPendingNetworkContactId: (contactId: string | null) => void;
+  pendingRivalOpportunityId: string | null;
+  setPendingRivalOpportunityId: (opportunityId: string | null) => void;
   pendingInternationalCountry: string | null;
   setPendingInternationalCountry: (country: string | null) => void;
   pendingListingReportId: string | null;

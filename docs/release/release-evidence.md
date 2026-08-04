@@ -15,10 +15,14 @@ Generated candidate evidence is intentionally ignored by Git:
 
 - `artifacts/release/candidate-package-manifest.json`
 - `artifacts/release/release-evidence-check.json`
+- `artifacts/release/generated/replayability-release-summary.json`
 - `artifacts/release/generated/long-career-release-summary.json`
+- `artifacts/release/generated/long-career-chooser-profile-matrix.json`
 - `artifacts/release/generated/long-career-workers/`
 
 The generated check report records the resolved commit, its source, tag, dirty state, package verification, gate evidence, and every blocker.
+
+Replayability output may still be generated from a dirty development checkout for diagnosis. In that case `humanFacingProxies.authority.evidenceClass` is `diagnostic_dirty_worktree` and `releaseCertificationEligible` is false. The candidate-core evidence check reads the replayability artifact directly and accepts it only when its source SHA matches the candidate and its authority records a successful Git inspection, zero dirty entries, and `clean_commit_bound` evidence.
 
 `npm run build` is also candidate-aware. The cross-platform Node wrapper derives
 the full Git `HEAD` when CI has not supplied `NEXT_PUBLIC_BUILD_VERSION`, rejects
@@ -64,6 +68,19 @@ seed one deterministically. The tracked gate remains
 `Unverified`; the checker computes an effective `Passed` status from this
 generated evidence, avoiding any post-commit policy edit.
 
+Run the optional, non-gating chooser-profile matrix separately:
+
+```powershell
+npm run test:release-soak:chooser-matrix
+```
+
+It exercises the cautious and aggressive autonomous policies once and writes
+`long-career-chooser-profile-matrix.json`. Those supplemental careers are not
+repeated inside every seed worker or the determinism replay. This preserves
+path-diversity diagnostics without inflating the 20-seed certification
+workload, changing its commercial-path digest, or turning supplemental
+coverage into a release blocker.
+
 Completed seed workers are atomic checkpoints. Re-running the same command
 from the same clean commit resumes only workers whose commit tree, Node
 runtime, hardware profile, concurrency, release budgets, seed count, season
@@ -90,6 +107,37 @@ second simulation path.
 This is intentionally a multi-hour release job. Do not shorten it by jumping
 calendar weeks; use a smaller seed/season profile only for local development
 proof, where the resulting evidence remains supporting rather than certifying.
+
+### Candidate-specific long-career timing exception
+
+The release checker supports one deliberately narrow exception type for the
+`longSaveGrowthAndCompaction` gate. It is not a reusable waiver system and it
+cannot resolve packaging, security, accessibility, hardware, usability, save
+integrity, crash, memory, determinism, or gameplay-correctness failures.
+
+The tracked policy locks this exception to source workflow `30902995422`,
+candidate `6fa7297c13ad6058a2e1c157fb9541677d0195c4`, and its exact Git tree. The
+exception accepts only the recorded seed-17 hosted-runner CPU variance (less
+than 0.5% over the stall-only CPU threshold while remaining below the separate
+wall-time limit) and the release-owner-directed cancellation of seed 1 after
+the risk decision. At least 18 of 20 requested shards must have passed.
+
+Certification evidence must use
+`docs/release/templates/long-career-timing-exception.template.json` and is
+accepted only when it is bound to the exact candidate tag, signed-package
+workflow run, package manifest, passing candidate-core evidence from that
+package workflow, current long-career policy hash, approval window, required
+controls, and hashed source
+artifacts. A valid exception is reported as `PassedWithAcceptedRisk`; it is
+never presented as an ordinary clean soak pass. Any changed source candidate,
+tree, policy, package, run, or evidence byte invalidates the decision.
+
+The source bundle is not a free-form operator summary. It must include the raw
+workflow-run and workflow-job responses, all 18 passing canonical shard JSON
+files, and the seed-17 worker-failure JSON. The checker parses those files,
+requires the exact quality/platform job outcomes and 20-seed job set, verifies
+every successful shard against the candidate/tree and 30-season profile, and
+derives the accepted timing values from the raw failure message.
 
 Run the strict gate with:
 
@@ -132,3 +180,9 @@ candidate through the explicit two-stage process in
 the original run's artifacts, never rebuilds them, validates every attestation
 and hash, and only then enables an explicitly requested draft GitHub release or
 final-tag Steam upload.
+
+The paired-career replayability interview gate is independent of the general
+moderated-usability gate. It uses the same candidate-bound attestation model,
+but its protocol focuses specifically on whether two ordinary careers feel
+materially different to the same participant without requiring invented
+personas or post-hoc narration.

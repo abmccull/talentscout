@@ -510,11 +510,13 @@ export function populateFullObservationPhases(
       venueType,
       countryId: session.countryId,
       culturalInsights: session.culturalInsights,
+      calendarEffects: session.culturalCalendarEffects,
       travelPosture: session.travelPosture,
     }),
     atmosphere,
     populatedPhases.flatMap((phase) => phase.atmosphereEvent ? [phase.atmosphereEvent] : []),
     session.culturalInsights,
+    session.culturalCalendarEffects,
   );
   const targetPlayer = contextualPlayers[0];
 
