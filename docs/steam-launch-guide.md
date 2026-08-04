@@ -339,12 +339,29 @@ Steamworks portal -> **Store Page** -> **Basic Info** -> **System Requirements**
 
 ## 8. Achievements Setup <a id="8-achievements"></a>
 
-Your project includes `docs/achievements_import.vdf`.
+Your project includes:
+
+- `docs/achievements_import.vdf` for the preserved full-game import file.
+- `docs/achievements_import_youth_early_access.vdf` for the current Youth
+  Scout Early Access Steam setup.
+
+Before importing, regenerate and validate the scoped file:
+
+```bash
+npm run steam:generate-achievement-imports
+npm run test:steam-achievement-imports
+```
 
 1. In Steamworks, go to **Stats & Achievements** ->
    **Achievement Configuration**.
-2. Click **Import** and upload `docs/achievements_import.vdf`.
-3. Confirm all 45 achievements are created with the correct API names.
+2. Click **Import** and upload
+   `docs/achievements_import_youth_early_access.vdf`.
+3. Confirm all 36 Youth Scout Early Access achievements are created with the
+   correct API names.
+4. Leave the following achievements reserved for a future full build:
+   `FIRST_MATCH`, `ALL_PERKS_TREE`, `DUAL_MASTERY`, `SECONDARY_SPEC`,
+   `MATCHES_25`, `MATCHES_50`, `MATCHES_100`, `AGAINST_ALL_ODDS`,
+   `BLIND_FAITH`.
 
 ### Achievement icons
 
@@ -509,7 +526,9 @@ Set the base USD price and any launch discount you intend to use.
 | `steamcmd/app_build_4455570.vdf` | SteamCmd build manifest |
 | `steamcmd/depot_build_*.vdf` | Per-platform depot configs |
 | `scripts/steam-upload.sh` | Local build and upload helper |
-| `docs/achievements_import.vdf` | Achievement import file |
+| `docs/achievements_import.vdf` | Preserved full-game achievement import file |
+| `docs/achievements_import_youth_early_access.vdf` | Youth Scout Early Access achievement import file |
+| `docs/steam_achievement_scope_youth_early_access.json` | Audited Youth EA Steam achievement scope manifest |
 | `src/lib/achievements.ts` | Achievement definitions |
 | `src/lib/steam/achievementMap.ts` | Code-to-Steam name mapping |
 | `src/lib/steam/saveProvider.ts` | Save provider logic |
@@ -525,6 +544,12 @@ npm run electron:dist
 
 # Build and upload manually
 ./scripts/steam-upload.sh
+
+# Regenerate the Youth EA Steam achievement import
+npm run steam:generate-achievement-imports
+
+# Validate the checked-in Youth EA Steam achievement import
+npm run test:steam-achievement-imports
 
 # Upload only
 ./scripts/steam-upload.sh --skip-build

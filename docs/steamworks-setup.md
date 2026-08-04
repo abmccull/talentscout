@@ -111,6 +111,23 @@ never crashes.
 
 ### Steamworks Dashboard Setup
 
+For the current Youth Scout Early Access branch:
+
+- Keep `docs/achievements_import.vdf` untouched as the preserved full-game
+  import file.
+- Import `docs/achievements_import_youth_early_access.vdf` into Steamworks.
+- Regenerate and validate that file with:
+
+```bash
+npm run steam:generate-achievement-imports
+npm run test:steam-achievement-imports
+```
+
+The Early Access import intentionally reserves these future-build-only
+achievements: `FIRST_MATCH`, `ALL_PERKS_TREE`, `DUAL_MASTERY`,
+`SECONDARY_SPEC`, `MATCHES_25`, `MATCHES_50`, `MATCHES_100`,
+`AGAINST_ALL_ODDS`, and `BLIND_FAITH`.
+
 For each achievement below:
 
 1. Go to your app in the Steamworks partner dashboard.
@@ -428,7 +445,8 @@ After generating a production build:
 ### Checklist Before Submitting a Steam Build
 
 - [ ] `steam_appid.txt` contains your real App ID (not `480`).
-- [ ] All 45 achievements are created in the Steamworks dashboard with matching API names.
+- [ ] For Youth Scout Early Access, all 36 scoped achievements from `docs/achievements_import_youth_early_access.vdf` are created in the Steamworks dashboard with matching API names.
+- [ ] The 9 future-build-only achievements remain reserved until a later full-build import.
 - [ ] Cloud save quota is set to at least 12 MB.
 - [ ] `electron/rich_presence.vdf` has been uploaded to the dashboard.
 - [ ] SDK redistribution binaries are bundled via `extraFiles`.
