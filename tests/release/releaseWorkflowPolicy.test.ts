@@ -30,6 +30,8 @@ describe("release workflow policy", () => {
     expect(acceptedCandidate).toContain("candidate_tag:");
     expect(acceptedCandidate).toContain("accepted_source_run_id:");
     expect(acceptedCandidate).toContain("verification_only:");
+    expect(acceptedCandidate.match(/Isolate immutable candidate package workspace/g)).toHaveLength(4);
+    expect(acceptedCandidate.match(/package-lock\.release-control\.json/g)).toHaveLength(4);
     expect(acceptedCandidate).toContain("path: candidate");
     expect(acceptedCandidate).toContain("release/youth-ea-rc2");
     expect(acceptedCandidate).toContain("Pushing any v* tag still triggers legacy build.yml");

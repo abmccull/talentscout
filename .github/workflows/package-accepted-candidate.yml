@@ -114,6 +114,9 @@ jobs:
           cache: npm
           cache-dependency-path: candidate/package-lock.json
 
+      - name: Isolate immutable candidate package workspace
+        run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
+
       - name: Validate control-plane Steam store readiness
         run: node scripts/validate-steam-store-assets.mjs
 
@@ -313,6 +316,9 @@ jobs:
           cache: npm
           cache-dependency-path: candidate/package-lock.json
 
+      - name: Isolate immutable candidate package workspace
+        run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
+
       - run: npm ci
         working-directory: candidate
 
@@ -414,6 +420,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: candidate/package-lock.json
+
+      - name: Isolate immutable candidate package workspace
+        run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
 
       - run: npm ci
         working-directory: candidate
@@ -535,6 +544,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: candidate/package-lock.json
+
+      - name: Isolate immutable candidate package workspace
+        run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
 
       - run: npm ci
         working-directory: candidate
