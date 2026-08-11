@@ -8,6 +8,14 @@ function workflow(name: string): string {
   return readFileSync(resolve(root, ".github", "workflows", name), "utf8");
 }
 
+function jobBlock(workflowText: string, jobId: string): string {
+  const match = workflowText.match(
+    new RegExp(`\\r?\\n  ${jobId}:\\r?\\n([\\s\\S]*?)(?=\\r?\\n  [a-z0-9-]+:\\r?\\n|$)`),
+  );
+  if (!match) throw new Error(`Missing workflow job: ${jobId}`);
+  return match[1];
+}
+
 describe("release workflow policy", () => {
   it("constructs immutable candidates without publishing or uploading to Steam", () => {
     const build = workflow("build.yml");
@@ -30,8 +38,14 @@ describe("release workflow policy", () => {
     expect(acceptedCandidate).toContain("candidate_tag:");
     expect(acceptedCandidate).toContain("accepted_source_run_id:");
     expect(acceptedCandidate).toContain("verification_only:");
-    expect(acceptedCandidate.match(/Isolate immutable candidate package workspace/g)).toHaveLength(4);
-    expect(acceptedCandidate.match(/package-lock\.release-control\.json/g)).toHaveLength(4);
+    for (const jobId of ["quality", "build-windows", "build-macos", "build-linux"]) {
+      const block = jobBlock(acceptedCandidate, jobId);
+      expect(block.match(/Isolate immutable candidate package workspace/g)).toHaveLength(1);
+      expect(block.match(/package-lock\.release-control\.json/g)).toHaveLength(1);
+      const isolationIndex = block.indexOf("Isolate immutable candidate package workspace");
+      const installIndex = block.indexOf("run: npm ci");
+      expect(installIndex).toBeGreaterThan(isolationIndex);
+    }
     expect(acceptedCandidate).toContain("ESLINT_USE_FLAT_CONFIG: \"false\"");
     expect(acceptedCandidate).toContain(
       "./node_modules/.bin/eslint src --ext .js,.jsx,.ts,.tsx --no-eslintrc --config .eslintrc.json",
