@@ -22,8 +22,10 @@ const maximumInitialGzipBytes = 1_205_862;
 
 const html = await readFile(shippingHtmlPath, "utf8");
 const scriptSources = [
-  ...html.matchAll(/<script\b[^>]*\bsrc="([^"]+\.js)"[^>]*>/g),
-].map((match) => match[1]);
+  ...html.matchAll(
+    /<script\b[^>]*\bsrc=(?:"([^"]+\.js)"|'([^']+\.js)'|([^\s>]+\.js))[^>]*>/gi,
+  ),
+].map((match) => match[1] ?? match[2] ?? match[3]);
 
 if (scriptSources.length === 0) {
   throw new Error(`No shipping JavaScript was found in ${shippingHtmlPath}`);
