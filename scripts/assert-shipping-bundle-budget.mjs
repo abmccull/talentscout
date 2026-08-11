@@ -26,12 +26,13 @@ const scriptSources = [
     /<script\b[^>]*\bsrc=(?:"([^"]+\.js)"|'([^']+\.js)'|([^\s>]+\.js))[^>]*>/gi,
   ),
 ].map((match) => match[1] ?? match[2] ?? match[3]);
+const normalizedScriptSources = scriptSources.map((source) => source.replace(/^["']|["']$/g, ""));
 
 if (scriptSources.length === 0) {
   throw new Error(`No shipping JavaScript was found in ${shippingHtmlPath}`);
 }
 
-const uniqueScriptSources = [...new Set(scriptSources)];
+const uniqueScriptSources = [...new Set(normalizedScriptSources)];
 const files = [];
 let rawBytes = 0;
 let gzipBytes = 0;
