@@ -68,13 +68,19 @@ export function buildRelationshipPosition(input: {
     0,
     Math.min(100, ecology.influence.activeObligations * 15 + activeAccess.length * 20),
   );
+  // Threat calculation: for contacts with no history, base threat on lack of trust
+  // but cap it lower than for contacts with active negative memories.
+  // For new/untested contacts, threat comes from uncertainty, not hostility.
+  const hasNegativeHistory = ecology.memories.some((memory) => memory.tone === "negative");
+  const negativeMemoryThreat = ecology.memories.filter((memory) => memory.tone === "negative").length * 12;
+  const baseThreat = ecology.trust.effective !== undefined
+    ? hasNegativeHistory
+      ? 100 - ecology.trust.effective  // Full inverse for contacts with negative history
+      : Math.max(0, 50 - ecology.trust.effective)  // Reduced threat for untested contacts
+    : 40;
   const threatScore = Math.max(
     0,
-    Math.min(
-      100,
-      (ecology.trust.effective !== undefined ? 100 - ecology.trust.effective : 40)
-        + (ecology.memories.filter((memory) => memory.tone === "negative").length * 12),
-    ),
+    Math.min(100, baseThreat + negativeMemoryThreat),
   );
   return {
     stakeholder: { ...input.stakeholder },

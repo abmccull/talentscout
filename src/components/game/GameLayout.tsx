@@ -437,6 +437,11 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     setScreen(screen);
     setSidebarOpen(false);
 
+    // Complete guided milestone when navigating to the expected screen
+    if (guidedSessionActive && currentGuidedTask === "openedCalendar" && screen === "calendar") {
+      useTutorialStore.getState().completeMilestone("openedCalendar");
+    }
+
     // Auto-open screen guide on first click of a newly-visible nav item.
     if (isFirstVisit) {
       setTimeout(() => {
