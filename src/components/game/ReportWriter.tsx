@@ -1210,7 +1210,7 @@ export function ReportWriter() {
                       : FORMAL_CATEGORY_UNKNOWN_OPTIONS[category];
                     return (
                       <fieldset key={category} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                        <legend className="px-1 text-sm font-semibold text-white">{JUDGMENT_LABELS[category]}</legend>
+                        <legend data-testid={`report-judgment-${category}`} className="px-1 text-sm font-semibold text-white">{JUDGMENT_LABELS[category]}</legend>
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           {(["assessed", "notAssessed"] as const).map((status) => (
                             <label

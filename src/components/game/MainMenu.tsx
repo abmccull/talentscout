@@ -15,6 +15,9 @@ import {
   Map,
   ShieldCheck,
   Trash2,
+  Volume2,
+  VolumeX,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { APP_VERSION } from "@/config/version";
@@ -26,6 +29,7 @@ import {
   BETA_CLOUD_SAVES_MESSAGE,
 } from "@/config/beta";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { useAudio } from "@/lib/audio/useAudio";
 
 // Session flag — splash only shown once per browser session.
 let splashShownThisSession = false;
@@ -70,6 +74,8 @@ export function MainMenu() {
     signOut: state.signOut,
     cloudSaveEnabled: state.cloudSaveEnabled,
   })));
+
+  const { isMuted, toggleMute } = useAudio();
 
   const [showLoadPicker, setShowLoadPicker] = useState(false);
   const [showSplash, setShowSplash] = useState(!splashShownThisSession);
@@ -283,6 +289,32 @@ export function MainMenu() {
             <Map size={16} className="mr-2" aria-hidden="true" />
             What&apos;s Coming
           </Button>
+
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="lg"
+              className="flex-1 text-base text-zinc-300"
+              onClick={toggleMute}
+              title={isMuted ? "Unmute audio" : "Mute audio"}
+            >
+              {isMuted ? (
+                <VolumeX size={18} className="mr-2" aria-hidden="true" />
+              ) : (
+                <Volume2 size={18} className="mr-2" aria-hidden="true" />
+              )}
+              {isMuted ? "Unmute" : "Mute"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              className="flex-1 text-base text-zinc-300"
+              onClick={() => setScreen("settings")}
+            >
+              <SettingsIcon size={18} className="mr-2" aria-hidden="true" />
+              Settings
+            </Button>
+          </div>
 
           {continueSave?.recovery && (
             <div
