@@ -75,7 +75,7 @@ export function MainMenu() {
     cloudSaveEnabled: state.cloudSaveEnabled,
   })));
 
-  const { isMuted, toggleMute } = useAudio();
+  const { volumes, toggleMute } = useAudio();
 
   const [showLoadPicker, setShowLoadPicker] = useState(false);
   const [showSplash, setShowSplash] = useState(!splashShownThisSession);
@@ -296,14 +296,14 @@ export function MainMenu() {
               size="lg"
               className="flex-1 text-base text-zinc-300"
               onClick={toggleMute}
-              title={isMuted ? "Unmute audio" : "Mute audio"}
+              title={volumes.muted ? "Unmute audio" : "Mute audio"}
             >
-              {isMuted ? (
+              {volumes.muted ? (
                 <VolumeX size={18} className="mr-2" aria-hidden="true" />
               ) : (
                 <Volume2 size={18} className="mr-2" aria-hidden="true" />
               )}
-              {isMuted ? "Unmute" : "Mute"}
+              {volumes.muted ? "Unmute" : "Mute"}
             </Button>
             <Button
               variant="ghost"
