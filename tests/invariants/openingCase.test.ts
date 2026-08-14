@@ -163,7 +163,7 @@ describe("opening discovery case", () => {
     expect(unsignedYouth[localCase!.youthId].country).toBe("england");
   });
 
-  it("turns the real observation state machine into signal, breakthrough, and contradiction", () => {
+  it("turns the opening watch into one standout beat", () => {
     const { openingCase, unsignedYouth } = setup();
     const session = {
       id: "session-1",
@@ -180,9 +180,9 @@ describe("opening discovery case", () => {
     } as unknown as ObservationSession;
 
     const shaped = shapeOpeningObservationSession(session, unsignedYouth[openingCase.youthId].player);
-    expect(shaped.phases).toHaveLength(3);
-    expect(shaped.phases[1].moments[0]).toMatchObject({ quality: 9, isStandout: true });
-    expect(shaped.phases[2].moments[0]).toMatchObject({ quality: 4, pressureContext: true });
+    expect(shaped.phases).toHaveLength(1);
+    expect(shaped.phases[0].moments[0]).toMatchObject({ quality: 9, isStandout: true });
+    expect(shaped.phases[0].moments[1]).toMatchObject({ quality: 4, pressureContext: true });
   });
 
   it("claims and resolves the first career decision exactly once", () => {

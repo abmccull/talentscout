@@ -206,7 +206,7 @@ function OpeningHourDesk({
   const player = youth?.player;
   const name = player ? `${player.firstName} ${player.lastName}` : "the kid";
   const writeReady = opening?.stage === "report" || opening?.stage === "decision";
-  const destination = opening?.stage === "report" ? "reportWriter" : opening?.stage === "decision" ? "openingDiscovery" : "observation";
+  const destination = opening?.stage === "report" || opening?.stage === "decision" ? "reportWriter" : "observation";
 
   return (
     <div

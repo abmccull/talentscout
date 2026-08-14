@@ -85,175 +85,38 @@ test.describe("guided opening discovery hook", () => {
     await expect(page.getByRole("button", { name: /End (Session )?Early/i })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Watch the match" }).click();
-    await page.getByRole("button", { name: /^Use technical lens for / }).click();
 
     const plannerNav = page.locator('[data-tutorial-id="nav-calendar"]');
     await expect(plannerNav).toBeDisabled();
     await expect(page.getByText(/Guided assignment in progress/i)).toBeVisible();
 
-    await page.evaluate(() => {
-      (window as any).__GAME_STORE__.setState({ currentScreen: "calendar" });
-    });
-    await gamePage.waitForScreen("calendar");
-    const returnToStep = page.getByRole("button", { name: "Return to guided step" });
-    await expect(returnToStep).toBeVisible();
-    await returnToStep.click();
-    await gamePage.waitForScreen("observation");
-    await expect(page.locator('[data-tutorial-id="observation-advance-to-standout"]:visible')).toBeVisible();
-    await page.waitForTimeout(250);
-    const desktopGuidanceLayout = await page.evaluate(() => {
-      const target = Array.from(document.querySelectorAll<HTMLElement>(
-        '[data-tutorial-id="observation-advance-to-standout"]',
-      )).find((element) => element.getBoundingClientRect().width > 0);
-      const mentor = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Mentor: Keep watching"]');
-      const targetRect = target?.getBoundingClientRect();
-      const mentorRect = mentor?.getBoundingClientRect();
-      return {
-        viewportHeight: window.innerHeight,
-        target: targetRect ? { top: targetRect.top, bottom: targetRect.bottom } : null,
-        mentor: mentorRect ? { top: mentorRect.top, bottom: mentorRect.bottom } : null,
-      };
-    });
-    expect(desktopGuidanceLayout.target).not.toBeNull();
-    expect(desktopGuidanceLayout.target!.top).toBeGreaterThanOrEqual(0);
-    expect(desktopGuidanceLayout.target!.bottom).toBeLessThanOrEqual(desktopGuidanceLayout.viewportHeight);
-    expect(desktopGuidanceLayout.mentor).not.toBeNull();
-    expect(desktopGuidanceLayout.mentor!.top).toBeGreaterThanOrEqual(0);
-    expect(desktopGuidanceLayout.mentor!.bottom).toBeLessThanOrEqual(desktopGuidanceLayout.viewportHeight);
-
-    await page.screenshot({
-      path: testInfo.outputPath("tutorial-next-action-desktop.png"),
-    });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('[data-tutorial-id="mobile-nav-calendar"]')).toBeDisabled();
-    await expect(page.getByRole("dialog", { name: /Mentor: Keep watching/i })).toBeVisible();
-    const mobileAxe = await new AxeBuilder({ page }).analyze();
-    expect(
-      mobileAxe.violations.filter(
-        (violation) => violation.impact === "serious" || violation.impact === "critical",
-      ),
-    ).toEqual([]);
-    await page.screenshot({
-      path: testInfo.outputPath("tutorial-next-action-mobile.png"),
-      fullPage: true,
-    });
-
-    const nextGuidedPhase = page.locator(
-      '[data-tutorial-id="observation-advance-to-standout"]:visible',
-    );
-    await expect(nextGuidedPhase).toContainText(/Next phase/i);
-    await nextGuidedPhase.click();
-    await page.setViewportSize({ width: 1280, height: 720 });
-
     const evidence = page.locator('[data-tutorial-id="observation-evidence-feed"]');
     await expect(evidence.getByText("Standout")).toBeVisible();
     const flagMoment = page.locator('[data-tutorial-id="observation-flag-moment"]:visible');
     await expect(flagMoment).toContainText("Flag moment");
-    await page.waitForTimeout(150);
-    await page.screenshot({
-      path: testInfo.outputPath("tutorial-flag-moment-desktop.png"),
-    });
     await flagMoment.click();
     const promising = page.locator('[data-tutorial-id="observation-promising-reaction"]:visible');
     await expect(promising).toHaveText("Promising");
-    await page.waitForTimeout(100);
-    await page.screenshot({
-      path: testInfo.outputPath("tutorial-promising-desktop.png"),
-    });
     await promising.click();
     await expect(page.getByText(/moment flagged/i)).toBeVisible();
 
-    const halftimeApproach = page.getByRole("button", { name: /^Confirm the first read\b/ });
-    await expect(halftimeApproach).toBeVisible();
-    await halftimeApproach.click();
-    await page.getByRole("button", { name: "Next Phase" }).click();
-    await expect(evidence.getByText("Under Pressure").first()).toBeVisible();
-    await page.getByRole("button", { name: "Go to Reflection" }).click();
-
-    const evidenceInterpretation = page.getByRole("group", { name: "What did this passage show?" });
-    await expect(evidenceInterpretation).toBeVisible();
-    await evidenceInterpretation.getByRole("radio").first().check();
-
-    const completeReflection = page.getByRole("button", { name: "Complete Reflection" });
-    await expect(completeReflection).toBeVisible();
-    await expect.poll(async () => completeReflection.evaluate((button) => {
-      const rect = button.getBoundingClientRect();
-      return rect.top >= 12 && rect.bottom <= window.innerHeight - 12;
-    })).toBe(true);
-    await expect(page.locator('[data-tutorial-id="observation-complete-reflection"]')).toBeVisible();
-    await expect.poll(async () => page.evaluate(() => {
-      const button = document.querySelector<HTMLElement>(
-        '[data-tutorial-id="observation-complete-reflection"]',
-      );
-      const mentor = document.querySelector<HTMLElement>(
-        '[role="dialog"][aria-label="Mentor: Complete the observation session"]',
-      );
-      if (!button || !mentor) return false;
-      const buttonRect = button.getBoundingClientRect();
-      const mentorRect = mentor.getBoundingClientRect();
-      const overlapWidth = Math.max(
-        0,
-        Math.min(buttonRect.right, mentorRect.right) - Math.max(buttonRect.left, mentorRect.left),
-      );
-      const overlapHeight = Math.max(
-        0,
-        Math.min(buttonRect.bottom, mentorRect.bottom) - Math.max(buttonRect.top, mentorRect.top),
-      );
-      return overlapWidth * overlapHeight === 0;
-    })).toBe(true);
-    await page.screenshot({
-      path: testInfo.outputPath("tutorial-complete-reflection-desktop.png"),
-    });
-    await completeReflection.click();
-
-    await gamePage.waitForScreen("openingDiscovery");
-    const openingDecision = page.getByTestId("opening-discovery");
-    await expect(openingDecision).toBeVisible();
-    await expect(page.getByText("Write the name down.")).toBeVisible();
-    await expect(page.getByText(/One exceptional action is a lead, not proof/i)).toBeVisible();
-    await expect(page.getByText("Your next move", { exact: true })).toBeVisible();
-    await expect(page.getByText(/The call you make now will shape who gets access/i)).toBeVisible();
-    await expect(page.getByText(/No one knows what this player will become/i)).toBeVisible();
-    await expect(openingDecision.getByText(/\bthe game\b|your reputation decision|each choice changes access|early access can become/i)).toHaveCount(0);
-    const openingDecisionAxe = await new AxeBuilder({ page }).analyze();
-    expect(
-      openingDecisionAxe.violations.filter(
-        (violation) => violation.impact === "serious" || violation.impact === "critical",
-      ),
-    ).toEqual([]);
-    await page.screenshot({
-      path: testInfo.outputPath("opening-decision-desktop.png"),
-      fullPage: true,
-    });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByText("Your next move", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Write the name" }).click();
+    await gamePage.waitForScreen("reportWriter");
+    await expect(page.getByText("Write the name down")).toBeVisible();
     await expect(page.getByRole("button", { name: /Keep the name private/ })).toBeVisible();
-    const openingDecisionMobileAxe = await new AxeBuilder({ page }).analyze();
-    expect(
-      openingDecisionMobileAxe.violations.filter(
-        (violation) => violation.impact === "serious" || violation.impact === "critical",
-      ),
-    ).toEqual([]);
-    await page.screenshot({
-      path: testInfo.outputPath("opening-decision-mobile.png"),
-      fullPage: true,
-    });
-    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect(page.getByRole("group", { name: "Saved evidence" })).toHaveCount(0);
+    await expect(page.getByText("Answer a real club need")).toHaveCount(0);
+    await expect(page.getByLabel(/Ask (Margaret|Tommy) for help/i)).toHaveCount(0);
 
     await page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
       const serialized = JSON.parse(JSON.stringify(store.getState().gameState));
       store.getState().loadGame(serialized);
     });
-    await gamePage.waitForScreen("openingDiscovery");
-    await expect(page.getByTestId("opening-discovery")).toBeVisible();
+    await gamePage.waitForScreen("reportWriter");
+    await expect(page.getByRole("button", { name: /Keep the name private/ })).toBeVisible();
 
     await page.getByRole("button", { name: /Keep the name private/ }).click();
-    await gamePage.waitForScreen("reportWriter");
-    await expect(page.getByText("Write the name down")).toBeVisible();
-    await expect(page.getByRole("group", { name: "Saved evidence" })).toHaveCount(0);
-    await expect(page.getByText("Answer a real club need")).toHaveCount(0);
-    await expect(page.getByLabel(/Ask (Margaret|Tommy) for help/i)).toHaveCount(0);
 
     const persisted = await page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;

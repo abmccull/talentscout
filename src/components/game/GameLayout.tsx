@@ -408,7 +408,9 @@ export function GameLayout({
     IS_YOUTH_EARLY_ACCESS && specialization === "youth";
   const youthWorkspaceItems = firstHourChrome
     ? YOUTH_WORKSPACE_ITEMS.filter(
-        (item) => item.screen !== "internationalView" && item.screen !== "career",
+        (item) =>
+          item.screen === "dashboard"
+          || item.screen === "calendar",
       )
     : YOUTH_WORKSPACE_ITEMS;
 
@@ -753,7 +755,7 @@ export function GameLayout({
         <nav
           aria-label="Youth Scout workspace"
           className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem+env(safe-area-inset-bottom))] border-t border-white/10 bg-[#0b0e12]/98 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden ${
-            youthWorkspaceItems.length <= 4 ? "grid-cols-4" : "grid-cols-6"
+            youthWorkspaceItems.length <= 2 ? "grid-cols-2" : youthWorkspaceItems.length <= 4 ? "grid-cols-4" : "grid-cols-6"
           }`}
         >
           {youthWorkspaceItems.map(({ screen, label, icon: Icon }) => {

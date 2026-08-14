@@ -775,6 +775,7 @@ export function createReportActions(get: GetState, set: SetState) {
       if (isOpeningReport) {
         tutorialAfterReport.completeMilestone("checkedInbox");
         tutorialAfterReport.completeMilestone("openedCalendar");
+        tutorialAfterReport.completeMilestone("scheduledActivity");
       }
 
       // First-team aha moment: a first report earns a real next step. Transfer

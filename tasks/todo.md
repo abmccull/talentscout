@@ -1,3 +1,12 @@
+# First-hour 10/10 cut (2026-08-14)
+
+- [x] Opening Watch is one standout beat
+- [x] Stance + file live on one notebook
+- [x] Opening-week rail is Desk + Planner; Prospects/Reports show the same kid
+- [x] Typecheck + targeted tests + commit
+
+---
+
 # First-hour Steam HUD batch (2026-08-14)
 
 Chrome = in-game HUD (rail, inbox, session meters), not a browser. Electron/Steam.

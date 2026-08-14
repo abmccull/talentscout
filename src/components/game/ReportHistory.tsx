@@ -48,6 +48,7 @@ import {
   type ReportOpportunityHistorySummary,
 } from "./reportHistoryOpportunityModel";
 import { ReportWorkspaceBridge } from "./reports/ReportWorkspaceBridge";
+import { OpeningHourKidRoom, shouldUseOpeningHourKidRoom } from "@/components/game/OpeningHourKidRoom";
 import {
   buildReportWorkspaceViewModel,
   type ReportWorkspaceAction,
@@ -790,6 +791,9 @@ export function ReportHistory() {
   const [reportPage, setReportPage] = useState(1);
 
   if (!gameState) return null;
+  if (shouldUseOpeningHourKidRoom(gameState)) {
+    return <OpeningHourKidRoom title="This week's name" gameState={gameState} />;
+  }
 
   const hasFinances = gameState.finances != null;
   const reportListings: ReportListing[] = gameState.finances?.reportListings ?? [];

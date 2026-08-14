@@ -33,6 +33,7 @@ import { MiniStarRange } from "@/components/ui/MiniStarRange";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getCountryDisplayName } from "@/lib/country";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { OpeningHourKidRoom, shouldUseOpeningHourKidRoom } from "@/components/game/OpeningHourKidRoom";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1104,6 +1105,9 @@ export function YouthScoutingScreen() {
   const [filterNationality, setFilterNationality] = useState("");
 
   if (!gameState) return null;
+  if (shouldUseOpeningHourKidRoom(gameState)) {
+    return <OpeningHourKidRoom title="This week's kid" gameState={gameState} />;
+  }
 
   const { unsignedYouth, subRegions, legacyScore, scout } = gameState;
 

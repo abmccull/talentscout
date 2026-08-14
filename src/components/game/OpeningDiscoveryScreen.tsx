@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Clock3, Eye, LockKeyhole, Phone, Sparkles, Users } from "lucide-react";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { YouthPortrait } from "@/components/game/YouthPortrait";
@@ -41,6 +41,13 @@ export function OpeningDiscoveryScreen() {
     ?.find((moment) => moment.playerId === projection?.playerId && moment.reaction === "promising");
   const hypothesis = latestJournal?.hypotheses
     ?.find((entry) => entry.playerId === projection?.playerId);
+
+  useEffect(() => {
+    if (!gameState?.openingCase) return;
+    if (gameState.openingCase.stage === "decision" || gameState.openingCase.stage === "report") {
+      useGameStore.getState().setScreen("reportWriter");
+    }
+  }, [gameState?.openingCase]);
 
   if (!gameState || !projection || !youth) return null;
 

@@ -51,6 +51,11 @@ import {
   getFreshReportObservationIds,
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
+import {
+  getOpeningCaseChoices,
+  type OpeningCaseChoiceId,
+} from "@/engine/youth/openingCase";
 import { InitialAssessmentBuilder } from "@/components/game/InitialAssessmentBuilder";
 import {
   addGameWeeks,
@@ -133,6 +138,7 @@ export function ReportWriter() {
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
   const [initialAssessmentInput, setInitialAssessmentInput] = useState<InitialAssessmentInput | null>(null);
+  const [openingStance, setOpeningStance] = useState<OpeningCaseChoiceId | null>(null);
   const [briefId, setBriefId] = useState("");
   const [intendedAudience, setIntendedAudience] = useState<StructuredReportInput["intendedAudience"]>("academyDirector");
   const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
@@ -781,7 +787,7 @@ export function ReportWriter() {
     if (isDirty && !window.confirm(t("unsavedWarning"))) {
       return;
     }
-    setScreen(conciseOpeningMode ? "openingDiscovery" : "playerProfile");
+    setScreen(conciseOpeningMode ? "dashboard" : "playerProfile");
   };
 
   const handleSubmit = () => {
@@ -808,7 +814,16 @@ export function ReportWriter() {
     openingDecisionCount: initialAssessmentInput ? 1 : 5,
     youthValidationErrors: structuredValidation.errors,
   });
-  const canSubmit = reportStatus.canSubmit;
+  const openingChoices = conciseOpeningMode && gameState
+    ? getOpeningCaseChoices(gameState)
+    : [];
+  const lockedOpeningStance = gameState?.openingCase?.selectedChoiceId ?? openingStance;
+  const needsOpeningStance = Boolean(
+    conciseOpeningMode
+    && gameState?.openingCase?.stage === "decision"
+    && !lockedOpeningStance,
+  );
+  const canSubmit = reportStatus.canSubmit && !needsOpeningStance;
   const observationsBlocker = reportStatus.blockers.find((blocker) => blocker.id === "observation-required");
   const freshEvidenceBlocker = reportStatus.blockers.find((blocker) => blocker.id === "fresh-evidence-required");
   const sectionNavigatorItems: SectionNavigatorItem[] = buildSectionNavigatorItems({
@@ -1537,8 +1552,29 @@ export function ReportWriter() {
           {conciseOpeningMode ? (
             <div data-tutorial-id="report-conviction" className="notebook-paper space-y-6 rounded-sm border border-[color:var(--primary)]/20 p-5 shadow-xl sm:p-8">
               <p className="max-w-xl text-sm leading-6 text-zinc-300">
-                The name is the first read. Filing it puts a second look on the week.
+                The name is the first read. Choose who hears it, then file. Planner will hold the second look.
               </p>
+              {openingChoices.length > 0 && (
+                <div className="space-y-3" role="group" aria-label="Choose what to do with the lead">
+                  {openingChoices.map((choice) => (
+                    <ChoiceCard
+                      key={choice.id}
+                      selected={lockedOpeningStance === choice.id}
+                      disabled={Boolean(gameState?.openingCase?.selectedChoiceId) && gameState?.openingCase?.selectedChoiceId !== choice.id}
+                      onSelect={() => {
+                        if (gameState?.openingCase?.selectedChoiceId) return;
+                        setOpeningStance(choice.id);
+                        setIsDirty(true);
+                        useGameStore.getState().resolveOpeningDiscoveryChoice(choice.id);
+                      }}
+                      className="min-h-16"
+                    >
+                      <span className="block font-semibold text-white">{choice.label}</span>
+                      <span className="mt-1.5 block text-sm leading-5 text-quiet">{choice.description}</span>
+                    </ChoiceCard>
+                  ))}
+                </div>
+              )}
               <div
                 className="sticky bottom-3 z-20 grid gap-3 rounded-sm border border-[color:var(--primary)]/25 bg-[#14110c] p-4 text-[#F0EBE3] shadow-2xl sm:grid-cols-[1fr_auto_auto] sm:items-center"
                 data-tutorial-id="report-submit"
@@ -1546,10 +1582,12 @@ export function ReportWriter() {
                 <p className={`text-sm ${canSubmit ? "text-[#F0EBE3]" : "text-amber-200"}`} aria-live="polite">
                   {canSubmit
                     ? "Ready to file. Planner will hold the second look."
-                    : reportStatus.primaryBlocker ?? "Watch the kid before you file the name."}
+                    : needsOpeningStance
+                      ? "Choose who hears the name, then file."
+                      : reportStatus.primaryBlocker ?? "Watch the kid before you file the name."}
                 </p>
                 <Button className="min-h-11" variant="outline" onClick={handleBack}>
-                  Back to the decision
+                  Back to Desk
                 </Button>
                 <Button className="min-h-11" onClick={handleSubmit} disabled={!canSubmit}>
                   <FileText size={14} className="mr-2" aria-hidden="true" />

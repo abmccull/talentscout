@@ -331,7 +331,7 @@ export interface GameStoreState {
   selectDataPoint: (pointId: string) => void;
   selectStrategicChoice: (choiceId: string) => void;
   addSessionNote: (note: string) => void;
-  endObservationSession: () => void;
+  endObservationSession: (options?: { openingNotebook?: boolean }) => void;
   resolveOpeningDiscoveryChoice: (choiceId: OpeningCaseChoiceId) => void;
 
   useInsight: (actionId: InsightActionId) => boolean;
