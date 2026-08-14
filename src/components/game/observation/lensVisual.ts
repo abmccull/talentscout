@@ -8,7 +8,7 @@ export const LENS_KEYS: LensType[] = [
   "general",
 ];
 
-export type LensShape = "square" | "triangle" | "diamond" | "bar" | "circle";
+export type LensShape = "square" | "triangle" | "plus" | "bar" | "circle";
 
 export interface LensVisual {
   label: string;
@@ -38,7 +38,7 @@ export const LENS_VISUAL: Record<LensType, LensVisual> = {
     label: "Mental",
     className: "signal-moment",
     borderClassName: "border-[color:var(--signal-moment)]/40",
-    shape: "diamond",
+    shape: "plus",
   },
   tactical: {
     label: "Tactical",
@@ -48,8 +48,8 @@ export const LENS_VISUAL: Record<LensType, LensVisual> = {
   },
   general: {
     label: "General",
-    className: "text-zinc-300",
-    borderClassName: "border-zinc-500/40",
+    className: "signal-general",
+    borderClassName: "border-[color:var(--signal-general)]/40",
     shape: "circle",
   },
 };
@@ -60,8 +60,8 @@ export function lensShapeClass(shape: LensShape): string {
       return "h-2.5 w-2.5 rounded-[2px] bg-current";
     case "triangle":
       return "h-0 w-0 border-x-[5px] border-b-[9px] border-x-transparent border-b-current bg-transparent";
-    case "diamond":
-      return "h-2.5 w-2.5 rotate-45 bg-current";
+    case "plus":
+      return "h-2.5 w-2.5 bg-current [clip-path:polygon(35%_0,65%_0,65%_35%,100%_35%,100%_65%,65%_65%,65%_100%,35%_100%,35%_65%,0_65%,0_35%,35%_35%)]";
     case "bar":
       return "h-2 w-3.5 rounded-sm bg-current";
     case "circle":

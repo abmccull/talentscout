@@ -245,6 +245,7 @@ function FieldChoice({
   checked,
   disabled,
   name,
+  value,
   title,
   description,
   meta,
@@ -254,6 +255,7 @@ function FieldChoice({
   checked: boolean;
   disabled?: boolean;
   name: string;
+  value: string;
   title: string;
   description: string;
   meta?: React.ReactNode;
@@ -265,6 +267,7 @@ function FieldChoice({
     <ChoiceCard
       type="radio"
       name={name}
+      value={value}
       selected={checked}
       disabled={disabled}
       disabledReason={disabled ? "This judgment is locked." : undefined}
@@ -399,6 +402,7 @@ export function InitialAssessmentBuilder({
             <FieldChoice
               key={card.id}
               name={`${baseId}-evidence`}
+              value={card.id}
               checked={checked}
               disabled={disabled}
               accent="cyan"
@@ -438,6 +442,7 @@ export function InitialAssessmentBuilder({
             <FieldChoice
               key={option.id}
               name={`${baseId}-claim`}
+              value={option.id}
               checked={draft.claimOptionId === option.id}
               disabled={disabled}
               accent="emerald"
@@ -471,6 +476,7 @@ export function InitialAssessmentBuilder({
             <FieldChoice
               key={option.id}
               name={`${baseId}-unknown`}
+              value={option.id}
               checked={draft.unknownOptionId === option.id}
               disabled={disabled}
               accent="amber"
@@ -509,6 +515,7 @@ export function InitialAssessmentBuilder({
               <FieldChoice
                 key={option.id}
                 name={`${baseId}-next-test`}
+                value={option.id}
                 checked={draft.nextTestId === option.id}
                 disabled={disabled}
                 accent="cyan"
@@ -539,6 +546,7 @@ export function InitialAssessmentBuilder({
             <FieldChoice
               key={option.value}
               name={`${baseId}-recommendation`}
+              value={option.value}
               checked={draft.recommendation === option.value}
               disabled={disabled}
               accent={option.value === "offerAcademyPlace" ? "amber" : option.value === "monitor" ? "cyan" : "emerald"}
@@ -567,6 +575,7 @@ export function InitialAssessmentBuilder({
           <FieldChoice
             key={option.value}
             name={`${baseId}-confidence`}
+            value={option.value}
             checked={draft.confidence === option.value}
             disabled={disabled}
             accent={option.value === "robust" ? "amber" : option.value === "tentative" ? "cyan" : "emerald"}

@@ -1,3 +1,13 @@
+# First-hour gold, ground, and quiet mentor (2026-08-14)
+
+- [x] Split signal hues; general uses a token
+- [x] School-match ground + named fallback portraits
+- [x] ChoiceCard radios have value + card focus
+- [x] Youth mentor no longer teaches marketplace or extra scheduling
+- [x] Typecheck + tests + commit
+
+---
+
 # First-hour 10/10 cut (2026-08-14)
 
 - [x] Opening Watch is one standout beat

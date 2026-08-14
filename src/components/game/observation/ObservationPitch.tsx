@@ -6,7 +6,7 @@ import type {
   ObservationSession,
   SessionPhase,
 } from "@/engine/observation/types";
-import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import {
   buildObservationPitchMarkers,
   inferObservationPhaseType,
@@ -98,7 +98,7 @@ export const ObservationPitch = memo(function ObservationPitch({
         aria-label={`Interactive observation pitch at ${phase.minute} minutes`}
         role="group"
         style={{
-          backgroundImage: "url('/images/backgrounds/match-atmosphere.png')",
+          backgroundImage: "url('/images/backgrounds/activities/school-match.png')",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -110,7 +110,7 @@ export const ObservationPitch = memo(function ObservationPitch({
             <div className="flex items-center gap-2">
               <Eye size={15} className="signal-moment" aria-hidden="true" />
               <h2 id="observation-pitch-heading" className="text-sm font-semibold text-zinc-100">
-                {venue} · first half
+                {venue}
               </h2>
             </div>
             <p className="mt-0.5 text-meta text-zinc-300">
@@ -140,7 +140,7 @@ export const ObservationPitch = memo(function ObservationPitch({
               style={{ left: `${marker.x}%`, top: `${Math.min(marker.y, 58)}%` }}
             >
               <span className="relative h-16 w-16 overflow-hidden rounded-full border border-white/20">
-                <YouthPortrait
+                <YouthPortraitWithFallback
                   playerId={marker.playerId}
                   size={64}
                   className="h-16 w-16"
@@ -150,8 +150,8 @@ export const ObservationPitch = memo(function ObservationPitch({
                   <span className="absolute inset-0 rounded-full ring-2 ring-[color:var(--signal-focus)]" />
                 )}
                 {marker.isStandout && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rotate-45 bg-[color:var(--signal-moment)] text-eyebrow font-black text-zinc-950">
-                    <span className="-rotate-45 text-eyebrow">M</span>
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[color:var(--signal-moment)] text-eyebrow font-black text-zinc-950">
+                    !
                   </span>
                 )}
               </span>
@@ -173,7 +173,7 @@ export const ObservationPitch = memo(function ObservationPitch({
           aria-hidden="true"
         >
           <span className="flex items-center gap-1">
-            <i className="inline-block h-2.5 w-2.5 rotate-45 bg-signal-moment" /> Moment
+            <i className="inline-block h-2.5 w-2.5 rounded-full bg-signal-moment" /> Moment
           </span>
           <span className="flex items-center gap-1">
             <i className="inline-block h-2.5 w-2.5 rounded-full ring-2 ring-[color:var(--signal-focus)]" /> Focus
@@ -208,7 +208,7 @@ export const ObservationPitch = memo(function ObservationPitch({
                     }`}
                     aria-label={`Select ${markerLabel(marker)} for focus`}
                   >
-                    <YouthPortrait playerId={marker.playerId} size={32} />
+                    <YouthPortraitWithFallback playerId={marker.playerId} size={32} alt={marker.name} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-medium text-zinc-200">{marker.name}</span>
                       <span className="block truncate text-eyebrow text-zinc-300">

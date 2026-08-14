@@ -270,42 +270,6 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     screen: "reportWriter",
   },
   {
-    id: "checkedInbox",
-    target: "report-marketplace-prompt",
-    title: "List your first report",
-    mentorText:
-      "List the youth report on the marketplace. That closes the real loop: observe the school match, write it up, then put the intel where buyers can act on it. Bids come after you advance more weeks.",
-    mentorTextFreelance:
-      "Don't go looking for feedback in an empty inbox. List the report, advance a few weeks, and let the market tell you whether the read has value.",
-    position: "bottom",
-    interactive: true,
-    screen: "reportHistory",
-  },
-  {
-    id: "openedCalendar",
-    target: ["mobile-nav-calendar", "nav-calendar"],
-    title: "Plan the second look",
-    mentorText:
-      "The first report preserves what you saw; it does not end the case. Open the Planner and choose the next context before the trail cools.",
-    mentorTextFreelance:
-      "You have a name and a first opinion. Now open the Planner. The second context is where a lucky highlight starts becoming a real scouting case.",
-    position: "bottom",
-    interactive: true,
-    screen: "calendar",
-  },
-  {
-    id: "scheduledActivity",
-    target: "calendar-activities",
-    title: "Spend the week with intent",
-    mentorText:
-      "Schedule the work that best tests your open question. Another live context adds more than repeating the same easy observation.",
-    mentorTextFreelance:
-      "Time is your scarce resource. Schedule a follow-up, contact conversation, or contrasting venue that can prove your first read wrong.",
-    position: "left",
-    interactive: true,
-    screen: "calendar",
-  },
-  {
     id: "advancedWeek",
     target: "advance-week",
     title: "Let the world answer back",

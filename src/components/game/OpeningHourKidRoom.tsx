@@ -1,7 +1,7 @@
 "use client";
 
 import { GameLayout } from "@/components/game/GameLayout";
-import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { Button } from "@/components/ui/button";
 import type { GameState } from "@/engine/core/types";
 import { isYouthOpeningShell } from "@/lib/youthFirstHour";
@@ -35,7 +35,7 @@ export function OpeningHourKidRoom({
           </p>
           <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center">
             {player && (
-              <YouthPortrait
+              <YouthPortraitWithFallback
                 playerId={player.id}
                 nationality={player.nationality}
                 age={player.age}

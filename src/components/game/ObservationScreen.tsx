@@ -926,14 +926,14 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
   if (isOpeningDiscovery && lead) {
     return (
       <div className="relative flex flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-8">
-        <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.38} />
-        <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-emerald-300/20 bg-[#0a0f0c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
+        <ScreenBackground src="/images/backgrounds/activities/school-match.png" opacity={0.38} />
+        <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-[color:var(--primary)]/25 bg-[#14110c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-300/10">
-              <Binoculars size={25} className="text-emerald-300" aria-hidden="true" />
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/10">
+              <Binoculars size={25} className="text-[color:var(--primary)]" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">10:42 · Local school ground</p>
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">10:42 · Local school ground</p>
               <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">The match started early.</h2>
               <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
                 No academy scout is here yet. {lead.name}, a {lead.position}, was mentioned quietly—but the source only saw one previous match. Watch the moment. Flag it. Write the name.
@@ -1512,7 +1512,7 @@ export function ObservationScreen() {
   return (
     <GameLayout chrome="watch">
       <div className="relative flex min-h-dvh min-w-0 flex-col overflow-x-hidden pb-6 md:h-full md:min-h-0 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
-        <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.72} />
+        <ScreenBackground src="/images/backgrounds/activities/school-match.png" opacity={0.72} />
 
         <div className="relative z-10 flex flex-1 flex-col min-h-0">
 

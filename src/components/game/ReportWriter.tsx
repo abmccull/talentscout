@@ -37,7 +37,7 @@ import {
 } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
-import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { useAudio } from "@/lib/audio/useAudio";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
@@ -874,11 +874,12 @@ export function ReportWriter() {
             ? "notebook-paper rounded-sm border border-amber-400/20"
             : "rounded-2xl border border-white/10 bg-[#10151b]/95"
         }`}>
-          <YouthPortrait
+          <YouthPortraitWithFallback
             playerId={player.id}
             nationality={player.nationality}
             age={player.age}
             size={64}
+            alt={`${player.firstName} ${player.lastName}`}
           />
           <div>
             <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">

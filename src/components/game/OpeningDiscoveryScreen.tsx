@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Clock3, Eye, LockKeyhole, Phone, Sparkles, Users } from "lucide-react";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
-import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useAudio } from "@/lib/audio/useAudio";
 import { useGameStore } from "@/stores/gameStore";
@@ -114,12 +114,13 @@ export function OpeningDiscoveryScreen() {
           <div className="mx-auto w-full max-w-xl text-center lg:text-left">
             <div className="mx-auto mb-5 flex w-fit items-end gap-3 lg:mx-0">
               <div className="rounded-full border-2 border-[color:var(--primary)]/50 bg-[#14110c] p-1 shadow-[0_0_50px_rgba(212,168,67,0.18)]">
-                <YouthPortrait
+                <YouthPortraitWithFallback
                   playerId={projection.playerId}
                   nationality={youth.player.nationality}
                   age={projection.age}
                   size={96}
                   className="rounded-full"
+                  alt={projection.playerName}
                 />
               </div>
               <span className="mb-1 rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-200">

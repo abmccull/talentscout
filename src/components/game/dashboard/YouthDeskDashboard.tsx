@@ -3,7 +3,7 @@
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { GameLayout } from "@/components/game/GameLayout";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
-import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { Button } from "@/components/ui/button";
 import CareerEraThread from "@/components/game/workspace/CareerEraThread";
 import { YouthActiveCaseBoard } from "@/components/game/workspace/desk/YouthActiveCaseBoard";
@@ -77,7 +77,7 @@ export function YouthDeskDashboard({
         className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7"
         data-tutorial-id="dashboard-overview"
       >
-        <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.95} />
+        <ScreenBackground src={firstHour ? "/images/backgrounds/activities/school-match.png" : "/images/backgrounds/dashboard-office.png"} opacity={firstHour ? 0.45 : 0.95} />
         <div className="relative z-10 mx-auto max-w-[1480px]">
           <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
@@ -95,6 +95,7 @@ export function YouthDeskDashboard({
                 </p>
               </div>
             </div>
+            {!firstHour && (
             <div className="flex flex-wrap items-center gap-2" data-testid="desk-week-status">
               <span className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${phaseBadgeClassName}`}>
                 {phaseLabel}
@@ -115,6 +116,7 @@ export function YouthDeskDashboard({
                 {Math.round(scout.fatigue)}% fatigue
               </span>
             </div>
+            )}
           </header>
 
           {!firstHour && dashboardWorkspace && (
@@ -215,7 +217,7 @@ function OpeningHourDesk({
     >
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
         {player && (
-          <YouthPortrait
+          <YouthPortraitWithFallback
             playerId={player.id}
             nationality={player.nationality}
             age={player.age}

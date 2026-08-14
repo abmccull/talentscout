@@ -86,7 +86,7 @@ export function ChoiceCard({
 
   if (type === "radio") {
     return (
-      <label className={surface}>
+      <label className={`${surface} has-[:focus-visible]:outline has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-3 has-[:focus-visible]:outline-[color:var(--ring)]`}>
         <input
           type="radio"
           name={name}

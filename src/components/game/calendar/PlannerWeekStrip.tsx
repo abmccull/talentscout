@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import type { Activity } from "@/engine/core/types";
 import { X } from "lucide-react";
-import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { ACTIVITY_DISPLAY } from "./ActivityCard";
 
 interface PlannerWeekStripProps {
@@ -230,7 +230,7 @@ export function PlannerWeekStrip({
                 <div className="mt-4 space-y-3">
                   <div className="flex items-start gap-2">
                     {activity.targetId ? (
-                      <YouthPortrait
+                      <YouthPortraitWithFallback
                         playerId={activity.targetId}
                         size={48}
                         className="mt-0.5 shrink-0"

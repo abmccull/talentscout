@@ -12,5 +12,8 @@ describe("lens dual-coding", () => {
       expect(visual.className).not.toMatch(/text-(blue|orange|purple|yellow|red|emerald)-/);
       expect(lensShapeClass(visual.shape).length).toBeGreaterThan(0);
     }
+
+    expect(LENS_VISUAL.general.className).toBe("signal-general");
+    expect(LENS_VISUAL.mental.shape).toBe("plus");
   });
 });

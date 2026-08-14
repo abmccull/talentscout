@@ -21,10 +21,11 @@
   --text-meta: 0.8125rem;
   --text-ui: 0.875rem;
   --text-body: 1rem;
-  --signal-focus: #d4a843;
-  --signal-moment: #f0c14b;
-  --signal-warn: #e8a54b;
-  --signal-danger: #ef4444;
+  --signal-focus: #5b8def;
+  --signal-moment: #d4a843;
+  --signal-warn: #e07a3d;
+  --signal-danger: #c44b6a;
+  --signal-general: #aeb7c2;
 }
 
 .text-eyebrow {
@@ -146,20 +147,23 @@ html.cb-deuteranopia {
   --ring: #f0c14b;
   --signal-focus: #5b8def;
   --signal-moment: #f0c14b;
-  --signal-warn: #e8a54b;
+  --signal-warn: #2aa198;
   --signal-danger: #c44b6a;
+  --signal-general: #d7dce3;
 }
 html.cb-tritanopia {
   --signal-focus: #2f9e6b;
   --signal-moment: #c44b6a;
   --signal-warn: #d9893b;
-  --signal-danger: #c44b6a;
+  --signal-danger: #5b8def;
+  --signal-general: #d7dce3;
 }
 
 .signal-focus { color: var(--signal-focus); }
 .signal-moment { color: var(--signal-moment); }
 .signal-warn { color: var(--signal-warn); }
 .signal-danger { color: var(--signal-danger); }
+.signal-general { color: var(--signal-general); }
 .bg-signal-focus { background-color: var(--signal-focus); }
 .bg-signal-moment { background-color: var(--signal-moment); }
 
