@@ -12,6 +12,7 @@ import { getGuidedMilestoneInstruction } from "./guidedMilestoneInstruction";
 import type { GuidedMilestoneId } from "@/stores/tutorialStore";
 import { parseConceptText } from "@/components/ui/GameTerm";
 import { isHalfTimePhase } from "@/engine/observation/session";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,6 +97,50 @@ function computePopupPosition(
   return { top, left };
 }
 
+function rectsOverlap(
+  card: { top: number; left: number; width: number; height: number },
+  target: TargetRect,
+  pad = 8,
+): boolean {
+  return !(
+    card.left + card.width + pad <= target.left
+    || target.left + target.width + pad <= card.left
+    || card.top + card.height + pad <= target.top
+    || target.top + target.height + pad <= card.top
+  );
+}
+
+function placeWithoutCoveringTarget(
+  rect: TargetRect,
+  preferredSide: TutorialStep["position"],
+  cardWidth: number,
+  cardHeight: number,
+): PopupPosition {
+  const order: TutorialStep["position"][] = [
+    preferredSide,
+    "bottom",
+    "top",
+    "right",
+    "left",
+  ];
+  const seen = new Set<string>();
+  for (const side of order) {
+    if (seen.has(side)) continue;
+    seen.add(side);
+    const pos = computePopupPosition(rect, side, cardWidth, cardHeight);
+    if (!rectsOverlap({ ...pos, width: cardWidth, height: cardHeight }, rect)) {
+      return pos;
+    }
+  }
+  const targetIsTop = rect.top + rect.height / 2 < window.innerHeight / 2;
+  return {
+    left: 8,
+    top: targetIsTop
+      ? Math.max(8, window.innerHeight - cardHeight - 8)
+      : 8,
+  };
+}
+
 /** Derive two-letter initials from a full name. */
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -165,6 +210,7 @@ export function MentorOverlay() {
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
   const [popupPos, setPopupPos] = useState<PopupPosition>({ top: 0, left: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
+  const continueRef = useRef<HTMLButtonElement>(null);
 
   // ---------------------------------------------------------------------------
   // Derive active mode (priority order)
@@ -193,6 +239,10 @@ export function MentorOverlay() {
     }
     return { kind: "none" };
   })();
+
+  useDialogFocusTrap(cardRef, activeMode.kind !== "none", {
+    initialFocusRef: continueRef,
+  });
 
   // ---------------------------------------------------------------------------
   // Target selector resolution
@@ -258,7 +308,7 @@ export function MentorOverlay() {
 
     const cardWidth = cardRef.current?.offsetWidth ?? 360;
     const cardHeight = cardRef.current?.offsetHeight ?? 220;
-    setPopupPos(computePopupPosition(rect, preferredSide, cardWidth, cardHeight));
+    setPopupPos(placeWithoutCoveringTarget(rect, preferredSide, cardWidth, cardHeight));
   }, [targetSelectorKey, preferredSide]);
 
   useEffect(() => {
@@ -511,7 +561,7 @@ export function MentorOverlay() {
       <div
         ref={cardRef}
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-label={`Mentor: ${title}`}
         style={{
           position: "fixed",
@@ -610,9 +660,10 @@ export function MentorOverlay() {
 
           {isOffGuidedScreen ? (
             <button
+              ref={continueRef}
               type="button"
               onClick={handleReturnToGuidedStep}
-              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-zinc-950 transition hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-[color:var(--primary)] px-3 py-2 text-xs font-bold text-[color:var(--primary-foreground)] transition"
             >
               <ArrowLeft size={14} aria-hidden="true" />
               Return to guided step
@@ -623,8 +674,9 @@ export function MentorOverlay() {
             </span>
           ) : (
             <button
+              ref={continueRef}
               onClick={handleNext}
-              className={`rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 ${btnClass}`}
+              className={`min-h-11 rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition ${btnClass}`}
             >
               {nextLabel}
             </button>

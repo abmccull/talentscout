@@ -294,9 +294,9 @@ test.describe("guided opening discovery hook", () => {
     await page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: /Test in harder context/i }).locator("..").click();
     await page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: /^Working\b/i }).locator("..").click();
     await page.getByRole("button", { name: "File initial assessment" }).click();
-    await gamePage.waitForScreen("dashboard");
+    await gamePage.waitForScreen("calendar");
     await expect(page.locator('[data-tutorial-id="report-marketplace-prompt"]')).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Scouting Desk" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Planner/i })).toBeVisible();
 
     const latestReport = await page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;

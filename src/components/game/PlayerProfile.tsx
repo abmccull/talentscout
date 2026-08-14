@@ -28,7 +28,7 @@ import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { hasObservableRecurringInjuryConcern } from "@/engine/scout/playerFacingIntel";
 import { Tooltip } from "@/components/ui/tooltip";
-import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
@@ -578,7 +578,7 @@ export function PlayerProfile() {
         {/* Header */}
         <div className="mb-5 flex flex-col gap-5 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 xl:flex-row xl:items-start xl:justify-between sm:p-6">
           <div className="flex flex-col items-start gap-4 sm:flex-row">
-            <PlayerAvatar
+            <YouthPortrait
               playerId={player.id}
               nationality={player.nationality}
               age={player.age}

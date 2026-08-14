@@ -10,6 +10,7 @@ import {
   queueGameplayAutosave,
   snapshotPersistedGameState,
 } from "./persistGameplayAutosave";
+import { bookOpeningFollowUp } from "@/engine/youth/openingFollowUp";
 import type {
   ConvictionLevel,
   FinancialRecord,
@@ -725,7 +726,7 @@ export function createReportActions(get: GetState, set: SetState) {
           }
         : null;
 
-      const nextState = synchronizeInternationalAssignmentProgress({
+      const committedState = synchronizeInternationalAssignmentProgress({
         ...gameState,
         reportWorkItems: preparedWorkItem
           ? Object.fromEntries(
@@ -755,9 +756,12 @@ export function createReportActions(get: GetState, set: SetState) {
           ...(revisionCostMessage ? [revisionCostMessage] : []),
         ],
       });
+      const nextState = isOpeningReport
+        ? bookOpeningFollowUp(committedState)
+        : committedState;
       set({
         gameState: nextState,
-        currentScreen: isOpeningReport ? "dashboard" : "reportHistory",
+        currentScreen: isOpeningReport ? "calendar" : "reportHistory",
         ...(shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),
       });
       queueGameplayAutosave(snapshotPersistedGameState(nextState), set);

@@ -126,7 +126,10 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
   await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
   await gamePage.waitForScreen("reportWriter");
   await gamePage.submitCurrentReportViaUI("recommend");
-  await gamePage.waitForScreen("dashboard");
+  const landed = await gamePage.getCurrentScreen();
+  if (landed !== "calendar" && landed !== "dashboard") {
+    await gamePage.waitForScreen("calendar");
+  }
   await expect(gamePage.page.locator('[data-tutorial-id="report-marketplace-prompt"]')).toHaveCount(0);
 
   const latestReport = await gamePage.page.evaluate(() => {

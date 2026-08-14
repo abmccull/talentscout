@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { Activity } from "@/engine/core/types";
 import { X } from "lucide-react";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
 import { ACTIVITY_DISPLAY } from "./ActivityCard";
 
 interface PlannerWeekStripProps {
@@ -214,9 +215,13 @@ export function PlannerWeekStrip({
               {activity && display && Icon ? (
                 <div className="mt-4 space-y-3">
                   <div className="flex items-start gap-2">
+                    {activity.targetId ? (
+                      <YouthPortrait playerId={activity.targetId} size={32} className="mt-0.5 shrink-0" />
+                    ) : (
                     <span className={`mt-0.5 rounded-lg border border-white/10 bg-black/30 p-2 ${display.color}`}>
                       <Icon size={16} aria-hidden="true" />
                     </span>
+                    )}
                     <div className="min-w-0">
                       <p className={`text-sm font-semibold ${display.color}`}>{display.label}</p>
                       <p className="mt-1 line-clamp-3 text-xs leading-5 text-zinc-300">{activity.description}</p>

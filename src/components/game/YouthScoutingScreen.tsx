@@ -6,6 +6,7 @@ import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -298,6 +299,13 @@ function YouthCard({
     >
       {/* Header */}
       <div className="mb-3 flex items-start justify-between gap-2">
+        <YouthPortrait
+          playerId={youth.player.id}
+          nationality={youth.player.nationality}
+          age={youth.player.age}
+          size={48}
+          className="shrink-0"
+        />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate font-semibold text-white">

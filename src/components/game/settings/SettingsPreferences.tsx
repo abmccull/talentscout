@@ -327,7 +327,7 @@ export function SettingsPreferences() {
 
             <div className="space-y-2">
               <label htmlFor="colorblind-mode" className="text-sm font-medium text-zinc-300">
-                Colorblind mode
+                Safer colors
               </label>
               <select
                 id="colorblind-mode"
@@ -338,13 +338,16 @@ export function SettingsPreferences() {
                     event.target.value as AppSettings["colorblindMode"],
                   )
                 }
-                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white"
               >
-                <option value="none">None</option>
-                <option value="protanopia">Protanopia (red deficiency)</option>
-                <option value="deuteranopia">Deuteranopia (green deficiency)</option>
-                <option value="tritanopia">Tritanopia (blue deficiency)</option>
+                <option value="none">Default palette</option>
+                <option value="protanopia">Safer for red-weak vision</option>
+                <option value="deuteranopia">Safer for green-weak vision</option>
+                <option value="tritanopia">Safer for blue-weak vision</option>
               </select>
+              <p className="text-xs text-quiet">
+                Remaps status colors. It does not simulate a color vision deficiency.
+              </p>
             </div>
           </CardContent>
         </Card>

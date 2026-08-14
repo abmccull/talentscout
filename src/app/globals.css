@@ -21,6 +21,10 @@
   --text-meta: 0.8125rem;
   --text-ui: 0.875rem;
   --text-body: 1rem;
+  --signal-focus: #d4a843;
+  --signal-moment: #f0c14b;
+  --signal-warn: #e8a54b;
+  --signal-danger: #ef4444;
 }
 
 .text-eyebrow {
@@ -134,10 +138,30 @@ html.ui-contrast-high [class*="border-"] {
   border-color: rgba(255, 255, 255, 0.45) !important;
 }
 
-/* Colorblind SVG filters — applied via SettingsApplier */
-html.cb-protanopia  { filter: url('#protanopia-filter');  }
-html.cb-deuteranopia { filter: url('#deuteranopia-filter'); }
-html.cb-tritanopia  { filter: url('#tritanopia-filter');  }
+/* Safer palettes — remaps meaning colors. Never simulate a deficiency. */
+html.cb-protanopia,
+html.cb-deuteranopia {
+  --primary: #f0c14b;
+  --accent: #f0c14b;
+  --ring: #f0c14b;
+  --signal-focus: #5b8def;
+  --signal-moment: #f0c14b;
+  --signal-warn: #e8a54b;
+  --signal-danger: #c44b6a;
+}
+html.cb-tritanopia {
+  --signal-focus: #2f9e6b;
+  --signal-moment: #c44b6a;
+  --signal-warn: #d9893b;
+  --signal-danger: #c44b6a;
+}
+
+.signal-focus { color: var(--signal-focus); }
+.signal-moment { color: var(--signal-moment); }
+.signal-warn { color: var(--signal-warn); }
+.signal-danger { color: var(--signal-danger); }
+.bg-signal-focus { background-color: var(--signal-focus); }
+.bg-signal-moment { background-color: var(--signal-moment); }
 
 /* Reduced motion — collapses all animations/transitions to near-instant */
 html.reduced-motion *,

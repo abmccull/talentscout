@@ -37,7 +37,7 @@ import {
 } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
-import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
 import { useAudio } from "@/lib/audio/useAudio";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
@@ -671,7 +671,7 @@ export function ReportWriter() {
     return (
       <GameLayout>
         <div className="relative flex min-h-[70vh] items-center justify-center p-4 sm:p-6">
-          <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
+          <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={conciseOpeningMode ? 0.5 : 0.82} />
           <Card className="relative z-10 w-full max-w-2xl border-amber-400/25 bg-[#10151b]/98 shadow-2xl shadow-black/40">
             <CardContent className="p-6 text-center sm:p-8">
               <Target className="mx-auto text-amber-300" size={30} aria-hidden="true" />
@@ -835,7 +835,7 @@ export function ReportWriter() {
   return (
     <GameLayout>
       <div className="relative min-h-full p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
-        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
+        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={conciseOpeningMode ? 0.5 : 0.82} />
         <div className="relative z-10 mx-auto max-w-6xl">
         <button
           onClick={handleBack}
@@ -847,15 +847,19 @@ export function ReportWriter() {
         </button>
 
         <div className="mb-5 flex items-center gap-4 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 sm:p-6">
-          <PlayerAvatar
+          <YouthPortrait
             playerId={player.id}
             nationality={player.nationality}
             age={player.age}
             size={64}
           />
           <div>
-            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.18em] text-emerald-300">Scouting judgment</p>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{t("title")}</h1>
+            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">
+              {conciseOpeningMode ? "Write the name down" : "Scouting judgment"}
+            </p>
+            <h1 className={`text-2xl font-bold tracking-tight text-white sm:text-3xl ${conciseOpeningMode ? "font-handwritten" : ""}`}>
+              {conciseOpeningMode ? `${player.firstName} ${player.lastName}` : t("title")}
+            </h1>
             <p className="text-sm text-zinc-400 mt-1">
               {player.firstName} {player.lastName} — {player.position}, Age {player.age}
               {club ? ` — ${club.name}` : ""}
@@ -1517,7 +1521,7 @@ export function ReportWriter() {
 
         <div id="report-section-evidence" className="scroll-mt-28 space-y-6">
           {conciseOpeningMode ? (
-            <div data-tutorial-id="report-conviction" className="space-y-4">
+            <div data-tutorial-id="report-conviction" className="space-y-4 rounded-2xl border border-[color:var(--primary)]/20 bg-[#14110c] p-4 shadow-xl sm:p-6">
               <InitialAssessmentBuilder
                 key={canonicalPlayerId}
                 cards={initialAssessmentCards}
@@ -1532,16 +1536,16 @@ export function ReportWriter() {
                 }}
               />
               <div
-                className="sticky bottom-3 z-20 grid gap-3 rounded-2xl border border-white/10 bg-[#0d1216]/95 p-4 shadow-2xl shadow-black/45 backdrop-blur sm:grid-cols-[1fr_auto_auto] sm:items-center"
+                className="sticky bottom-3 z-20 grid gap-3 rounded-2xl border border-[#0A1628]/15 bg-[#0A1628] p-4 text-[#F0EBE3] shadow-2xl sm:grid-cols-[1fr_auto_auto] sm:items-center"
                 data-tutorial-id="report-submit"
               >
-                <p className={`text-sm ${canSubmit ? "text-emerald-200" : "text-amber-200"}`} aria-live="polite">
+                <p className={`text-sm ${canSubmit ? "text-[#F0EBE3]" : "text-amber-200"}`} aria-live="polite">
                   {canSubmit
-                    ? "Your evidence, uncertainty, next test, and confidence are ready to file."
+                    ? "Ready to file. Planner will hold the second look."
                     : reportStatus.primaryBlocker ?? "Complete the five assessment decisions to file this first read."}
                 </p>
                 <Button className="min-h-11" variant="outline" onClick={handleBack}>
-                  {tc("cancel")}
+                  Back to the decision
                 </Button>
                 <Button className="min-h-11" onClick={handleSubmit} disabled={!canSubmit}>
                   <FileText size={14} className="mr-2" aria-hidden="true" />
