@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isYouthFirstHour, isYouthOpeningWeek } from "@/lib/youthFirstHour";
+import {
+  isYouthFirstHour,
+  isYouthOpeningWeek,
+  shouldHoldAchievementToasts,
+  shouldShowYouthInbox,
+} from "@/lib/youthFirstHour";
 import { cycleDialogTab, isElementVisible } from "@/lib/a11y/dialogFocus";
 
 describe("youth first-hour rail", () => {
@@ -30,6 +35,26 @@ describe("youth first-hour rail", () => {
     })).toBe(false);
     expect(isYouthOpeningWeek({ currentWeek: 1, currentSeason: 1 })).toBe(true);
     expect(isYouthOpeningWeek({ currentWeek: 2, currentSeason: 1 })).toBe(false);
+  });
+
+  it("hides inbox and holds achievement juice until a day is booked", () => {
+    const firstHour = {
+      currentWeek: 1,
+      currentSeason: 1,
+      openingCase: { id: "opening" },
+      reports: { r1: {} },
+    };
+    const booked = {
+      ...firstHour,
+      schedule: { activities: [{ id: "school-match" }] },
+    };
+
+    expect(shouldShowYouthInbox(firstHour)).toBe(false);
+    expect(shouldShowYouthInbox(booked)).toBe(true);
+    expect(shouldHoldAchievementToasts("reportWriter", firstHour)).toBe(true);
+    expect(shouldHoldAchievementToasts("dashboard", firstHour)).toBe(true);
+    expect(shouldHoldAchievementToasts("observation", booked)).toBe(true);
+    expect(shouldHoldAchievementToasts("dashboard", booked)).toBe(false);
   });
 });
 

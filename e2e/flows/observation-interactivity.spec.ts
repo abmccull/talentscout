@@ -100,7 +100,7 @@ test.describe("interactive observation pitch", () => {
     const controls = page.getByTestId("mobile-observation-controls");
     const controlsBox = await controls.boundingBox();
     expect(controlsBox).not.toBeNull();
-    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(844 - 63);
+    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(844 + 1);
     await expect(page.getByRole("button", { name: "Next phase" })).toBeVisible();
 
     const animations = await page
@@ -136,7 +136,7 @@ test.describe("interactive observation pitch", () => {
     gamePage.expectNoConsoleErrors();
   });
 
-  test("tablet action controls align with the desktop sidebar breakpoint", async ({ gamePage }) => {
+  test("tablet action controls sit on the watch floor without overflowing", async ({ gamePage }) => {
     const page = gamePage.page;
 
     for (const viewport of [
@@ -148,7 +148,7 @@ test.describe("interactive observation pitch", () => {
       await expect(controls).toBeVisible();
       const box = await controls.boundingBox();
       expect(box).not.toBeNull();
-      expect(box!.x).toBeGreaterThanOrEqual(239);
+      expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(Math.abs(box!.y + box!.height - viewport.height)).toBeLessThanOrEqual(1);
       expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
 

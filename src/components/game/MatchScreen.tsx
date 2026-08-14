@@ -14,6 +14,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
+import { LENS_KEYS, LENS_VISUAL } from "@/components/game/observation/lensVisual";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -21,14 +22,12 @@ import { useTranslations } from "next-intl";
 
 type FocusLens = "technical" | "physical" | "mental" | "tactical" | "general";
 
-const LENS_KEYS: FocusLens[] = ["technical", "physical", "mental", "tactical", "general"];
-
 const LENS_COLORS: Record<FocusLens, string> = {
-  technical: "text-blue-400",
-  physical:  "text-orange-400",
-  mental:    "text-purple-400",
-  tactical:  "text-yellow-400",
-  general:   "text-zinc-400",
+  technical: LENS_VISUAL.technical.className,
+  physical: LENS_VISUAL.physical.className,
+  mental: LENS_VISUAL.mental.className,
+  tactical: LENS_VISUAL.tactical.className,
+  general: LENS_VISUAL.general.className,
 };
 
 // ---------------------------------------------------------------------------

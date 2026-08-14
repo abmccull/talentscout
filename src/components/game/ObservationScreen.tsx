@@ -64,6 +64,11 @@ import {
   QuickInteractionContent,
 } from "./ObservationPhase";
 import { ObservationPitch } from "./observation/ObservationPitch";
+import {
+  LENS_KEYS,
+  LENS_VISUAL,
+  lensShapeClass,
+} from "./observation/lensVisual";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isOpeningDiscoverySession } from "@/engine/youth/openingCase";
 import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
@@ -72,32 +77,24 @@ import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
 // Constants
 // ---------------------------------------------------------------------------
 
-const LENS_KEYS: LensType[] = ["technical", "physical", "mental", "tactical", "general"];
-
-const LENS_COLORS: Record<LensType, string> = {
-  technical: "text-blue-400",
-  physical:  "text-orange-400",
-  mental:    "text-purple-400",
-  tactical:  "text-yellow-400",
-  general:   "text-zinc-400",
-};
-
-const LENS_BORDER: Record<LensType, string> = {
-  technical: "border-blue-500/30",
-  physical:  "border-orange-500/30",
-  mental:    "border-purple-500/30",
-  tactical:  "border-yellow-500/30",
-  general:   "border-zinc-500/30",
-};
+function LensMark({ lens }: { lens: LensType }) {
+  const visual = LENS_VISUAL[lens];
+  return (
+    <i
+      className={`inline-block shrink-0 ${lensShapeClass(visual.shape)}`}
+      aria-hidden="true"
+    />
+  );
+}
 
 const REACTION_CONFIG: Record<
   SessionFlaggedMoment["reaction"],
   { label: string; icon: React.ElementType; className: string }
 > = {
-  promising:      { label: "Promising",      icon: CheckCircle2, className: "text-emerald-400" },
-  concerning:     { label: "Concerning",      icon: AlertTriangle, className: "text-red-400" },
-  interesting:    { label: "Interesting",     icon: HelpCircle, className: "text-amber-400" },
-  needs_more_data: { label: "Needs More Data", icon: Database, className: "text-blue-400" },
+  promising:      { label: "Promising",      icon: CheckCircle2, className: "signal-focus" },
+  concerning:     { label: "Concerning",      icon: AlertTriangle, className: "signal-danger" },
+  interesting:    { label: "Interesting",     icon: HelpCircle, className: "signal-moment" },
+  needs_more_data: { label: "Needs More Data", icon: Database, className: "text-zinc-300" },
 };
 
 const MODE_LABELS: Record<ObservationSession["mode"], string> = {
@@ -158,9 +155,9 @@ const MomentCard = memo(function MomentCard({
     <Card
       className={`border ${
         isFocused
-          ? "border-emerald-500/30 bg-emerald-500/5"
+          ? "border-[color:var(--signal-focus)]/35 bg-[color:var(--signal-focus)]/8"
           : "border-[#27272a] bg-[#0f0f0f]"
-      } ${moment.isStandout ? "ring-1 ring-amber-500/30" : ""}`}
+      } ${moment.isStandout ? "ring-1 ring-[color:var(--signal-moment)]/35" : ""}`}
     >
       <CardContent className="p-3">
         <div className="flex items-start justify-between gap-2">
@@ -415,7 +412,7 @@ const FocusPanel = memo(function FocusPanel({
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Eye size={14} className="text-emerald-500" aria-hidden="true" />
+            <Eye size={14} className="signal-focus" aria-hidden="true" />
             Focus Tokens
           </h3>
           <span className="text-xs text-zinc-400 tabular-nums">
@@ -428,7 +425,7 @@ const FocusPanel = memo(function FocusPanel({
             <div
               key={i}
               className={`h-2 flex-1 rounded-full transition-colors ${
-                i < focusTokens.available ? "bg-emerald-500" : "bg-zinc-700"
+                i < focusTokens.available ? "bg-[color:var(--signal-focus)]" : "bg-zinc-700"
               }`}
               aria-hidden="true"
             />
@@ -445,12 +442,13 @@ const FocusPanel = memo(function FocusPanel({
           <div className="space-y-2">
             {focusedPlayers.map((player) => {
               const lens = player.currentLens ?? "general";
+              const visual = LENS_VISUAL[lens];
               return (
                 <div
                   key={player.playerId}
-                  className={`rounded-md border ${LENS_BORDER[lens]} bg-[#141414] p-3 ${
+                  className={`rounded-md border ${visual.borderClassName} bg-[#141414] p-3 ${
                     player.playerId === selectedPlayerId
-                      ? "ring-1 ring-emerald-400/70"
+                      ? "ring-1 ring-[color:var(--signal-focus)]/70"
                       : ""
                   }`}
                 >
@@ -471,7 +469,10 @@ const FocusPanel = memo(function FocusPanel({
                     className="flex min-h-9 items-center justify-between rounded border border-[#27272a] bg-[#0a0a0a] px-2 py-1.5 text-xs"
                     aria-label={`${lens} observation lens locked for ${player.name}`}
                   >
-                    <span className={`font-medium capitalize ${LENS_COLORS[lens]}`}>{lens}</span>
+                    <span className={`flex items-center gap-2 font-medium ${visual.className}`}>
+                      <LensMark lens={lens} />
+                      {visual.label}
+                    </span>
                     <span className="text-eyebrow text-zinc-400">Locked for this focus</span>
                   </div>
                 </div>
@@ -494,7 +495,7 @@ const FocusPanel = memo(function FocusPanel({
                 <div key={player.playerId}>
                   <div className={`flex min-h-11 items-center justify-between rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-[#141414] transition motion-reduce:transition-none ${
                     player.playerId === selectedPlayerId
-                      ? "bg-emerald-500/10 ring-1 ring-emerald-400/30"
+                      ? "bg-[color:var(--signal-focus)]/10 ring-1 ring-[color:var(--signal-focus)]/30"
                       : ""
                   }`}>
                     <div className="flex items-center gap-2 min-w-0">
@@ -510,7 +511,7 @@ const FocusPanel = memo(function FocusPanel({
                         onClick={() =>
                           setPendingFocusId(isPending ? null : player.playerId)
                         }
-                        className="ml-2 min-h-10 shrink-0 rounded px-2.5 py-1 text-eyebrow text-emerald-400 transition motion-reduce:transition-none hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400"
+                        className="ml-2 min-h-10 shrink-0 rounded px-2.5 py-1 text-eyebrow signal-focus transition motion-reduce:transition-none hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--signal-focus)]"
                         aria-label={`Add focus to ${player.name}`}
                         aria-expanded={isPending}
                       >
@@ -532,10 +533,11 @@ const FocusPanel = memo(function FocusPanel({
                               : undefined
                           }
                           onClick={() => handleConfirmFocus(player.playerId, lens)}
-                          className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition motion-reduce:transition-none hover:bg-[#27272a] ${LENS_COLORS[lens]}`}
+                          className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition motion-reduce:transition-none hover:bg-[#27272a] ${LENS_VISUAL[lens].className}`}
                           aria-label={`Use ${lens} lens for ${player.name}`}
                         >
-                          <span className="capitalize font-medium">{lens}</span>
+                          <LensMark lens={lens} />
+                          <span className="font-medium">{LENS_VISUAL[lens].label}</span>
                         </button>
                       ))}
                     </div>
@@ -1502,6 +1504,7 @@ export function ObservationScreen() {
 
   const { state, mode } = activeSession;
   const ModeIcon = MODE_ICONS[mode];
+  const isLiveWatch = mode === "fullObservation";
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -1515,7 +1518,7 @@ export function ObservationScreen() {
           <div className="shrink-0 border-b border-[#27272a] bg-[#0c0c0c] px-3 py-2.5 sm:px-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <ModeIcon size={14} className="text-emerald-400 shrink-0" aria-hidden="true" />
+                <ModeIcon size={14} className="signal-focus shrink-0" aria-hidden="true" />
                 <span className="truncate text-sm font-semibold text-zinc-200">
                   {MODE_LABELS[mode]}
                 </span>
@@ -1588,12 +1591,16 @@ export function ObservationScreen() {
 
           {state === "active" && currentPhase && (
             <div
-              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden lg:flex-row lg:overflow-hidden"
+              className={`flex min-h-0 min-w-0 flex-1 overflow-x-hidden ${
+                isLiveWatch
+                  ? "flex-col pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
+                  : "flex-col lg:flex-row lg:overflow-hidden"
+              }`}
               data-testid="active-observation-layout"
             >
 
-              {/* ── Left: Phase content (60%) ───────────────────────────── */}
-              <div className="flex min-w-0 flex-none flex-col lg:flex-1 lg:self-stretch lg:overflow-hidden">
+              {/* ── Stage: stadium fills the remaining watch room ──────── */}
+              <div className={`flex min-w-0 flex-col ${isLiveWatch ? "min-h-0 flex-1" : "flex-none lg:flex-1 lg:self-stretch lg:overflow-hidden"}`}>
 
                 {/* Phase description banner */}
                 <div className="shrink-0 border-b border-[#27272a] bg-[#0f0f0f] px-4 py-2">
@@ -1633,7 +1640,7 @@ export function ObservationScreen() {
                     <span className="text-eyebrow text-zinc-400">Observation clarity</span>
                     <div className="flex-1 h-1 bg-[#27272a] rounded-full overflow-hidden max-w-[80px]">
                       <div
-                        className="h-full rounded-full bg-emerald-500/60"
+                        className="h-full rounded-full bg-[color:var(--signal-focus)]/70"
                         style={{
                           width: `${Math.round((1 - activeSession.venueAtmosphere.chaosLevel) * 100)}%`,
                         }}
@@ -1650,10 +1657,10 @@ export function ObservationScreen() {
                   />
                 )}
 
-                {/* Phase content — scrollable */}
-                <div className="min-h-0 flex-none p-3 sm:p-4 lg:flex-1 lg:overflow-y-auto">
-                  {mode === "fullObservation" ? (
-                    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(420px,1.15fr)_minmax(300px,0.85fr)]">
+                {/* Phase content — live watch is a stadium, not a two-column desk */}
+                <div className={`min-h-0 ${isLiveWatch ? "relative flex flex-1 flex-col" : "flex-none p-3 sm:p-4 lg:flex-1 lg:overflow-y-auto"}`}>
+                  {isLiveWatch ? (
+                    <>
                       <ObservationPitch
                         session={activeSession}
                         phase={currentPhase}
@@ -1661,14 +1668,14 @@ export function ObservationScreen() {
                         onSelectPlayer={handlePitchPlayerSelect}
                       />
                       <section
-                        className="min-w-0"
+                        className="notebook-paper z-20 max-h-[38vh] overflow-y-auto border-t border-white/10 p-3 sm:p-4 lg:absolute lg:bottom-4 lg:right-4 lg:top-24 lg:max-h-none lg:w-[min(22rem,36%)] lg:rounded-xl lg:border lg:border-white/10 lg:shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
                         aria-labelledby="observation-evidence-heading"
                         data-tutorial-id="observation-evidence-feed"
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <h2
                             id="observation-evidence-heading"
-                            className="text-eyebrow font-semibold uppercase tracking-[0.13em] text-zinc-400"
+                            className="font-handwritten text-lg font-semibold text-zinc-100"
                           >
                             What you noticed
                           </h2>
@@ -1688,7 +1695,7 @@ export function ObservationScreen() {
                           onStrategicChoice={handleStrategicChoice}
                         />
                       </section>
-                    </div>
+                    </>
                   ) : (
                     <PhaseContent
                       phase={currentPhase}
@@ -1705,8 +1712,8 @@ export function ObservationScreen() {
                 </div>
               </div>
 
-              {/* ── Right sidebar: mode-aware ──────────────────────────── */}
-              <aside className="hidden w-72 shrink-0 flex-col overflow-hidden border-l border-[#27272a] bg-[#0c0c0c] lg:flex">
+              {/* Investigation / analysis keep a desktop rail. Live watch uses the sheet. */}
+              <aside className={`w-72 shrink-0 flex-col overflow-hidden border-l border-[#27272a] bg-[#0c0c0c] ${isLiveWatch ? "hidden" : "hidden lg:flex"}`}>
 
                 {/* Sidebar content based on mode */}
                 {mode === "fullObservation" ? (
@@ -1795,17 +1802,17 @@ export function ObservationScreen() {
                 </div>
               </aside>
 
-              {/* Mobile context sheet: stays in the single vertical flow. */}
-              <section className="border-t border-[#27272a] bg-[#0c0c0c] lg:hidden">
+              {/* Focus sheet: live watch uses it at every width. Other modes stay mobile-only. */}
+              <section className={`border-t border-[#27272a] bg-[#0c0c0c] ${isLiveWatch ? "" : "lg:hidden"}`}>
                 <button
                   ref={mobileFocusToggleRef}
                   type="button"
                   onClick={() => setShowMobileFocus((open) => !open)}
-                  className="flex min-h-12 w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400"
+                  className="flex min-h-12 w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--signal-focus)]"
                   aria-expanded={showMobileFocus}
                   aria-controls="mobile-observation-context"
                 >
-                  <SlidersHorizontal size={15} className="shrink-0 text-emerald-400" aria-hidden="true" />
+                  <SlidersHorizontal size={15} className="signal-focus shrink-0" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs font-semibold text-zinc-200">
                       {mode === "fullObservation" ? "Focus targets and lenses" : "Session context"}
@@ -1830,7 +1837,7 @@ export function ObservationScreen() {
                 <>
                   <button
                     type="button"
-                    className="fixed inset-0 z-40 cursor-default bg-black/60 backdrop-blur-[1px] lg:hidden"
+                    className={`fixed inset-0 z-40 cursor-default bg-black/60 backdrop-blur-[1px] ${isLiveWatch ? "" : "lg:hidden"}`}
                     onClick={closeMobileFocus}
                     aria-label="Dismiss focus sheet backdrop"
                     tabIndex={-1}
@@ -1842,7 +1849,11 @@ export function ObservationScreen() {
                     aria-modal="true"
                     aria-labelledby="mobile-observation-context-title"
                     onKeyDown={handleMobileFocusKeyDown}
-                    className="fixed inset-x-3 bottom-[calc(8.75rem+env(safe-area-inset-bottom))] z-50 flex max-h-[56dvh] flex-col overflow-hidden rounded-2xl border border-emerald-300/20 bg-[#0b0f0d] shadow-[0_24px_70px_rgba(0,0,0,0.65)] md:bottom-20 md:left-[15.75rem] md:right-3 lg:hidden"
+                    className={`fixed inset-x-3 z-50 flex max-h-[56dvh] flex-col overflow-hidden rounded-2xl border border-[color:var(--signal-focus)]/25 bg-[#0b0f0d] shadow-[0_24px_70px_rgba(0,0,0,0.65)] ${
+                      isLiveWatch
+                        ? "bottom-[calc(6.5rem+env(safe-area-inset-bottom))]"
+                        : "bottom-[calc(8.75rem+env(safe-area-inset-bottom))] md:bottom-20 md:left-[15.75rem] md:right-3 lg:hidden"
+                    }`}
                   >
                     <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                       <div className="min-w-0">
@@ -1858,7 +1869,7 @@ export function ObservationScreen() {
                       <button
                         type="button"
                         onClick={closeMobileFocus}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--signal-focus)]"
                         aria-label="Close focus controls"
                       >
                         <X size={18} aria-hidden="true" />
@@ -1883,9 +1894,13 @@ export function ObservationScreen() {
                 </>
               )}
 
-              {/* Mobile actions remain reachable above the fixed workspace nav. */}
+              {/* Watch chrome has no rail. Live watch sits on the floor; other modes clear the workspace nav. */}
               <div
-                className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-white/10 bg-[#0a0d0b]/95 p-3 shadow-[0_-12px_30px_rgba(0,0,0,0.35)] backdrop-blur md:bottom-0 md:left-60 lg:hidden"
+                className={`fixed inset-x-0 z-20 border-t border-white/10 bg-[#0a0d0b]/95 p-3 shadow-[0_-12px_30px_rgba(0,0,0,0.35)] backdrop-blur ${
+                  isLiveWatch
+                    ? "bottom-0"
+                    : "bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 md:left-60 lg:hidden"
+                }`}
                 data-tutorial-id="observation-session-controls"
                 data-testid="mobile-observation-controls"
               >

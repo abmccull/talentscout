@@ -846,7 +846,11 @@ export function ReportWriter() {
           {t("backToProfile")}
         </button>
 
-        <div className="mb-5 flex items-center gap-4 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 sm:p-6">
+        <div className={`mb-5 flex items-center gap-4 p-5 shadow-xl shadow-black/20 sm:p-6 ${
+          conciseOpeningMode
+            ? "notebook-paper rounded-sm border border-amber-400/20"
+            : "rounded-2xl border border-white/10 bg-[#10151b]/95"
+        }`}>
           <YouthPortrait
             playerId={player.id}
             nationality={player.nationality}
@@ -867,6 +871,7 @@ export function ReportWriter() {
           </div>
         </div>
 
+        {!conciseOpeningMode && (
         <ReportWorkflowNavigator
           decisionsRemaining={decisionsRemaining}
           completedSectionCount={completedSectionCount}
@@ -878,6 +883,7 @@ export function ReportWriter() {
           nextRequiredStepId={workflow.nextRequiredStepId}
           onOpenSection={openWorkflowSection}
         />
+        )}
 
         {preparedWorkItem && (
           <PreparedReportWorkCallout
@@ -1521,7 +1527,7 @@ export function ReportWriter() {
 
         <div id="report-section-evidence" className="scroll-mt-28 space-y-6">
           {conciseOpeningMode ? (
-            <div data-tutorial-id="report-conviction" className="space-y-4 rounded-2xl border border-[color:var(--primary)]/20 bg-[#14110c] p-4 shadow-xl sm:p-6">
+            <div data-tutorial-id="report-conviction" className="notebook-paper space-y-4 rounded-sm border border-amber-400/20 p-4 shadow-xl sm:p-6">
               <InitialAssessmentBuilder
                 key={canonicalPlayerId}
                 cards={initialAssessmentCards}

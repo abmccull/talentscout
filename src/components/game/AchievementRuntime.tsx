@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AchievementToast } from "@/components/game/AchievementToast";
 import { useAchievementStore } from "@/stores/achievementStore";
 import { useGameStore } from "@/stores/gameStore";
+import { shouldHoldAchievementToasts } from "@/lib/youthFirstHour";
 
 /**
  * Keeps achievement evaluation and its notification UI out of the main-menu
@@ -20,14 +21,8 @@ export function AchievementRuntime() {
     }
   }, [checkAndUnlock, gameState]);
 
-  // Preserve critical scouting decisions as a single emotional beat. Newly
-  // earned achievements stay queued instead of covering observation, opening
-  // discovery, or a travel dossier on smaller screens.
-  if (
-    currentScreen === "observation"
-    || currentScreen === "openingDiscovery"
-    || currentScreen === "internationalView"
-  ) {
+  // Preserve the first-hour beat. Unlocks stay queued; the toast waits.
+  if (shouldHoldAchievementToasts(currentScreen, gameState)) {
     return null;
   }
 

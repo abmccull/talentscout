@@ -1,3 +1,20 @@
+# First-hour ceiling batch (2026-08-14)
+
+Leftover after A–F on `f8fd7a7`. Do not invent packages, NVDA, VO, or tags.
+
+- [x] Cinematic Watch: stadium fills the room; lens is a sheet; evidence is a notebook overlay
+- [x] Hide Inbox until a day is booked
+- [x] Dual-code leftover hue (lenses + first-hour rings)
+- [x] Paper notebook opening report (dark paper, no CRM navigator)
+- [x] Queue achievement toasts during first hour
+- [x] Typecheck + targeted tests + commit
+
+## Review
+
+Watch is now a stadium: full-bleed pitch, notebook overlay for evidence, focus as a sheet at every width. First-hour Inbox and achievement toasts stay backstage until a day is booked. Lenses are word + shape + token. Opening report is dark paper without the CRM navigator. Typecheck passed. Targeted tests passed (first-hour helpers, lens dual-code, type floor, report helpers, pitch model). Process attestations are still unverified.
+
+---
+
 # Launch consolidation (2026-08-13)
 
 Source: `tasks/LAUNCH_CONSOLIDATION_REPORT.md` from ship-gate + review-changes + design-audit + game-readiness-2.

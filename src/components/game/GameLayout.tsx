@@ -492,6 +492,14 @@ export function GameLayout({
   }
 
   const watchChrome = chrome === "watch";
+  const showInboxChrome = !firstHourChrome;
+  const firstHourFocus = firstHourChrome
+    ? "focus-visible:outline-amber-400"
+    : "focus-visible:outline-emerald-400";
+  const firstHourSelected = firstHourChrome
+    ? "bg-amber-400/12 font-semibold text-amber-200 ring-1 ring-inset ring-amber-400/20"
+    : "bg-emerald-400/12 font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20";
+  const firstHourMobileActive = firstHourChrome ? "text-amber-200" : "text-emerald-300";
 
   return (
     <div className="flex min-h-screen bg-[#090b0e]">
@@ -520,7 +528,7 @@ export function GameLayout({
             onClick={() => setSidebarOpen(true)}
             disabled={guidedSessionActive}
             title={guidedSessionActive ? "Finish the highlighted tutorial step first" : undefined}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+            className={`flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 ${firstHourFocus} disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent`}
             aria-label="Open navigation menu"
             aria-expanded={sidebarOpen}
             aria-controls="game-nav-sidebar"
@@ -536,11 +544,12 @@ export function GameLayout({
         </div>
         <div className="flex items-center justify-end">
           {!guidedSessionActive && <ScreenHelpButton placement="mobileHeader" />}
+          {showInboxChrome && (
           <button
             onClick={() => handleNavClick("inbox")}
             disabled={isGuidedNavigationLocked("inbox")}
             title={isGuidedNavigationLocked("inbox") ? "Finish the highlighted tutorial step first" : undefined}
-            className="relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+            className={`relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 ${firstHourFocus} disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent`}
             aria-label={unreadCount > 0 ? `Open inbox, ${unreadCount} unread` : "Open inbox"}
           >
             <Bell size={20} aria-hidden="true" />
@@ -550,6 +559,7 @@ export function GameLayout({
               </span>
             )}
           </button>
+          )}
         </div>
       </header>
 
@@ -592,20 +602,20 @@ export function GameLayout({
             </button>
           </div>
           {useYouthEarlyAccessNav && (
-            <span className="mt-2 inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-eyebrow font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <span className="mt-2 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-eyebrow font-semibold uppercase tracking-[0.14em] text-amber-200">
               Youth Scout · Early Access
             </span>
           )}
           <p className="mt-2 text-xs text-zinc-400">
             Week {currentWeek} — Season {currentSeason}
           </p>
-          {useYouthEarlyAccessNav && (
+          {useYouthEarlyAccessNav && showInboxChrome && (
             <button
               data-tutorial-id="nav-inbox"
               onClick={() => handleNavClick("inbox")}
               disabled={isGuidedNavigationLocked("inbox")}
               title={isGuidedNavigationLocked("inbox") ? "Finish the highlighted tutorial step first" : undefined}
-              className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm text-zinc-300 transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-white/10 disabled:hover:bg-white/[0.03]"
+              className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm text-zinc-300 transition hover:border-amber-400/30 hover:bg-amber-400/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-white/10 disabled:hover:bg-white/[0.03]"
             >
               <Bell size={16} aria-hidden="true" />
               <span className="flex-1 text-left">Inbox</span>
@@ -658,11 +668,11 @@ export function GameLayout({
                     disabled={isLocked}
                     title={lockReason}
                     aria-current={activeNavScreen === screen ? "page" : undefined}
-                    className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                    className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition focus-visible:outline focus-visible:outline-2 ${firstHourFocus} ${
                       isLocked
                         ? "cursor-not-allowed opacity-40 text-zinc-600"
                         : activeNavScreen === screen
-                          ? "bg-emerald-400/12 font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20"
+                          ? firstHourSelected
                           : "cursor-pointer text-zinc-300 hover:bg-white/5 hover:text-white"
                     }`}
                   >
@@ -757,11 +767,11 @@ export function GameLayout({
                 disabled={isTutorialLocked}
                 title={isTutorialLocked ? "Finish the highlighted tutorial step first" : undefined}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 ${firstHourFocus} ${
                   isTutorialLocked
                     ? "cursor-not-allowed text-zinc-600 opacity-40"
                     : isActive
-                      ? "text-emerald-300"
+                      ? firstHourMobileActive
                       : "text-zinc-400 hover:bg-white/5 hover:text-white"
                 }`}
               >

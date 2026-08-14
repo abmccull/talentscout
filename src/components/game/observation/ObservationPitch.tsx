@@ -88,31 +88,14 @@ export const ObservationPitch = memo(function ObservationPitch({
 
   return (
     <section
-      className="min-w-0 rounded-xl border border-white/10 bg-[#090d0b]/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:p-4"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col"
       aria-labelledby="observation-pitch-heading"
       data-testid="observation-pitch"
     >
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <Eye size={15} className="signal-moment" aria-hidden="true" />
-            <h2 id="observation-pitch-heading" className="text-sm font-semibold text-zinc-100">
-              {venue} · first half
-            </h2>
-          </div>
-          <p className="mt-0.5 text-meta text-quiet">
-            Watch the faces. Select the kid you need a second look at.
-          </p>
-        </div>
-        <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-eyebrow font-semibold uppercase tracking-[0.12em] text-zinc-300">
-          {PHASE_LABELS[phaseType] ?? "Live"}
-        </span>
-      </div>
-
       <div
         ref={pitchControlsRef}
-        className="relative aspect-[105/68] min-h-[220px] w-full overflow-hidden rounded-lg border border-white/10 bg-black shadow-inner sm:min-h-[260px]"
-        aria-label={`Live watch at ${phase.minute} minutes`}
+        className="relative min-h-[240px] flex-1 overflow-hidden bg-black sm:min-h-[300px]"
+        aria-label={`Interactive observation pitch at ${phase.minute} minutes`}
         role="group"
         style={{
           backgroundImage: "url('/images/backgrounds/match-atmosphere.png')",
@@ -120,7 +103,24 @@ export const ObservationPitch = memo(function ObservationPitch({
           backgroundPosition: "center",
         }}
       >
-        <div className="absolute inset-0 bg-[#0a1628]/55" aria-hidden="true" />
+        <div className="absolute inset-0 bg-[#0a1628]/50" aria-hidden="true" />
+
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3 sm:p-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Eye size={15} className="signal-moment" aria-hidden="true" />
+              <h2 id="observation-pitch-heading" className="text-sm font-semibold text-zinc-100">
+                {venue} · first half
+              </h2>
+            </div>
+            <p className="mt-0.5 text-meta text-zinc-300">
+              Watch the faces. Select the kid you need a second look at.
+            </p>
+          </div>
+          <span className="rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-eyebrow font-semibold uppercase tracking-[0.12em] text-zinc-200">
+            {PHASE_LABELS[phaseType] ?? "Live"}
+          </span>
+        </div>
 
         {markers.map((marker, index) => {
           const isSelected = marker.playerId === selectedPlayerId;
@@ -137,7 +137,7 @@ export const ObservationPitch = memo(function ObservationPitch({
               className={`group absolute z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full ${
                 isSelected ? "ring-2 ring-[color:var(--primary)] ring-offset-2 ring-offset-black" : ""
               }`}
-              style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
+              style={{ left: `${marker.x}%`, top: `${Math.min(marker.y, 68)}%` }}
             >
               <span className="relative h-11 w-11 overflow-hidden rounded-full border border-white/20">
                 <YouthPortrait playerId={marker.playerId} size={48} className="h-11 w-11" />
@@ -164,7 +164,7 @@ export const ObservationPitch = memo(function ObservationPitch({
         })}
 
         <div
-          className="pointer-events-none absolute bottom-2 left-2 flex flex-wrap gap-2 rounded-md bg-black/65 px-2 py-1.5 text-eyebrow text-zinc-200 backdrop-blur-sm"
+          className="pointer-events-none absolute left-3 top-20 z-20 flex flex-wrap gap-2 rounded-md bg-black/65 px-2 py-1.5 text-eyebrow text-zinc-200 backdrop-blur-sm sm:top-24"
           aria-hidden="true"
         >
           <span className="flex items-center gap-1">
@@ -174,6 +174,52 @@ export const ObservationPitch = memo(function ObservationPitch({
             <i className="inline-block h-2.5 w-2.5 rounded-full ring-2 ring-[color:var(--signal-focus)]" /> Focus
           </span>
         </div>
+
+        <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/55 to-transparent px-2 pb-2 pt-8 sm:px-3">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <h3 className="text-eyebrow font-semibold uppercase tracking-[0.13em] text-zinc-300">
+              Players in view
+            </h3>
+            <span className="text-eyebrow text-zinc-300">
+              {activeMarkers.length} active {activeMarkers.length === 1 ? "moment" : "moments"}
+            </span>
+          </div>
+          <ul
+            className="flex gap-1.5 overflow-x-auto pb-0.5"
+            aria-label="Synchronized list of players on the observation pitch"
+          >
+            {markers.map((marker) => {
+              const isSelected = marker.playerId === selectedPlayerId;
+              return (
+                <li key={marker.playerId} className="min-w-0 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onSelectPlayer(marker.playerId)}
+                    aria-pressed={isSelected}
+                    className={`flex min-h-11 min-w-[9.5rem] items-center gap-2 rounded-md border px-2.5 py-2 text-left ${
+                      isSelected
+                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/15"
+                        : "border-white/15 bg-black/45 hover:border-white/30"
+                    }`}
+                    aria-label={`Select ${markerLabel(marker)} for focus`}
+                  >
+                    <YouthPortrait playerId={marker.playerId} size={32} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-zinc-200">{marker.name}</span>
+                      <span className="block truncate text-eyebrow text-zinc-300">
+                        {marker.isFocused
+                          ? "Focus"
+                          : marker.hasMoment
+                            ? "Moment"
+                            : marker.position}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
@@ -181,52 +227,6 @@ export const ObservationPitch = memo(function ObservationPitch({
           ? `${selectedMarker.name} selected. ${selectedMarker.isFocused ? "Focus is active." : "Choose a lens in focus controls to allocate attention."}`
           : "No player selected."}
       </p>
-
-      <div className="mt-3">
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <h3 className="text-eyebrow font-semibold uppercase tracking-[0.13em] text-quiet">
-            Players in view
-          </h3>
-          <span className="text-eyebrow text-quiet">
-            {activeMarkers.length} active {activeMarkers.length === 1 ? "moment" : "moments"}
-          </span>
-        </div>
-        <ul
-          className="grid grid-cols-1 gap-1.5 min-[430px]:grid-cols-2 xl:grid-cols-3"
-          aria-label="Synchronized list of players on the observation pitch"
-        >
-          {markers.map((marker) => {
-            const isSelected = marker.playerId === selectedPlayerId;
-            return (
-              <li key={marker.playerId} className="min-w-0">
-                <button
-                  type="button"
-                  onClick={() => onSelectPlayer(marker.playerId)}
-                  aria-pressed={isSelected}
-                  className={`flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-2 text-left ${
-                    isSelected
-                      ? "border-[color:var(--primary)] bg-[color:var(--primary)]/10"
-                      : "border-white/10 bg-white/[0.025] hover:border-white/20"
-                  }`}
-                  aria-label={`Select ${markerLabel(marker)} for focus`}
-                >
-                  <YouthPortrait playerId={marker.playerId} size={32} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-zinc-200">{marker.name}</span>
-                    <span className="block truncate text-eyebrow text-quiet">
-                      {marker.isFocused
-                        ? "Focus"
-                        : marker.hasMoment
-                          ? "Moment"
-                          : marker.position}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
     </section>
   );
 });

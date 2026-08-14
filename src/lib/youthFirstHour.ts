@@ -28,3 +28,32 @@ export function isYouthOpeningWeek(state: {
 export function isYouthWatchScreen(screen: string | null | undefined): boolean {
   return screen === "observation" || screen === "openingDiscovery";
 }
+
+/** Inbox stays backstage until the opening week has a booked second look. */
+export function shouldShowYouthInbox(state: {
+  currentWeek?: number;
+  currentSeason?: number;
+  openingCase?: unknown;
+  schedule?: { activities?: Array<unknown | null> } | null;
+} | null | undefined): boolean {
+  return !isYouthFirstHour(state);
+}
+
+/**
+ * Hold Steam-style juice while the first hour is still one emotional beat.
+ * Watch, discovery, and travel already needed a clear stage; filing the name
+ * should not get a toast either.
+ */
+export function shouldHoldAchievementToasts(
+  screen: string | null | undefined,
+  state: {
+    currentWeek?: number;
+    currentSeason?: number;
+    openingCase?: unknown;
+    schedule?: { activities?: Array<unknown | null> } | null;
+  } | null | undefined,
+): boolean {
+  if (isYouthWatchScreen(screen)) return true;
+  if (screen === "internationalView") return true;
+  return isYouthFirstHour(state);
+}
