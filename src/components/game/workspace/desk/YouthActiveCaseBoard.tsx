@@ -87,7 +87,7 @@ export function YouthActiveCaseBoard({
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200/85">
+            <div className="flex items-center gap-2 text-meta font-semibold uppercase tracking-[0.18em] text-emerald-200/85">
               <ArrowRight size={14} aria-hidden="true" />
               Next move
             </div>
@@ -135,7 +135,7 @@ export function YouthActiveCaseBoard({
                 <div key={item.label} className="min-w-[15rem] snap-start rounded-xl border border-white/10 bg-white/[0.045] px-3 py-3 xl:min-w-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                      <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">
                         {item.label}
                       </p>
                       <p className="mt-1 text-sm leading-6 text-zinc-100">{item.value}</p>
@@ -185,7 +185,7 @@ export function YouthActiveCaseBoard({
                 >
                   <div className="flex items-center gap-2">
                     <span
-                      className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-eyebrow font-bold ${
                         step.active
                           ? "bg-emerald-300 text-zinc-950"
                           : step.complete

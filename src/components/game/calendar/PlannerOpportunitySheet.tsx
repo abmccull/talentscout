@@ -54,7 +54,7 @@ export function PlannerOpportunitySheet({
         className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#10151b]/94 px-4 py-3 text-left shadow-xl shadow-black/20"
       >
         <span className="min-w-0">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+          <span className="block text-eyebrow font-semibold uppercase tracking-[0.18em] text-zinc-400">
             Opportunity list
           </span>
           <span className="mt-1 block text-sm font-semibold text-white">
@@ -88,7 +88,7 @@ export function PlannerOpportunitySheet({
           >
             <div className="flex min-h-14 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-quiet">
                   Opportunity list
                 </p>
                 <h2 id="planner-mobile-opportunity-sheet-title" className="mt-1 text-sm font-semibold text-white">

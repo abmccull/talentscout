@@ -78,10 +78,10 @@ export function PlannerWeekStrip({
             <h2 id="itinerary-heading" className="text-base font-semibold text-white">
               Weekly itinerary
             </h2>
-            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200">
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-meta font-semibold text-emerald-200">
               {slotsUsed}/7 days committed
             </span>
-            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+            <span className={`rounded-full border px-2.5 py-1 text-meta font-semibold ${
               severity === "danger"
                 ? "border-red-400/25 bg-red-400/10 text-red-200"
                 : severity === "warn"
@@ -184,7 +184,7 @@ export function PlannerWeekStrip({
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+                  <p className="text-eyebrow font-bold uppercase tracking-[0.14em] text-quiet">
                     {translateDay(dayKey)}
                   </p>
                   <p className="mt-1 text-xs text-zinc-400">
@@ -222,7 +222,7 @@ export function PlannerWeekStrip({
                       <p className="mt-1 line-clamp-3 text-xs leading-5 text-zinc-300">{activity.description}</p>
                     </div>
                   </div>
-                  <p className="text-[11px] text-zinc-400">
+                  <p className="text-meta text-zinc-400">
                     Occupies {activity.slots} day{activity.slots === 1 ? "" : "s"}.
                   </p>
                 </div>
@@ -263,10 +263,10 @@ export function PlannerWeekStrip({
                   className={`workspace-interactive mt-4 flex min-h-[68px] w-full flex-col items-start justify-center rounded-xl border px-3 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
                     selectedActivity
                       ? canPlaceSelected
-                        ? "border-blue-400/30 bg-blue-400/[0.06] font-semibold text-blue-100 hover:bg-blue-400/10"
-                        : "border-white/10 bg-black/20 text-zinc-500"
+                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/12 font-semibold text-[color:var(--primary)] hover:bg-[color:var(--primary)]/18"
+                        : "border-white/10 bg-black/20 text-quiet"
                       : renderExpandedEmptyState
-                        ? "border-emerald-400/35 bg-emerald-400/[0.08] text-white hover:bg-emerald-400/[0.12]"
+                        ? "border-[color:var(--primary)]/35 bg-[color:var(--primary)]/[0.08] text-white hover:bg-[color:var(--primary)]/[0.12]"
                         : isPassiveBlankDay
                           ? "border-dashed border-white/10 bg-transparent text-zinc-400 hover:border-emerald-400/25 hover:bg-emerald-400/[0.04] hover:text-zinc-200 xl:min-h-[48px] xl:rounded-lg xl:px-2"
                         : "border-white/12 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.07]"
@@ -289,7 +289,7 @@ export function PlannerWeekStrip({
                         selectedActivity
                           ? canPlaceSelected
                             ? "text-blue-100/85"
-                            : "text-zinc-500"
+                            : "text-quiet"
                           : "text-emerald-100/85"
                       }`}
                     >
@@ -310,7 +310,7 @@ export function PlannerWeekStrip({
       </div>
 
       {(upcomingEvent || severity !== "ok") && (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-3 text-[11px]">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-3 text-meta">
           {upcomingEvent && (
             <span className="text-zinc-300">
               Next event: <strong className="font-semibold text-white">{upcomingEvent.name}</strong> in W{upcomingEvent.startWeek}

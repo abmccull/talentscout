@@ -545,7 +545,7 @@ export function GameLayout({
           >
             <Bell size={20} aria-hidden="true" />
             {unreadCount > 0 && (
-              <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-amber-400 px-1 text-center text-[9px] font-bold leading-4 text-zinc-950">
+              <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-amber-400 px-1 text-center text-eyebrow font-bold leading-4 text-zinc-950">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -592,7 +592,7 @@ export function GameLayout({
             </button>
           </div>
           {useYouthEarlyAccessNav && (
-            <span className="mt-2 inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <span className="mt-2 inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-eyebrow font-semibold uppercase tracking-[0.14em] text-emerald-300">
               Youth Scout · Early Access
             </span>
           )}
@@ -610,7 +610,7 @@ export function GameLayout({
               <Bell size={16} aria-hidden="true" />
               <span className="flex-1 text-left">Inbox</span>
               {unreadCount > 0 && (
-                <span className="min-w-5 rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-[10px] font-bold text-zinc-950">
+                <span className="min-w-5 rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-eyebrow font-bold text-zinc-950">
                   {unreadCount}
                 </span>
               )}
@@ -633,7 +633,7 @@ export function GameLayout({
           {visibleSections.map((section) => (
             <div key={section.label ?? "util"}>
               {section.label && (
-                <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+                <p className="px-3 pb-1 pt-4 text-eyebrow font-semibold uppercase tracking-[0.16em] text-zinc-400">
                   {section.label}
                 </p>
               )}
@@ -672,22 +672,22 @@ export function GameLayout({
                       <Lock size={12} className="text-zinc-600" aria-hidden="true" />
                     )}
                     {lockState === "preview" && !isNew && (
-                      <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                      <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-eyebrow font-bold text-amber-400">
                         Preview
                       </span>
                     )}
                     {isNew && !isLocked && lockState !== "preview" && (
-                      <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                      <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-eyebrow font-bold text-emerald-400">
                         New
                       </span>
                     )}
                     {screen === "inbox" && !isNew && unreadCount > 0 && (
-                      <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white min-w-[18px] text-center">
+                      <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-eyebrow font-bold text-white min-w-[18px] text-center">
                         {unreadCount}
                       </span>
                     )}
                     {screen === "npcManagement" && !isNew && unreviewedNpcReportCount > 0 && (
-                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-eyebrow font-bold text-black">
                         {unreviewedNpcReportCount}
                       </span>
                     )}

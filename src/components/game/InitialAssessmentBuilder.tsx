@@ -26,6 +26,7 @@ import {
 } from "@/engine/scout/evidenceModel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { cn } from "@/lib/utils";
 
 type AssessmentDraft = Partial<InitialAssessmentInput>;
@@ -240,15 +241,6 @@ function evaluateDraft(
   };
 }
 
-function selectedTone(selected: boolean, accent: "emerald" | "cyan" | "amber"): string {
-  if (!selected) {
-    return "border-white/10 bg-black/20 text-zinc-200 hover:border-white/20 hover:bg-white/[0.03]";
-  }
-  if (accent === "cyan") return "border-cyan-400/55 bg-cyan-400/[0.09] text-cyan-50";
-  if (accent === "amber") return "border-amber-400/55 bg-amber-400/[0.11] text-amber-50";
-  return "border-emerald-400/55 bg-emerald-400/[0.09] text-emerald-50";
-}
-
 function FieldChoice({
   checked,
   disabled,
@@ -256,7 +248,6 @@ function FieldChoice({
   title,
   description,
   meta,
-  accent,
   onSelect,
   recommended = false,
 }: {
@@ -266,58 +257,24 @@ function FieldChoice({
   title: string;
   description: string;
   meta?: React.ReactNode;
-  accent: "emerald" | "cyan" | "amber";
+  accent?: "emerald" | "cyan" | "amber";
   onSelect: () => void;
   recommended?: boolean;
 }) {
   return (
-    <label
-      className={cn(
-        "flex min-h-11 cursor-pointer flex-col rounded-xl border px-4 py-3 transition focus-within:outline focus-within:outline-2 focus-within:outline-offset-2",
-        accent === "cyan" && "focus-within:outline-cyan-300",
-        accent === "amber" && "focus-within:outline-amber-300",
-        accent === "emerald" && "focus-within:outline-emerald-300",
-        disabled && "cursor-not-allowed opacity-55",
-        selectedTone(checked, accent),
-      )}
+    <ChoiceCard
+      type="radio"
+      name={name}
+      selected={checked}
+      disabled={disabled}
+      disabledReason={disabled ? "This judgment is locked." : undefined}
+      recommended={recommended}
+      onSelect={onSelect}
     >
-      <input
-        type="radio"
-        name={name}
-        checked={checked}
-        disabled={disabled}
-        onChange={onSelect}
-        className="sr-only"
-      />
-      <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-white">{title}</span>
-          <span className="mt-1 block text-xs leading-5 text-zinc-300">{description}</span>
-        </span>
-        <span className="shrink-0 space-y-1 text-right">
-          <span
-            className={cn(
-              "block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
-              checked
-                ? accent === "amber"
-                  ? "border-amber-300/45 bg-amber-300/15 text-amber-100"
-                  : accent === "cyan"
-                    ? "border-cyan-300/45 bg-cyan-300/15 text-cyan-100"
-                    : "border-emerald-300/45 bg-emerald-300/15 text-emerald-100"
-                : "border-white/10 bg-white/[0.03] text-zinc-400",
-            )}
-          >
-            {checked ? "Selected" : "Available"}
-          </span>
-          {recommended && (
-            <span className="block rounded-full border border-amber-300/35 bg-amber-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100">
-              Recommended
-            </span>
-          )}
-        </span>
-      </span>
-      {meta && <span className="mt-3 block text-xs text-zinc-400">{meta}</span>}
-    </label>
+      <span className="block text-sm font-semibold text-white">{title}</span>
+      <span className="mt-1 block text-xs leading-5 text-zinc-300">{description}</span>
+      {meta && <span className="mt-3 block text-xs text-quiet">{meta}</span>}
+    </ChoiceCard>
   );
 }
 
@@ -330,7 +287,7 @@ function SelectionSummary({
 }) {
   return (
     <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">{label}</p>
+      <p className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-quiet">{label}</p>
       <p className="mt-1 text-sm text-zinc-100">{value}</p>
     </div>
   );
@@ -648,7 +605,7 @@ export function InitialAssessmentBuilder({
         </div>
         <span
           className={cn(
-            "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]",
+            "rounded-full border px-2.5 py-1 text-eyebrow font-semibold uppercase tracking-[0.14em]",
             preview
               ? "border-emerald-300/35 bg-emerald-300/15 text-emerald-100"
               : "border-amber-300/35 bg-amber-300/15 text-amber-100",
@@ -779,7 +736,7 @@ export function InitialAssessmentBuilder({
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-quiet">
                   Step {mobileStep + 1} of {MOBILE_STEPS.length}
                 </p>
                 <h3 className="mt-1 text-lg font-semibold text-white">{MOBILE_STEPS[mobileStep].label}</h3>

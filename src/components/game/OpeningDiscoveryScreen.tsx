@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { ArrowRight, Clock3, Eye, LockKeyhole, Phone, Sparkles, Users } from "lucide-react";
+import { Clock3, Eye, LockKeyhole, Phone, Sparkles, Users } from "lucide-react";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -80,7 +81,7 @@ export function OpeningDiscoveryScreen() {
               className="h-11 w-11 rounded-xl border border-emerald-300/20 object-cover"
             />
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.22em] text-emerald-300">
                 {projection.eyebrow}
               </p>
               <p className="mt-0.5 text-xs text-zinc-400">{projection.venueLabel} · Week {gameState.currentWeek}, Season {gameState.currentSeason}</p>
@@ -130,7 +131,7 @@ export function OpeningDiscoveryScreen() {
 
             <div className="mt-6 grid gap-3 text-left sm:grid-cols-2">
               <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">{projection.signalLabel}</p>
+                <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-emerald-300">{projection.signalLabel}</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-200">
                   {breakthrough?.description
                     ?? veteranPrologue?.evidenceBeats[1].focused
@@ -138,7 +139,7 @@ export function OpeningDiscoveryScreen() {
                 </p>
               </div>
               <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.05] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300">The open question</p>
+                <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-amber-300">The open question</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-200">
                   {hypothesis?.text
                     ?? veteranPrologue?.contradiction
@@ -150,7 +151,7 @@ export function OpeningDiscoveryScreen() {
               <div className="mt-3 flex items-start gap-3 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-4 text-left">
                 <Clock3 size={17} className="mt-0.5 shrink-0 text-rose-200" aria-hidden="true" />
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-200">Decision window</p>
+                  <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-rose-200">Decision window</p>
                   <p className="mt-1 text-sm leading-6 text-zinc-200">{projection.deadline}</p>
                   {projection.stakeholderConflict && (
                     <p className="mt-1 text-xs leading-5 text-zinc-400">{projection.stakeholderConflict}</p>
@@ -162,7 +163,7 @@ export function OpeningDiscoveryScreen() {
 
           <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0d1210]/95 p-4 shadow-2xl backdrop-blur sm:p-6">
             <div className="mb-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Your next move</p>
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-emerald-300">Your next move</p>
               <h2 className="mt-2 text-2xl font-bold text-white">{projection.questionLabel}</h2>
               <p className="mt-2 text-sm leading-6 text-zinc-400">
                 The call you make now will shape who gets access, how quickly the name spreads,
@@ -177,46 +178,42 @@ export function OpeningDiscoveryScreen() {
                   ? `Ask ${projection.sourceContactName} to verify`
                   : choice.label;
                 return (
-                  <button
+                  <ChoiceCard
                     key={choice.id}
-                    type="button"
-                    disabled={pendingChoice !== null}
-                    aria-busy={pendingChoice === choice.id}
-                    onClick={() => handleChoice(choice.id)}
-                    className={`group flex min-h-24 w-full items-start gap-4 rounded-xl border p-4 text-left transition motion-reduce:transition-none ${
-                      pendingChoice === choice.id
-                        ? "border-amber-300/50 bg-amber-300/[0.08]"
-                        : "border-white/10 bg-white/[0.025] hover:border-amber-300/40 hover:bg-amber-300/[0.06]"
-                    } disabled:cursor-wait disabled:opacity-80`}
+                    selected={pendingChoice === choice.id}
+                    pending={pendingChoice === choice.id}
+                    disabled={pendingChoice !== null && pendingChoice !== choice.id}
+                    disabledReason={pendingChoice && pendingChoice !== choice.id ? "Choice already committed." : undefined}
+                    onSelect={() => handleChoice(choice.id)}
+                    className="min-h-24"
                   >
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-emerald-300">
-                      <Icon size={19} aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-3">
-                        <span className="font-semibold text-white group-hover:text-emerald-100">{choiceLabel}</span>
-                        <ArrowRight size={16} className="shrink-0 text-zinc-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-300 motion-reduce:transition-none" aria-hidden="true" />
+                    <span className="flex items-start gap-4">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-[color:var(--primary)]">
+                        <Icon size={19} aria-hidden="true" />
                       </span>
-                      <span className="mt-1.5 block text-sm leading-5 text-zinc-400">{choice.description}</span>
-                      {choice.effect && (
-                        <span className="mt-1.5 block text-xs leading-5 text-emerald-200/80">
-                          What this means: {choice.effect}
-                        </span>
-                      )}
-                      <span className="mt-2 flex flex-wrap gap-1.5">
-                        {choice.knownTradeoffs.map((tradeoff) => (
-                          <span key={tradeoff} className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-300">
-                            {tradeoff}
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold text-white">{choiceLabel}</span>
+                        <span className="mt-1.5 block text-sm leading-5 text-quiet">{choice.description}</span>
+                        {choice.effect && (
+                          <span className="mt-1.5 block text-xs leading-5 text-[color:var(--primary)]">
+                            What this means: {choice.effect}
                           </span>
-                        ))}
+                        )}
+                        <span className="mt-2 flex flex-wrap gap-1.5">
+                          {choice.knownTradeoffs.map((tradeoff) => (
+                            <span key={tradeoff} className="rounded-full border border-white/10 px-2 py-1 text-eyebrow text-zinc-300">
+                              {tradeoff}
+                            </span>
+                          ))}
+                        </span>
                       </span>
                     </span>
-                  </button>
+                  </ChoiceCard>
                 );
               })}
             </div>
 
-            <p className="mt-4 text-center text-[11px] leading-5 text-zinc-400">
+            <p className="mt-4 text-center text-meta leading-5 text-zinc-400">
               No one knows what this player will become. What you record, who you tell, and
               whether you return will decide whether this first read earns trust or becomes a lesson.
             </p>

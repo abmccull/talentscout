@@ -82,7 +82,7 @@ export function YouthDeskDashboard({
               <ScoutAvatar avatarId={scout.avatarId ?? 1} size={48} />
               {club && <ClubCrest clubId={club.id} clubName={club.name} size={48} />}
               <div className="min-w-0">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">
                   Youth recruitment room
                 </p>
                 <h1 className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">

@@ -686,7 +686,7 @@ export function QuickInteractionContent({
               <p className="text-sm text-zinc-300 leading-snug">{choice.description}</p>
 
               <span
-                className="flex flex-wrap gap-1.5 text-[11px] font-medium"
+                className="flex flex-wrap gap-1.5 text-meta font-medium"
                 data-testid="strategic-choice-impact"
               >
                 <span className="rounded bg-emerald-500/10 px-2 py-1 text-emerald-300">

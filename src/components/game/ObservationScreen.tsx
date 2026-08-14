@@ -13,6 +13,7 @@ import {
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Button } from "@/components/ui/button";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -165,19 +166,19 @@ const MomentCard = memo(function MomentCard({
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="mb-1 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+              <span className="text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
                 {playerName}
               </span>
-              <Badge variant="secondary" className="text-[10px] py-0">
+              <Badge variant="secondary" className="text-eyebrow py-0">
                 {cue?.clarity && cue.clarity !== "missed" ? cue.clarity : "Passage"}
               </Badge>
               {moment.isStandout && (
-                <Badge variant="warning" className="text-[10px] py-0">
+                <Badge variant="warning" className="text-eyebrow py-0">
                   Standout
                 </Badge>
               )}
               {moment.pressureContext && (
-                <Badge variant="outline" className="py-0 text-[10px] text-zinc-400">
+                <Badge variant="outline" className="py-0 text-eyebrow text-zinc-400">
                   Under Pressure
                 </Badge>
               )}
@@ -186,7 +187,7 @@ const MomentCard = memo(function MomentCard({
               {isFocused && cue ? cue.detail : moment.vagueDescription}
             </p>
             {isFocused && cue && (
-              <p className="mt-1.5 text-[10px] leading-4 text-zinc-400">
+              <p className="mt-1.5 text-eyebrow leading-4 text-zinc-400">
                 {cue.regionalContext}
               </p>
             )}
@@ -195,7 +196,7 @@ const MomentCard = memo(function MomentCard({
                 {cue!.attributesHinted.map((attr) => (
                   <span
                     key={attr}
-                    className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400"
+                    className="rounded bg-zinc-800 px-1.5 py-0.5 text-eyebrow text-zinc-400"
                   >
                     {attr}
                   </span>
@@ -438,7 +439,7 @@ const FocusPanel = memo(function FocusPanel({
       {/* Active focus allocations */}
       {focusedPlayers.length > 0 && (
         <div>
-          <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <h4 className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Active Focus
           </h4>
           <div className="space-y-2">
@@ -471,7 +472,7 @@ const FocusPanel = memo(function FocusPanel({
                     aria-label={`${lens} observation lens locked for ${player.name}`}
                   >
                     <span className={`font-medium capitalize ${LENS_COLORS[lens]}`}>{lens}</span>
-                    <span className="text-[10px] text-zinc-400">Locked for this focus</span>
+                    <span className="text-eyebrow text-zinc-400">Locked for this focus</span>
                   </div>
                 </div>
               );
@@ -483,7 +484,7 @@ const FocusPanel = memo(function FocusPanel({
       {/* Available players to focus */}
       {unfocusedPlayers.length > 0 && (
         <div>
-          <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <h4 className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Players in Session
           </h4>
           <div className="space-y-1">
@@ -509,7 +510,7 @@ const FocusPanel = memo(function FocusPanel({
                         onClick={() =>
                           setPendingFocusId(isPending ? null : player.playerId)
                         }
-                        className="ml-2 min-h-10 shrink-0 rounded px-2.5 py-1 text-[10px] text-emerald-400 transition motion-reduce:transition-none hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400"
+                        className="ml-2 min-h-10 shrink-0 rounded px-2.5 py-1 text-eyebrow text-emerald-400 transition motion-reduce:transition-none hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400"
                         aria-label={`Add focus to ${player.name}`}
                         aria-expanded={isPending}
                       >
@@ -521,7 +522,7 @@ const FocusPanel = memo(function FocusPanel({
                   {/* Lens selector for pending player */}
                   {isPending && (
                     <div className="mt-1 mb-2 rounded border border-[#27272a] bg-[#141414] p-2 space-y-1">
-                      <p className="mb-1.5 text-[10px] text-zinc-400">Select lens for {player.name}</p>
+                      <p className="mb-1.5 text-eyebrow text-zinc-400">Select lens for {player.name}</p>
                       {LENS_KEYS.map((lens) => (
                         <button
                           key={lens}
@@ -580,7 +581,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
         </h3>
         {primaryPlayer && (
           <div className="rounded-md border border-[#27272a] bg-[#141414] p-3 mb-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
               About
             </p>
             <p className="text-sm font-medium text-zinc-200">{primaryPlayer.name}</p>
@@ -589,7 +590,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
         )}
         {speaker && (
           <div className="rounded-md border border-[#27272a] bg-[#141414] p-3">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
               Speaking with
             </p>
             <p className="text-sm font-medium text-zinc-200">{speaker.name}</p>
@@ -600,7 +601,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
       {/* Dialogue progress */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <span className="text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Progress
           </span>
           <span className="text-xs text-zinc-400 tabular-nums">
@@ -624,7 +625,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
       {/* Hypotheses formed */}
       {session.hypotheses.length > 0 && (
         <div>
-          <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <h4 className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Hypotheses Formed
           </h4>
           <div className="space-y-1.5">
@@ -634,7 +635,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
                 className="rounded border border-[#27272a] bg-[#141414] px-3 py-2"
               >
                 <p className="text-xs text-zinc-300 leading-snug">{hyp.text}</p>
-                <p className="mt-0.5 text-[10px] capitalize text-zinc-400">{hyp.domain}</p>
+                <p className="mt-0.5 text-eyebrow capitalize text-zinc-400">{hyp.domain}</p>
               </div>
             ))}
           </div>
@@ -646,7 +647,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
         <p className="text-lg font-bold text-amber-400 tabular-nums">
           {session.insightPointsEarned}
         </p>
-        <p className="text-[10px] text-zinc-400">Insight Earned</p>
+        <p className="text-eyebrow text-zinc-400">Insight Earned</p>
       </div>
     </div>
   );
@@ -687,7 +688,7 @@ const MinimalInfoSidebar = memo(function MinimalInfoSidebar({
         <p className="text-lg font-bold text-amber-400 tabular-nums">
           {session.insightPointsEarned}
         </p>
-        <p className="text-[10px] text-zinc-400">Insight Earned</p>
+        <p className="text-eyebrow text-zinc-400">Insight Earned</p>
       </div>
     </div>
   );
@@ -741,7 +742,7 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
   const selectedDefinition = questionOptions.find((question) => question.id === selected);
   return (
     <fieldset className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.05] p-3 sm:p-4">
-      <legend className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+      <legend className="px-1 text-eyebrow font-semibold uppercase tracking-[0.18em] text-cyan-200">
         What are you here to learn?
       </legend>
       <p className="mt-1 text-xs leading-5 text-zinc-300">
@@ -749,36 +750,23 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {questionOptions.map((question) => (
-          <label
+          <ChoiceCard
             key={question.id}
-            className={`relative min-h-16 cursor-pointer rounded-lg border px-3 py-2.5 text-left transition focus-within:ring-2 focus-within:ring-cyan-300 ${
-              selected === question.id
-                ? "border-cyan-300/55 bg-cyan-300/10"
-                : "border-white/10 bg-black/20 hover:border-white/25"
-            }`}
+            type="radio"
+            name={`scouting-question-${session.id}`}
+            value={question.id}
+            selected={selected === question.id}
+            recommended={question.recommended}
+            onSelect={() => onChange(question.id)}
+            className="min-h-16 px-3 py-2.5"
           >
-            <input
-              type="radio"
-              name={`scouting-question-${session.id}`}
-              value={question.id}
-              checked={selected === question.id}
-              onChange={() => onChange(question.id)}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-            <span className="flex items-center justify-between gap-2 text-xs font-semibold leading-4 text-white">
-              <span>{question.label}</span>
-              {question.recommended && (
-                <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-cyan-100">
-                  Best fit
-                </span>
-              )}
-            </span>
-            <span className="mt-1 block text-[10px] leading-4 text-cyan-100/65">{question.focus}</span>
-          </label>
+            <span className="block text-xs font-semibold leading-4 text-white">{question.label}</span>
+            <span className="mt-1 block text-eyebrow leading-4 text-quiet">{question.focus}</span>
+          </ChoiceCard>
         ))}
       </div>
       {selectedDefinition && (
-        <p className="mt-3 rounded-lg bg-black/20 px-3 py-2 text-[11px] leading-4 text-zinc-300">
+        <p className="mt-3 rounded-lg bg-black/20 px-3 py-2 text-meta leading-4 text-zinc-300">
           <span className="block">{selectedDefinition.prompt}</span>
           {selectedDefinition.reason && (
             <span className="mt-1 block text-cyan-100/65">Why it fits: {selectedDefinition.reason}</span>
@@ -826,27 +814,24 @@ const HalftimeApproachPanel = memo(function HalftimeApproachPanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Half-time adjustment</p>
+          <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-amber-300">Half-time adjustment</p>
           <h2 id="halftime-read-title" className="mt-0.5 text-sm font-semibold text-white">How will you watch the second half?</h2>
         </div>
-        {selected && <Badge variant="warning" className="text-[10px]">Locked</Badge>}
+        {selected && <Badge variant="warning" className="text-eyebrow">Locked</Badge>}
       </div>
       <div className="mt-2 grid gap-2 md:grid-cols-3">
         {HALFTIME_APPROACHES.map((approach) => (
-          <button
+          <ChoiceCard
             key={approach.id}
-            type="button"
-            onClick={() => onSelect(approach.id)}
-            disabled={Boolean(selected)}
-            className={`min-h-16 rounded-lg border p-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:cursor-default ${
-              selected === approach.id
-                ? "border-amber-300/60 bg-amber-300/12"
-                : "border-white/10 bg-black/20 hover:border-white/25 disabled:opacity-55"
-            }`}
+            selected={selected === approach.id}
+            disabled={Boolean(selected) && selected !== approach.id}
+            disabledReason={selected && selected !== approach.id ? "Second-half approach is locked." : undefined}
+            onSelect={() => onSelect(approach.id)}
+            className="min-h-16 p-2.5"
           >
             <span className="block text-xs font-semibold text-white">{approach.label}</span>
-            <span className="mt-1 block text-[10px] leading-4 text-zinc-400">{approach.description}</span>
-          </button>
+            <span className="mt-1 block text-eyebrow leading-4 text-quiet">{approach.description}</span>
+          </ChoiceCard>
         ))}
       </div>
     </section>
@@ -890,7 +875,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <ModeIcon size={25} className="text-emerald-300" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">
                 {veteranPrologue.venueLabel} · {MODE_LABELS[mode]}
               </p>
               <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
@@ -907,15 +892,15 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               </blockquote>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Your lead</p>
+                  <p className="text-eyebrow uppercase tracking-wider text-zinc-400">Your lead</p>
                   <p className="mt-1 text-sm font-semibold text-white">{lead.name}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Your deadline</p>
+                  <p className="text-eyebrow uppercase tracking-wider text-zinc-400">Your deadline</p>
                   <p className="mt-1 text-sm font-semibold text-white">{veteranPrologue.deadline}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Who is in conflict</p>
+                  <p className="text-eyebrow uppercase tracking-wider text-zinc-400">Who is in conflict</p>
                   <p className="mt-1 text-sm font-semibold text-white">{veteranPrologue.stakeholderConflict}</p>
                 </div>
               </div>
@@ -946,7 +931,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <Binoculars size={25} className="text-emerald-300" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">10:42 · Local school ground</p>
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">10:42 · Local school ground</p>
               <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">The match started early.</h2>
               <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
                 No academy scout is here yet. {lead.name}, a {lead.position}, was mentioned quietly—but the source only saw one previous match. You have three phases to decide whether the name belongs in your notebook.
@@ -959,15 +944,15 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               </blockquote>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Your lead</p>
+                  <p className="text-eyebrow uppercase tracking-wider text-zinc-400">Your lead</p>
                   <p className="mt-1 text-sm font-semibold text-white">{lead.name}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Time available</p>
+                  <p className="text-eyebrow uppercase tracking-wider text-zinc-400">Time available</p>
                   <p className="mt-1 text-sm font-semibold text-white">Three key passages of play</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">What matters</p>
+                  <p className="text-eyebrow uppercase tracking-wider text-zinc-400">What matters</p>
                   <p className="mt-1 text-sm font-semibold text-white">Being first, not being certain</p>
                 </div>
               </div>
@@ -1004,7 +989,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
 
       {venueAtmosphere && (
         <div className="mb-4 max-w-sm rounded-lg border border-[#27272a] bg-[#0f0f0f] p-4 text-left">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <p className="mb-1 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Venue Atmosphere
           </p>
           <p className="text-xs text-zinc-300 leading-snug mb-2">
@@ -1012,9 +997,9 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
           </p>
           {venueAtmosphere.amplifiedAttributes.length > 0 && (
             <div className="mb-1 flex flex-wrap gap-1">
-              <span className="text-[10px] text-emerald-500 mr-1">Amplified:</span>
+              <span className="text-eyebrow text-emerald-500 mr-1">Amplified:</span>
               {venueAtmosphere.amplifiedAttributes.map((a) => (
-                <span key={a} className="rounded bg-emerald-900/30 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                <span key={a} className="rounded bg-emerald-900/30 px-1.5 py-0.5 text-eyebrow text-emerald-400">
                   {a}
                 </span>
               ))}
@@ -1022,9 +1007,9 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
           )}
           {venueAtmosphere.dampenedAttributes.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              <span className="text-[10px] text-red-500 mr-1">Dampened:</span>
+              <span className="text-eyebrow text-red-500 mr-1">Dampened:</span>
               {venueAtmosphere.dampenedAttributes.map((a) => (
-                <span key={a} className="rounded bg-red-900/30 px-1.5 py-0.5 text-[10px] text-red-400">
+                <span key={a} className="rounded bg-red-900/30 px-1.5 py-0.5 text-eyebrow text-red-400">
                   {a}
                 </span>
               ))}
@@ -1035,28 +1020,28 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
 
       {situation && (
         <div className="mb-4 w-full max-w-sm rounded-lg border border-sky-500/20 bg-sky-500/5 p-4 text-left">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+          <p className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-sky-300">
             What this situation can reveal
           </p>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded bg-black/20 p-2">
-              <p className="text-[9px] text-zinc-500">Level</p>
-              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.competitionLevel)}</p>
+              <p className="text-eyebrow text-quiet">Level</p>
+              <p className="mt-0.5 text-eyebrow font-medium text-white">{formatSituationLabel(situation.competitionLevel)}</p>
             </div>
             <div className="rounded bg-black/20 p-2">
-              <p className="text-[9px] text-zinc-500">Stakes</p>
-              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.stakes)}</p>
+              <p className="text-eyebrow text-quiet">Stakes</p>
+              <p className="mt-0.5 text-eyebrow font-medium text-white">{formatSituationLabel(situation.stakes)}</p>
             </div>
             <div className="rounded bg-black/20 p-2">
-              <p className="text-[9px] text-zinc-500">Tactical frame</p>
-              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.tacticalFrame)}</p>
+              <p className="text-eyebrow text-quiet">Tactical frame</p>
+              <p className="mt-0.5 text-eyebrow font-medium text-white">{formatSituationLabel(situation.tacticalFrame)}</p>
             </div>
           </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+          <p className="mt-2 text-eyebrow leading-relaxed text-zinc-400">
             Evidence uncertainty ×{situation.uncertaintyMultiplier.toFixed(2)} · Misleading-sample risk {Math.round(situation.misleadingSignalRisk * 100)}%
           </p>
           {situation.biasWarnings[0] && (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-amber-200/80">
+            <p className="mt-1.5 text-eyebrow leading-relaxed text-amber-200/80">
               Watch for: {situation.biasWarnings[0]}
             </p>
           )}
@@ -1065,7 +1050,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
 
       {players.length > 0 && (
         <div className="mb-6 max-w-sm w-full rounded-lg border border-[#27272a] bg-[#0f0f0f] p-4 text-left">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <p className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Players in Session ({players.length})
           </p>
           <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -1156,19 +1141,19 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
             <p className="text-xl font-bold text-emerald-400 tabular-nums">
               {result.insightPointsEarned}
             </p>
-            <p className="mt-0.5 text-[10px] text-zinc-400">Insight Points</p>
+            <p className="mt-0.5 text-eyebrow text-zinc-400">Insight Points</p>
           </div>
           <div className="rounded-lg border border-[#27272a] bg-[#0f0f0f] p-3 text-center">
             <p className="text-xl font-bold text-amber-400 tabular-nums">
               {result.flaggedMoments.length}
             </p>
-            <p className="mt-0.5 text-[10px] text-zinc-400">{MODE_FLAGGED_SHORT_LABEL[result.mode]}</p>
+            <p className="mt-0.5 text-eyebrow text-zinc-400">{MODE_FLAGGED_SHORT_LABEL[result.mode]}</p>
           </div>
           <div className="rounded-lg border border-[#27272a] bg-[#0f0f0f] p-3 text-center">
             <p className="text-xl font-bold text-zinc-200 capitalize">
               {result.qualityTier}
             </p>
-            <p className="mt-0.5 text-[10px] text-zinc-400">Quality Tier</p>
+            <p className="mt-0.5 text-eyebrow text-zinc-400">Quality Tier</p>
           </div>
         </div>
 
@@ -1249,13 +1234,13 @@ const CompleteView = memo(function CompleteView({ session, onContinue }: Complet
           <p className="text-xl font-bold text-emerald-400 tabular-nums">
             {result.insightPointsEarned}
           </p>
-          <p className="mt-0.5 text-[10px] text-zinc-400">Insight Points</p>
+          <p className="mt-0.5 text-eyebrow text-zinc-400">Insight Points</p>
         </div>
         <div className="rounded-lg border border-[#27272a] bg-[#0f0f0f] p-3 text-center">
           <p className="text-xl font-bold text-amber-400 tabular-nums">
             {result.focusedPlayerIds.length}
           </p>
-          <p className="mt-0.5 text-[10px] text-zinc-400">Players Observed</p>
+          <p className="mt-0.5 text-eyebrow text-zinc-400">Players Observed</p>
         </div>
       </div>
       <Button onClick={onContinue} size="lg">
@@ -1534,7 +1519,7 @@ export function ObservationScreen() {
                 <span className="truncate text-sm font-semibold text-zinc-200">
                   {MODE_LABELS[mode]}
                 </span>
-                <Badge variant="secondary" className="hidden text-[10px] capitalize min-[430px]:inline-flex">
+                <Badge variant="secondary" className="hidden text-eyebrow capitalize min-[430px]:inline-flex">
                   {activeSession.specialization}
                 </Badge>
               </div>
@@ -1571,7 +1556,7 @@ export function ObservationScreen() {
               </div>
             </div>
             {state === "active" && (
-              <p className="mt-0.5 text-[11px] capitalize text-zinc-400">
+              <p className="mt-0.5 text-meta capitalize text-zinc-400">
                 {activeSession.activityType.replace(/([A-Z])/g, " $1").trim()}
                 {mode === "fullObservation" && activeSession.venueAtmosphere?.weather
                   ? ` · ${activeSession.venueAtmosphere.weather}`
@@ -1631,7 +1616,7 @@ export function ObservationScreen() {
                         aria-hidden="true"
                       />
                       <div>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mr-2">
+                        <span className="text-eyebrow font-semibold uppercase tracking-wider text-amber-500 mr-2">
                           Atmosphere Event
                         </span>
                         <span className="text-xs text-amber-200">
@@ -1645,7 +1630,7 @@ export function ObservationScreen() {
                 {/* Chaos indicator — match modes only */}
                 {mode === "fullObservation" && activeSession.venueAtmosphere && (
                   <div className="shrink-0 px-4 py-1.5 flex items-center gap-2 border-b border-[#27272a]">
-                    <span className="text-[10px] text-zinc-400">Observation clarity</span>
+                    <span className="text-eyebrow text-zinc-400">Observation clarity</span>
                     <div className="flex-1 h-1 bg-[#27272a] rounded-full overflow-hidden max-w-[80px]">
                       <div
                         className="h-full rounded-full bg-emerald-500/60"
@@ -1683,11 +1668,11 @@ export function ObservationScreen() {
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <h2
                             id="observation-evidence-heading"
-                            className="text-[10px] font-semibold uppercase tracking-[0.13em] text-zinc-400"
+                            className="text-eyebrow font-semibold uppercase tracking-[0.13em] text-zinc-400"
                           >
                             What you noticed
                           </h2>
-                          <span className="text-[10px] text-zinc-400">
+                          <span className="text-eyebrow text-zinc-400">
                             {currentPhase.moments.length} {currentPhase.moments.length === 1 ? "moment" : "moments"}
                           </span>
                         </div>
@@ -1825,7 +1810,7 @@ export function ObservationScreen() {
                     <span className="block text-xs font-semibold text-zinc-200">
                       {mode === "fullObservation" ? "Focus targets and lenses" : "Session context"}
                     </span>
-                    <span className="block truncate text-[10px] text-zinc-400">
+                    <span className="block truncate text-eyebrow text-zinc-400">
                       {mode === "fullObservation"
                         ? selectedPitchPlayerId
                           ? `${activeSession.players.find((player) => player.playerId === selectedPitchPlayerId)?.name ?? "Player"} selected`
@@ -1864,7 +1849,7 @@ export function ObservationScreen() {
                         <h2 id="mobile-observation-context-title" className="text-sm font-semibold text-zinc-100">
                           {mode === "fullObservation" ? "Choose your focus" : "Session context"}
                         </h2>
-                        <p className="truncate text-[10px] text-zinc-400">
+                        <p className="truncate text-eyebrow text-zinc-400">
                           {mode === "fullObservation" && selectedPitchPlayerId
                             ? activeSession.players.find((player) => player.playerId === selectedPitchPlayerId)?.name ?? "Selected player"
                             : "Supporting information"}

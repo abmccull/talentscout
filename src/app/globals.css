@@ -17,6 +17,24 @@
   --border: #29313a;
   --ring: #d4a843;
   --radius: 0.75rem;
+  --text-eyebrow: 0.75rem;
+  --text-meta: 0.8125rem;
+  --text-ui: 0.875rem;
+  --text-body: 1rem;
+}
+
+.text-eyebrow {
+  font-size: var(--text-eyebrow);
+  line-height: 1.25;
+}
+
+.text-meta {
+  font-size: var(--text-meta);
+  line-height: 1.35;
+}
+
+.text-quiet {
+  color: var(--muted-foreground);
 }
 
 body {

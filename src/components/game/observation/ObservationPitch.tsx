@@ -96,11 +96,11 @@ export const ObservationPitch = memo(function ObservationPitch({
               Live scouting view
             </h2>
           </div>
-          <p className="mt-0.5 text-[11px] text-zinc-400">
+          <p className="mt-0.5 text-meta text-zinc-400">
             Select a player to direct your attention and choose an evidence lens.
           </p>
         </div>
-        <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-300">
+        <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-eyebrow font-semibold uppercase tracking-[0.12em] text-zinc-300">
           {PHASE_LABELS[phaseType] ?? "Live phase"}
         </span>
       </div>
@@ -194,7 +194,7 @@ export const ObservationPitch = memo(function ObservationPitch({
             >
               <span
                 aria-hidden="true"
-                className={`relative flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black shadow-[0_3px_10px_rgba(0,0,0,0.55)] transition motion-reduce:transition-none ${
+                className={`relative flex h-7 w-7 items-center justify-center rounded-full border-2 text-eyebrow font-black shadow-[0_3px_10px_rgba(0,0,0,0.55)] transition motion-reduce:transition-none ${
                   marker.isFocused
                     ? "border-emerald-200 bg-emerald-500 text-emerald-950"
                     : marker.hasMoment
@@ -212,7 +212,7 @@ export const ObservationPitch = memo(function ObservationPitch({
               </span>
               <span
                 aria-hidden="true"
-                className={`pointer-events-none absolute left-1/2 top-10 hidden max-w-28 -translate-x-1/2 truncate rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-medium text-white shadow sm:block ${
+                className={`pointer-events-none absolute left-1/2 top-10 hidden max-w-28 -translate-x-1/2 truncate rounded bg-black/80 px-1.5 py-0.5 text-eyebrow font-medium text-white shadow sm:block ${
                   isSelected ? "ring-1 ring-white/30" : ""
                 }`}
               >
@@ -223,7 +223,7 @@ export const ObservationPitch = memo(function ObservationPitch({
         })}
 
         <div
-          className="pointer-events-none absolute bottom-2 left-2 flex flex-wrap gap-1.5 rounded-md bg-black/55 px-2 py-1.5 text-[9px] text-zinc-200 backdrop-blur-sm"
+          className="pointer-events-none absolute bottom-2 left-2 flex flex-wrap gap-1.5 rounded-md bg-black/55 px-2 py-1.5 text-eyebrow text-zinc-200 backdrop-blur-sm"
           aria-hidden="true"
         >
           <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-400" /> Moment</span>
@@ -240,10 +240,10 @@ export const ObservationPitch = memo(function ObservationPitch({
 
       <div className="mt-3">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <h3 className="text-[10px] font-semibold uppercase tracking-[0.13em] text-zinc-400">
+          <h3 className="text-eyebrow font-semibold uppercase tracking-[0.13em] text-zinc-400">
             Players in view
           </h3>
-          <span className="text-[10px] text-zinc-400">
+          <span className="text-eyebrow text-zinc-400">
             {activeMarkers.length} active {activeMarkers.length === 1 ? "moment" : "moments"}
           </span>
         </div>
@@ -267,7 +267,7 @@ export const ObservationPitch = memo(function ObservationPitch({
                   aria-label={`Select ${markerLabel(marker)} for focus`}
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-eyebrow font-bold ${
                       marker.isFocused
                         ? "bg-emerald-500 text-emerald-950"
                         : marker.hasMoment
@@ -280,7 +280,7 @@ export const ObservationPitch = memo(function ObservationPitch({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium text-zinc-200">{marker.name}</span>
-                    <span className="block truncate text-[10px] text-zinc-400">
+                    <span className="block truncate text-eyebrow text-zinc-400">
                       {marker.isFocused
                         ? "Focus active"
                         : marker.hasMoment
