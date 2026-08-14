@@ -13,6 +13,7 @@ import {
   Loader2,
   LogOut,
   Map,
+  Settings,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
@@ -273,6 +274,16 @@ export function MainMenu() {
             onClick={() => setShowLoadPicker(true)}
           >
             Load Career
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full text-base"
+            data-testid="main-menu-settings"
+            onClick={() => setScreen("settings")}
+          >
+            <Settings size={16} className="mr-2" aria-hidden="true" />
+            Settings
           </Button>
           <Button
             variant="ghost"

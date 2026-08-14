@@ -25,7 +25,7 @@
     "electron:dist": "npm run build && npm run electron:prepare && electron-builder --publish never && npm run electron:assert-slim-package",
     "test:e2e": "playwright test",
     "e2e:serve": "node scripts/serve-static.mjs --dir out-e2e --port 3000 --require-e2e-bridge",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run --maxWorkers=4",
     "test:coverage:critical": "vitest run --config vitest.critical-coverage.config.ts",
     "test:coverage:retention": "vitest run --config vitest.retention-coverage.config.ts",
     "test:replayability": "node scripts/run-replayability-telemetry.mjs --seeds=100 --seasons=3 --weeks=38 --out=artifacts/release/generated/replayability-release-summary.json",

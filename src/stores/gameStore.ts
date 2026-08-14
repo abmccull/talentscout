@@ -180,6 +180,10 @@ import {
   type SaveSource,
 } from "@/lib/saveProvider";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
+import {
+  queueGameplayAutosave,
+  snapshotPersistedGameState,
+} from "@/stores/actions/persistGameplayAutosave";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import {
   applyScenarioSetup,
@@ -985,6 +989,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else {
       // The standard path lands on the dashboard before the guided session starts.
       useTutorialStore.getState().completeMilestone("viewedDashboard");
+    }
+    const { gameState: startedState, activeSession } = get();
+    if (startedState) {
+      queueGameplayAutosave(
+        snapshotPersistedGameState(startedState, activeSession),
+        set,
+      );
     }
     } finally {
       newGameStartInFlight = false;

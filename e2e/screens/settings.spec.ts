@@ -25,7 +25,9 @@ test.describe("Settings Screen", () => {
     const hasFontSetting =
       content.toLowerCase().includes("font") ||
       content.toLowerCase().includes("text size") ||
-      content.toLowerCase().includes("display");
+      content.toLowerCase().includes("display") ||
+      content.toLowerCase().includes("graphics") ||
+      content.toLowerCase().includes("interface scale");
     expect(hasFontSetting).toBe(true);
   });
 

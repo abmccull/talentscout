@@ -605,6 +605,12 @@ function createWindow() {
     }
   };
   mainWindow.webContents.on("render-process-gone", discardRendererTransfers);
+  mainWindow.on("enter-full-screen", () => {
+    mainWindow.webContents.send("window:fullscreen-changed", true);
+  });
+  mainWindow.on("leave-full-screen", () => {
+    mainWindow.webContents.send("window:fullscreen-changed", false);
+  });
   mainWindow.on("closed", () => {
     discardRendererTransfers();
     mainWindow = null;
@@ -614,6 +620,14 @@ function createWindow() {
 // ---------------------------------------------------------------------------
 // IPC - Steam API (real SDK when available, graceful fallbacks otherwise)
 // ---------------------------------------------------------------------------
+
+handleTrustedIpc("window:setFullScreen", (_event, enabled) => {
+  if (!mainWindow) return false;
+  mainWindow.setFullScreen(Boolean(enabled));
+  return mainWindow.isFullScreen();
+});
+
+handleTrustedIpc("window:isFullScreen", () => Boolean(mainWindow?.isFullScreen()));
 
 handleTrustedIpc("steam:isAvailable", () => {
   return steamAvailable && Boolean(steamClient);

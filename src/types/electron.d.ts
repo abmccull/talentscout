@@ -13,6 +13,11 @@ interface ElectronAPI {
     saveFile: (data: string, filename: string) => Promise<boolean>;
     openFile: () => Promise<string | null>;
   };
+  window?: {
+    setFullScreen: (enabled: boolean) => Promise<boolean>;
+    isFullScreen: () => Promise<boolean>;
+    onFullScreenChange: (listener: (enabled: boolean) => void) => () => void;
+  };
 }
 
 declare global {

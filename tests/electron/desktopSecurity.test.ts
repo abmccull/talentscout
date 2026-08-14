@@ -151,6 +151,8 @@ describe("Electron desktop trust boundary", () => {
       "steam:resetAllAchievements",
       "steam:setRichPresence",
       "steam:unlockAchievement",
+      "window:isFullScreen",
+      "window:setFullScreen",
     ]);
     expect(mainSource).not.toMatch(/ipcMain\.handle\("(?:dialog|steam):/);
     expect(mainSource).not.toContain('handleTrustedIpc("steam:setCloudSave"');

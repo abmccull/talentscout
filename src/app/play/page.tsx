@@ -12,6 +12,7 @@ import { warmWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { selectNextCareerMoment } from "@/engine/career/careerMoments";
 
+
 function GameScreenLoading() {
   return (
     <div
@@ -62,6 +63,10 @@ const TutorialRuntime = dynamic(
 );
 const AuthRuntime = dynamic(
   () => import("@/components/game/AuthRuntime").then((module) => module.AuthRuntime),
+  { ssr: false },
+);
+const PersistenceRuntime = dynamic(
+  () => import("@/components/game/PersistenceRuntime").then((module) => module.PersistenceRuntime),
   { ssr: false },
 );
 const ScreenMusicRuntime = dynamic(
@@ -504,6 +509,7 @@ export default function Home() {
       {/* Auth is optional gameplay infrastructure. Initialize it after the
           route shell so Supabase does not block the first workspace render. */}
       <AuthRuntime />
+      <PersistenceRuntime />
       <ScreenMusicRuntime />
       {/* SettingsApplier applies CSS classes to <html> for font size,
           colorblind filters, and reduced motion. Renders no visible UI. */}

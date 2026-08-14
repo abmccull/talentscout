@@ -647,11 +647,22 @@ interface PostSubmitListingPromptProps {
   playerName: string;
   suggestedPrice: number;
   marketTemperature?: string;
+  reaction?: { title: string; body: string };
   onList: (price: number, isExclusive: boolean) => void;
   onDismiss: () => void;
+  onOpenInbox?: () => void;
 }
 
-function PostSubmitListingPrompt({ report, playerName, suggestedPrice, marketTemperature, onList, onDismiss }: PostSubmitListingPromptProps) {
+function PostSubmitListingPrompt({
+  report,
+  playerName,
+  suggestedPrice,
+  marketTemperature,
+  reaction,
+  onList,
+  onDismiss,
+  onOpenInbox,
+}: PostSubmitListingPromptProps) {
   const [price, setPrice] = React.useState(suggestedPrice.toString());
   const [isExclusive, setIsExclusive] = React.useState(false);
   const exclusivePrice = Math.round(suggestedPrice * 2.0);
@@ -670,6 +681,17 @@ function PostSubmitListingPrompt({ report, playerName, suggestedPrice, marketTem
             <p className="text-xs text-zinc-400 mb-3">
               <span className="text-white font-medium">{playerName}</span> — {CONVICTION_LABELS[report.conviction]} · Craft {report.qualityScore}/100
             </p>
+            {reaction && (
+              <div
+                data-testid="opening-first-reaction"
+                className="mb-3 rounded-lg border border-emerald-500/20 bg-black/20 px-3 py-2.5"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                  First reaction
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-300">{reaction.body}</p>
+              </div>
+            )}
             <div className="flex flex-wrap items-end gap-3 mb-3">
               <div>
                 <label htmlFor="prompt-price" className="block text-[10px] text-zinc-500 mb-1">
@@ -721,6 +743,11 @@ function PostSubmitListingPrompt({ report, playerName, suggestedPrice, marketTem
               <Button size="sm" variant="ghost" onClick={onDismiss}>
                 Skip for Now
               </Button>
+              {reaction && onOpenInbox && (
+                <Button size="sm" variant="outline" onClick={onOpenInbox}>
+                  Check Inbox
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -880,6 +907,17 @@ export function ReportHistory() {
   const pendingReportPrice = pendingReport && gameState.finances
     ? calculateReportPrice(pendingReport, gameState.scout, undefined, false, gameState.finances.marketTemperature)
     : 0;
+  const pendingReportCase = pendingReport?.caseId
+    ? gameState.scoutingCases[pendingReport.caseId]
+    : undefined;
+  const pendingOpeningReaction = gameState.openingCase
+    && pendingReport
+    && pendingReport.playerId === gameState.openingCase.playerId
+    && pendingReportCase?.reportIds[0] === pendingReport.id
+    ? [...gameState.inbox].reverse().find((message) =>
+        message.id.startsWith(`opening-choice:${gameState.openingCase!.id}:`)
+      )
+    : undefined;
   const reportWorkspaceViewModel = buildReportWorkspaceViewModel({
     gameState,
     reports,
@@ -1258,11 +1296,13 @@ export function ReportHistory() {
               playerName={`${pendingReportPlayer.firstName} ${pendingReportPlayer.lastName}`}
               suggestedPrice={pendingReportPrice}
               marketTemperature={gameState.finances?.marketTemperature}
+              reaction={pendingOpeningReaction}
               onList={(price, isExclusive) => {
                 listReportForSale(pendingReport.id, price, isExclusive);
                 dismissPendingListing();
               }}
               onDismiss={dismissPendingListing}
+              onOpenInbox={() => setScreen("inbox")}
             />
           </div>
         )}

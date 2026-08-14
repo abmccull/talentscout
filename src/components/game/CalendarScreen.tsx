@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
+import {
+  useGuardedWeekAdvance,
+  WeekAdvanceConfirmDialog,
+} from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,7 +100,6 @@ export function CalendarScreen() {
     gameState,
     scheduleActivity,
     unscheduleActivity,
-    requestWeekAdvance,
     getClub,
     lastWeekSummary,
     pendingCelebrationTitle,
@@ -113,7 +116,6 @@ export function CalendarScreen() {
     gameState: state.gameState,
     scheduleActivity: state.scheduleActivity,
     unscheduleActivity: state.unscheduleActivity,
-    requestWeekAdvance: state.requestWeekAdvance,
     getClub: state.getClub,
     lastWeekSummary: state.lastWeekSummary,
     pendingCelebrationTitle: state.pendingCelebration?.title ?? null,
@@ -130,6 +132,12 @@ export function CalendarScreen() {
 
   const t = useTranslations("calendar");
   const { playSFX } = useAudio();
+  const {
+    request: requestWeekAdvance,
+    pending: weekAdvancePending,
+    confirm: confirmWeekAdvance,
+    cancel: cancelWeekAdvance,
+  } = useGuardedWeekAdvance();
 
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
@@ -1413,6 +1421,11 @@ export function CalendarScreen() {
             </div>
           </div>
         )}
+      <WeekAdvanceConfirmDialog
+        open={weekAdvancePending}
+        onConfirm={confirmWeekAdvance}
+        onCancel={cancelWeekAdvance}
+      />
     </GameLayout>
   );
 }

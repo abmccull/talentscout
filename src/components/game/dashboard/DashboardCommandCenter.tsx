@@ -15,6 +15,7 @@ import type { DashboardActionTarget, DashboardPriorityItem } from "./dashboardPr
 import type { DashboardWorkspaceModel } from "./dashboardWorkspaceModel";
 import { DashboardOpportunityCard } from "./DashboardOpportunityCard";
 import { DashboardPriorityCard } from "./DashboardPriorityCard";
+import { WorkspaceDisclosure } from "../workspace/WorkspaceDisclosure";
 
 const DashboardIntelligencePanel = dynamic(
   () => import("./DashboardIntelligencePanel"),
@@ -171,58 +172,83 @@ export function DashboardCommandCenter({
         className="grid gap-2 rounded-2xl border border-white/10 bg-[#11161c]/95 p-3 xl:hidden"
         data-testid="dashboard-mobile-brief"
       >
-        <div className="rounded-xl border border-amber-300/15 bg-amber-300/[0.05] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-200">
-            Requires attention
-          </p>
-          <p className="mt-1 text-sm font-semibold leading-5 text-white">
-            {attentionItems[0]?.title ?? "No urgent obligation is waiting."}
-          </p>
-        </div>
-        <div className="rounded-xl border border-emerald-300/15 bg-emerald-300/[0.05] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-200">
-            Opportunity at risk
-          </p>
-          <p className="mt-1 text-sm font-semibold leading-5 text-white">
-            {opportunityItems[0]?.title ?? "No major opportunity is slipping away."}
-          </p>
-        </div>
-        <div className="rounded-xl border border-sky-300/15 bg-sky-300/[0.05] px-3 py-2.5">
+        <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.07] px-3 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-sky-200">
             Do next
           </p>
-          <p className="mt-1 text-sm font-semibold leading-5 text-white">
-            {nextAction?.actionLabel ?? "Open planner"}
+          <p className="mt-1 text-base font-semibold leading-6 text-white">
+            {nextAction?.title ?? "Choose where the next week creates information."}
           </p>
+          <p className="mt-1 text-xs leading-5 text-zinc-300">
+            {nextAction?.explanation ?? "The active queue is clear enough to plan the next observation."}
+          </p>
+          <Button
+            type="button"
+            className="mt-3 min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-600"
+            onClick={() => {
+              if (nextAction?.actionTarget) {
+                onAction(nextAction.actionTarget);
+                return;
+              }
+              onOpenPlanner();
+            }}
+          >
+            {nextAction?.actionLabel ?? "Open planner"}
+            <MoveRight size={15} className="ml-2" aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-200">Attention</p>
+            <p className="mt-1 line-clamp-2 text-xs leading-4 text-zinc-200">
+              {attentionItems[0]?.title ?? "Queue clear"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-emerald-300/15 bg-emerald-300/[0.04] px-3 py-2">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-200">At risk</p>
+            <p className="mt-1 line-clamp-2 text-xs leading-4 text-zinc-200">
+              {opportunityItems[0]?.title ?? "Nothing urgent"}
+            </p>
+          </div>
         </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)]">
         <div className="space-y-4">
           {topItem && (
-            featuredIsOpportunity ? (
-              <DashboardOpportunityCard
-                item={topItem}
-                featured
-                orderIndex={1}
-                onAction={onAction}
-                onMarkReviewed={onMarkReviewed}
-                onSnooze={onSnooze}
-                onTogglePin={onTogglePin}
-                onDismiss={onDismiss}
-              />
-            ) : (
-              <DashboardPriorityCard
-                item={topItem}
-                featured
-                orderIndex={1}
-                onAction={onAction}
-                onMarkReviewed={onMarkReviewed}
-                onSnooze={onSnooze}
-                onTogglePin={onTogglePin}
-                onDismiss={onDismiss}
-              />
-            )
+            <WorkspaceDisclosure
+              tone="subtle"
+              title="Open full priority brief"
+              description="Review the evidence, consequence, and available handling actions."
+              summary={<span>Rank 1</span>}
+              responsiveOpenAt="xl"
+              className="xl:overflow-visible xl:border-0 xl:bg-transparent xl:[&>summary]:hidden"
+              contentClassName="!border-t-0 !p-0 xl:!block"
+            >
+              {featuredIsOpportunity ? (
+                <DashboardOpportunityCard
+                  item={topItem}
+                  featured
+                  orderIndex={1}
+                  onAction={onAction}
+                  onMarkReviewed={onMarkReviewed}
+                  onSnooze={onSnooze}
+                  onTogglePin={onTogglePin}
+                  onDismiss={onDismiss}
+                />
+              ) : (
+                <DashboardPriorityCard
+                  item={topItem}
+                  featured
+                  orderIndex={1}
+                  onAction={onAction}
+                  onMarkReviewed={onMarkReviewed}
+                  onSnooze={onSnooze}
+                  onTogglePin={onTogglePin}
+                  onDismiss={onDismiss}
+                />
+              )}
+            </WorkspaceDisclosure>
           )}
 
           {(remainingAttentionItems.length > 0 || remainingOpportunityItems.length > 0) && (

@@ -11,11 +11,14 @@ import type {
   Club,
   IndependentTier,
   Player,
-  Position,
   ScoutReport,
 } from "../core/types";
 import { processRetainerFailure } from "./clientRelationships";
 import { canAcceptRetainerWork, getAgencyCapacity } from "./agencyCapacity";
+import {
+  buildYouthRetainerBrief,
+  isValidYouthRetainerBrief,
+} from "./retainerBriefs";
 import {
   addGameWeeksWithSeasonLength,
   gameWeeksBetweenWithSeasonLength,
@@ -110,22 +113,6 @@ export function generateRetainerOffers(
       3,
       seasonLength,
     );
-    const roster = club.playerIds.map((playerId) => players[playerId]).filter(Boolean);
-    const positions: Position[] = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
-    const positionCounts = positions.map((position) => ({
-      position,
-      count: roster.filter((player) => player.position === position).length,
-    }));
-    const targetPosition = positionCounts.sort((left, right) =>
-      left.count - right.count || left.position.localeCompare(right.position)
-    )[0]?.position ?? rng.pick(positions);
-    const focus = club.scoutingPhilosophy === "academyFirst"
-      ? "academy" as const
-      : club.scoutingPhilosophy === "globalRecruiter"
-        ? "data" as const
-        : "firstTeam" as const;
-    const ageRange: [number, number] = focus === "academy" ? [15, 20] : [18, 27];
-
     offers.push({
       id: `retainer_${club.id}_${rng.nextInt(100000, 999999)}`,
       clubId: club.id,
@@ -134,13 +121,7 @@ export function generateRetainerOffers(
       requiredReportsPerMonth: config.requiredReports,
       reportsDeliveredThisMonth: 0,
       status: "active",
-      brief: {
-        focus,
-        targetPositions: [targetPosition],
-        ageRange,
-        minimumReportQuality: 48 + tier * 6,
-        description: `${club.name} needs ${targetPosition} intelligence for its ${focus === "academy" ? "academy pathway" : focus === "data" ? "global recruitment model" : "first-team planning"}.`,
-      },
+      brief: buildYouthRetainerBrief(club, players, tier),
       offeredWeek: week,
       offeredSeason: season,
       offerExpiresWeek: offerExpiry.week,
@@ -169,6 +150,7 @@ export function acceptRetainer(
   scout: Scout,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord | null {
+  if (!isValidYouthRetainerBrief(contract.brief)) return null;
   const indTier = scout.independentTier ?? 1;
   const max = MAX_RETAINERS_BY_TIER[indTier];
   const current = finances.retainerContracts.filter((r) => r.status !== "cancelled").length;
@@ -472,12 +454,10 @@ export function recordRetainerDelivery(
 ): FinancialRecord {
   const updatedContracts = finances.retainerContracts.map((c) => {
     if (c.clubId === clubId && (c.status === "active" || c.status === "suspended")) {
-      if (report && (c.deliveredReportIds ?? []).includes(report.id)) return c;
+      if (!isValidYouthRetainerBrief(c.brief) || !report || !player) return c;
+      if ((c.deliveredReportIds ?? []).includes(report.id)) return c;
       if (
-        c.brief
-        && report
-        && player
-        && (
+        (
           report.qualityScore < c.brief.minimumReportQuality
           || !c.brief.targetPositions.includes(player.position)
           || player.age < c.brief.ageRange[0]

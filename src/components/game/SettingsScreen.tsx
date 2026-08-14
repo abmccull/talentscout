@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
-import { useSettingsStore } from "@/stores/settingsStore";
-import type { AppSettings } from "@/stores/settingsStore";
 import { GameLayout } from "./GameLayout";
+import { ScreenBackground } from "@/components/ui/screen-background";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,15 +18,10 @@ import {
   User,
   LogOut,
   AlertTriangle,
-  Volume2,
-  VolumeX,
-  Monitor,
-  Accessibility,
   MessageSquarePlus,
 } from "lucide-react";
 import { MAX_MANUAL_SLOTS } from "@/lib/db";
-import { useAudio } from "@/lib/audio/useAudio";
-import type { AudioChannel } from "@/lib/audio/audioEngine";
+import { SettingsPreferences } from "./settings/SettingsPreferences";
 import {
   exportGameData,
   importGameData,
@@ -48,70 +42,7 @@ import {
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { useShallow } from "zustand/react/shallow";
 
-function PillToggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={`relative h-11 w-16 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-        checked ? "bg-emerald-500" : "bg-zinc-700"
-      }`}
-    >
-      <span
-        className={`absolute left-1.5 top-1.5 h-8 w-8 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-5" : "translate-x-0"
-        }`}
-      />
-    </button>
-  );
-}
-
-function RadioGroup<T extends string>({
-  name,
-  options,
-  value,
-  onChange,
-}: {
-  name: string;
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={name}>
-      {options.map((opt) => (
-        <label
-          key={opt.value}
-          className={`flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-md border px-4 py-2 text-sm transition ${
-            value === opt.value
-              ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
-              : "border-[#27272a] text-zinc-400 hover:border-zinc-600 hover:text-white"
-          }`}
-        >
-          <input
-            type="radio"
-            name={name}
-            value={opt.value}
-            checked={value === opt.value}
-            onChange={() => onChange(opt.value)}
-            className="sr-only"
-          />
-          {opt.label}
-        </label>
-      ))}
-    </div>
-  );
-}
+import { PillToggle } from "./settings/SettingsControls";
 
 export function SettingsScreen() {
   const {
@@ -156,18 +87,6 @@ export function SettingsScreen() {
     })),
   );
 
-  const { setSetting, ...settings } = useSettingsStore(
-    useShallow((state) => ({
-      setSetting: state.setSetting,
-      fontSize: state.fontSize,
-      colorblindMode: state.colorblindMode,
-      reducedMotion: state.reducedMotion,
-      cinematicMoments: state.cinematicMoments,
-      emotionalAudioCues: state.emotionalAudioCues,
-      autoOpenCareerDefiningMoments: state.autoOpenCareerDefiningMoments,
-    })),
-  );
-
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -188,8 +107,6 @@ export function SettingsScreen() {
     clearTimeout(modTimerRef.current);
   }, []);
 
-  const { volumes, setVolume, toggleMute } = useAudio();
-
   useEffect(() => {
     void refreshSaveSlots();
     void getModdedKeys().then(setModdedKeys);
@@ -205,7 +122,7 @@ export function SettingsScreen() {
     return () => window.clearInterval(intervalId);
   }, [refreshSaveSyncStatus]);
 
-  if (!gameState) return null;
+  const hasActiveCareer = Boolean(gameState);
 
   const allManualSaves = saveSlots.filter((save) => save.slot > 0);
   const manualSaves = IS_YOUTH_EARLY_ACCESS
@@ -260,25 +177,29 @@ export function SettingsScreen() {
     await handleSave(slot);
   };
 
-  return (
-    <GameLayout>
+  const content = (
       <div
         className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6"
         data-tutorial-id="settings-preferences"
+        data-testid="settings-screen"
       >
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 id="settings-title" className="text-2xl font-bold">Settings</h1>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setScreen("dashboard")}
+            onClick={() => setScreen(hasActiveCareer ? "dashboard" : "mainMenu")}
             className="min-h-11"
           >
             <ArrowLeft size={14} className="mr-1" aria-hidden="true" />
-            Back
+            {hasActiveCareer ? "Back to Desk" : "Back to main menu"}
           </Button>
         </div>
 
+        <SettingsPreferences />
+
+        {hasActiveCareer ? (
+        <>
         <Card>
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
@@ -413,262 +334,6 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              {volumes.muted ? (
-                <VolumeX
-                  size={18}
-                  className="text-emerald-500"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Volume2
-                  size={18}
-                  className="text-emerald-500"
-                  aria-hidden="true"
-                />
-              )}
-              Audio
-            </h2>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
-              <div className="flex items-center gap-2">
-                <VolumeX
-                  size={14}
-                  className="text-zinc-400"
-                  aria-hidden="true"
-                />
-                <p className="text-sm font-medium">Mute All Audio</p>
-              </div>
-              <PillToggle
-                checked={volumes.muted}
-                onChange={() => toggleMute()}
-                label="Mute all audio"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="cinematic-moments" className="text-sm font-medium text-zinc-300">
-                Career moment presentation
-              </label>
-              <select
-                id="cinematic-moments"
-                value={settings.cinematicMoments}
-                onChange={(event) => setSetting(
-                  "cinematicMoments",
-                  event.target.value as AppSettings["cinematicMoments"],
-                )}
-                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              >
-                <option value="full">Full presentation</option>
-                <option value="reduced">Reduced effects</option>
-                <option value="off">Archive only</option>
-              </select>
-              <p className="text-xs leading-5 text-zinc-400">
-                Changes visual delivery only. Decisions, consequences, and the career archive remain identical.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between gap-4 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
-              <div>
-                <p className="text-sm font-medium">Emotional audio cues</p>
-                <p className="text-xs text-zinc-400">Optional stingers; all information is also shown in text</p>
-              </div>
-              <PillToggle
-                checked={settings.emotionalAudioCues}
-                onChange={(value) => setSetting("emotionalAudioCues", value)}
-                label="Toggle emotional audio cues"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-4 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
-              <div>
-                <p className="text-sm font-medium">Auto-open defining moments</p>
-                <p className="text-xs text-zinc-400">Turn off to keep every moment in the Career archive without an interruption</p>
-              </div>
-              <PillToggle
-                checked={settings.autoOpenCareerDefiningMoments}
-                onChange={(value) => setSetting("autoOpenCareerDefiningMoments", value)}
-                label="Toggle automatic career-defining moments"
-              />
-            </div>
-
-            {(
-              [
-                { channel: "master" as const, label: "Master volume" },
-                { channel: "music" as const, label: "Music" },
-                { channel: "sfx" as const, label: "Sound effects" },
-                { channel: "ambience" as const, label: "Ambience" },
-              ] satisfies { channel: AudioChannel | "master"; label: string }[]
-            ).map(({ channel, label }) => {
-              const value =
-                channel === "master"
-                  ? volumes.master
-                  : volumes[channel as AudioChannel];
-              const pct = Math.round(value * 100);
-              const inputId = `audio-volume-${channel}`;
-              return (
-                <div key={channel} className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label
-                      htmlFor={inputId}
-                      className="text-sm font-medium text-zinc-300"
-                    >
-                      {label}
-                    </label>
-                    <span
-                      className="w-10 text-right text-xs tabular-nums text-zinc-400"
-                      aria-live="polite"
-                      aria-atomic="true"
-                    >
-                      {pct}%
-                    </span>
-                  </div>
-                  <input
-                    id={inputId}
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={pct}
-                    onChange={(e) =>
-                      setVolume(channel, Number(e.target.value) / 100)
-                    }
-                    disabled={volumes.muted && channel !== "master"}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={pct}
-                    aria-valuetext={`${pct} percent`}
-                    className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-emerald-500 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 ${
-                      volumes.muted && channel !== "master"
-                        ? "opacity-40"
-                        : "opacity-100"
-                    }`}
-                  />
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <Monitor size={18} className="text-emerald-500" aria-hidden="true" />
-              Display
-            </h2>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-zinc-300">Font Size</p>
-              <RadioGroup<AppSettings["fontSize"]>
-                name="fontSize"
-                value={settings.fontSize}
-                onChange={(v) => setSetting("fontSize", v)}
-                options={[
-                  { value: "small", label: "Small" },
-                  { value: "medium", label: "Medium" },
-                  { value: "large", label: "Large" },
-                ]}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label
-                htmlFor="colorblind-mode"
-                className="text-sm font-medium text-zinc-300"
-              >
-                Colorblind Mode
-              </label>
-              <select
-                id="colorblind-mode"
-                value={settings.colorblindMode}
-                onChange={(e) =>
-                  setSetting(
-                    "colorblindMode",
-                    e.target.value as AppSettings["colorblindMode"],
-                  )
-                }
-                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              >
-                <option value="none">None</option>
-                <option value="protanopia">Protanopia (red deficiency)</option>
-                <option value="deuteranopia">
-                  Deuteranopia (green deficiency)
-                </option>
-                <option value="tritanopia">Tritanopia (blue deficiency)</option>
-              </select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <Accessibility
-                size={18}
-                className="text-emerald-500"
-                aria-hidden="true"
-              />
-              Accessibility
-            </h2>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
-              <div>
-                <p className="text-sm font-medium">Reduce Motion</p>
-                <p className="text-xs text-zinc-400">
-                  Minimise animations and transitions
-                </p>
-              </div>
-              <PillToggle
-                checked={settings.reducedMotion}
-                onChange={(v) => setSetting("reducedMotion", v)}
-                label="Toggle reduced motion"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-zinc-300">
-                Keyboard Shortcuts
-              </p>
-              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
-                <ul
-                  className="space-y-1.5 text-xs text-zinc-400"
-                  aria-label="Keyboard shortcut reference"
-                >
-                  {(
-                    [
-                      ["Esc", "Back to Desk"],
-                      ["1", "Desk"],
-                      ["2", "Planner"],
-                      ["3", "Prospects"],
-                      ["4", "Reports"],
-                      ["5", "World"],
-                      ["6", "Career"],
-                      ["Space", "Advance week (Planner screen)"],
-                      ["?", "Open Settings"],
-                      ["Ctrl+S", "Open Settings (save management)"],
-                      ["F1", "Send Feedback"],
-                    ] as [string, string][]
-                  ).map(([key, desc]) => (
-                    <li key={key} className="flex items-center gap-3">
-                      <kbd className="inline-flex min-w-[2.25rem] items-center justify-center rounded border border-[#3f3f46] bg-[#1c1c1e] px-1.5 py-0.5 font-mono text-[11px] text-zinc-300">
-                        {key}
-                      </kbd>
-                      <span>{desc}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2.5 text-xs text-zinc-400">
-                  Shortcuts are disabled while typing in any text field.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>
@@ -835,7 +500,7 @@ export function SettingsScreen() {
             )}
 
             <p className="text-xs leading-relaxed text-zinc-400">
-              Game autosaves every time you advance a week. Use Manage Saves for
+              Game autosaves the opening loop and every week advance. Use Manage Saves for
               loading, deleting, and slot-by-slot save management across your{" "}
               {MAX_MANUAL_SLOTS} manual slots.
             </p>
@@ -887,12 +552,17 @@ export function SettingsScreen() {
               Quit to Main Menu
             </Button>
             <p className="mt-2 text-center text-xs text-zinc-400">
-              Unsaved progress will be lost. The game autosaves each week.
+              Unsaved progress will be lost. The game autosaves the opening loop and each week.
             </p>
           </CardContent>
         </Card>
+        </>
+        ) : null}
       </div>
+  );
 
+  const dialogs = (
+    <>
       {showSaveLoadModal && (
         <SaveLoadModal
           isOpen={showSaveLoadModal}
@@ -909,6 +579,28 @@ export function SettingsScreen() {
         isOpen={showFeedbackModal}
         onClose={() => setShowFeedbackModal(false)}
       />
-    </GameLayout>
+    </>
+  );
+
+  if (hasActiveCareer) {
+    return (
+      <GameLayout>
+        {content}
+        {dialogs}
+      </GameLayout>
+    );
+  }
+
+  return (
+    <main
+      className="relative min-h-screen overflow-hidden bg-[#090b0e]"
+      aria-labelledby="settings-title"
+    >
+      <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.88} />
+      <div className="relative z-10 min-h-screen overflow-y-auto">
+        {content}
+      </div>
+      {dialogs}
+    </main>
   );
 }

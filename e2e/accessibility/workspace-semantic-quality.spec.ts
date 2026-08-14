@@ -72,8 +72,8 @@ test.describe("Workspace semantic quality", () => {
       {
         screen: "dashboard",
         headingName: /^Scouting Desk$/,
-        primaryObject: () => gamePage.page.getByTestId("desk-primary-decision"),
-        action: () => gamePage.page.getByTestId("desk-primary-decision").getByRole("button").first(),
+        primaryObject: () => gamePage.page.getByTestId("dashboard-command-center"),
+        action: () => gamePage.page.getByTestId("dashboard-command-center").locator("button:visible").first(),
       },
       {
         screen: "calendar",

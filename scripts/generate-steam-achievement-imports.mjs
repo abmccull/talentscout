@@ -8,6 +8,7 @@ import {
 
 const checkOnly = process.argv.includes("--check");
 const reportOnly = process.argv.includes("--report");
+const normalizeLineEndings = (value) => value.replace(/\r\n?/g, "\n");
 
 const report = auditSteamAchievementImports(DEFAULT_ROOT);
 
@@ -58,14 +59,20 @@ if (checkOnly) {
     process.exit(1);
   }
 
-  if (report.currentFullGameImportSource !== report.generatedFullGameImportVdf) {
+  if (
+    normalizeLineEndings(report.currentFullGameImportSource)
+    !== normalizeLineEndings(report.generatedFullGameImportVdf)
+  ) {
     console.error(
       `${STEAM_ACHIEVEMENT_IMPORT_PATHS.fullGameImportVdf} is out of date; rerun npm run steam:generate-achievement-imports.`,
     );
     process.exit(1);
   }
 
-  if (report.currentYouthImportSource !== report.generatedYouthImportVdf) {
+  if (
+    normalizeLineEndings(report.currentYouthImportSource)
+    !== normalizeLineEndings(report.generatedYouthImportVdf)
+  ) {
     console.error(
       `${STEAM_ACHIEVEMENT_IMPORT_PATHS.youthEarlyAccessImportVdf} is out of date; rerun npm run steam:generate-achievement-imports.`,
     );

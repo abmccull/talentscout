@@ -295,6 +295,12 @@ test.describe("guided opening discovery hook", () => {
     await page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: /^Working\b/i }).locator("..").click();
     await page.getByRole("button", { name: "File initial assessment" }).click();
     await gamePage.waitForScreen("reportHistory");
+    const marketplacePrompt = page.locator('[data-tutorial-id="report-marketplace-prompt"]');
+    await expect(marketplacePrompt).toBeVisible();
+    await expect(marketplacePrompt.getByTestId("opening-first-reaction")).toContainText(
+      "reads the silence as discretion",
+    );
+    await expect(marketplacePrompt.getByRole("button", { name: "Check Inbox" })).toBeVisible();
 
     const latestReport = await page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;

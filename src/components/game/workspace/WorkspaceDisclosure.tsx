@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +13,13 @@ interface WorkspaceDisclosureProps
   summary?: ReactNode;
   tone?: "default" | "subtle";
   contentClassName?: string;
+  responsiveOpenAt?: "lg" | "xl";
 }
+
+const RESPONSIVE_OPEN_QUERIES = {
+  lg: "(min-width: 1024px)",
+  xl: "(min-width: 1280px)",
+} as const;
 
 export function WorkspaceDisclosure({
   title,
@@ -24,10 +30,32 @@ export function WorkspaceDisclosure({
   tone = "default",
   className,
   contentClassName,
+  responsiveOpenAt,
+  open,
+  onToggle,
   children,
   ...props
 }: WorkspaceDisclosureProps) {
   const subtle = tone === "subtle";
+  const [matchesResponsiveOpen, setMatchesResponsiveOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState(Boolean(open));
+
+  useEffect(() => {
+    if (!responsiveOpenAt) return;
+    const media = window.matchMedia(RESPONSIVE_OPEN_QUERIES[responsiveOpenAt]);
+    const sync = () => setMatchesResponsiveOpen(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, [responsiveOpenAt]);
+
+  useEffect(() => {
+    if (open !== undefined) setUserOpen(open);
+  }, [open]);
+
+  const resolvedOpen = responsiveOpenAt
+    ? matchesResponsiveOpen || (open ?? userOpen)
+    : open;
 
   return (
     <details
@@ -37,6 +65,13 @@ export function WorkspaceDisclosure({
           : "group overflow-hidden rounded-xl border border-white/10 bg-[#11161c]/90",
         className,
       )}
+      open={resolvedOpen}
+      onToggle={(event) => {
+        if (responsiveOpenAt && !matchesResponsiveOpen && open === undefined) {
+          setUserOpen(event.currentTarget.open);
+        }
+        onToggle?.(event);
+      }}
       {...props}
     >
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 [&::-webkit-details-marker]:hidden">

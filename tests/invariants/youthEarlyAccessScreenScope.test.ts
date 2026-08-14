@@ -72,6 +72,7 @@ describe("Youth Early Access screen scope", () => {
     expect(resolveYouthEarlyAccessScreen("mainMenu", false)).toBe("mainMenu");
     expect(resolveYouthEarlyAccessScreen("newGame", false)).toBe("newGame");
     expect(resolveYouthEarlyAccessScreen("futureRoadmap", false)).toBe("futureRoadmap");
+    expect(resolveYouthEarlyAccessScreen("settings", false)).toBe("settings");
     expect(resolveYouthEarlyAccessScreen("playerProfile", false)).toBe("mainMenu");
     expect(resolveYouthEarlyAccessScreen("career", false)).toBe("mainMenu");
   });

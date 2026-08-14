@@ -9,6 +9,7 @@
  */
 
 import { useSyncExternalStore, useCallback } from "react";
+import { useSettingsStore } from "@/stores/settingsStore";
 import {
   AudioEngine,
   DEFAULT_VOLUMES,
@@ -35,11 +36,13 @@ function getServerSnapshot(): VolumeState {
 export interface UseAudioReturn {
   playMusic: (id: string) => void;
   playSFX: (id: string) => void;
+  playStinger: (id: string) => void;
   playAmbience: (id: string) => void;
   stopMusic: () => void;
   stopAmbience: () => void;
   setVolume: (channel: AudioChannel | "master", value: number) => void;
   toggleMute: () => void;
+  resetVolumes: () => void;
   volumes: VolumeState;
 }
 
@@ -62,15 +65,22 @@ export function useAudio(): UseAudioReturn {
     [engine],
   );
   const toggleMute = useCallback(() => engine.toggleMute(), [engine]);
+  const resetVolumes = useCallback(() => engine.resetToDefaults(), [engine]);
+  const playStinger = useCallback((id: string) => {
+    if (!useSettingsStore.getState().emotionalAudioCues) return;
+    engine.playSFX(id);
+  }, [engine]);
 
   return {
     playMusic,
     playSFX,
+    playStinger,
     playAmbience,
     stopMusic,
     stopAmbience,
     setVolume,
     toggleMute,
+    resetVolumes,
     volumes,
   };
 }

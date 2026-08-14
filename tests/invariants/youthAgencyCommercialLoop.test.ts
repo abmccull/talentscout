@@ -206,6 +206,13 @@ describe("youth agency commercial loop", () => {
         reportsDeliveredThisMonth: 0,
         status: "active" as const,
         deliveredReportIds: [],
+        brief: {
+          focus: "academy" as const,
+          targetPositions: [player.position],
+          ageRange: [15, 20] as [number, number],
+          minimumReportQuality: 0,
+          description: "Assess academy prospects for the client club.",
+        },
       }, {
         id: "retainer-origin",
         clubId: "club-origin",
@@ -215,6 +222,13 @@ describe("youth agency commercial loop", () => {
         reportsDeliveredThisMonth: 0,
         status: "active" as const,
         deliveredReportIds: [],
+        brief: {
+          focus: "academy" as const,
+          targetPositions: [player.position],
+          ageRange: [15, 20] as [number, number],
+          minimumReportQuality: 0,
+          description: "Assess academy prospects for the originating club.",
+        },
       }],
       consultingContracts: [makeConsultingContract()],
       clientRelationships: [],

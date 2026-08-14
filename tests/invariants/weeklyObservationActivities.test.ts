@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Activity, GameState, Observation } from "@/engine/core/types";
 import type { WeeklySimulationDiagnosticValue } from "@/engine/core/weeklySimulationTelemetry";
 import { addActivity, createWeekSchedule, processCompletedWeek } from "@/engine/core/calendar";
@@ -29,6 +29,10 @@ vi.mock("@/lib/db", () => ({
     leaderboard: { put: async () => undefined, clear: async () => undefined },
   },
 }));
+
+beforeEach(() => {
+  vi.resetModules();
+});
 
 async function createObservationState(seed: string): Promise<GameState> {
   const { useGameStore } = await import("@/stores/gameStore");

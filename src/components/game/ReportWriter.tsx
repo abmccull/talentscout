@@ -87,6 +87,7 @@ import {
   PreparedReportWorkCallout,
   ReportWriterAlerts,
 } from "@/components/game/report-writer/ReportWriterCallouts";
+import { WorkspaceDisclosure } from "@/components/game/workspace/WorkspaceDisclosure";
 import {
   BREAKDOWN_LABELS,
   CONVICTION_KEYS,
@@ -1087,7 +1088,19 @@ export function ReportWriter() {
                   </div>
                 </fieldset>
 
-                <section id="report-section-framing" data-testid="report-presentation-room" className="scroll-mt-28 overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#0d1519] shadow-[0_22px_70px_-45px_rgba(34,211,238,0.6)]" aria-labelledby="presentation-room-title">
+                <WorkspaceDisclosure
+                  id="report-section-framing"
+                  data-testid="report-presentation-room"
+                  title="Choose how you make the case"
+                  eyebrow="Boardroom framing"
+                  description="Compare the emphasis and tradeoff before opening the full room read."
+                  summary={<span>{PRESENTATION_APPROACHES.find((approach) => approach.id === presentationApproach)?.label}</span>}
+                  responsiveOpenAt="lg"
+                  tone="subtle"
+                  className="scroll-mt-28 lg:overflow-visible lg:border-0 lg:bg-transparent lg:[&>summary]:hidden"
+                  contentClassName="!border-t-0 !p-0 lg:!block"
+                >
+                <section className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#0d1519] shadow-[0_22px_70px_-45px_rgba(34,211,238,0.6)]" aria-labelledby="presentation-room-title">
                   <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_42%)] p-4 sm:p-5">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
@@ -1192,6 +1205,7 @@ export function ReportWriter() {
                     })()}
                   </fieldset>
                 </section>
+                </WorkspaceDisclosure>
 
                 <div id="report-section-judgments" className="scroll-mt-28 grid gap-3 lg:grid-cols-3">
                   {JUDGMENT_CATEGORIES.map((category) => {
@@ -1209,7 +1223,22 @@ export function ReportWriter() {
                         ]
                       : FORMAL_CATEGORY_UNKNOWN_OPTIONS[category];
                     return (
-                      <fieldset key={category} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                      <WorkspaceDisclosure
+                        key={category}
+                        data-testid={`report-judgment-${category}`}
+                        title={JUDGMENT_LABELS[category]}
+                        description={categoryDrafts[category].status === "unselected"
+                          ? "Choose whether the evidence supports a claim."
+                          : categoryDrafts[category].status === "notAssessed"
+                            ? "Explicitly left unassessed."
+                            : "Evidence-backed claim in progress."}
+                        summary={<span>{categoryDrafts[category].status === "unselected" ? "Not started" : "In progress"}</span>}
+                        responsiveOpenAt="lg"
+                        tone="subtle"
+                        className="lg:overflow-visible lg:border-0 lg:bg-transparent lg:[&>summary]:hidden"
+                        contentClassName="!border-t-0 !p-0 lg:!block"
+                      >
+                      <fieldset className="border-0 bg-black/20 p-4 lg:rounded-xl lg:border lg:border-white/10">
                         <legend className="px-1 text-sm font-semibold text-white">{JUDGMENT_LABELS[category]}</legend>
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           {(["assessed", "notAssessed"] as const).map((status) => (
@@ -1316,6 +1345,7 @@ export function ReportWriter() {
                           </fieldset>
                         )}
                       </fieldset>
+                      </WorkspaceDisclosure>
                     );
                   })}
                 </div>
@@ -1411,11 +1441,19 @@ export function ReportWriter() {
                   </div>
                 </fieldset>
 
-                <div
+                <WorkspaceDisclosure
                   id="report-section-terms"
                   hidden={!isWorkflowSectionActive("case")}
-                  className="scroll-mt-28 grid gap-4 md:grid-cols-2"
+                  title="Terms and fallback"
+                  eyebrow="Commercial context"
+                  description="Set the wage assumption and name a credible alternative only when needed."
+                  summary={<span>£{estimatedWeeklyWage.toLocaleString()}/week</span>}
+                  responsiveOpenAt="lg"
+                  tone="subtle"
+                  className="scroll-mt-28 lg:overflow-visible lg:border-0 lg:bg-transparent lg:[&>summary]:hidden"
+                  contentClassName="lg:!block lg:!border-t-0 lg:!p-0"
                 >
+                  <div className="grid gap-4 md:grid-cols-2">
                   <label className="text-xs font-medium text-zinc-300">
                     Estimated weekly wage
                     <input
@@ -1451,7 +1489,8 @@ export function ReportWriter() {
                       ))}
                     </select>
                   </label>
-                </div>
+                  </div>
+                </WorkspaceDisclosure>
 
                 {!conciseOpeningMode && reportStatus.blockers.length > 0 && isWorkflowSectionActive("final") && (
                   <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">

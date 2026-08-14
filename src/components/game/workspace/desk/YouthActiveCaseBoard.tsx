@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { YouthActiveCaseModel } from "./youthDeskModel";
+import { WorkspaceDisclosure } from "../WorkspaceDisclosure";
 
 interface YouthActiveCaseBoardProps {
   model: YouthActiveCaseModel;
@@ -114,20 +115,17 @@ export function YouthActiveCaseBoard({
             )}
           </div>
 
-          <section className="min-w-0 rounded-2xl border border-white/12 bg-black/30 p-3.5 sm:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                  Case signal rail
-                </p>
-                <p className="mt-1 text-xs leading-5 text-zinc-300">
-                  Four signals explain what the next week should prove.
-                </p>
-              </div>
-              <span className="text-[11px] text-zinc-400">One case, four pressures</span>
-            </div>
+          <WorkspaceDisclosure
+            tone="subtle"
+            title="Review case signals"
+            description="Four pressures explain what the next week should prove."
+            summary={<span>Evidence · context · recommendation · schedule</span>}
+            responsiveOpenAt="xl"
+            className="min-w-0 bg-black/30 xl:[&>summary]:hidden"
+            contentClassName="xl:!block xl:!border-t-0"
+          >
             <div
-              className="mt-4 flex max-w-full snap-x gap-2 overflow-x-auto pb-1 focus-visible:rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 [scrollbar-width:thin] xl:grid xl:grid-cols-2 xl:overflow-visible xl:pb-0"
+              className="flex max-w-full snap-x gap-2 overflow-x-auto pb-1 focus-visible:rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 [scrollbar-width:thin] xl:grid xl:grid-cols-2 xl:overflow-visible xl:pb-0"
               tabIndex={0}
               role="region"
               aria-label="Case signals. Use left and right arrow keys to review all signals."
@@ -150,27 +148,26 @@ export function YouthActiveCaseBoard({
                 </div>
               ))}
             </div>
-          </section>
+          </WorkspaceDisclosure>
         </div>
 
         <div className="min-w-0 space-y-4">
-          <section className="min-w-0 rounded-2xl border border-white/12 bg-black/30 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Target size={16} className="text-emerald-300" aria-hidden="true" />
-                <p className="text-sm font-semibold text-white">
-                  {model.stageLabel}
-                </p>
-              </div>
-              <Badge className="border-white/12 bg-white/[0.04] text-zinc-200" variant="outline">
-                Case progression
-              </Badge>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-zinc-300">
+          <WorkspaceDisclosure
+            data-testid="case-progression-disclosure"
+            title={model.stageLabel}
+            eyebrow="Case progression"
+            icon={<Target size={16} className="text-emerald-300" aria-hidden="true" />}
+            description="Open the case path and the assignment pressure attached to it."
+            summary={<span>{model.stageSteps.filter((step) => step.complete).length}/{model.stageSteps.length} complete</span>}
+            responsiveOpenAt="xl"
+            className="min-w-0 bg-black/30 xl:[&>summary]:hidden"
+            contentClassName="xl:!block xl:!border-t-0"
+          >
+            <p className="mb-4 text-xs leading-5 text-zinc-300">
               {model.briefLine}
             </p>
             <ol
-              className="mt-4 flex max-w-full snap-x gap-2 overflow-x-auto pb-1 focus-visible:rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 [scrollbar-width:thin] xl:grid xl:grid-cols-1 xl:overflow-visible xl:pb-0"
+              className="flex max-w-full snap-x gap-2 overflow-x-auto pb-1 focus-visible:rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 [scrollbar-width:thin] xl:grid xl:grid-cols-1 xl:overflow-visible xl:pb-0"
               tabIndex={0}
               aria-label="Case progression. Use left and right arrow keys to review every stage."
               onKeyDown={handleHorizontalRailKeyDown}
@@ -203,7 +200,7 @@ export function YouthActiveCaseBoard({
                 </li>
               ))}
             </ol>
-          </section>
+          </WorkspaceDisclosure>
 
           {asideContent}
         </div>

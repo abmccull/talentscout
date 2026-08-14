@@ -6,6 +6,10 @@
  * prediction auto-generation, and retainer/client delivery tracking.
  */
 import type { GetState, SetState } from "./types";
+import {
+  queueGameplayAutosave,
+  snapshotPersistedGameState,
+} from "./persistGameplayAutosave";
 import type {
   ConvictionLevel,
   FinancialRecord,
@@ -712,40 +716,42 @@ export function createReportActions(get: GetState, set: SetState) {
           }
         : null;
 
+      const nextState = synchronizeInternationalAssignmentProgress({
+        ...gameState,
+        reportWorkItems: preparedWorkItem
+          ? Object.fromEntries(
+              Object.entries(gameState.reportWorkItems ?? {}).map(([id, item]) => [
+                id,
+                id === preparedWorkItem.id
+                  ? {
+                      ...item,
+                      status: "consumed" as const,
+                      consumedByReportId: scoredReport.id,
+                    }
+                  : item,
+              ]),
+            )
+          : gameState.reportWorkItems,
+        reports: { ...gameState.reports, [scoredReport.id]: scoredReport },
+        scoutingCases: caseLink.scoutingCases,
+        scout: updatedScoutAfterResponse,
+        finances: updatedFinances,
+        discoveryRecords: updatedDiscoveryRecords,
+        clubResponses: updatedClubResponses,
+        predictions: updatedPredictions,
+        systemFitCache: updatedSystemFitCache,
+        inbox: [
+          ...gameState.inbox,
+          ...(responseInboxMessage ? [responseInboxMessage] : []),
+          ...(revisionCostMessage ? [revisionCostMessage] : []),
+        ],
+      });
       set({
-        gameState: synchronizeInternationalAssignmentProgress({
-          ...gameState,
-          reportWorkItems: preparedWorkItem
-            ? Object.fromEntries(
-                Object.entries(gameState.reportWorkItems ?? {}).map(([id, item]) => [
-                  id,
-                  id === preparedWorkItem.id
-                    ? {
-                        ...item,
-                        status: "consumed" as const,
-                        consumedByReportId: scoredReport.id,
-                      }
-                    : item,
-                ]),
-              )
-            : gameState.reportWorkItems,
-          reports: { ...gameState.reports, [scoredReport.id]: scoredReport },
-          scoutingCases: caseLink.scoutingCases,
-          scout: updatedScoutAfterResponse,
-          finances: updatedFinances,
-          discoveryRecords: updatedDiscoveryRecords,
-          clubResponses: updatedClubResponses,
-          predictions: updatedPredictions,
-          systemFitCache: updatedSystemFitCache,
-          inbox: [
-            ...gameState.inbox,
-            ...(responseInboxMessage ? [responseInboxMessage] : []),
-            ...(revisionCostMessage ? [revisionCostMessage] : []),
-          ],
-        }),
+        gameState: nextState,
         currentScreen: "reportHistory",
         ...(shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),
       });
+      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
       const tutorialAfterReport = useTutorialStore.getState();
       if (isNewCase) {
         // Tutorial auto-advance: step expects the first accountable case filing.

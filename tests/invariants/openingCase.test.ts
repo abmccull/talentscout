@@ -199,6 +199,8 @@ describe("opening discovery case", () => {
     expect(resolved.openingCase).toMatchObject({ stage: "report", selectedChoiceId: "protect" });
     expect(resolvedAgain.openingCase?.selectedChoiceId).toBe("protect");
     expect(resolved.inbox.filter((message) => message.id.startsWith("opening-choice:"))).toHaveLength(1);
+    expect(resolved.inbox.at(-1)?.body).toContain("reads the silence as discretion");
+    expect(resolved.inbox.at(-1)?.body).toContain("first reaction");
     expect(Object.keys(resolved.consequenceState.decisions)).toHaveLength(1);
     expect(Object.keys(resolved.consequenceState.memories)).toHaveLength(1);
     expect(Object.keys(resolved.consequenceState.facts)).toHaveLength(1);

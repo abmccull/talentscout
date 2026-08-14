@@ -34,7 +34,7 @@ export function ScreenBackground({
       />
       <div
         className="absolute inset-0 bg-[#090b0e]"
-        style={{ opacity }}
+        style={{ opacity: `var(--screen-bg-overlay, ${opacity})` }}
       />
     </div>
   );

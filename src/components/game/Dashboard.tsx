@@ -3,6 +3,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
+import {
+  useGuardedWeekAdvance,
+  WeekAdvanceConfirmDialog,
+} from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,7 +84,6 @@ export function Dashboard() {
     openDashboardTarget,
     getUpcomingFixtures,
     getLeagueStandings,
-    requestWeekAdvance,
     scheduleMatch,
     markMessageRead,
     selectPlayer,
@@ -99,7 +102,6 @@ export function Dashboard() {
     openDashboardTarget: state.openDashboardTarget,
     getUpcomingFixtures: state.getUpcomingFixtures,
     getLeagueStandings: state.getLeagueStandings,
-    requestWeekAdvance: state.requestWeekAdvance,
     scheduleMatch: state.scheduleMatch,
     markMessageRead: state.markMessageRead,
     selectPlayer: state.selectPlayer,
@@ -117,6 +119,13 @@ export function Dashboard() {
   const [showSatisfactionHistory, setShowSatisfactionHistory] = useState(false);
   const t = useTranslations("dashboard");
   const tCal = useTranslations("calendar");
+
+  const {
+    request: requestWeekAdvance,
+    pending: weekAdvancePending,
+    confirm: confirmWeekAdvance,
+    cancel: cancelWeekAdvance,
+  } = useGuardedWeekAdvance();
 
   // useMemo hooks MUST be called before any early return to satisfy React's
   // Rules of Hooks (hooks must be called in the same order every render).
@@ -1434,6 +1443,11 @@ export function Dashboard() {
         />
         </div>
       </div>
+      <WeekAdvanceConfirmDialog
+        open={weekAdvancePending}
+        onConfirm={confirmWeekAdvance}
+        onCancel={cancelWeekAdvance}
+      />
     </GameLayout>
   );
 }

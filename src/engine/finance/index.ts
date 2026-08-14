@@ -127,6 +127,12 @@ export {
   recordRetainerDelivery,
   processRetainerRenewals,
 } from "./retainers";
+export {
+  buildYouthRetainerBrief,
+  ensureYouthRetainerBrief,
+  isValidYouthRetainerBrief,
+  normalizeYouthRetainerContracts,
+} from "./retainerBriefs";
 export type {
   RetainerCloseEvent,
   RetainerCloseOutcome,

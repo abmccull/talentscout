@@ -92,6 +92,30 @@ html.font-small { font-size: 14px; }
 html.font-medium { font-size: 16px; }
 html.font-large { font-size: 18px; }
 
+html.bg-intensity-low { --screen-bg-overlay: 0.88; }
+html.bg-intensity-medium { --screen-bg-overlay: 0.68; }
+html.bg-intensity-high { --screen-bg-overlay: 0.48; }
+
+html.ui-contrast-high {
+  --foreground: #ffffff;
+  --muted-foreground: #f4f4f5;
+  --border: #e4e4e7;
+  --card: #000000;
+  --secondary: #09090b;
+  --muted: #18181b;
+}
+html.ui-contrast-high body {
+  color: #ffffff;
+  background-image: none;
+}
+html.ui-contrast-high [class*="text-zinc-"],
+html.ui-contrast-high [class*="text-muted"] {
+  color: #f4f4f5 !important;
+}
+html.ui-contrast-high [class*="border-"] {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+
 /* Colorblind SVG filters — applied via SettingsApplier */
 html.cb-protanopia  { filter: url('#protanopia-filter');  }
 html.cb-deuteranopia { filter: url('#deuteranopia-filter'); }

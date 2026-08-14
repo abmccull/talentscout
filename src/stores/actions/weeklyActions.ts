@@ -11,7 +11,10 @@ import type { GameScreen } from "../gameStoreTypes";
 import { createWeekSimulationActions } from "./weekSimulationActions";
 import { createMatchActions } from "./matchActions";
 import { processWeeklyEconomy } from "./weeklyEconomy";
-import { createAutosaveQueue, scheduleAfterPaint } from "./autosaveQueue";
+import {
+  queueGameplayAutosave,
+  snapshotPersistedGameState,
+} from "./persistGameplayAutosave";
 import type {
   GameState,
   Activity,
@@ -237,31 +240,7 @@ export {
 // ── Module-level state ─────────────────────────────────────────────────────
 // ── Local type alias ───────────────────────────────────────────────────────
 
-interface AutosaveRequest {
-  state: GameState;
-  set: SetState;
-}
-
-const autosaveQueue = createAutosaveQueue<AutosaveRequest>({
-  schedule: scheduleAfterPaint,
-  onRequest: ({ set }) => set({ autosaveError: null }),
-  persist: async ({ state }) => {
-    const provider = await getActiveSaveProvider();
-    await persistGameState(provider, "autosave", state, "Autosave");
-  },
-  onError: (error, { set }) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn("Autosave failed:", error);
-    set({ autosaveError: message });
-  },
-});
-
-export function queueWeeklyAutosave(newState: GameState, set: SetState): void {
-  // A single player command can request both a checkpoint and a final save.
-  // Coalesce those synchronous requests before persistence migration starts,
-  // then defer the structured commit until the completed week can paint first.
-  autosaveQueue.request({ state: newState, set });
-}
+export { queueWeeklyAutosave } from "./persistGameplayAutosave";
 
 
 export interface WeeklyActionRuntime {
@@ -318,10 +297,14 @@ export function createWeeklyActions(
       return;
     }
     const schedule = addActivity(gameState.schedule, effectiveActivity, dayIndex);
+    const nextState = { ...gameState, schedule };
     set({
-      gameState: { ...gameState, schedule },
+      gameState: nextState,
       weekSimulation: null,
     });
+    if (runtime.persistenceEnabled) {
+      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+    }
 
     // Tutorial auto-advance — generic and specialization-specific conditions.
     const tutorial = runtime.getTutorialState();
@@ -364,10 +347,14 @@ export function createWeeklyActions(
     const { gameState } = get();
     if (!gameState) return;
     const schedule = removeActivity(gameState.schedule, dayIndex);
+    const nextState = { ...gameState, schedule };
     set({
-      gameState: { ...gameState, schedule },
+      gameState: nextState,
       weekSimulation: null,
     });
+    if (runtime.persistenceEnabled) {
+      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+    }
   },
 
   setWeeklyIntent: (intentId: WeeklyIntentId) => {
@@ -1456,14 +1443,14 @@ export function createWeeklyActions(
       persistenceEnabled:
         runtime.persistenceEnabled && !isBatchAdvanceInProgress(),
       getTutorialState: runtime.getTutorialState,
-      queueAutosave: queueWeeklyAutosave,
+      queueAutosave: queueGameplayAutosave,
     });
 
   },
 
   // ── Quick Scout Mode (F17) ──────────────────────────────────────────────
   // Quick Scout orchestration stays on the canonical weekly transaction.
-  ...createWeeklyQuickScoutActions(get, set, { queueAutosave: queueWeeklyAutosave }),
+  ...createWeeklyQuickScoutActions(get, set, { queueAutosave: queueGameplayAutosave }),
   ...createWeekSimulationActions(get, set, {
     buildDaySpanInfo,
     buildDayInteraction,

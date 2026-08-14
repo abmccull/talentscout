@@ -9,12 +9,14 @@ import type {
   RetainerContract,
   Scout,
   Club,
+  Player,
   PitchResult,
 } from "../core/types";
 import {
   gameWeeksBetweenWithSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "../core/gameDate";
+import { buildYouthRetainerBrief } from "./retainerBriefs";
 
 // ---------------------------------------------------------------------------
 // Satisfaction helpers
@@ -108,6 +110,7 @@ export function pitchToClub(
   club: Club,
   pitchType: "coldCall" | "referral" | "showcase",
   actionSequence = (finances.actionSequence ?? 0) + 1,
+  players: Record<string, Player> = {},
 ): PitchResult {
   const alreadyRetained = finances.retainerContracts.some(
     (contract) => contract.clubId === club.id && contract.status === "active",
@@ -172,6 +175,7 @@ export function pitchToClub(
     requiredReportsPerMonth: requiredReports,
     reportsDeliveredThisMonth: 0,
     status: "active",
+    brief: buildYouthRetainerBrief(club, players, tier),
   };
 
   return {

@@ -867,7 +867,7 @@ export function InboxScreen() {
       startReport: state.startReport,
     })),
   );
-  const { playSFX } = useAudio();
+  const { playStinger } = useAudio();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // A7: Enhanced filter/sort state
   const [filterCategory, setFilterCategory] = useState<FilterCategory>("all");
@@ -1025,7 +1025,7 @@ export function InboxScreen() {
     setExpandedId(isExpanding ? message.id : null);
     if (isExpanding && !message.read) {
       markMessageRead(message.id);
-      playSFX(message.type === "jobOffer" ? "job-offer" : "notification");
+      playStinger(message.type === "jobOffer" ? "job-offer" : "notification");
     }
   };
 

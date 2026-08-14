@@ -6,6 +6,10 @@
  * reflection generation, insight spending, and session lifecycle.
  */
 import type { GetState, SetState } from "./types";
+import {
+  queueGameplayAutosave,
+  snapshotPersistedGameState,
+} from "./persistGameplayAutosave";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
   LensType,
@@ -874,16 +878,18 @@ export function createObservationActions(get: GetState, set: SetState) {
         return;
       }
 
+      const nextState = {
+        ...gameState,
+        activeObservationSession: session,
+      };
       set({
         activeSession: session,
-        gameState: {
-          ...gameState,
-          activeObservationSession: session,
-        },
+        gameState: nextState,
         sessionReturnScreen: options?.returnScreen
           ?? (get().weekSimulation ? "weekSimulation" : "dashboard"),
         currentScreen: "observation" as GameScreen,
       });
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, session), set);
     },
 
     beginSession: () => {
@@ -1258,6 +1264,7 @@ export function createObservationActions(get: GetState, set: SetState) {
           : weekSimulation,
         gameState: nextGameState,
       });
+      queueGameplayAutosave(snapshotPersistedGameState(nextGameState, null), set);
 
       if (
         didCompleteLifecycle &&
@@ -1277,6 +1284,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         selectedPlayerId: resolved.openingCase?.playerId ?? get().selectedPlayerId,
         currentScreen: "reportWriter" as GameScreen,
       });
+      queueGameplayAutosave(snapshotPersistedGameState(resolved), set);
     },
 
     // ═══════════════════════════════════════════════════════════════════════════

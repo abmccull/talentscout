@@ -21,6 +21,7 @@ import {
   migrateReportListingBids,
   normalizeClubEconomicsMap,
   normalizeEmployeeContractsInRecord,
+  normalizeYouthRetainerContracts,
 } from "@/engine/finance";
 import { migratePoliticalMeetingState } from "@/engine/career/politicalMeetings";
 import { createRNG } from "@/engine/rng";
@@ -849,6 +850,11 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
   }
   if (state.finances) {
     state.finances = migrateFinancialRecord(state.finances, state.scout);
+    state.finances = normalizeYouthRetainerContracts(
+      state.finances,
+      state.clubs,
+      state.players,
+    );
     if (state.finances.employees.some((employee) => !employee.skills)) {
       state.finances = migrateEmployeeSkillsInRecord(
         state.finances,

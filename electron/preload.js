@@ -281,6 +281,23 @@ const electronAPI = Object.freeze({
     saveFile,
     openFile,
   }),
+
+  window: Object.freeze({
+    setFullScreen: (enabled) => invoke("window:setFullScreen", enabled === true),
+    isFullScreen: () => invoke("window:isFullScreen"),
+    onFullScreenChange: (listener) => {
+      if (typeof listener !== "function") {
+        throw new TypeError("Fullscreen listener must be a function");
+      }
+      const wrapped = (_event, enabled) => {
+        listener(enabled === true);
+      };
+      ipcRenderer.on("window:fullscreen-changed", wrapped);
+      return () => {
+        ipcRenderer.removeListener("window:fullscreen-changed", wrapped);
+      };
+    },
+  }),
 });
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

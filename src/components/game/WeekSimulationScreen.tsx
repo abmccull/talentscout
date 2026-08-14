@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { useSettingsStore } from "@/stores/settingsStore";
+
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -808,6 +810,8 @@ export function WeekSimulationScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const { playSFX } = useAudio();
   const prefersReducedMotion = useReducedMotion();
+  const autoPlayWeekSimulation = useSettingsStore((s) => s.autoPlayWeekSimulation);
+  const reducedMotionSetting = useSettingsStore((s) => s.reducedMotion);
 
   // All hooks must be called before any early return
   const currentDay = weekSimulation?.currentDay ?? 0;
@@ -876,10 +880,29 @@ export function WeekSimulationScreen() {
     chooseSimulationInteraction(choiceId, focusedPlayerIds);
   };
 
-  const advanceDayWithFeedback = () => {
+  const advanceDayWithFeedback = useCallback(() => {
     playSFX("calendar-slide");
     advanceDay();
-  };
+  }, [advanceDay, playSFX]);
+
+  useEffect(() => {
+    if (!autoPlayWeekSimulation || prefersReducedMotion || reducedMotionSetting) return;
+    if (interactionPending || isComplete || isAdvancingWeek || canLaunchInteractiveSession) {
+      return;
+    }
+    const timeoutId = window.setTimeout(advanceDayWithFeedback, 1400);
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    advanceDayWithFeedback,
+    autoPlayWeekSimulation,
+    prefersReducedMotion,
+    reducedMotionSetting,
+    interactionPending,
+    isComplete,
+    isAdvancingWeek,
+    canLaunchInteractiveSession,
+    currentDay,
+  ]);
 
   const fastForwardWithFeedback = () => {
     playSFX("page-turn");

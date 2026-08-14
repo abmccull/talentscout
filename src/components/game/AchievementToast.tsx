@@ -6,20 +6,23 @@ import { ACHIEVEMENTS } from "@/lib/achievements";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isAchievementAvailableForBuild } from "@/stores/gameScreenScope";
 
+
 const AUTO_DISMISS_MS = 3600;
 
 interface ToastContentProps {
   achievementIds: string[];
   onDismiss: () => void;
+  dismissMs: number;
 }
 
 function ToastCard({
   achievementIds,
   onDismiss,
+  dismissMs,
 }: ToastContentProps) {
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { playSFX } = useAudio();
+  const { playStinger } = useAudio();
 
   const achievements = achievementIds
     .map((id) => ACHIEVEMENTS.find((achievement) => achievement.id === id))
@@ -29,17 +32,17 @@ function ToastCard({
   const hiddenAchievementCount = Math.max(0, achievements.length - visibleAchievements.length);
 
   useEffect(() => {
-    playSFX("achievement");
+    playStinger("achievement");
     const id = window.requestAnimationFrame(() => setVisible(true));
     return () => window.cancelAnimationFrame(id);
-  }, [playSFX]);
+  }, [playStinger]);
 
   useEffect(() => {
-    timerRef.current = setTimeout(onDismiss, AUTO_DISMISS_MS);
+    timerRef.current = setTimeout(onDismiss, dismissMs);
     return () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
     };
-  }, [onDismiss]);
+  }, [dismissMs, onDismiss]);
 
   if (!achievement) return null;
 
@@ -114,7 +117,7 @@ function ToastCard({
         <div
           className="h-full rounded-full bg-emerald-500"
           style={{
-            animation: `shrink ${AUTO_DISMISS_MS}ms linear forwards`,
+            animation: `shrink ${dismissMs}ms linear forwards`,
           }}
         />
       </div>
@@ -126,10 +129,9 @@ export function AchievementToast() {
   const pendingToasts = useAchievementStore((s) => s.pendingToasts);
   const dismissAllToasts = useAchievementStore((s) => s.dismissAllToasts);
 
-  const availablePendingToasts = pendingToasts.filter(
-    isAchievementAvailableForBuild,
-  );
+  const availablePendingToasts = pendingToasts.filter(isAchievementAvailableForBuild);
   const currentId = availablePendingToasts[0] ?? null;
+  const dismissMs = AUTO_DISMISS_MS;
 
   if (!currentId) return null;
 
@@ -151,6 +153,7 @@ export function AchievementToast() {
           key={availablePendingToasts.join("|")}
           achievementIds={availablePendingToasts}
           onDismiss={dismissAllToasts}
+          dismissMs={dismissMs}
         />
       </div>
     </>

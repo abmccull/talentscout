@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { WorkspaceDisclosure } from "@/components/game/workspace/WorkspaceDisclosure";
 
 interface CareerRecoveryPanelProps {
   state: GameState;
@@ -123,9 +124,19 @@ export function CareerRecoveryPanel({ state, onChoose }: CareerRecoveryPanelProp
       </CardHeader>
       <CardContent>
         {episode.status === "awaitingChoice" ? (
-          <div className="grid gap-3 lg:grid-cols-3">
-            {options.map((option) => (
-              <div key={option.id} className="flex flex-col rounded-xl border border-white/10 bg-black/25 p-4">
+          <WorkspaceDisclosure
+            title="Open recovery routes"
+            eyebrow="Choose deliberately"
+            description="Compare the work, deadline, and return level attached to each route."
+            summary={<span>{options.filter((option) => option.available).length} available</span>}
+            responsiveOpenAt="lg"
+            tone="subtle"
+            className="lg:overflow-visible lg:border-0 lg:bg-transparent lg:[&>summary]:hidden"
+            contentClassName="!p-0 lg:!block lg:!border-t-0"
+          >
+            <div className="grid gap-3 lg:grid-cols-3">
+              {options.map((option) => (
+                <div key={option.id} className="flex flex-col rounded-xl border border-white/10 bg-black/25 p-4">
                 <p className="font-semibold text-white">{option.label}</p>
                 <p className="mt-1 text-sm leading-5 text-zinc-400">{option.description}</p>
                 <p className="mt-3 text-xs font-semibold text-amber-200">Target: {option.targetLabel}</p>
@@ -150,9 +161,10 @@ export function CareerRecoveryPanel({ state, onChoose }: CareerRecoveryPanelProp
                   Choose this route
                   <ArrowRight size={15} className="ml-2" aria-hidden="true" />
                 </Button>
-              </div>
-            ))}
-          </div>
+                </div>
+              ))}
+            </div>
+          </WorkspaceDisclosure>
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div>

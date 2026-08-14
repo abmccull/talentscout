@@ -171,12 +171,12 @@ function MinorCelebration({
   description,
   onDismiss,
   reducedMotion,
-}: Omit<CelebrationProps, "tier"> & { reducedMotion: boolean }) {
-  // Auto-dismiss after MINOR_AUTO_DISMISS_MS
+  dismissMs,
+}: Omit<CelebrationProps, "tier"> & { reducedMotion: boolean; dismissMs: number }) {
   React.useEffect(() => {
-    const id = setTimeout(onDismiss, MINOR_AUTO_DISMISS_MS);
+    const id = setTimeout(onDismiss, dismissMs);
     return () => clearTimeout(id);
-  }, [onDismiss]);
+  }, [dismissMs, onDismiss]);
 
   return (
     <div
@@ -330,6 +330,7 @@ export function Celebration({ tier, title, description, onDismiss }: Celebration
   const { playSFX } = useAudio();
   const reducedMotion = useSettingsStore((state) => state.reducedMotion);
   const emotionalAudioCues = useSettingsStore((state) => state.emotionalAudioCues);
+  const dismissMs = MINOR_AUTO_DISMISS_MS;
 
   React.useEffect(() => {
     if (emotionalAudioCues) playSFX(CELEBRATION_SFX[tier]);
@@ -339,7 +340,13 @@ export function Celebration({ tier, title, description, onDismiss }: Celebration
     <>
       <style>{CONFETTI_KEYFRAMES}</style>
       {tier === "minor" && (
-        <MinorCelebration title={title} description={description} onDismiss={onDismiss} reducedMotion={reducedMotion} />
+        <MinorCelebration
+          title={title}
+          description={description}
+          onDismiss={onDismiss}
+          reducedMotion={reducedMotion}
+          dismissMs={dismissMs}
+        />
       )}
       {tier === "major" && (
         <MajorCelebration title={title} description={description} onDismiss={onDismiss} reducedMotion={reducedMotion} />

@@ -478,13 +478,18 @@ function choiceMessage(
   choices: ReadonlyArray<OpeningCaseChoiceProjection>,
 ): InboxMessage {
   const choice = choices.find((candidate) => candidate.id === choiceId)!;
+  const immediateReaction = choiceId === "protect"
+    ? "Your source reads the silence as discretion, and the player stays off the wider market's radar for now."
+    : choiceId === "verify"
+      ? "Your source agrees to another check. The relationship strengthens, but the extra conversation creates a little market noise."
+      : "The club hears the name early and the player gains attention. Your source notices that confidentiality came second.";
   return {
     id: `opening-choice:${openingCase.id}:${choiceId}`,
     week,
     season,
     type: "event",
     title: `First lead: ${choice.label}`,
-    body: `${choice.description} This decision is preserved with the original observation and will shape who remembers the case.`,
+    body: `${immediateReaction} ${choice.description} This first reaction is preserved with the original observation and will shape who remembers the case.`,
     read: false,
     actionRequired: false,
     relatedId: openingCase.playerId,

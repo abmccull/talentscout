@@ -39,6 +39,13 @@ function activeRetainer(overrides: Partial<RetainerContract> = {}): RetainerCont
     requiredReportsPerMonth: 2,
     reportsDeliveredThisMonth: 2,
     status: "active",
+    brief: {
+      focus: "academy",
+      targetPositions: ["CM"],
+      ageRange: [15, 20],
+      minimumReportQuality: 54,
+      description: "Find a youth central midfielder for the academy pathway.",
+    },
     ...overrides,
   };
 }

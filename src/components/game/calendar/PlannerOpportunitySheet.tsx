@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { cycleDialogTab, getDialogFocusable } from "@/lib/a11y/dialogFocus";
 
 interface PlannerOpportunitySheetProps {
   open: boolean;
@@ -21,10 +22,47 @@ export function PlannerOpportunitySheet({
   onClose,
   children,
 }: PlannerOpportunitySheetProps) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : triggerRef.current;
+    const focusStart = () => {
+      const root = sheetRef.current;
+      if (!root) return;
+      const focusable = getDialogFocusable(root);
+      (closeRef.current ?? focusable[0])?.focus();
+    };
+    const frame = window.requestAnimationFrame(focusStart);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (sheetRef.current) cycleDialogTab(event, sheetRef.current);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("keydown", onKeyDown);
+      if (previousFocus && document.contains(previousFocus)) {
+        previousFocus.focus();
+      } else {
+        triggerRef.current?.focus();
+      }
+    };
+  }, [onClose, open]);
+
   return (
     <>
       <button
         type="button"
+        ref={triggerRef}
         data-testid="planner-mobile-opportunities-trigger"
         onClick={onOpen}
         aria-expanded={open}
@@ -57,6 +95,7 @@ export function PlannerOpportunitySheet({
             tabIndex={-1}
           />
           <div
+            ref={sheetRef}
             id="planner-mobile-opportunity-sheet"
             role="dialog"
             aria-modal="true"
@@ -74,6 +113,7 @@ export function PlannerOpportunitySheet({
               </div>
               <button
                 type="button"
+                ref={closeRef}
                 onClick={onClose}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
                 aria-label="Close opportunity sheet"

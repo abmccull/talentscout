@@ -8,6 +8,10 @@
  * transfer negotiations, free agent negotiations, and player loan management.
  */
 import type { GetState, SetState } from "./types";
+import {
+  queueGameplayAutosave,
+  snapshotPersistedGameState,
+} from "./persistGameplayAutosave";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
   InboxMessage,
@@ -69,6 +73,7 @@ import {
   getTransferContingentReserve,
   recordRetainerDelivery,
   recordConsultingReportDelivery,
+  ensureYouthRetainerBrief,
   selectAgencyOperatingPolicy,
 } from "@/engine/finance";
 import { creditForLoanRepayment } from "@/engine/finance/creditScore";
@@ -697,12 +702,14 @@ export function createFinanceActions(get: GetState, set: SetState) {
     acceptRetainerContract: (contract: RetainerContract) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
+      const club = gameState.clubs[contract.clubId];
+      if (!club) return;
       // Public actions may receive a negotiated/generated offer or a direct
       // contract assembled by another gameplay system. Anchor either shape to
       // the acceptance date so a missing optional offer timestamp cannot make
       // settlement fall back to an unrelated global week boundary.
       const datedContract: RetainerContract = {
-        ...contract,
+        ...ensureYouthRetainerBrief(contract, club, gameState.players),
         startWeek: contract.startWeek ?? contract.offeredWeek ?? gameState.currentWeek,
         startSeason: contract.startSeason ?? contract.offeredSeason ?? gameState.currentSeason,
       };
@@ -723,12 +730,12 @@ export function createFinanceActions(get: GetState, set: SetState) {
           gameState.currentWeek,
           gameState.currentSeason,
         );
-        set({
-          gameState: {
-            ...gameState,
-            finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
-          },
-        });
+        const nextState = {
+          ...gameState,
+          finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
+        };
+        set({ gameState: nextState });
+        queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
       }
     },
 
@@ -865,6 +872,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         club,
         pitchType,
         actionSequence,
+        gameState.players,
       );
       if (result.success && result.offeredContract) {
         const financesWithRelationship = ensureClientRelationship(

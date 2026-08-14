@@ -21,7 +21,7 @@ const CHOICE_ICONS = {
 export function OpeningDiscoveryScreen() {
   const gameState = useGameStore((state) => state.gameState);
   const resolveChoice = useGameStore((state) => state.resolveOpeningDiscoveryChoice);
-  const { playSFX } = useAudio();
+  const { playStinger } = useAudio();
   const projection = gameState ? buildOpeningCaseProjection(gameState) : null;
   const choices = gameState ? getOpeningCaseChoices(gameState) : [];
   const veteranPrologue = gameState?.veteranPrologue;
@@ -51,7 +51,7 @@ export function OpeningDiscoveryScreen() {
           : "/images/backgrounds/match-atmosphere.png";
 
   const handleChoice = (choiceId: OpeningCaseChoiceId) => {
-    playSFX("discovery");
+    playStinger("discovery");
     resolveChoice(choiceId);
   };
 

@@ -12,7 +12,6 @@ import type {
   Club,
   Scout,
   ScoutReport,
-  Position,
   StaffScoutingSignal,
   StaffScoutingWorkProduct,
 } from "../core/types";
@@ -24,6 +23,7 @@ import {
   MAX_AVAILABLE_ANALYST_REVIEWS,
 } from "./analystReviews";
 import { addGameWeeksWithSeasonLength } from "../core/gameDate";
+import { buildYouthRetainerBrief } from "./retainerBriefs";
 
 // ---------------------------------------------------------------------------
 // Public result type
@@ -422,15 +422,6 @@ function processRelationshipManagerWork(
   const negotiationBonus = Math.round((maxFee - minFee) * (negotiation / 20) * 0.3);
   const monthlyFee = Math.min(maxFee, feeRoll + negotiationBonus);
   const offerExpiry = addGameWeeksWithSeasonLength({ week, season }, 3);
-  const positions: Position[] = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
-  const roster = prospect.playerIds.map((playerId) => players[playerId]).filter(Boolean);
-  const targetPosition = positions
-    .map((position) => ({
-      position,
-      count: roster.filter((player) => player.position === position).length,
-    }))
-    .sort((left, right) => left.count - right.count || left.position.localeCompare(right.position))[0].position;
-
   const offer = {
     id: `retainer_${prospect.id}_rm_${week}_${season}`,
     clubId: prospect.id,
@@ -439,13 +430,7 @@ function processRelationshipManagerWork(
     requiredReportsPerMonth: tier + 1,
     reportsDeliveredThisMonth: 0,
     status: "active" as const,
-    brief: {
-      focus: prospect.scoutingPhilosophy === "academyFirst" ? "academy" as const : "firstTeam" as const,
-      targetPositions: [targetPosition],
-      ageRange: prospect.scoutingPhilosophy === "academyFirst" ? [15, 20] as [number, number] : [18, 27] as [number, number],
-      minimumReportQuality: 48 + tier * 6,
-      description: `${prospect.name} wants decision-ready intelligence at ${targetPosition}.`,
-    },
+    brief: buildYouthRetainerBrief(prospect, players, tier as 1 | 2 | 3),
     offeredWeek: week,
     offeredSeason: season,
     offerExpiresWeek: offerExpiry.week,
