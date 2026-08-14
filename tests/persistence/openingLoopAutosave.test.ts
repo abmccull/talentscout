@@ -26,11 +26,13 @@ vi.mock("@/lib/saveProvider", () => ({
 import {
   flushGameplayAutosave,
   queueGameplayAutosave,
+  resetGameplayAutosaveWatermark,
   snapshotPersistedGameState,
 } from "@/stores/actions/persistGameplayAutosave";
 
 afterEach(() => {
   persistGameState.mockClear();
+  resetGameplayAutosaveWatermark();
   vi.useRealTimers();
 });
 

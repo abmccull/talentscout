@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import { ArrowRight, Clock3, Eye, LockKeyhole, Phone, Sparkles, Users } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -22,6 +23,7 @@ export function OpeningDiscoveryScreen() {
   const gameState = useGameStore((state) => state.gameState);
   const resolveChoice = useGameStore((state) => state.resolveOpeningDiscoveryChoice);
   const { playStinger } = useAudio();
+  const [pendingChoice, setPendingChoice] = useState<OpeningCaseChoiceId | null>(null);
   const projection = gameState ? buildOpeningCaseProjection(gameState) : null;
   const choices = gameState ? getOpeningCaseChoices(gameState) : [];
   const veteranPrologue = gameState?.veteranPrologue;
@@ -51,6 +53,8 @@ export function OpeningDiscoveryScreen() {
           : "/images/backgrounds/match-atmosphere.png";
 
   const handleChoice = (choiceId: OpeningCaseChoiceId) => {
+    if (pendingChoice) return;
+    setPendingChoice(choiceId);
     playStinger("discovery");
     resolveChoice(choiceId);
   };
@@ -61,7 +65,7 @@ export function OpeningDiscoveryScreen() {
       aria-labelledby="opening-discovery-heading"
       data-testid="opening-discovery"
     >
-      <ScreenBackground src={background} opacity={0.45} />
+      <ScreenBackground src={background} opacity={0.72} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(16,185,129,0.18),transparent_35%),linear-gradient(to_bottom,rgba(4,7,6,0.15),#070a09_75%)]" />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-8 sm:py-10">
@@ -95,6 +99,7 @@ export function OpeningDiscoveryScreen() {
                 <PlayerAvatar
                   playerId={projection.playerId}
                   nationality={youth.player.nationality}
+                  age={projection.age}
                   size={96}
                   className="rounded-full"
                 />
@@ -175,8 +180,14 @@ export function OpeningDiscoveryScreen() {
                   <button
                     key={choice.id}
                     type="button"
+                    disabled={pendingChoice !== null}
+                    aria-busy={pendingChoice === choice.id}
                     onClick={() => handleChoice(choice.id)}
-                    className="group flex min-h-24 w-full items-start gap-4 rounded-xl border border-white/10 bg-white/[0.025] p-4 text-left transition hover:border-emerald-300/40 hover:bg-emerald-300/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 motion-reduce:transition-none"
+                    className={`group flex min-h-24 w-full items-start gap-4 rounded-xl border p-4 text-left transition motion-reduce:transition-none ${
+                      pendingChoice === choice.id
+                        ? "border-amber-300/50 bg-amber-300/[0.08]"
+                        : "border-white/10 bg-white/[0.025] hover:border-amber-300/40 hover:bg-amber-300/[0.06]"
+                    } disabled:cursor-wait disabled:opacity-80`}
                   >
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-emerald-300">
                       <Icon size={19} aria-hidden="true" />

@@ -1,21 +1,20 @@
 /**
  * First-hour chrome: start → watch → file → see next week.
  * World, Career, and the stacked Desk command center stay backstage
- * until the opening report exists or the calendar has moved.
+ * until the opening week has a booked second look or the calendar moves.
  */
 export function isYouthFirstHour(state: {
   currentWeek?: number;
   currentSeason?: number;
   reports?: Record<string, unknown> | null;
   openingCase?: unknown;
+  schedule?: { activities?: Array<unknown | null> } | null;
 } | null | undefined): boolean {
-  if (!state) return false;
-  return (
-    Boolean(state.openingCase)
-    && (state.currentSeason ?? 1) === 1
-    && (state.currentWeek ?? 1) <= 1
-    && Object.keys(state.reports ?? {}).length === 0
-  );
+  if (!state?.openingCase) return false;
+  if ((state.currentSeason ?? 1) !== 1) return false;
+  if ((state.currentWeek ?? 1) > 1) return false;
+  const booked = state.schedule?.activities?.some((activity) => activity != null) ?? false;
+  return !booked;
 }
 
 export function isYouthOpeningWeek(state: {
@@ -24,4 +23,8 @@ export function isYouthOpeningWeek(state: {
 } | null | undefined): boolean {
   if (!state) return false;
   return (state.currentSeason ?? 1) === 1 && (state.currentWeek ?? 1) <= 1;
+}
+
+export function isYouthWatchScreen(screen: string | null | undefined): boolean {
+  return screen === "observation" || screen === "openingDiscovery";
 }

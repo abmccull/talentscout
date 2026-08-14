@@ -35,11 +35,9 @@ export function PersistenceRuntime() {
     const gameApi = window.electronAPI?.game;
     const unsubscribeFlushRequest = gameApi?.onFlushSaveRequest?.(() => {
       void flush()
+        .then(() => gameApi.notifySaveFlushed?.())
         .catch((error) => {
           console.warn("Quit flush failed:", error);
-        })
-        .finally(() => {
-          void gameApi.notifySaveFlushed?.();
         });
     });
 

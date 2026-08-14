@@ -773,7 +773,7 @@ export function ReportWriter() {
     if (isDirty && !window.confirm(t("unsavedWarning"))) {
       return;
     }
-    setScreen("playerProfile");
+    setScreen(conciseOpeningMode ? "openingDiscovery" : "playerProfile");
   };
 
   const handleSubmit = () => {
@@ -850,6 +850,7 @@ export function ReportWriter() {
           <PlayerAvatar
             playerId={player.id}
             nationality={player.nationality}
+            age={player.age}
             size={64}
           />
           <div>

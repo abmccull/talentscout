@@ -73,6 +73,7 @@ export function createAutosaveQueue<T>(
   let cancelScheduled: (() => void) | null = null;
   let queued: { value: T } | null = null;
   let idleWaiters: Array<() => void> = [];
+  let lastError: unknown = null;
 
   const notifyIdle = (): void => {
     if (pending || queued !== null || scheduled) return;
@@ -108,8 +109,14 @@ export function createAutosaveQueue<T>(
     queued = null;
     pending = true;
     void options.persist(value)
-      .then(() => options.onSuccess?.(value))
-      .catch((error: unknown) => options.onError(error, value))
+      .then(() => {
+        lastError = null;
+        options.onSuccess?.(value);
+      })
+      .catch((error: unknown) => {
+        lastError = error;
+        options.onError(error, value);
+      })
       .finally(() => {
         pending = false;
         if (queued !== null) {
@@ -151,6 +158,7 @@ export function createAutosaveQueue<T>(
       }
       try {
         await whenIdle();
+        if (lastError) throw lastError;
       } finally {
         immediate = false;
       }

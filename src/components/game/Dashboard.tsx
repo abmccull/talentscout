@@ -8,6 +8,7 @@ import {
   WeekAdvanceConfirmDialog,
 } from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
+import { isYouthFirstHour } from "@/lib/youthFirstHour";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -159,15 +160,16 @@ export function Dashboard() {
         : [],
     [gameState],
   );
+  const firstHourDesk = isYouthFirstHour(gameState);
   const dashboardWorkspace = useMemo(
     () =>
-      gameState
+      gameState && !firstHourDesk
         ? buildDashboardWorkspaceModel({
             gameState,
             pendingListingReportId,
           })
         : null,
-    [gameState, pendingListingReportId],
+    [firstHourDesk, gameState, pendingListingReportId],
   );
   useEffect(() => {
     if (!dashboardWorkspace) return;
@@ -412,7 +414,7 @@ export function Dashboard() {
       scheduledSlots,
       openDayCount,
     });
-    if (!dashboardWorkspace) {
+    if (!firstHourDesk && !dashboardWorkspace) {
       return null;
     }
     return (

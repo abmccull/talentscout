@@ -122,7 +122,7 @@ export function PlannerWeekStrip({
       )}
 
       <div
-        className="grid grid-cols-7 gap-1 pb-1 sm:gap-2"
+        className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] xl:grid xl:grid-cols-7 xl:overflow-visible xl:pb-0"
         tabIndex={0}
         role="region"
         aria-label="Weekly itinerary days. Use left and right arrow keys to scroll."
@@ -152,7 +152,7 @@ export function PlannerWeekStrip({
           return (
             <div
               key={dayKey}
-              className={`workspace-interactive relative min-h-[88px] min-w-0 rounded-xl border p-2 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] ${
+              className={`workspace-interactive relative min-h-11 min-w-[5.75rem] snap-start rounded-xl border p-2 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] xl:min-w-0 ${
                 activity
                   ? "border-emerald-400/25 bg-emerald-400/[0.06]"
                   : isPreviewed

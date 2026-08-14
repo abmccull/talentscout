@@ -12,6 +12,7 @@ import { createWeekSimulationActions } from "./weekSimulationActions";
 import { createMatchActions } from "./matchActions";
 import { processWeeklyEconomy } from "./weeklyEconomy";
 import {
+  flushGameplayAutosave,
   queueGameplayAutosave,
   snapshotPersistedGameState,
 } from "./persistGameplayAutosave";
@@ -155,8 +156,6 @@ import {
 import { createInsightState, accumulateInsight, calculateCapacity, tickCooldown } from "@/engine/insight/insight";
 import { nextGameWeek } from "@/engine/reports/scoutingCases";
 import { deriveScoutingCaseObservationFocus } from "@/engine/reports/caseQuestions";
-import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
-import { persistGameState } from "@/lib/saveProvider";
 import {
   createWeeklyQuickScoutActions,
   isBatchAdvanceInProgress,
@@ -422,11 +421,9 @@ export function createWeeklyActions(
     // Checkpoint autosave before processing — if the game crashes during week
     // simulation the player has a save from immediately before.
     if (runtime.persistenceEnabled && !isBatchAdvanceInProgress()) {
-      getActiveSaveProvider()
-        .then((provider) => persistGameState(provider, "autosave", gameState, "Autosave"))
-        .catch((err) => {
-          console.warn("Pre-advance checkpoint autosave failed:", err);
-        });
+      void flushGameplayAutosave(snapshotPersistedGameState(gameState), set).catch((err) => {
+        console.warn("Pre-advance checkpoint autosave failed:", err);
+      });
     }
 
     const simState = get().weekSimulation;

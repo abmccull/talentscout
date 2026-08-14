@@ -83,6 +83,32 @@ Code-side launch fixes are in the working tree on top of `f82dc6f`:
 - Opening week always confirms Advance Week
 - Mobile Planner is a 7-column week; mobile nav uses rem and 4 columns in the first hour
 
+## Path from 4.7 to 10/10
+
+A 10 is not polish. The audit already wrote the scorecard. One room at a time: name yourself, watch one kid, write the name, see that kid on tomorrow’s itinerary. Chrome, mentor, inbox, and KPI tiles stay backstage until the week has a booked second look.
+
+Done on this pass toward that scorecard:
+- Watch is chrome-light (no rail / Inbox / Handbook)
+- Mentor no longer covers Watch the match
+- First-hour 4-tab rail survives filing until a day is booked
+- Mentor after the report points at Planner, not Reports
+- Opening discovery locks after click; overlay is darker; back from the opening report returns to discovery
+- Brand tokens and wordmark moved to floodlight amber / navy
+- Youth avatars cannot grow stubble or grey hair
+- Mobile planner scrolls with 44px+ day cells
+
+Still required for a 10 (cannot fake):
+1. Observation pitch is still an FM tactics board. Replace it with atmosphere + named faces.
+2. Real youth portraits that can sit next to ScoutAvatar. Age-safe SVG is not a portrait.
+3. Rem type floor on every first-hour 8–11px label (pitch names, report meta, evidence).
+4. One selected / pending / disabled / 3px focus recipe reused everywhere.
+5. Mentor overlay is a real dialog, never covering its target.
+6. After file, Planner already has that kid on a day. Advance Week is not the hero at 0/7.
+7. Colorblind mode remaps the palette. It must not simulate the deficiency.
+8. Reports look like a notebook, not a CRM form.
+
+Until 1–2 exist, the audit will not score imagery or brand above the mid 6s. Until 6 exists, conversion stays a 6.
+
 ## Still not launch-ready
 
-Process attestations (C) are still unverified. Art (D) is still named, not faked. The next ship step is package + human cert on the new SHA — not a Ready stamp.
+Process attestations remain unverified. Do not invent them.

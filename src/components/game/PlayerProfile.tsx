@@ -581,6 +581,7 @@ export function PlayerProfile() {
             <PlayerAvatar
               playerId={player.id}
               nationality={player.nationality}
+              age={player.age}
               size={96}
             />
             <div>

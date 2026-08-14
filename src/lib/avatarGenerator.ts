@@ -146,21 +146,27 @@ const HAIR_COLORS: string[] = [
  * All outputs are deterministic — the same (seed, nationality) pair always
  * produces the same AvatarParams.
  */
-export function generateAvatarParams(seed: string, nationality?: string): AvatarParams {
+export function generateAvatarParams(
+  seed: string,
+  nationality?: string,
+  age?: number,
+): AvatarParams {
   const hash = hashString(seed);
   const next = makeSeededValues(hash);
 
   const skinTones = getSkinTones(nationality);
+  const youth = age != null && age < 21;
+  const hairColors = youth ? HAIR_COLORS.filter((color) => color !== "#A0A0A0") : HAIR_COLORS;
 
   return {
     headShape:  next(8),        // 0–7
     skinTone:   skinTones[next(skinTones.length)]!,
     hairStyle:  next(15),       // 0–14
-    hairColor:  HAIR_COLORS[next(HAIR_COLORS.length)]!,
+    hairColor:  hairColors[next(hairColors.length)]!,
     eyeShape:   next(6),        // 0–5
     noseType:   next(5),        // 0–4
     mouthType:  next(4),        // 0–3
-    facialHair: next(4),        // 0–3 (0 = none)
-    accessory:  next(3),        // 0–2 (0 = none)
+    facialHair: youth ? 0 : next(4),
+    accessory:  youth ? 0 : next(3),
   };
 }

@@ -362,6 +362,14 @@ export function MentorOverlay() {
 
   if (activeMode.kind === "none") return null;
   if (!gameState || NON_GAME_SCREENS.has(currentGameScreen)) return null;
+  if (activeMode.kind === "guided") {
+    const targets = Array.isArray(activeMode.milestone.target)
+      ? activeMode.milestone.target
+      : [activeMode.milestone.target];
+    // The setup card already carries the hook. A covering mentor card
+    // hides Watch the match — the first-hour conversion control.
+    if (targets.includes("observation-begin-session")) return null;
+  }
 
   // ---------------------------------------------------------------------------
   // Derived display values

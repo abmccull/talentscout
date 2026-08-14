@@ -611,6 +611,11 @@ function createWindow() {
   mainWindow.on("leave-full-screen", () => {
     mainWindow.webContents.send("window:fullscreen-changed", false);
   });
+  mainWindow.on("close", (event) => {
+    if (quitFlushState === "done") return;
+    event.preventDefault();
+    requestQuitFlush();
+  });
   mainWindow.on("closed", () => {
     discardRendererTransfers();
     mainWindow = null;
@@ -639,7 +644,37 @@ function finishQuitFlush() {
   }
   if (quitFlushState === "done") return;
   quitFlushState = "done";
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+  }
   app.quit();
+}
+
+function requestQuitFlush() {
+  if (quitFlushState === "done") {
+    finishQuitFlush();
+    return;
+  }
+  if (quitFlushState === "waiting") return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    quitFlushState = "done";
+    app.quit();
+    return;
+  }
+  quitFlushState = "waiting";
+  try {
+    if (mainWindow.webContents.isDestroyed()) {
+      throw new Error("renderer gone");
+    }
+    mainWindow.webContents.send("game:flush-save");
+  } catch (error) {
+    console.warn("[Persist] Could not ask renderer to flush:", error);
+    finishQuitFlush();
+    return;
+  }
+  quitFlushTimer = setTimeout(() => {
+    finishQuitFlush();
+  }, 2500);
 }
 
 handleTrustedIpc("game:notifySaveFlushed", () => {
@@ -1004,15 +1039,6 @@ app.on("window-all-closed", () => {
 app.on("before-quit", (event) => {
   clearInterval(saveTransferCleanupTimer);
   if (quitFlushState === "done") return;
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    quitFlushState = "done";
-    return;
-  }
   event.preventDefault();
-  if (quitFlushState === "waiting") return;
-  quitFlushState = "waiting";
-  mainWindow.webContents.send("game:flush-save");
-  quitFlushTimer = setTimeout(() => {
-    finishQuitFlush();
-  }, 2500);
+  requestQuitFlush();
 });

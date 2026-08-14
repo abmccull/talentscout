@@ -291,7 +291,7 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
       "You have a name and a first opinion. Now open the Planner. The second context is where a lucky highlight starts becoming a real scouting case.",
     position: "bottom",
     interactive: true,
-    screen: "reportHistory",
+    screen: "calendar",
   },
   {
     id: "scheduledActivity",

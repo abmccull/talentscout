@@ -21,6 +21,7 @@ export interface PlayerAvatarProps {
   playerId: string;
   size?: 48 | 64 | 96;
   nationality?: string;
+  age?: number;
   className?: string;
 }
 
@@ -143,9 +144,10 @@ export function PlayerAvatar({
   playerId,
   size = 48,
   nationality,
+  age,
   className,
 }: PlayerAvatarProps) {
-  const params = generateAvatarParams(playerId, nationality);
+  const params = generateAvatarParams(playerId, nationality, age);
 
   const cx = 50;
   const cy = 50;

@@ -12,6 +12,10 @@ interface AutosaveRequest {
 let persistTail = Promise.resolve();
 let committedSavedAt = 0;
 
+export function resetGameplayAutosaveWatermark(): void {
+  committedSavedAt = 0;
+}
+
 async function persistAutosaveSnapshot(state: GameState): Promise<void> {
   const run = persistTail.then(async () => {
     if (state.lastSaved > 0 && state.lastSaved < committedSavedAt) return;

@@ -220,7 +220,7 @@ export function MainMenu() {
           </Badge>
         )}
         <h1 className="mb-2 text-6xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
-          Talent<span className="text-emerald-500">Scout</span>
+          Talent<span className="text-amber-400">Scout</span>
         </h1>
         <p className="text-lg text-zinc-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
           {IS_YOUTH_EARLY_ACCESS

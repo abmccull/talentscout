@@ -266,7 +266,13 @@ function getNavLockState(
   return null;
 }
 
-export function GameLayout({ children }: { children: React.ReactNode }) {
+export function GameLayout({
+  children,
+  chrome = "workspace",
+}: {
+  children: React.ReactNode;
+  chrome?: "workspace" | "watch";
+}) {
   const {
     currentScreen,
     setScreen,
@@ -485,15 +491,28 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const watchChrome = chrome === "watch";
+
   return (
     <div className="flex min-h-screen bg-[#090b0e]">
       <a
         href="#game-main"
-        className="fixed left-3 top-3 z-[70] -translate-y-20 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition focus:translate-y-0"
+        className="fixed left-3 top-3 z-[70] -translate-y-20 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition focus:translate-y-0"
       >
         Skip to game content
       </a>
 
+      {watchChrome && (
+        <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center justify-center border-b border-white/10 bg-[#0b0e12]/90 px-3 backdrop-blur">
+          <p className="text-sm font-semibold text-white">Watch</p>
+          <p className="ml-3 text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted-foreground)]">
+            Week {currentWeek} · Season {currentSeason}
+          </p>
+        </header>
+      )}
+
+      {!watchChrome && (
+      <>
       <header className="fixed inset-x-0 top-0 z-30 grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center border-b border-white/10 bg-[#0b0e12]/95 px-2 backdrop-blur md:hidden">
         <div className="flex items-center">
           <button
@@ -511,7 +530,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="min-w-0 text-center">
           <p className="truncate text-sm font-semibold text-white">{activeWorkspaceLabel}</p>
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted-foreground)]">
             Week {currentWeek} · Season {currentSeason}
           </p>
         </div>
@@ -560,7 +579,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-bold tracking-tight">
-              Talent<span className="text-emerald-500">Scout</span>
+              Talent<span className="text-amber-400">Scout</span>
             </h1>
             {/* Close button visible only on mobile */}
             <button
@@ -753,12 +772,18 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
       )}
+      </>
+      )}
 
       <main
         id="game-main"
         ref={mainRef}
         tabIndex={-1}
-        className={`game-mobile-safe-scroll relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.07),transparent_34%),linear-gradient(180deg,#0b0e12_0%,#090b0e_100%)] pt-14 focus:outline-none md:pt-0 ${useYouthEarlyAccessNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`}
+        className={`relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(212,168,67,0.08),transparent_34%),linear-gradient(180deg,#0b1220_0%,#0a1628_100%)] focus:outline-none ${
+          watchChrome
+            ? "pt-12"
+            : `game-mobile-safe-scroll pt-14 md:pt-0 ${useYouthEarlyAccessNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`
+        }`}
       >
         {autosaveError !== null && (
           <div

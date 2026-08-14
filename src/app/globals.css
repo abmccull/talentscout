@@ -5,17 +5,17 @@
   --foreground: #f2f5f7;
   --card: #11161c;
   --card-foreground: #f2f5f7;
-  --primary: #34d399;
-  --primary-foreground: #07110d;
+  --primary: #d4a843;
+  --primary-foreground: #0a1628;
   --secondary: #19232d;
   --secondary-foreground: #f2f5f7;
   --muted: #171c22;
   --muted-foreground: #aeb7c2;
-  --accent: #22c55e;
-  --accent-foreground: #0a0a0a;
+  --accent: #d4a843;
+  --accent-foreground: #0a1628;
   --destructive: #ef4444;
   --border: #29313a;
-  --ring: #34d399;
+  --ring: #d4a843;
   --radius: 0.75rem;
 }
 
@@ -24,14 +24,14 @@ body {
   color: var(--foreground);
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   background-image:
-    radial-gradient(circle at 85% -10%, rgba(52, 211, 153, 0.07), transparent 32rem),
-    linear-gradient(180deg, #0b0e12 0%, #090b0e 100%);
+    radial-gradient(circle at 85% -10%, rgba(212, 168, 67, 0.08), transparent 32rem),
+    linear-gradient(180deg, #0b1220 0%, #0a1628 100%);
   background-attachment: fixed;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgba(52, 211, 153, 0.28);
+  background: rgba(212, 168, 67, 0.28);
   color: #ffffff;
 }
 

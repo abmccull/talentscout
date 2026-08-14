@@ -395,11 +395,15 @@ export function createReportActions(get: GetState, set: SetState) {
       // A retry or double click has neither a new ID nor new evidence. Keep it
       // silent and idempotent instead of turning it into an invalid revision.
       if (gameState.reports[report.id] && freshObservationIds.length === 0) {
+        const isOpeningRetry = Boolean(
+          gameState.openingCase
+          && gameState.openingCase.playerId === report.playerId,
+        );
         set({
-          currentScreen: "reportHistory",
-          ...(gameState.scout.careerPath === "independent"
-            ? { pendingListingReportId: report.id }
-            : {}),
+          currentScreen: isOpeningRetry ? "dashboard" : "reportHistory",
+          ...(isOpeningRetry || gameState.scout.careerPath !== "independent"
+            ? {}
+            : { pendingListingReportId: report.id }),
         });
         return;
       }

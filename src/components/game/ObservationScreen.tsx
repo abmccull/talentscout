@@ -1520,9 +1520,9 @@ export function ObservationScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <GameLayout>
-      <div className="relative flex min-h-[calc(100dvh-7.5rem)] min-w-0 flex-col overflow-x-hidden pb-20 md:h-full md:min-h-0 md:pb-20 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden lg:pb-0">
-        <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.85} />
+    <GameLayout chrome="watch">
+      <div className="relative flex min-h-dvh min-w-0 flex-col overflow-x-hidden pb-6 md:h-full md:min-h-0 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
+        <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.72} />
 
         <div className="relative z-10 flex flex-1 flex-col min-h-0">
 

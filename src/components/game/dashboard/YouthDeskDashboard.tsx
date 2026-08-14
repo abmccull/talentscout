@@ -31,7 +31,7 @@ interface YouthDeskDashboardProps {
   youthDeskAction: DashboardYouthDeskAction;
   activeCaseModel: DashboardYouthActionModel;
   currentCareerEra?: DashboardCareerEra;
-  dashboardWorkspace: DashboardWorkspaceModel;
+  dashboardWorkspace: DashboardWorkspaceModel | null;
   onDashboardAction: (target: DashboardActionTarget) => void;
   onMarkReviewed: (item: DashboardPriorityItem) => void;
   onSnooze: (item: DashboardPriorityItem) => void;
@@ -115,7 +115,7 @@ export function YouthDeskDashboard({
             </div>
           </header>
 
-          {!firstHour && (
+          {!firstHour && dashboardWorkspace && (
             <DashboardCommandCenter
               model={dashboardWorkspace}
               onAction={onDashboardAction}

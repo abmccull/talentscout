@@ -183,6 +183,7 @@ import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import {
   flushGameplayAutosave,
   queueGameplayAutosave,
+  resetGameplayAutosaveWatermark,
   snapshotPersistedGameState,
 } from "@/stores/actions/persistGameplayAutosave";
 import { useTutorialStore } from "@/stores/tutorialStore";
@@ -404,6 +405,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Start new game
   startNewGame: async (config) => {
     if (newGameStartInFlight) return;
+    resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     set({
       isAdvancingWeek: false,
@@ -1007,6 +1009,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadGame: (rawState) => {
+    resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     // Every runtime entrypoint, including direct test/import loads, passes
     // through the same pure and idempotent migration used by save providers.

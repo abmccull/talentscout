@@ -1,5 +1,3 @@
-import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
-import { persistGameState } from "@/lib/saveProvider";
 import { runWeeklyWorkerTransaction } from "@/lib/weeklySimulationWorkerClient";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import type { GameStoreState } from "../gameStoreTypes";
@@ -7,6 +5,10 @@ import type { GetState, SetState } from "./types";
 import {
   queueWeeklyAutosave,
 } from "./weeklyActions";
+import {
+  flushGameplayAutosave,
+  snapshotPersistedGameState,
+} from "./persistGameplayAutosave";
 import { applyWeeklyTutorialCommands } from "./weeklyTutorialBridge";
 import { materializeWeeklyWorkerCommit } from "./weeklyHeadlessTransaction";
 import { isBatchAdvanceInProgress } from "./weeklyQuickScoutActions";
@@ -30,16 +32,9 @@ export function createWeeklyAsyncActions(
       if (!sourceState || !sourceSimulation || get().isAdvancingWeek) return;
 
       if (!isBatchAdvanceInProgress()) {
-        getActiveSaveProvider()
-          .then((provider) => persistGameState(
-            provider,
-            "autosave",
-            sourceState,
-            "Autosave",
-          ))
-          .catch((error) => {
-            console.warn("Pre-advance checkpoint autosave failed:", error);
-          });
+        void flushGameplayAutosave(snapshotPersistedGameState(sourceState), set).catch((error) => {
+          console.warn("Pre-advance checkpoint autosave failed:", error);
+        });
       }
 
       const tutorial = useTutorialStore.getState();
