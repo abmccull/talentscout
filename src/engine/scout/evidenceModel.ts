@@ -726,6 +726,26 @@ export function buildInitialAssessment(
   };
 }
 
+/** First-hour notebook: file the name without a five-decision form. */
+export function seedOpeningNotebookAssessment(
+  cards: ScoutingEvidenceCard[],
+): InitialAssessmentInput | null {
+  const card = cards[0];
+  if (!card) return null;
+  const claim = getEvidenceClaimOptions(card)[0];
+  const unknown = getEvidenceUnknownOptions(card)[0];
+  const nextTest = unknown ? getEvidenceNextTestOptions(unknown)[0] : undefined;
+  if (!claim || !unknown || !nextTest) return null;
+  return {
+    evidenceCardId: card.id,
+    claimOptionId: claim.id,
+    unknownOptionId: unknown.id,
+    nextTestId: nextTest.id,
+    recommendation: "monitor",
+    confidence: "working",
+  };
+}
+
 function evidenceBandFromReportConfidence(
   confidence: "low" | "medium" | "high",
 ): EvidenceConfidenceBand {

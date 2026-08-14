@@ -37,7 +37,7 @@ describe("youth first-hour rail", () => {
     expect(isYouthOpeningWeek({ currentWeek: 2, currentSeason: 1 })).toBe(false);
   });
 
-  it("hides inbox and holds achievement juice until a day is booked", () => {
+  it("hides inbox and holds achievement juice for the whole opening week", () => {
     const firstHour = {
       currentWeek: 1,
       currentSeason: 1,
@@ -50,11 +50,22 @@ describe("youth first-hour rail", () => {
     };
 
     expect(shouldShowYouthInbox(firstHour)).toBe(false);
-    expect(shouldShowYouthInbox(booked)).toBe(true);
+    expect(shouldShowYouthInbox(booked)).toBe(false);
     expect(shouldHoldAchievementToasts("reportWriter", firstHour)).toBe(true);
     expect(shouldHoldAchievementToasts("dashboard", firstHour)).toBe(true);
     expect(shouldHoldAchievementToasts("observation", booked)).toBe(true);
-    expect(shouldHoldAchievementToasts("dashboard", booked)).toBe(false);
+    expect(shouldHoldAchievementToasts("dashboard", booked)).toBe(true);
+    expect(shouldShowYouthInbox({
+      currentWeek: 2,
+      currentSeason: 1,
+      openingCase: { id: "opening" },
+      schedule: { activities: [{ id: "school-match" }] },
+    })).toBe(true);
+    expect(shouldHoldAchievementToasts("dashboard", {
+      currentWeek: 2,
+      currentSeason: 1,
+      openingCase: { id: "opening" },
+    })).toBe(false);
   });
 });
 

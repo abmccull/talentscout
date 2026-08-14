@@ -1,19 +1,24 @@
-/**
- * First-hour chrome: start → watch → file → see next week.
- * World, Career, and the stacked Desk command center stay backstage
- * until the opening week has a booked second look or the calendar moves.
- */
-export function isYouthFirstHour(state: {
+type OpeningState = {
   currentWeek?: number;
   currentSeason?: number;
   reports?: Record<string, unknown> | null;
   openingCase?: unknown;
   schedule?: { activities?: Array<unknown | null> } | null;
-} | null | undefined): boolean {
+} | null | undefined;
+
+function isOpeningSeasonOneWeekOne(state: OpeningState): boolean {
   if (!state?.openingCase) return false;
   if ((state.currentSeason ?? 1) !== 1) return false;
-  if ((state.currentWeek ?? 1) > 1) return false;
-  const booked = state.schedule?.activities?.some((activity) => activity != null) ?? false;
+  return (state.currentWeek ?? 1) <= 1;
+}
+
+/**
+ * Unbooked opening: Desk still has one next verb (watch / write).
+ * Booking the second look does not mean the Steam first week is over.
+ */
+export function isYouthFirstHour(state: OpeningState): boolean {
+  if (!isOpeningSeasonOneWeekOne(state)) return false;
+  const booked = state?.schedule?.activities?.some((activity) => activity != null) ?? false;
   return !booked;
 }
 
@@ -25,35 +30,29 @@ export function isYouthOpeningWeek(state: {
   return (state.currentSeason ?? 1) === 1 && (state.currentWeek ?? 1) <= 1;
 }
 
+/**
+ * Steam first-week shell. Inbox, World, Career, and achievement juice stay
+ * off the HUD until week 2 — including the Planner receipt after filing.
+ */
+export function isYouthOpeningShell(state: OpeningState): boolean {
+  return isOpeningSeasonOneWeekOne(state);
+}
+
 export function isYouthWatchScreen(screen: string | null | undefined): boolean {
   return screen === "observation" || screen === "openingDiscovery";
 }
 
-/** Inbox stays backstage until the opening week has a booked second look. */
-export function shouldShowYouthInbox(state: {
-  currentWeek?: number;
-  currentSeason?: number;
-  openingCase?: unknown;
-  schedule?: { activities?: Array<unknown | null> } | null;
-} | null | undefined): boolean {
-  return !isYouthFirstHour(state);
+/** Career HUD (Inbox / World / Career) stays off for the whole opening week. */
+export function shouldShowYouthInbox(state: OpeningState): boolean {
+  return !isYouthOpeningShell(state);
 }
 
-/**
- * Hold Steam-style juice while the first hour is still one emotional beat.
- * Watch, discovery, and travel already needed a clear stage; filing the name
- * should not get a toast either.
- */
+/** Hold Steam achievement juice through Watch and the whole opening week. */
 export function shouldHoldAchievementToasts(
   screen: string | null | undefined,
-  state: {
-    currentWeek?: number;
-    currentSeason?: number;
-    openingCase?: unknown;
-    schedule?: { activities?: Array<unknown | null> } | null;
-  } | null | undefined,
+  state: OpeningState,
 ): boolean {
   if (isYouthWatchScreen(screen)) return true;
   if (screen === "internationalView") return true;
-  return isYouthFirstHour(state);
+  return isYouthOpeningShell(state);
 }

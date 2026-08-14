@@ -499,6 +499,11 @@ export class GamePage {
       state: "visible",
       timeout: 15_000,
     });
+    const fileTheName = this.page.getByRole("button", { name: /^File the name$/ });
+    if (await fileTheName.isVisible({ timeout: 500 }).catch(() => false)) {
+      if (shouldSubmit) await fileTheName.click();
+      return;
+    }
     const fileInitialAssessment = this.page.getByRole("button", { name: /^File initial assessment$/ });
     if (await fileInitialAssessment.isVisible({ timeout: 500 }).catch(() => false)) {
       await this.page.getByRole("group", { name: "Saved evidence" }).getByRole("radio").first().locator("..").click();

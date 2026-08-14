@@ -42,6 +42,7 @@ test.describe("interactive observation pitch", () => {
     const contextToggle = page.getByRole("button", {
       name: /Focus targets and lenses/i,
     });
+    await contextToggle.click();
     await expect(contextToggle).toHaveAttribute("aria-expanded", "true");
     const technicalLens = page.getByRole("button", {
       name: /^Use technical lens for /,
@@ -125,13 +126,11 @@ test.describe("interactive observation pitch", () => {
 
     await pitchMarker.tap();
     await expect(pitchMarker).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: /Focus targets and lenses/i }).click();
     await expect(
       page.getByRole("button", { name: /Focus targets and lenses/i }),
     ).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("dialog", { name: "Choose your focus" })).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /^Use technical lens for / }).first(),
-    ).toBeFocused();
 
     gamePage.expectNoConsoleErrors();
   });

@@ -15,12 +15,18 @@ export function bookOpeningFollowUp(state: GameState): GameState {
   const dayIndex = (state.schedule.activities ?? []).findIndex((activity) => activity == null);
   if (dayIndex < 0) return state;
 
+  const youth = opening.youthId
+    ? state.unsignedYouth?.[opening.youthId]
+    : undefined;
+  const playerName = youth
+    ? `${youth.player.firstName} ${youth.player.lastName}`
+    : "the kid";
   const activity: Activity = {
     instanceId: `opening-followup-${opening.id}`,
     type: "followUpSession",
     slots: 1,
     targetId: opening.playerId,
-    description: "Second look — watch him where the first read can fail.",
+    description: `Second look — ${playerName}. Watch where the first read can fail.`,
   };
   if (!canScheduleActivity(state.schedule, activity, dayIndex, state.scout)) {
     return state;

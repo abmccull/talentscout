@@ -134,13 +134,18 @@ export const ObservationPitch = memo(function ObservationPitch({
               aria-label={`Track ${markerLabel(marker)}`}
               aria-pressed={isSelected}
               tabIndex={isSelected || (!selectedPlayerId && index === 0) ? 0 : -1}
-              className={`group absolute z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full ${
+              className={`group absolute z-10 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full ${
                 isSelected ? "ring-2 ring-[color:var(--primary)] ring-offset-2 ring-offset-black" : ""
               }`}
-              style={{ left: `${marker.x}%`, top: `${Math.min(marker.y, 68)}%` }}
+              style={{ left: `${marker.x}%`, top: `${Math.min(marker.y, 58)}%` }}
             >
-              <span className="relative h-11 w-11 overflow-hidden rounded-full border border-white/20">
-                <YouthPortrait playerId={marker.playerId} size={48} className="h-11 w-11" />
+              <span className="relative h-16 w-16 overflow-hidden rounded-full border border-white/20">
+                <YouthPortrait
+                  playerId={marker.playerId}
+                  size={64}
+                  className="h-16 w-16"
+                  alt={marker.name}
+                />
                 {marker.isFocused && (
                   <span className="absolute inset-0 rounded-full ring-2 ring-[color:var(--signal-focus)]" />
                 )}
@@ -150,7 +155,7 @@ export const ObservationPitch = memo(function ObservationPitch({
                   </span>
                 )}
               </span>
-              <span className="pointer-events-none absolute left-1/2 top-12 hidden max-w-28 -translate-x-1/2 truncate rounded bg-black/80 px-1.5 py-0.5 text-meta font-medium text-white shadow sm:block">
+              <span className="pointer-events-none absolute left-1/2 top-[4.25rem] max-w-28 -translate-x-1/2 truncate rounded bg-black/80 px-1.5 py-0.5 text-meta font-medium text-white shadow">
                 {marker.name}
               </span>
               {marker.isStandout && (

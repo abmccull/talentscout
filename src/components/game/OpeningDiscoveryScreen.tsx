@@ -23,6 +23,7 @@ const CHOICE_ICONS = {
 export function OpeningDiscoveryScreen() {
   const gameState = useGameStore((state) => state.gameState);
   const resolveChoice = useGameStore((state) => state.resolveOpeningDiscoveryChoice);
+  const setScreen = useGameStore((state) => state.setScreen);
   const { playStinger } = useAudio();
   const [pendingChoice, setPendingChoice] = useState<OpeningCaseChoiceId | null>(null);
   const projection = gameState ? buildOpeningCaseProjection(gameState) : null;
@@ -67,7 +68,7 @@ export function OpeningDiscoveryScreen() {
       data-testid="opening-discovery"
     >
       <ScreenBackground src={background} opacity={0.72} />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(16,185,129,0.18),transparent_35%),linear-gradient(to_bottom,rgba(4,7,6,0.15),#070a09_75%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(212,168,67,0.16),transparent_35%),linear-gradient(to_bottom,rgba(4,7,6,0.15),#070a09_75%)]" />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-8 sm:py-10">
         <header className="flex items-center justify-between gap-4">
@@ -78,25 +79,34 @@ export function OpeningDiscoveryScreen() {
               width={44}
               height={44}
               unoptimized
-              className="h-11 w-11 rounded-xl border border-emerald-300/20 object-cover"
+              className="h-11 w-11 rounded-xl border border-[color:var(--primary)]/25 object-cover"
             />
             <div>
-              <p className="text-eyebrow font-semibold uppercase tracking-[0.22em] text-emerald-300">
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.22em] text-[color:var(--primary)]">
                 {projection.eyebrow}
               </p>
               <p className="mt-0.5 text-xs text-zinc-400">{projection.venueLabel} · Week {gameState.currentWeek}, Season {gameState.currentSeason}</p>
             </div>
           </div>
           <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300 sm:flex">
-            <Eye size={14} className="text-emerald-300" aria-hidden="true" />
+            <Eye size={14} className="text-[color:var(--primary)]" aria-hidden="true" />
             You were first to notice
           </div>
         </header>
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={() => setScreen(gameState.openingCase?.stage === "report" ? "reportWriter" : "observation")}
+            className="min-h-11 rounded-lg px-3 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white"
+          >
+            {gameState.openingCase?.stage === "report" ? "Continue to the notebook" : "Back to Watch"}
+          </button>
+        </div>
 
         <section className="grid flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-12">
           <div className="mx-auto w-full max-w-xl text-center lg:text-left">
             <div className="mx-auto mb-5 flex w-fit items-end gap-3 lg:mx-0">
-              <div className="rounded-full border-2 border-emerald-300/50 bg-[#101712] p-1 shadow-[0_0_50px_rgba(16,185,129,0.18)]">
+              <div className="rounded-full border-2 border-[color:var(--primary)]/50 bg-[#14110c] p-1 shadow-[0_0_50px_rgba(212,168,67,0.18)]">
                 <YouthPortrait
                   playerId={projection.playerId}
                   nationality={youth.player.nationality}
@@ -130,8 +140,8 @@ export function OpeningDiscoveryScreen() {
             </p>
 
             <div className="mt-6 grid gap-3 text-left sm:grid-cols-2">
-              <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] p-4">
-                <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-emerald-300">{projection.signalLabel}</p>
+              <div className="rounded-xl border border-[color:var(--primary)]/20 bg-[color:var(--primary)]/[0.06] p-4">
+                <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-[color:var(--primary)]">{projection.signalLabel}</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-200">
                   {breakthrough?.description
                     ?? veteranPrologue?.evidenceBeats[1].focused
@@ -163,7 +173,7 @@ export function OpeningDiscoveryScreen() {
 
           <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0d1210]/95 p-4 shadow-2xl backdrop-blur sm:p-6">
             <div className="mb-5">
-              <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-emerald-300">Your next move</p>
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">Your next move</p>
               <h2 className="mt-2 text-2xl font-bold text-white">{projection.questionLabel}</h2>
               <p className="mt-2 text-sm leading-6 text-zinc-400">
                 The call you make now will shape who gets access, how quickly the name spreads,

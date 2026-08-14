@@ -8,7 +8,7 @@ import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
-import { isYouthFirstHour } from "@/lib/youthFirstHour";
+import { isYouthOpeningShell } from "@/lib/youthFirstHour";
 import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 import { getCareerElapsedWeeks } from "@/engine/core/gameDate";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
@@ -323,7 +323,7 @@ export function GameLayout({
       reportCount: gameState
         ? selectLatestReportsByCase(Object.values(gameState.reports ?? {})).length
         : 0,
-      firstHourChrome: IS_YOUTH_EARLY_ACCESS && isYouthFirstHour(gameState),
+      firstHourChrome: IS_YOUTH_EARLY_ACCESS && isYouthOpeningShell(gameState),
       hasScheduledActivity:
         gameState?.schedule?.activities?.some((activity) => activity != null) ?? false,
       hasAttendedMatch: (gameState?.playedFixtures?.length ?? 0) > 0,

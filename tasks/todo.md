@@ -1,3 +1,16 @@
+# First-hour Steam HUD batch (2026-08-14)
+
+Chrome = in-game HUD (rail, inbox, session meters), not a browser. Electron/Steam.
+
+- [x] Collapse Watch: big named face, no auto focus sheet, notes under the pitch
+- [x] Opening file is a notebook (name + file), not a 5-decision form
+- [x] Hold career HUD (Inbox/World/Career/toasts) through the opening week
+- [x] Desk one kid + one next verb; Planner receipt names the kid
+- [x] Complete openedCalendar on file so mentor does not lie
+- [x] Typecheck + targeted tests + commit
+
+---
+
 # First-hour ceiling batch (2026-08-14)
 
 Leftover after A–F on `f8fd7a7`. Do not invent packages, NVDA, VO, or tags.

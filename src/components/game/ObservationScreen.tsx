@@ -1416,7 +1416,6 @@ export function ObservationScreen() {
   const handlePitchPlayerSelect = useCallback((playerId: string) => {
     playSFX("click");
     setSelectedPitchPlayerId(playerId);
-    setShowMobileFocus(true);
   }, [playSFX]);
 
   const closeMobileFocus = useCallback(() => {
@@ -1522,9 +1521,6 @@ export function ObservationScreen() {
                 <span className="truncate text-sm font-semibold text-zinc-200">
                   {MODE_LABELS[mode]}
                 </span>
-                <Badge variant="secondary" className="hidden text-eyebrow capitalize min-[430px]:inline-flex">
-                  {activeSession.specialization}
-                </Badge>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                 {state === "active" && currentPhase && (
@@ -1534,9 +1530,6 @@ export function ObservationScreen() {
                         ? `${currentPhase.minute}'`
                         : `Step ${currentPhase.minute}`}
                     </Badge>
-                    <Badge variant="secondary" className="text-xs tabular-nums">
-                      {activeSession.currentPhaseIndex + 1} / {activeSession.phases.length}
-                    </Badge>
                     {isHalfTime && (
                       <Badge variant="warning" className="text-xs">
                         Half Time
@@ -1544,18 +1537,6 @@ export function ObservationScreen() {
                     )}
                   </>
                 )}
-                <Badge
-                  variant={
-                    state === "complete"
-                      ? "success"
-                      : state === "reflection"
-                        ? "warning"
-                        : "outline"
-                  }
-                  className="text-xs capitalize"
-                >
-                  {state}
-                </Badge>
               </div>
             </div>
             {state === "active" && (
@@ -1634,22 +1615,6 @@ export function ObservationScreen() {
                   </div>
                 )}
 
-                {/* Chaos indicator — match modes only */}
-                {mode === "fullObservation" && activeSession.venueAtmosphere && (
-                  <div className="shrink-0 px-4 py-1.5 flex items-center gap-2 border-b border-[#27272a]">
-                    <span className="text-eyebrow text-zinc-400">Observation clarity</span>
-                    <div className="flex-1 h-1 bg-[#27272a] rounded-full overflow-hidden max-w-[80px]">
-                      <div
-                        className="h-full rounded-full bg-[color:var(--signal-focus)]/70"
-                        style={{
-                          width: `${Math.round((1 - activeSession.venueAtmosphere.chaosLevel) * 100)}%`,
-                        }}
-                        aria-hidden="true"
-                      />
-                    </div>
-                  </div>
-                )}
-
                 {mode === "fullObservation" && isHalfTime && (
                   <HalftimeApproachPanel
                     selected={activeSession.halftimeApproach}
@@ -1668,7 +1633,7 @@ export function ObservationScreen() {
                         onSelectPlayer={handlePitchPlayerSelect}
                       />
                       <section
-                        className="notebook-paper z-20 max-h-[38vh] overflow-y-auto border-t border-white/10 p-3 sm:p-4 lg:absolute lg:bottom-4 lg:right-4 lg:top-24 lg:max-h-none lg:w-[min(22rem,36%)] lg:rounded-xl lg:border lg:border-white/10 lg:shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+                        className="notebook-paper z-20 max-h-[32vh] overflow-y-auto border-t border-white/10 p-3 sm:p-4"
                         aria-labelledby="observation-evidence-heading"
                         data-tutorial-id="observation-evidence-feed"
                       >
@@ -1898,7 +1863,7 @@ export function ObservationScreen() {
               <div
                 className={`fixed inset-x-0 z-20 border-t border-white/10 bg-[#0a0d0b]/95 p-3 shadow-[0_-12px_30px_rgba(0,0,0,0.35)] backdrop-blur ${
                   isLiveWatch
-                    ? "bottom-0"
+                    ? "bottom-0 pb-[env(safe-area-inset-bottom)]"
                     : "bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 md:left-60 lg:hidden"
                 }`}
                 data-tutorial-id="observation-session-controls"

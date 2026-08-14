@@ -3,6 +3,8 @@
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { GameLayout } from "@/components/game/GameLayout";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { Button } from "@/components/ui/button";
 import CareerEraThread from "@/components/game/workspace/CareerEraThread";
 import { YouthActiveCaseBoard } from "@/components/game/workspace/desk/YouthActiveCaseBoard";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -147,6 +149,13 @@ export function YouthDeskDashboard({
                 Next move
               </h2>
             )}
+            {firstHour ? (
+              <OpeningHourDesk
+                gameState={gameState}
+                setScreen={setScreen}
+                selectPlayer={selectPlayer}
+              />
+            ) : (
             <YouthActiveCaseBoard
               model={activeCaseModel}
               eyebrow={youthDeskAction.eyebrow}
@@ -154,12 +163,12 @@ export function YouthDeskDashboard({
               scheduledSlots={scheduledSlots}
               onPrimaryAction={onPrimaryAction}
               onSecondaryAction={
-                firstHour || youthDeskAction.kind === "planner"
+                youthDeskAction.kind === "planner"
                   ? undefined
                   : () => setScreen("calendar")
               }
               secondaryLabel={
-                firstHour || youthDeskAction.kind === "planner" ? undefined : "Review itinerary"
+                youthDeskAction.kind === "planner" ? undefined : "Review itinerary"
               }
               asideContent={
                 !firstHour && currentCareerEra ? (
@@ -175,9 +184,66 @@ export function YouthDeskDashboard({
                 ) : undefined
               }
             />
+            )}
           </section>
         </div>
       </section>
     </GameLayout>
+  );
+}
+
+function OpeningHourDesk({
+  gameState,
+  setScreen,
+  selectPlayer,
+}: {
+  gameState: GameState;
+  setScreen: DashboardSetScreen;
+  selectPlayer: (playerId: string) => void;
+}) {
+  const opening = gameState.openingCase;
+  const youth = opening ? gameState.unsignedYouth[opening.youthId] : undefined;
+  const player = youth?.player;
+  const name = player ? `${player.firstName} ${player.lastName}` : "the kid";
+  const writeReady = opening?.stage === "report" || opening?.stage === "decision";
+  const destination = opening?.stage === "report" ? "reportWriter" : opening?.stage === "decision" ? "openingDiscovery" : "observation";
+
+  return (
+    <div
+      data-testid="desk-primary-decision"
+      className="rounded-sm border border-[color:var(--primary)]/20 bg-[#14110c] p-5 sm:p-7"
+    >
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        {player && (
+          <YouthPortrait
+            playerId={player.id}
+            nationality={player.nationality}
+            age={player.age}
+            size={96}
+            alt={name}
+          />
+        )}
+        <div className="min-w-0">
+          <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">
+            Next move
+          </p>
+          <h2 className="text-2xl font-bold text-white sm:text-3xl">{name}</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-300">
+            {writeReady
+              ? "Write the name down. Planner will hold the second look."
+              : "Watch this kid. One look is enough to write the name."}
+          </p>
+          <Button
+            className="mt-4 min-h-11"
+            onClick={() => {
+              if (player) selectPlayer(player.id);
+              setScreen(destination);
+            }}
+          >
+            {writeReady ? "Write the name down" : "Watch the match"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

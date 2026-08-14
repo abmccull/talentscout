@@ -8,6 +8,8 @@ import {
   WeekAdvanceConfirmDialog,
 } from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
+import { isYouthOpeningShell } from "@/lib/youthFirstHour";
+import { openingFollowUpDayIndex } from "@/engine/youth/openingFollowUp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -271,6 +273,20 @@ export function CalendarScreen() {
     return () => window.clearTimeout(timeout);
   }, [plannerReceipt]);
 
+  useEffect(() => {
+    if (!gameState || !isYouthOpeningShell(gameState)) return;
+    const dayIndex = openingFollowUpDayIndex(gameState);
+    if (dayIndex < 0) return;
+    const opening = gameState.openingCase;
+    const youth = opening ? gameState.unsignedYouth[opening.youthId] : undefined;
+    const name = youth
+      ? `${youth.player.firstName} ${youth.player.lastName}`
+      : "The kid";
+    setPlannerReceipt(`${name} is on the week. Second look booked.`);
+    // Opening receipt only on first landing after file.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState?.openingCase?.id]);
+
   // Stable callback for resolving club IDs to names in ActivityPanel
   const resolveClubName = useCallback(
     (id: string) => getClub(id)?.name ?? id,
@@ -308,6 +324,17 @@ export function CalendarScreen() {
   );
   const seasonLength = getSeasonLength(gameState.fixtures, currentSeason);
   const activities = schedule.activities ?? [];
+  const openingShell = isYouthOpeningShell(gameState);
+  const bookedPlayerNames: Record<string, string> = {};
+  for (const activity of activities) {
+    if (!activity?.targetId) continue;
+    const youth = Object.values(gameState.unsignedYouth).find(
+      (item) => item.player.id === activity.targetId,
+    );
+    if (youth) {
+      bookedPlayerNames[activity.targetId] = `${youth.player.firstName} ${youth.player.lastName}`;
+    }
+  }
   const slotsUsed = activities.filter(Boolean).length;
   const maxSlots = 7;
   const severity = fatigueSeverity(scout.fatigue);
@@ -715,7 +742,9 @@ export function CalendarScreen() {
         {/* Header */}
         <div className="mb-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-[#10151b]/92 p-4 shadow-xl shadow-black/20 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">Weekly command</p>
+            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">
+              {gameState && isYouthOpeningShell(gameState) ? "This week" : "Weekly command"}
+            </p>
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Planner</h1>
               <span
@@ -835,7 +864,9 @@ export function CalendarScreen() {
           severity={severity}
           upcomingEvent={upcomingEvents[0]}
           isWeekBlank={slotsUsed === 0}
-          prelude={(
+          playerNames={bookedPlayerNames}
+          openingShell={openingShell}
+          prelude={openingShell ? undefined : (
             <div className="grid gap-3 lg:hidden">
               <article className="rounded-xl border border-violet-400/20 bg-[linear-gradient(145deg,rgba(38,32,58,0.92),rgba(15,20,27,0.96))] p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -900,6 +931,7 @@ export function CalendarScreen() {
           receiptMessage={plannerReceipt}
         />
 
+        {!openingShell && (
         <section
           data-tutorial-id="calendar-activities"
           aria-labelledby="planner-opportunity-heading"
@@ -974,6 +1006,7 @@ export function CalendarScreen() {
             />
           </div>
         </section>
+        )}
 
         {/* Week Preview Panel (F16) */}
         {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (

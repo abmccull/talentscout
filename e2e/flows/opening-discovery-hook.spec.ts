@@ -250,10 +250,8 @@ test.describe("guided opening discovery hook", () => {
 
     await page.getByRole("button", { name: /Keep the name private/ }).click();
     await gamePage.waitForScreen("reportWriter");
-    await expect(page.getByRole("heading", { name: /Shape the first football read on/i })).toBeVisible();
-    await expect(page.getByRole("group", { name: "Saved evidence" })).toBeVisible();
-    await expect(page.getByRole("group", { name: "What it suggests" })).toBeVisible();
-    await expect(page.getByRole("group", { name: "What remains untested" })).toBeVisible();
+    await expect(page.getByText("Write the name down")).toBeVisible();
+    await expect(page.getByRole("group", { name: "Saved evidence" })).toHaveCount(0);
     await expect(page.getByText("Answer a real club need")).toHaveCount(0);
     await expect(page.getByLabel(/Ask (Margaret|Tommy) for help/i)).toHaveCount(0);
 
@@ -287,13 +285,7 @@ test.describe("guided opening discovery hook", () => {
         (violation) => violation.impact === "serious" || violation.impact === "critical",
       ),
     ).toEqual([]);
-    await page.getByRole("group", { name: "Saved evidence" }).getByRole("radio").first().locator("..").click();
-    await page.getByRole("group", { name: "What it suggests" }).getByRole("radio", { name: /Make the measured read/i }).locator("..").click();
-    await page.getByRole("group", { name: "What remains untested" }).getByRole("radio").first().locator("..").click();
-    await page.getByRole("group", { name: "Next test" }).getByRole("radio").first().locator("..").click();
-    await page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: /Test in harder context/i }).locator("..").click();
-    await page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: /^Working\b/i }).locator("..").click();
-    await page.getByRole("button", { name: "File initial assessment" }).click();
+    await page.getByRole("button", { name: "File the name" }).click();
     await gamePage.waitForScreen("calendar");
     await expect(page.locator('[data-tutorial-id="report-marketplace-prompt"]')).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /Planner/i })).toBeVisible();

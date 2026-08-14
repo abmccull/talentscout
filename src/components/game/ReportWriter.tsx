@@ -68,6 +68,7 @@ import { buildReportWriterStatus } from "@/components/game/reportWriterStatus";
 import {
   buildFormalAssessment,
   buildInitialAssessment,
+  seedOpeningNotebookAssessment,
   FORMAL_CATEGORY_UNKNOWN_OPTIONS,
   getEvidenceClaimOptions,
   getEvidenceUnknownOptions,
@@ -367,6 +368,13 @@ export function ReportWriter() {
     return [...new Map(cards.map((card) => [card.id, card])).values()]
       .sort((left, right) => left.minute - right.minute || left.id.localeCompare(right.id));
   }, [canonicalPlayerId, gameState]);
+  useEffect(() => {
+    if (!conciseOpeningMode || initialAssessmentInput) return;
+    const seeded = seedOpeningNotebookAssessment(initialAssessmentCards);
+    if (!seeded) return;
+    setInitialAssessmentInput(seeded);
+    useTutorialStore.getState().completeMilestone("wroteReport");
+  }, [conciseOpeningMode, initialAssessmentCards, initialAssessmentInput]);
   const alternativeCandidates = useMemo(() => {
     if (!gameState || !player) return [];
     return Object.values(gameState.unsignedYouth)
@@ -840,7 +848,7 @@ export function ReportWriter() {
         <button
           onClick={handleBack}
           className="mb-4 flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-          aria-label="Back to player profile"
+          aria-label={conciseOpeningMode ? "Back to the decision" : "Back to player profile"}
         >
           <ArrowLeft size={15} aria-hidden="true" />
           {t("backToProfile")}
@@ -1527,35 +1535,25 @@ export function ReportWriter() {
 
         <div id="report-section-evidence" className="scroll-mt-28 space-y-6">
           {conciseOpeningMode ? (
-            <div data-tutorial-id="report-conviction" className="notebook-paper space-y-4 rounded-sm border border-amber-400/20 p-4 shadow-xl sm:p-6">
-              <InitialAssessmentBuilder
-                key={canonicalPlayerId}
-                cards={initialAssessmentCards}
-                playerName={`${player.firstName} ${player.lastName}`}
-                value={initialAssessmentInput}
-                onChange={(nextValue) => {
-                  setInitialAssessmentInput(nextValue);
-                  setIsDirty(true);
-                  if (nextValue) {
-                    useTutorialStore.getState().completeMilestone("wroteReport");
-                  }
-                }}
-              />
+            <div data-tutorial-id="report-conviction" className="notebook-paper space-y-6 rounded-sm border border-[color:var(--primary)]/20 p-5 shadow-xl sm:p-8">
+              <p className="max-w-xl text-sm leading-6 text-zinc-300">
+                The name is the first read. Filing it puts a second look on the week.
+              </p>
               <div
-                className="sticky bottom-3 z-20 grid gap-3 rounded-2xl border border-[#0A1628]/15 bg-[#0A1628] p-4 text-[#F0EBE3] shadow-2xl sm:grid-cols-[1fr_auto_auto] sm:items-center"
+                className="sticky bottom-3 z-20 grid gap-3 rounded-sm border border-[color:var(--primary)]/25 bg-[#14110c] p-4 text-[#F0EBE3] shadow-2xl sm:grid-cols-[1fr_auto_auto] sm:items-center"
                 data-tutorial-id="report-submit"
               >
                 <p className={`text-sm ${canSubmit ? "text-[#F0EBE3]" : "text-amber-200"}`} aria-live="polite">
                   {canSubmit
                     ? "Ready to file. Planner will hold the second look."
-                    : reportStatus.primaryBlocker ?? "Complete the five assessment decisions to file this first read."}
+                    : reportStatus.primaryBlocker ?? "Watch the kid before you file the name."}
                 </p>
                 <Button className="min-h-11" variant="outline" onClick={handleBack}>
                   Back to the decision
                 </Button>
                 <Button className="min-h-11" onClick={handleSubmit} disabled={!canSubmit}>
                   <FileText size={14} className="mr-2" aria-hidden="true" />
-                  File initial assessment
+                  File the name
                 </Button>
               </div>
             </div>
@@ -1599,6 +1597,7 @@ export function ReportWriter() {
             />
           )}
 
+          {!conciseOpeningMode && (
           <details id="report-dossier" className="group scroll-mt-24 rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
               <div>
@@ -2060,6 +2059,7 @@ export function ReportWriter() {
 
             </div>
           </details>
+          )}
 
 
           {/* Written summary */}

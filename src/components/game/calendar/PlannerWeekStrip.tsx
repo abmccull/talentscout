@@ -18,6 +18,8 @@ interface PlannerWeekStripProps {
   severity: "ok" | "warn" | "danger";
   upcomingEvent?: { name: string; startWeek: number };
   isWeekBlank?: boolean;
+  playerNames?: Record<string, string>;
+  openingShell?: boolean;
   prelude?: ReactNode;
   onClearSelection: () => void;
   onRequestOpportunitySelection?: () => void;
@@ -43,6 +45,8 @@ export function PlannerWeekStrip({
   severity,
   upcomingEvent,
   isWeekBlank = false,
+  playerNames = {},
+  openingShell = false,
   prelude,
   onClearSelection,
   onRequestOpportunitySelection,
@@ -71,7 +75,11 @@ export function PlannerWeekStrip({
       id="planner-itinerary"
       data-tutorial-id="calendar-grid"
       aria-labelledby="itinerary-heading"
-      className="sticky -top-4 z-20 -mx-2 mb-4 rounded-2xl border border-emerald-400/20 bg-[#0c1217]/95 p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 md:top-0 sm:p-4"
+      className={`sticky -top-4 z-20 -mx-2 mb-4 rounded-2xl border p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 md:top-0 sm:p-4 ${
+        openingShell
+          ? "border-[color:var(--primary)]/25 bg-[#14110c]/95"
+          : "border-emerald-400/20 bg-[#0c1217]/95"
+      }`}
     >
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
@@ -79,7 +87,11 @@ export function PlannerWeekStrip({
             <h2 id="itinerary-heading" className="text-base font-semibold text-white">
               Weekly itinerary
             </h2>
-            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-meta font-semibold text-emerald-200">
+            <span className={`rounded-full border px-2.5 py-1 text-meta font-semibold ${
+              openingShell
+                ? "border-[color:var(--primary)]/25 bg-[color:var(--primary)]/10 text-amber-100"
+                : "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+            }`}>
               {slotsUsed}/7 days committed
             </span>
             <span className={`rounded-full border px-2.5 py-1 text-meta font-semibold ${
@@ -116,7 +128,7 @@ export function PlannerWeekStrip({
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          className="workspace-receipt-pulse mb-4 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-2 text-sm text-emerald-100"
+          className="workspace-receipt-pulse mb-4 rounded-xl border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/[0.08] px-3 py-2 text-sm text-amber-50"
         >
           {receiptMessage}
         </div>
@@ -155,7 +167,9 @@ export function PlannerWeekStrip({
               key={dayKey}
               className={`workspace-interactive relative min-h-11 min-w-[5.75rem] snap-start rounded-xl border p-2 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] xl:min-w-0 ${
                 activity
-                  ? "border-emerald-400/25 bg-emerald-400/[0.06]"
+                  ? openingShell
+                    ? "border-[color:var(--primary)]/30 bg-[color:var(--primary)]/[0.08]"
+                    : "border-emerald-400/25 bg-emerald-400/[0.06]"
                   : isPreviewed
                     ? "border-blue-300/45 bg-blue-400/[0.08]"
                     : canPlaceSelected || isDropTarget
@@ -216,14 +230,21 @@ export function PlannerWeekStrip({
                 <div className="mt-4 space-y-3">
                   <div className="flex items-start gap-2">
                     {activity.targetId ? (
-                      <YouthPortrait playerId={activity.targetId} size={32} className="mt-0.5 shrink-0" />
+                      <YouthPortrait
+                        playerId={activity.targetId}
+                        size={48}
+                        className="mt-0.5 shrink-0"
+                        alt={playerNames[activity.targetId] ?? "Booked prospect"}
+                      />
                     ) : (
                     <span className={`mt-0.5 rounded-lg border border-white/10 bg-black/30 p-2 ${display.color}`}>
                       <Icon size={16} aria-hidden="true" />
                     </span>
                     )}
                     <div className="min-w-0">
-                      <p className={`text-sm font-semibold ${display.color}`}>{display.label}</p>
+                      <p className={`text-sm font-semibold ${openingShell ? "text-[color:var(--primary)]" : display.color}`}>
+                        {activity.targetId ? playerNames[activity.targetId] ?? display.label : display.label}
+                      </p>
                       <p className="mt-1 line-clamp-3 text-xs leading-5 text-zinc-300">{activity.description}</p>
                     </div>
                   </div>
