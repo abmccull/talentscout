@@ -54,7 +54,10 @@ export function isValidYouthRetainerBrief(
   return Boolean(
     brief
     && brief.focus === "academy"
+    && Array.isArray(brief.targetPositions)
     && brief.targetPositions.length > 0
+    && Array.isArray(brief.ageRange)
+    && brief.ageRange.length >= 2
     && brief.ageRange[0] >= 15
     && brief.ageRange[1] <= 20
     && brief.ageRange[0] <= brief.ageRange[1]

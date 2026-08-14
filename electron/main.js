@@ -629,6 +629,24 @@ handleTrustedIpc("window:setFullScreen", (_event, enabled) => {
 
 handleTrustedIpc("window:isFullScreen", () => Boolean(mainWindow?.isFullScreen()));
 
+let quitFlushState = "idle";
+let quitFlushTimer = null;
+
+function finishQuitFlush() {
+  if (quitFlushTimer) {
+    clearTimeout(quitFlushTimer);
+    quitFlushTimer = null;
+  }
+  if (quitFlushState === "done") return;
+  quitFlushState = "done";
+  app.quit();
+}
+
+handleTrustedIpc("game:notifySaveFlushed", () => {
+  if (quitFlushState === "waiting") finishQuitFlush();
+  return { ok: true };
+});
+
 handleTrustedIpc("steam:isAvailable", () => {
   return steamAvailable && Boolean(steamClient);
 });
@@ -983,6 +1001,18 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.once("before-quit", () => {
+app.on("before-quit", (event) => {
   clearInterval(saveTransferCleanupTimer);
+  if (quitFlushState === "done") return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    quitFlushState = "done";
+    return;
+  }
+  event.preventDefault();
+  if (quitFlushState === "waiting") return;
+  quitFlushState = "waiting";
+  mainWindow.webContents.send("game:flush-save");
+  quitFlushTimer = setTimeout(() => {
+    finishQuitFlush();
+  }, 2500);
 });

@@ -1173,41 +1173,20 @@ export function NewGameScreen() {
                       </fieldset>
 
                       <div className="rounded-xl border border-zinc-700/70 bg-black/25 p-4">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-white">
-                              {selectedYouthPreset
-                                ? `${selectedYouthPreset.name}: ready to begin`
-                                : "Choose a scouting instinct to begin"}
-                            </p>
-                            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                              {effectiveOpeningMode === "desk"
-                                ? "Begin at the Desk and plan your first week yourself."
-                                : effectiveOpeningMode === "dynamic"
-                                  ? "Follow a fresh lead unique to this career, gather evidence, and make a recommendation with lasting consequences."
-                                  : effectiveOpeningMode === "tutorial"
-                                    ? "Replay the guided school-match assignment and work through its evidence, report, and follow-up."
-                                    : "Start with a guided school-match assignment. Watch the key moments, save useful evidence, and decide whether the player is worth following."}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleStart}
-                            disabled={!canQuickStart || isStarting}
-                            aria-describedby="quick-start-requirements"
-                            className="min-h-12 shrink-0 rounded-lg bg-emerald-500 px-6 py-3 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-950/40 transition hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-45"
-                          >
-                            {isStarting
-                              ? "Creating your football world…"
-                              : effectiveOpeningMode === "dynamic"
-                              ? "Follow the new lead"
-                              : effectiveOpeningMode === "desk"
-                                ? "Start at the Desk"
-                                : effectiveOpeningMode === "tutorial"
-                                  ? "Replay guided assignment"
-                                  : "Begin first assignment"}
-                          </button>
-                        </div>
+                        <p className="text-sm font-medium text-white">
+                          {selectedYouthPreset
+                            ? `${selectedYouthPreset.name} selected`
+                            : "Choose a scouting instinct"}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                          {effectiveOpeningMode === "desk"
+                            ? "Begin at the Desk and plan your first week yourself."
+                            : effectiveOpeningMode === "dynamic"
+                              ? "Follow a fresh lead unique to this career, gather evidence, and make a recommendation with lasting consequences."
+                              : effectiveOpeningMode === "tutorial"
+                                ? "Replay the guided school-match assignment and work through its evidence, report, and follow-up."
+                                : "Start with a guided school-match assignment. Watch the key moments, save useful evidence, and decide whether the player is worth following."}
+                        </p>
                         <p id="quick-start-requirements" className="mt-2 text-xs text-zinc-400" role="status" aria-live="polite">
                           {startError ?? (isStarting
                             ? "Generating clubs, players, contacts, and your opening assignment…"
@@ -1215,15 +1194,7 @@ export function NewGameScreen() {
                             ? "Enter your name, then choose a scouting instinct."
                             : selectedSkillPreset === "custom"
                               ? "Choose one of the four scouting instincts above."
-                              : `Ready to ${
-                                  effectiveOpeningMode === "desk"
-                                    ? "take control of your first week"
-                                    : effectiveOpeningMode === "dynamic"
-                                      ? "follow a fresh lead"
-                                      : effectiveOpeningMode === "tutorial"
-                                      ? "replay the guided case"
-                                      : "take the call"
-                                }. For full control over your scout and world, choose Continue below.`)}
+                              : "Ready. Take the call below, or customize your scout first.")}
                         </p>
                       </div>
                     </CardContent>
@@ -2135,7 +2106,33 @@ export function NewGameScreen() {
           )}
 
           <div className="flex flex-col items-end gap-2">
-            {step !== lastStepId ? (
+            {IS_YOUTH_EARLY_ACCESS && step === 1 && canQuickStart ? (
+              <>
+                <Button
+                  onClick={handleStart}
+                  disabled={isStarting}
+                  aria-describedby="quick-start-requirements"
+                  className="min-h-11 cursor-pointer"
+                >
+                  {isStarting
+                    ? "Creating your football world…"
+                    : effectiveOpeningMode === "dynamic"
+                      ? "Follow the new lead"
+                      : effectiveOpeningMode === "desk"
+                        ? "Start at the Desk"
+                        : effectiveOpeningMode === "tutorial"
+                          ? "Replay guided assignment"
+                          : "Take the call"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="min-h-11 text-xs text-zinc-400 underline-offset-4 transition hover:text-zinc-200 hover:underline"
+                >
+                  Customize scout first
+                </button>
+              </>
+            ) : step !== lastStepId ? (
               <Button onClick={goNext} disabled={!canAdvance(step)} className="min-h-11 cursor-pointer">
                 Continue
               </Button>

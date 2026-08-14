@@ -1,3 +1,25 @@
+# Launch consolidation (2026-08-13)
+
+Source: `tasks/LAUNCH_CONSOLIDATION_REPORT.md` from ship-gate + review-changes + design-audit + game-readiness-2.
+
+- [x] Persist mutex + generation skip so quit cannot be overwritten by an older queue write
+- [x] Awaited Electron quit flush (`game:flush-save` / `game:notifySaveFlushed`)
+- [x] Coalesce planner autosaves (400ms) and clear `autosaveError` on success
+- [x] Fail-closed youth retainer briefs
+- [x] Focus traps: planner sheet visibility, TargetPicker, mobile sidebar, week-advance confirm
+- [x] First-hour Desk is one next-move (no stacked command center)
+- [x] Identity has one primary: Take the call
+- [x] Hide World/Career while the opening case is still the first hour
+- [x] Opening report lands on Desk; marketplace is not a guided lock
+- [x] Opening week always confirms Advance Week
+- [x] Mobile Planner shows seven days; nav uses rem
+
+## Review
+
+Typecheck passed. Targeted unit tests passed (autosave queue, opening-loop persist, retainer, first-hour helper, dialog focus, desktop IPC allowlist, screen scope). Remaining launch blockers are process-only: SHA-bound packages, NVDA/VO, usability, and a version tag. Do not invent those attestations.
+
+---
+
 # PA Estimate & System Fit Implementation Plan
 
 ## Context

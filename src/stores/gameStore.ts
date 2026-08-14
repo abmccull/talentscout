@@ -181,6 +181,7 @@ import {
 } from "@/lib/saveProvider";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import {
+  flushGameplayAutosave,
   queueGameplayAutosave,
   snapshotPersistedGameState,
 } from "@/stores/actions/persistGameplayAutosave";
@@ -389,7 +390,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Post-submit listing prompt (transient — not persisted)
   pendingListingReportId: null,
-  dismissPendingListing: () => set({ pendingListingReportId: null }),
+  dismissPendingListing: () => {
+    useTutorialStore.getState().completeMilestone("checkedInbox");
+    set({ pendingListingReportId: null });
+  },
 
   // Report comparison (F11) — transient UI state
   comparisonReportIds: [],
@@ -1049,33 +1053,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
   saveGame: () => {
     const { gameState, activeSession } = get();
     if (!gameState) return null;
-    const saved = {
-      ...gameState,
-      activeObservationSession: activeSession,
-      lastSaved: Date.now(),
-    };
+    const saved = snapshotPersistedGameState(gameState, activeSession);
     set({ gameState: saved });
-    getActiveSaveProvider()
-      .then((provider) => persistGameState(provider, "autosave", saved, "Autosave"))
-      .then((commit) => {
-        const savedAt = commit?.record.state.lastSaved;
-        if (!Number.isFinite(savedAt)) return;
-        set((current) => {
-          const currentState = current.gameState;
-          if (!currentState || currentState.lastSaved >= savedAt!) return {};
-          return {
-            gameState: {
-              ...currentState,
-              lastSaved: savedAt!,
-            },
-          };
-        });
-      })
-      .catch((err) => {
-        console.warn("saveGame: provider persist failed:", err);
-        void import("@/lib/sentry").then(({ captureException }) => captureException(err));
-      });
+    void flushGameplayAutosave(saved, set).catch((err) => {
+      console.warn("saveGame: provider persist failed:", err);
+      void import("@/lib/sentry").then(({ captureException }) => captureException(err));
+    });
     return saved;
+  },
+
+  flushGameplaySave: async () => {
+    const { gameState, activeSession } = get();
+    if (!gameState) return;
+    const saved = snapshotPersistedGameState(gameState, activeSession);
+    set({ gameState: saved });
+    await flushGameplayAutosave(saved, set);
   },
 
   // Persistence (save provider)

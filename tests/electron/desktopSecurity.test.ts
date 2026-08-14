@@ -138,6 +138,7 @@ describe("Electron desktop trust boundary", () => {
       "dialog:commitSaveFileTransfer",
       "dialog:finishOpenFileTransfer",
       "dialog:readOpenFileChunk",
+      "game:notifySaveFlushed",
       "steam:abortCloudSaveTransfer",
       "steam:appendCloudSaveChunk",
       "steam:beginCloudLoadTransfer",

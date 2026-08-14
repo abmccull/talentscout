@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { TargetOption } from "@/engine/core/types";
 import { Search, User, Users, Star, Eye, X, ChevronRight } from "lucide-react";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 
 interface TargetPickerProps {
   targets: TargetOption[];
@@ -19,10 +20,10 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
   const overlayRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus search input on mount
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useDialogFocusTrap(overlayRef, true, {
+    onClose,
+    initialFocusRef: inputRef,
+  });
 
   // Close on click outside
   useEffect(() => {
@@ -33,15 +34,6 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [onClose]);
-
-  // Close on Escape
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
   const filtered = targets.filter((t) =>
@@ -61,7 +53,7 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
     <div
       ref={overlayRef}
       role="dialog"
-      aria-modal={inline ? "true" : "false"}
+      aria-modal="true"
       aria-label={dialogLabel}
       className={`${inline ? "relative" : "absolute left-0 right-0 top-full mt-1"} z-50 rounded-lg border border-[#27272a] bg-[#0a0a0a] shadow-xl shadow-black/50`}
     >

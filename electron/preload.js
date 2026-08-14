@@ -298,6 +298,22 @@ const electronAPI = Object.freeze({
       };
     },
   }),
+
+  game: Object.freeze({
+    onFlushSaveRequest: (listener) => {
+      if (typeof listener !== "function") {
+        throw new TypeError("Save flush listener must be a function");
+      }
+      const wrapped = () => {
+        listener();
+      };
+      ipcRenderer.on("game:flush-save", wrapped);
+      return () => {
+        ipcRenderer.removeListener("game:flush-save", wrapped);
+      };
+    },
+    notifySaveFlushed: () => invoke("game:notifySaveFlushed"),
+  }),
 });
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

@@ -248,6 +248,7 @@ export interface GameStoreState {
   startNewGame: (config: NewGameConfig) => Promise<void>;
   loadGame: (state: unknown) => void;
   saveGame: () => GameState | null;
+  flushGameplaySave: () => Promise<void>;
 
   saveToSlot: (slot: number, name: string) => Promise<void>;
   loadFromSlot: (slot: number) => Promise<void>;

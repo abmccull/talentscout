@@ -95,4 +95,23 @@ describe("autosave queue", () => {
     await vi.runAllTimersAsync();
     expect(persist.mock.calls).toEqual([[1], [3]]);
   });
+
+  it("flushNow cancels the delayed schedule and persists the newest snapshot", async () => {
+    vi.useFakeTimers();
+    const persist = vi.fn(async (_revision: number) => undefined);
+    const queue = createAutosaveQueue<number>({
+      persist,
+      onError: () => undefined,
+      schedule: (task) => {
+        const handle = setTimeout(task, 400);
+        return () => clearTimeout(handle);
+      },
+    });
+
+    queue.request(1);
+    queue.request(2);
+    expect(persist).not.toHaveBeenCalled();
+    await queue.flushNow();
+    expect(persist.mock.calls).toEqual([[2]]);
+  });
 });

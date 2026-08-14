@@ -74,7 +74,7 @@ test.describe("guided opening discovery hook", () => {
     await persona.click();
     await expect(persona).toHaveAttribute("aria-pressed", "true");
 
-    const beginAssignment = page.getByRole("button", { name: "Begin first assignment" });
+    const beginAssignment = page.getByRole("button", { name: "Take the call" });
     await beginAssignment.scrollIntoViewIfNeeded();
     await expect(beginAssignment).toBeEnabled();
     await beginAssignment.click();
@@ -294,13 +294,9 @@ test.describe("guided opening discovery hook", () => {
     await page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: /Test in harder context/i }).locator("..").click();
     await page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: /^Working\b/i }).locator("..").click();
     await page.getByRole("button", { name: "File initial assessment" }).click();
-    await gamePage.waitForScreen("reportHistory");
-    const marketplacePrompt = page.locator('[data-tutorial-id="report-marketplace-prompt"]');
-    await expect(marketplacePrompt).toBeVisible();
-    await expect(marketplacePrompt.getByTestId("opening-first-reaction")).toContainText(
-      "reads the silence as discretion",
-    );
-    await expect(marketplacePrompt.getByRole("button", { name: "Check Inbox" })).toBeVisible();
+    await gamePage.waitForScreen("dashboard");
+    await expect(page.locator('[data-tutorial-id="report-marketplace-prompt"]')).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Scouting Desk" })).toBeVisible();
 
     const latestReport = await page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;

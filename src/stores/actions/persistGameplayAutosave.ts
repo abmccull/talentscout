@@ -1,7 +1,7 @@
 import type { GameState } from "@/engine/core/types";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { persistGameState } from "@/lib/saveProvider";
-import { createAutosaveQueue, scheduleAfterPaint } from "./autosaveQueue";
+import { createAutosaveQueue, scheduleCoalescedGameplayPersist } from "./autosaveQueue";
 import type { SetState } from "./types";
 
 interface AutosaveRequest {
@@ -9,13 +9,27 @@ interface AutosaveRequest {
   set: SetState;
 }
 
-const autosaveQueue = createAutosaveQueue<AutosaveRequest>({
-  schedule: scheduleAfterPaint,
-  onRequest: ({ set }) => set({ autosaveError: null }),
-  persist: async ({ state }) => {
+let persistTail = Promise.resolve();
+let committedSavedAt = 0;
+
+async function persistAutosaveSnapshot(state: GameState): Promise<void> {
+  const run = persistTail.then(async () => {
+    if (state.lastSaved > 0 && state.lastSaved < committedSavedAt) return;
     const provider = await getActiveSaveProvider();
     await persistGameState(provider, "autosave", state, "Autosave");
+    committedSavedAt = Math.max(committedSavedAt, state.lastSaved);
+  });
+  persistTail = run.then(() => undefined, () => undefined);
+  await run;
+}
+
+const autosaveQueue = createAutosaveQueue<AutosaveRequest>({
+  schedule: scheduleCoalescedGameplayPersist,
+  onRequest: ({ set }) => set({ autosaveError: null }),
+  persist: async ({ state }) => {
+    await persistAutosaveSnapshot(state);
   },
+  onSuccess: ({ set }) => set({ autosaveError: null }),
   onError: (error, { set }) => {
     const message = error instanceof Error ? error.message : String(error);
     console.warn("Autosave failed:", error);
@@ -36,6 +50,11 @@ export function snapshotPersistedGameState(
 
 export function queueGameplayAutosave(state: GameState, set: SetState): void {
   autosaveQueue.request({ state, set });
+}
+
+export async function flushGameplayAutosave(state: GameState, set: SetState): Promise<void> {
+  autosaveQueue.request({ state, set });
+  await autosaveQueue.flushNow();
 }
 
 export const queueWeeklyAutosave = queueGameplayAutosave;

@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { cycleDialogTab, getDialogFocusable } from "@/lib/a11y/dialogFocus";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 
 interface PlannerOpportunitySheetProps {
   open: boolean;
@@ -28,35 +28,19 @@ export function PlannerOpportunitySheet({
 
   useEffect(() => {
     if (!open) return;
-    const previousFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : triggerRef.current;
-    const focusStart = () => {
-      const root = sheetRef.current;
-      if (!root) return;
-      const focusable = getDialogFocusable(root);
-      (closeRef.current ?? focusable[0])?.focus();
+    const media = window.matchMedia("(min-width: 1024px)");
+    const closeWhenDesktop = () => {
+      if (media.matches) onClose();
     };
-    const frame = window.requestAnimationFrame(focusStart);
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (sheetRef.current) cycleDialogTab(event, sheetRef.current);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("keydown", onKeyDown);
-      if (previousFocus && document.contains(previousFocus)) {
-        previousFocus.focus();
-      } else {
-        triggerRef.current?.focus();
-      }
-    };
+    closeWhenDesktop();
+    media.addEventListener("change", closeWhenDesktop);
+    return () => media.removeEventListener("change", closeWhenDesktop);
   }, [onClose, open]);
+
+  useDialogFocusTrap(sheetRef, open, {
+    onClose,
+    initialFocusRef: closeRef,
+  });
 
   return (
     <>

@@ -24,6 +24,7 @@ vi.mock("@/lib/saveProvider", () => ({
 }));
 
 import {
+  flushGameplayAutosave,
   queueGameplayAutosave,
   snapshotPersistedGameState,
 } from "@/stores/actions/persistGameplayAutosave";
@@ -68,5 +69,23 @@ describe("opening-loop autosave queue", () => {
       second,
       "Autosave",
     );
+  });
+
+  it("flushes immediately on quit and ignores a stale older snapshot", async () => {
+    const set = vi.fn() as unknown as SetState;
+    const older = { currentWeek: 1, lastSaved: 10 } as GameState;
+    const newer = { currentWeek: 1, lastSaved: 20 } as GameState;
+
+    await flushGameplayAutosave(newer, set);
+    await flushGameplayAutosave(older, set);
+
+    expect(persistGameState).toHaveBeenCalledTimes(1);
+    expect(persistGameState).toHaveBeenCalledWith(
+      expect.anything(),
+      "autosave",
+      newer,
+      "Autosave",
+    );
+    expect(set).toHaveBeenCalledWith({ autosaveError: null });
   });
 });

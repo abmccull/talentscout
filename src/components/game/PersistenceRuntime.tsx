@@ -6,29 +6,49 @@ import { useGameStore } from "@/stores/gameStore";
 /**
  * Flushes the in-memory career to the autosave slot when the window hides
  * or the packaged app is closing. Electron close fires pagehide on the
- * renderer; there is no game state in the main-process before-quit hook.
+ * renderer; main-process before-quit then waits for game:notifySaveFlushed.
  */
 export function PersistenceRuntime() {
-  const hasCareer = useGameStore((state) => state.gameState !== null);
-  const saveGame = useGameStore((state) => state.saveGame);
-
   useEffect(() => {
-    if (!hasCareer) return;
+    let inFlight: Promise<void> | null = null;
 
-    const flush = () => {
-      saveGame();
+    const flush = (): Promise<void> => {
+      if (inFlight) return inFlight;
+      const { gameState, flushGameplaySave } = useGameStore.getState();
+      if (!gameState) return Promise.resolve();
+      inFlight = flushGameplaySave().finally(() => {
+        inFlight = null;
+      });
+      return inFlight;
+    };
+
+    const onPageHide = () => {
+      void flush();
     };
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") void flush();
     };
 
-    window.addEventListener("pagehide", flush);
+    window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
+
+    const gameApi = window.electronAPI?.game;
+    const unsubscribeFlushRequest = gameApi?.onFlushSaveRequest?.(() => {
+      void flush()
+        .catch((error) => {
+          console.warn("Quit flush failed:", error);
+        })
+        .finally(() => {
+          void gameApi.notifySaveFlushed?.();
+        });
+    });
+
     return () => {
-      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
+      unsubscribeFlushRequest?.();
     };
-  }, [hasCareer, saveGame]);
+  }, []);
 
   return null;
 }

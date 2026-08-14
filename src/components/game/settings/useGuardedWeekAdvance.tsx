@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { Button } from "@/components/ui/button";
+import { isYouthOpeningWeek } from "@/lib/youthFirstHour";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 
 export function useGuardedWeekAdvance() {
   const requestWeekAdvance = useGameStore((state) => state.requestWeekAdvance);
   const confirmBeforeAdvance = useSettingsStore((state) => state.confirmBeforeAdvance);
+  const openingWeek = useGameStore((state) => isYouthOpeningWeek(state.gameState));
   const [pending, setPending] = useState(false);
 
   const request = () => {
-    if (confirmBeforeAdvance) {
+    if (confirmBeforeAdvance || openingWeek) {
       setPending(true);
       return;
     }
@@ -38,10 +41,14 @@ export function WeekAdvanceConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocusTrap(dialogRef, open, { onClose: onCancel });
+
   if (!open) return null;
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       role="dialog"
       aria-modal="true"

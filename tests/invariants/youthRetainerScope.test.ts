@@ -14,6 +14,7 @@ import {
 import {
   buildYouthRetainerBrief,
   ensureYouthRetainerBrief,
+  isValidYouthRetainerBrief,
   normalizeYouthRetainerContracts,
 } from "@/engine/finance/retainerBriefs";
 import { pitchToClub } from "@/engine/finance/clientRelationships";
@@ -139,6 +140,30 @@ describe("Youth Early Access retainer scope", () => {
       focus: "academy",
       ageRange: [15, 20],
     });
+  });
+
+  it("treats academy briefs missing required fields as invalid instead of throwing", () => {
+    expect(
+      isValidYouthRetainerBrief({
+        focus: "academy",
+      } as never),
+    ).toBe(false);
+    expect(
+      isValidYouthRetainerBrief({
+        focus: "academy",
+        targetPositions: ["ST"],
+      } as never),
+    ).toBe(false);
+
+    const academy = club("academy", "academyFirst");
+    const repaired = ensureYouthRetainerBrief(
+      contract({
+        brief: { focus: "academy" } as never,
+      }),
+      academy,
+      { [player.id]: player },
+    );
+    expect(isValidYouthRetainerBrief(repaired.brief)).toBe(true);
   });
 
   it("repairs legacy offers with club context and rejects invalid direct acceptance", () => {

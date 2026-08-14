@@ -7,6 +7,7 @@ import CareerEraThread from "@/components/game/workspace/CareerEraThread";
 import { YouthActiveCaseBoard } from "@/components/game/workspace/desk/YouthActiveCaseBoard";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import type { GameState } from "@/engine/core/types";
+import { isYouthFirstHour } from "@/lib/youthFirstHour";
 import { DashboardCommandCenter } from "./DashboardCommandCenter";
 import type { DashboardActionTarget } from "./dashboardPriorityModel";
 import type { DashboardPriorityItem } from "./dashboardPriorityModel";
@@ -66,6 +67,7 @@ export function YouthDeskDashboard({
   selectPlayer,
 }: YouthDeskDashboardProps) {
   const club = scout.currentClubId ? gameState.clubs[scout.currentClubId] : undefined;
+  const firstHour = isYouthFirstHour(gameState);
 
   return (
     <GameLayout>
@@ -113,39 +115,54 @@ export function YouthDeskDashboard({
             </div>
           </header>
 
-          <DashboardCommandCenter
-            model={dashboardWorkspace}
-            onAction={onDashboardAction}
-            onOpenPlanner={() => setScreen("calendar")}
-            onMarkReviewed={onMarkReviewed}
-            onSnooze={onSnooze}
-            onTogglePin={onTogglePin}
-            onDismiss={onDismiss}
-            onDismissInsight={onDismissInsight}
-          />
+          {!firstHour && (
+            <DashboardCommandCenter
+              model={dashboardWorkspace}
+              onAction={onDashboardAction}
+              onOpenPlanner={() => setScreen("calendar")}
+              onMarkReviewed={onMarkReviewed}
+              onSnooze={onSnooze}
+              onTogglePin={onTogglePin}
+              onDismiss={onDismiss}
+              onDismissInsight={onDismissInsight}
+            />
+          )}
 
-          <section aria-labelledby="dashboard-active-case-title" className="mt-8">
-            <div className="mb-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
-                Scouting context
-              </p>
-              <h2 id="dashboard-active-case-title" className="mt-1 text-xl font-semibold text-white">
-                Active case
+          <section aria-labelledby="dashboard-active-case-title" className={firstHour ? "" : "mt-8"}>
+            {!firstHour && (
+              <div className="mb-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                  Scouting context
+                </p>
+                <h2 id="dashboard-active-case-title" className="mt-1 text-xl font-semibold text-white">
+                  Active case
+                </h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
+                  Use this case board after the priority queue tells you where attention belongs.
+                </p>
+              </div>
+            )}
+            {firstHour && (
+              <h2 id="dashboard-active-case-title" className="sr-only">
+                Next move
               </h2>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
-                Use this case board after the priority queue tells you where attention belongs.
-              </p>
-            </div>
+            )}
             <YouthActiveCaseBoard
               model={activeCaseModel}
               eyebrow={youthDeskAction.eyebrow}
               ctaLabel={youthDeskAction.label}
               scheduledSlots={scheduledSlots}
               onPrimaryAction={onPrimaryAction}
-              onSecondaryAction={youthDeskAction.kind !== "planner" ? () => setScreen("calendar") : undefined}
-              secondaryLabel={youthDeskAction.kind !== "planner" ? "Review itinerary" : undefined}
+              onSecondaryAction={
+                firstHour || youthDeskAction.kind === "planner"
+                  ? undefined
+                  : () => setScreen("calendar")
+              }
+              secondaryLabel={
+                firstHour || youthDeskAction.kind === "planner" ? undefined : "Review itinerary"
+              }
               asideContent={
-                currentCareerEra ? (
+                !firstHour && currentCareerEra ? (
                   <CareerEraThread
                     variant="desk"
                     era={currentCareerEra}

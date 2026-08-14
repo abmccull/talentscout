@@ -126,7 +126,8 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
   await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
   await gamePage.waitForScreen("reportWriter");
   await gamePage.submitCurrentReportViaUI("recommend");
-  await gamePage.waitForScreen("reportHistory");
+  await gamePage.waitForScreen("dashboard");
+  await expect(gamePage.page.locator('[data-tutorial-id="report-marketplace-prompt"]')).toHaveCount(0);
 
   const latestReport = await gamePage.page.evaluate(() => {
     const store = (window as any).__GAME_STORE__;
@@ -144,11 +145,6 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
       (descriptor: unknown) => typeof descriptor === "string" && descriptor.length > 0,
     ),
   ).toBe(true);
-
-  await expect(
-    gamePage.page.locator('[data-tutorial-id="report-marketplace-prompt"]'),
-  ).toBeVisible();
-  await gamePage.page.getByRole("button", { name: /^List Now$/ }).click();
 }
 
 test.describe("Youth Early Access", () => {

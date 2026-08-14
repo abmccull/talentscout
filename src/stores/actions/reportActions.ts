@@ -698,9 +698,14 @@ export function createReportActions(get: GetState, set: SetState) {
         );
       }
 
-      // For independent scouts, flag the newly submitted report for the listing prompt
+      const isOpeningReport = Boolean(
+        gameState.openingCase
+        && gameState.openingCase.playerId === scoredReport.playerId,
+      );
+      // Marketplace is optional after the first hour. Opening reports land on Desk.
       const shouldOfferMarketplaceListing = isNewCase
-        && gameState.scout.careerPath === "independent";
+        && gameState.scout.careerPath === "independent"
+        && !isOpeningReport;
       const revisionCostMessage: InboxMessage | null = publicRevisionCost > 0
         ? {
             id: `public-revision-cost-${scoredReport.id}`,
@@ -748,7 +753,7 @@ export function createReportActions(get: GetState, set: SetState) {
       });
       set({
         gameState: nextState,
-        currentScreen: "reportHistory",
+        currentScreen: isOpeningReport ? "dashboard" : "reportHistory",
         ...(shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),
       });
       queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
@@ -758,6 +763,9 @@ export function createReportActions(get: GetState, set: SetState) {
         tutorialAfterReport.completeMilestone("wroteReport");
         tutorialAfterReport.checkAutoAdvance("reportSubmitted");
         tutorialAfterReport.completeMilestone("submittedReport");
+      }
+      if (isOpeningReport) {
+        tutorialAfterReport.completeMilestone("checkedInbox");
       }
 
       // First-team aha moment: a first report earns a real next step. Transfer

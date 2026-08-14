@@ -8,6 +8,8 @@ import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { isYouthFirstHour } from "@/lib/youthFirstHour";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 import { getCareerElapsedWeeks } from "@/engine/core/gameDate";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import {
@@ -281,6 +283,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     effectiveWeek,
     observationCount,
     reportCount,
+    firstHourChrome,
     hasScheduledActivity,
     hasAttendedMatch,
     scoutAvatarId,
@@ -314,6 +317,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       reportCount: gameState
         ? selectLatestReportsByCase(Object.values(gameState.reports ?? {})).length
         : 0,
+      firstHourChrome: IS_YOUTH_EARLY_ACCESS && isYouthFirstHour(gameState),
       hasScheduledActivity:
         gameState?.schedule?.activities?.some((activity) => activity != null) ?? false,
       hasAttendedMatch: (gameState?.playedFixtures?.length ?? 0) > 0,
@@ -330,17 +334,27 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   // All hooks must be called before any early return
   const [seenNav, setSeenNav] = useState<Set<GameScreen>>(() => loadSeenNav());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarCloseRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<GameScreen | null>(null);
 
-  // Close sidebar on Escape key
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSidebarOpen(false);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobileViewport(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
   }, []);
+
+  const mobileDrawerOpen = isMobileViewport && sidebarOpen;
+  const mobileDrawerHidden = isMobileViewport && !sidebarOpen;
+  useDialogFocusTrap(sidebarRef, mobileDrawerOpen, {
+    onClose: () => setSidebarOpen(false),
+    initialFocusRef: sidebarCloseRef,
+  });
 
   // Prevent body scroll when sidebar overlay is open on mobile
   useEffect(() => {
@@ -386,10 +400,15 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   };
   const useYouthEarlyAccessNav =
     IS_YOUTH_EARLY_ACCESS && specialization === "youth";
+  const youthWorkspaceItems = firstHourChrome
+    ? YOUTH_WORKSPACE_ITEMS.filter(
+        (item) => item.screen !== "internationalView" && item.screen !== "career",
+      )
+    : YOUTH_WORKSPACE_ITEMS;
 
   const isNavScreenVisible = (screen: GameScreen): boolean => {
     if (useYouthEarlyAccessNav) {
-      return YOUTH_WORKSPACE_ITEMS.some((item) => item.screen === screen)
+      return youthWorkspaceItems.some((item) => item.screen === screen)
         || YOUTH_SUPPORT_ITEMS.some((item) => item.screen === screen);
     }
     return getNavVisibility(screen, navCtx);
@@ -404,16 +423,22 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     ),
   })).filter((section) => section.visibleItems.length > 0);
   const showCareerShortcut = isNavScreenVisible("career");
-  const activeNavScreen = useYouthEarlyAccessNav
-    ? getYouthEarlyAccessWorkspaceParent(currentScreen)
-    : currentScreen;
-  const activeWorkspaceLabel = useYouthEarlyAccessNav
-    ? [
-        ...YOUTH_WORKSPACE_ITEMS,
-        ...YOUTH_SUPPORT_ITEMS,
-        { screen: "inbox" as GameScreen, label: "Inbox", icon: Mail },
-      ].find((item) => item.screen === activeNavScreen)?.label ?? "TalentScout"
-    : "TalentScout";
+  const liveLookActive =
+    currentScreen === "observation" || currentScreen === "openingDiscovery";
+  const activeNavScreen = liveLookActive
+    ? null
+    : useYouthEarlyAccessNav
+      ? getYouthEarlyAccessWorkspaceParent(currentScreen)
+      : currentScreen;
+  const activeWorkspaceLabel = liveLookActive
+    ? "Watch"
+    : useYouthEarlyAccessNav
+      ? [
+          ...youthWorkspaceItems,
+          ...YOUTH_SUPPORT_ITEMS,
+          { screen: "inbox" as GameScreen, label: "Inbox", icon: Mail },
+        ].find((item) => item.screen === activeNavScreen)?.label ?? "TalentScout"
+      : "TalentScout";
 
   const guidedNavigationDestination: GameScreen | null =
     currentGuidedTask === "openedCalendar" ? "calendar" : null;
@@ -472,11 +497,14 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       <header className="fixed inset-x-0 top-0 z-30 grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center border-b border-white/10 bg-[#0b0e12]/95 px-2 backdrop-blur md:hidden">
         <div className="flex items-center">
           <button
+            ref={menuButtonRef}
             onClick={() => setSidebarOpen(true)}
             disabled={guidedSessionActive}
             title={guidedSessionActive ? "Finish the highlighted tutorial step first" : undefined}
             className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
             aria-label="Open navigation menu"
+            aria-expanded={sidebarOpen}
+            aria-controls="game-nav-sidebar"
           >
             <Menu size={21} aria-hidden="true" />
           </button>
@@ -516,11 +544,18 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Sidebar — desktop: static, mobile: slide-over overlay */}
-      <aside aria-label="Game navigation" className={`
+      <aside
+        id="game-nav-sidebar"
+        ref={sidebarRef}
+        aria-label="Game navigation"
+        aria-hidden={mobileDrawerHidden || undefined}
+        inert={mobileDrawerHidden || undefined}
+        className={`
         fixed inset-y-0 left-0 z-50 flex w-72 md:w-60 flex-col border-r border-white/10 bg-[#0b0e12]
         transform transition-transform duration-200 ease-in-out
         md:static md:translate-x-0
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        ${mobileDrawerHidden ? "invisible pointer-events-none md:visible md:pointer-events-auto" : ""}
       `}>
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center justify-between">
@@ -529,6 +564,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             </h1>
             {/* Close button visible only on mobile */}
             <button
+              ref={sidebarCloseRef}
               onClick={() => setSidebarOpen(false)}
               className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white md:hidden"
               aria-label="Close sidebar"
@@ -687,9 +723,11 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       {useYouthEarlyAccessNav && (
         <nav
           aria-label="Youth Scout workspace"
-          className="fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-6 border-t border-white/10 bg-[#0b0e12]/98 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+          className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem+env(safe-area-inset-bottom))] border-t border-white/10 bg-[#0b0e12]/98 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden ${
+            youthWorkspaceItems.length <= 4 ? "grid-cols-4" : "grid-cols-6"
+          }`}
         >
-          {YOUTH_WORKSPACE_ITEMS.map(({ screen, label, icon: Icon }) => {
+          {youthWorkspaceItems.map(({ screen, label, icon: Icon }) => {
             const isActive = activeNavScreen === screen;
             const isTutorialLocked = isGuidedNavigationLocked(screen);
             return (
@@ -700,7 +738,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
                 disabled={isTutorialLocked}
                 title={isTutorialLocked ? "Finish the highlighted tutorial step first" : undefined}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-[9px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
                   isTutorialLocked
                     ? "cursor-not-allowed text-zinc-600 opacity-40"
                     : isActive

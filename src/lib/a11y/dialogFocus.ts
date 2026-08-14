@@ -13,13 +13,16 @@ export function getDialogFocusable(root: HTMLElement): HTMLElement[] {
   );
 }
 
+export function isElementVisible(node: HTMLElement | null): boolean {
+  if (!node) return false;
+  return node.offsetParent !== null || node.getClientRects().length > 0;
+}
+
 export function cycleDialogTab(event: KeyboardEvent, root: HTMLElement): void {
   if (event.key !== "Tab") return;
+  if (!isElementVisible(root)) return;
   const focusable = getDialogFocusable(root);
-  if (focusable.length === 0) {
-    event.preventDefault();
-    return;
-  }
+  if (focusable.length === 0) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
   if (event.shiftKey && document.activeElement === first) {
