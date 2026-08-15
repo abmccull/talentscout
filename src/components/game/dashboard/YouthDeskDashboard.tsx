@@ -119,6 +119,15 @@ export function YouthDeskDashboard({
             )}
           </header>
 
+          {!firstHour && gameState.openingCase && currentSeason === 1 && currentWeek === 2 && (
+            <div
+              role="status"
+              className="mb-5 rounded-sm border border-[color:var(--primary)]/25 bg-[#14110c] px-4 py-3 text-sm leading-6 text-zinc-200"
+            >
+              The board is open. Prospects, Reports, and Inbox are live. The kid you wrote down is still the case.
+            </div>
+          )}
+
           {!firstHour && dashboardWorkspace && (
             <DashboardCommandCenter
               model={dashboardWorkspace}

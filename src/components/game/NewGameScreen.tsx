@@ -769,12 +769,13 @@ export function NewGameScreen() {
             &larr; Back to Menu
           </button>
           <h1 id="new-game-heading" className="text-lg font-semibold tracking-tight text-white sm:text-xl">
-            Create Your Scout
+            {IS_YOUTH_EARLY_ACCESS && step === 1 ? "Take the call" : "Create Your Scout"}
           </h1>
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar — Youth EA default path is name + instinct + Take the call. */}
+      {!(IS_YOUTH_EARLY_ACCESS && step === 1) && (
       <div className="px-8 pt-6 pb-2">
         <div className="mx-auto max-w-3xl">
           <div className="flex items-center justify-between">
@@ -832,6 +833,7 @@ export function NewGameScreen() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Step content */}
       <div className="min-h-0 flex-1 px-8 py-6 overflow-y-auto">
@@ -1102,11 +1104,11 @@ export function NewGameScreen() {
                 </Card>
 
                 {IS_YOUTH_EARLY_ACCESS && (
-                  <Card className="mt-6 overflow-hidden border-emerald-500/40 bg-zinc-950/80 shadow-2xl shadow-emerald-950/30">
-                    <div className="border-b border-emerald-500/20 bg-gradient-to-r from-emerald-950/90 via-zinc-950 to-zinc-950 px-6 py-5">
+                  <Card className="mt-6 overflow-hidden border-[color:var(--primary)]/35 bg-zinc-950/80 shadow-2xl shadow-black/40">
+                    <div className="border-b border-[color:var(--primary)]/20 bg-gradient-to-r from-[#14110c] via-zinc-950 to-zinc-950 px-6 py-5">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
+                          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--primary)]">
                             {isExperiencedYouthPlayer
                               ? "Start your next scouting career"
                               : "Your first scouting assignment"}
@@ -1149,9 +1151,9 @@ export function NewGameScreen() {
                                 type="button"
                                 aria-pressed={isSelected}
                                 onClick={() => applyYouthPersona(preset)}
-                                className={`min-h-24 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
+                                className={`min-h-24 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ring)] ${
                                   isSelected
-                                    ? "border-emerald-400 bg-emerald-500/12 shadow-lg shadow-emerald-950/40"
+                                    ? "border-[color:var(--primary)] bg-[color:var(--primary)]/12 shadow-lg shadow-black/40"
                                     : "border-zinc-700 bg-zinc-900/70 hover:border-zinc-500 hover:bg-zinc-900"
                                 }`}
                               >
@@ -1159,7 +1161,7 @@ export function NewGameScreen() {
                                   <span className="font-semibold text-white">{preset.name}</span>
                                   <span
                                     aria-hidden="true"
-                                    className={`h-3 w-3 rounded-full border ${isSelected ? "border-emerald-300 bg-emerald-400" : "border-zinc-500"}`}
+                                    className={`h-3 w-3 rounded-full border ${isSelected ? "border-[color:var(--primary)] bg-[color:var(--primary)]" : "border-zinc-500"}`}
                                   />
                                 </span>
                                 <span className="mt-1 block text-xs leading-relaxed text-zinc-300">{preset.description}</span>

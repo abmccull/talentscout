@@ -757,7 +757,9 @@ export function CalendarScreen() {
               Week {currentWeek} — Season {currentSeason}
             </p>
             <p className="mt-1 max-w-2xl text-sm text-zinc-300">
-              Spend seven finite days on the evidence, access, and recovery that matter most.
+              {openingShell
+                ? "The second look is on the week. Advance Week opens the board — Prospects, Reports, and Inbox — together."
+                : "Spend seven finite days on the evidence, access, and recovery that matter most."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200">
@@ -811,6 +813,11 @@ export function CalendarScreen() {
                 Advance Week
               </Button>
             </Tooltip>
+            {openingShell && (
+              <p className="mt-2 max-w-xs text-right text-xs leading-5 text-zinc-400 sm:ml-auto">
+                Next week the board opens. Stay here until you advance.
+              </p>
+            )}
           </div>
         </div>
 

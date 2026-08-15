@@ -1,3 +1,15 @@
+# First-hour program (close it)
+
+Three programs. Do not reopen persist/HUD. Do not mix launch attestations.
+
+- [x] 1A: Youth EA new game default is name + instinct + Take the call (no stepper)
+- [x] 1C: Opening Planner copy + week-2 Desk “board is open”
+- [ ] 1B: Live first-hour playthrough + design-audit on this SHA (human/screens)
+- [ ] Program 2: Week 2 Desk / Prospects / Inbox / later Watch
+- [ ] Program 3: Push, freeze SHA, package, attest
+
+---
+
 # First-hour gold, ground, and quiet mentor (2026-08-14)
 
 - [x] Split signal hues; general uses a token
