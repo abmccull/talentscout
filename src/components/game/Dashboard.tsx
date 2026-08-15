@@ -8,7 +8,7 @@ import {
   WeekAdvanceConfirmDialog,
 } from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
-import { isYouthFirstHour } from "@/lib/youthFirstHour";
+import { isYouthEarlyCareer, isYouthFirstHour } from "@/lib/youthFirstHour";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -414,7 +414,7 @@ export function Dashboard() {
       scheduledSlots,
       openDayCount,
     });
-    if (!firstHourDesk && !dashboardWorkspace) {
+    if (!firstHourDesk && !isYouthEarlyCareer(gameState) && !dashboardWorkspace) {
       return null;
     }
     return (

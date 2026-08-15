@@ -9,7 +9,7 @@ import CareerEraThread from "@/components/game/workspace/CareerEraThread";
 import { YouthActiveCaseBoard } from "@/components/game/workspace/desk/YouthActiveCaseBoard";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import type { GameState } from "@/engine/core/types";
-import { isYouthFirstHour } from "@/lib/youthFirstHour";
+import { isYouthEarlyCareer, isYouthFirstHour } from "@/lib/youthFirstHour";
 import { DashboardCommandCenter } from "./DashboardCommandCenter";
 import type { DashboardActionTarget } from "./dashboardPriorityModel";
 import type { DashboardPriorityItem } from "./dashboardPriorityModel";
@@ -70,6 +70,8 @@ export function YouthDeskDashboard({
 }: YouthDeskDashboardProps) {
   const club = scout.currentClubId ? gameState.clubs[scout.currentClubId] : undefined;
   const firstHour = isYouthFirstHour(gameState);
+  const earlyCareer = isYouthEarlyCareer(gameState);
+  const sameCaseDesk = firstHour || earlyCareer;
 
   return (
     <GameLayout>
@@ -77,7 +79,7 @@ export function YouthDeskDashboard({
         className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7"
         data-tutorial-id="dashboard-overview"
       >
-        <ScreenBackground src={firstHour ? "/images/backgrounds/activities/school-match.png" : "/images/backgrounds/dashboard-office.png"} opacity={firstHour ? 0.45 : 0.95} />
+        <ScreenBackground src={sameCaseDesk ? "/images/backgrounds/activities/school-match.png" : "/images/backgrounds/dashboard-office.png"} opacity={sameCaseDesk ? 0.45 : 0.95} />
         <div className="relative z-10 mx-auto max-w-[1480px]">
           <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
@@ -85,7 +87,7 @@ export function YouthDeskDashboard({
               {club && <ClubCrest clubId={club.id} clubName={club.name} size={48} />}
               <div className="min-w-0">
                 <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-amber-200">
-                  Youth recruitment room
+                  {sameCaseDesk ? "The same case" : "Youth recruitment room"}
                 </p>
                 <h1 className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">
                   Scouting Desk
@@ -95,7 +97,7 @@ export function YouthDeskDashboard({
                 </p>
               </div>
             </div>
-            {!firstHour && (
+            {!sameCaseDesk && (
             <div className="flex flex-wrap items-center gap-2" data-testid="desk-week-status">
               <span className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${phaseBadgeClassName}`}>
                 {phaseLabel}
@@ -119,16 +121,16 @@ export function YouthDeskDashboard({
             )}
           </header>
 
-          {!firstHour && gameState.openingCase && currentSeason === 1 && currentWeek === 2 && (
+          {earlyCareer && !firstHour && (
             <div
               role="status"
               className="mb-5 rounded-sm border border-[color:var(--primary)]/25 bg-[#14110c] px-4 py-3 text-sm leading-6 text-zinc-200"
             >
-              The board is open. Prospects, Reports, and Inbox are live. The kid you wrote down is still the case.
+              Same kid. Prospects and Reports are how you test the first read. World and Career wait until this case has another week behind it.
             </div>
           )}
 
-          {!firstHour && dashboardWorkspace && (
+          {!sameCaseDesk && dashboardWorkspace && (
             <DashboardCommandCenter
               model={dashboardWorkspace}
               onAction={onDashboardAction}
@@ -141,8 +143,8 @@ export function YouthDeskDashboard({
             />
           )}
 
-          <section aria-labelledby="dashboard-active-case-title" className={firstHour ? "" : "mt-8"}>
-            {!firstHour && (
+          <section aria-labelledby="dashboard-active-case-title" className={sameCaseDesk ? "" : "mt-8"}>
+            {!sameCaseDesk && (
               <div className="mb-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
                   Scouting context
@@ -155,12 +157,12 @@ export function YouthDeskDashboard({
                 </p>
               </div>
             )}
-            {firstHour && (
+            {sameCaseDesk && (
               <h2 id="dashboard-active-case-title" className="sr-only">
                 Next move
               </h2>
             )}
-            {firstHour ? (
+            {sameCaseDesk ? (
               <OpeningHourDesk
                 gameState={gameState}
                 setScreen={setScreen}
@@ -216,8 +218,32 @@ function OpeningHourDesk({
   const youth = opening ? gameState.unsignedYouth[opening.youthId] : undefined;
   const player = youth?.player;
   const name = player ? `${player.firstName} ${player.lastName}` : "the kid";
-  const writeReady = opening?.stage === "report" || opening?.stage === "decision";
-  const destination = opening?.stage === "report" || opening?.stage === "decision" ? "reportWriter" : "observation";
+  const week = gameState.currentWeek ?? 1;
+  const writeReady = week <= 1 && (opening?.stage === "report" || opening?.stage === "decision");
+  const followUpBooked = (gameState.schedule?.activities ?? []).some(
+    (activity) =>
+      activity?.type === "followUpSession"
+      && activity.targetId === opening?.playerId,
+  );
+  const destination = writeReady
+    ? "reportWriter"
+    : followUpBooked || week > 1
+      ? "calendar"
+      : "observation";
+  const blurb = writeReady
+    ? "Write the name down. Planner will hold the second look."
+    : week > 1
+      ? followUpBooked
+        ? "The second look is on the week. Watch him again, then the board will mean something."
+        : "Book the second look. Same kid. A new context."
+      : "Watch this kid. One look is enough to write the name.";
+  const cta = writeReady
+    ? "Write the name down"
+    : week > 1
+      ? followUpBooked
+        ? "Open the week"
+        : "Book the second look"
+      : "Watch the match";
 
   return (
     <div
@@ -240,9 +266,7 @@ function OpeningHourDesk({
           </p>
           <h2 className="text-2xl font-bold text-white sm:text-3xl">{name}</h2>
           <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-300">
-            {writeReady
-              ? "Write the name down. Planner will hold the second look."
-              : "Watch this kid. One look is enough to write the name."}
+            {blurb}
           </p>
           <Button
             className="mt-4 min-h-11"
@@ -251,7 +275,7 @@ function OpeningHourDesk({
               setScreen(destination);
             }}
           >
-            {writeReady ? "Write the name down" : "Watch the match"}
+            {cta}
           </Button>
         </div>
       </div>

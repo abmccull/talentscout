@@ -845,7 +845,13 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
   const ModeIcon = MODE_ICONS[mode];
   const isOpeningDiscovery = isOpeningDiscoverySession(session);
   const veteranPrologue = useGameStore((state) => state.gameState?.veteranPrologue);
+  const openingPlayerId = useGameStore((state) => state.gameState?.openingCase?.playerId);
   const lead = players[0];
+  const isOpeningFollowUp = Boolean(
+    !isOpeningDiscovery
+    && openingPlayerId
+    && players.some((player) => player.playerId === openingPlayerId),
+  );
 
   if (
     isOpeningDiscovery
@@ -969,6 +975,34 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               </Button>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOpeningFollowUp && lead) {
+    return (
+      <div className="relative flex flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-8">
+        <ScreenBackground src="/images/backgrounds/activities/school-match.png" opacity={0.38} />
+        <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-[color:var(--primary)]/25 bg-[#14110c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
+          <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">
+            Second look
+          </p>
+          <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+            Same kid. New context.
+          </h2>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
+            You already wrote {lead.name} down. This look is to test the first read, not to start a different game.
+          </p>
+          <Button
+            onClick={onBegin}
+            size="lg"
+            className="mt-6 w-full gap-2 sm:w-auto"
+            data-tutorial-id="observation-begin-session"
+          >
+            <Play size={16} aria-hidden="true" />
+            Watch the match
+          </Button>
         </div>
       </div>
     );

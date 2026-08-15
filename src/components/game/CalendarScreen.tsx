@@ -8,7 +8,7 @@ import {
   WeekAdvanceConfirmDialog,
 } from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
-import { isYouthOpeningShell } from "@/lib/youthFirstHour";
+import { isYouthEarlyCareer, isYouthOpeningShell } from "@/lib/youthFirstHour";
 import { openingFollowUpDayIndex } from "@/engine/youth/openingFollowUp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -743,7 +743,7 @@ export function CalendarScreen() {
         <div className="mb-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-[#10151b]/92 p-4 shadow-xl shadow-black/20 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">
-              {gameState && isYouthOpeningShell(gameState) ? "This week" : "Weekly command"}
+              {gameState && isYouthEarlyCareer(gameState) ? "This week" : "Weekly command"}
             </p>
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Planner</h1>
