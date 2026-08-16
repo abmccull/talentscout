@@ -915,17 +915,6 @@ export function createObservationActions(get: GetState, set: SetState) {
       ) {
         useTutorialStore.getState().completeMilestone("attendedMatch");
       }
-      if (
-        gameState
-        && isOpeningDiscoverySession(updatedSession)
-        && updatedSession.state === "active"
-      ) {
-        const leadId = gameState.openingCase?.playerId
-          ?? updatedSession.players[0]?.playerId;
-        if (leadId) {
-          get().allocateSessionFocus(leadId, "technical");
-        }
-      }
     },
 
     setSessionScoutingQuestion: (questionId: ScoutingQuestionId) => {

@@ -57,3 +57,16 @@ Scored from shipped `getDiscoveryHookMilestoneOrder()`, `getYouthGuidedMilestone
 **Re-audit vs Audit 1:** flow 6→10, ease 5→10, coherence 5→10, coverage 6→10.
 
 Live e2e (`e2e/flows/opening-discovery-hook.spec.ts`) was run. Playwright launched `/play` and reached new-game, then timed out waiting for **Take the call** (world-gen / 120s). That is captured in `{SCRATCH}/tutorial-e2e.log`. It is not a live 10/10 playthrough. The gating bar is the rubric + unit/source checks above.
+
+## Audit 3 — opening focus beat (2026-08-16)
+
+Skeptic: `beginSession` auto-allocated technical focus and completed `focusedPlayer` before the player clicked. That skipped the taught Watch → spend focus/lens beat.
+
+Fix: opening Watch no longer auto-spends a focus token. `tests/ui/youthOpeningFocusTutorial.test.ts` drives `startNewGame` → `beginSession` and asserts the current task stays `focusedPlayer` with no focused players until `allocateSessionFocus`.
+
+| Metric | Score | Evidence |
+| --- | --- | --- |
+| Flow | 10 | After Watch the match, the next task is spend focus/lens, then flag. |
+| Ease / intuition | 10 | Unchanged: instruction still names Focus + lens. |
+| Button / click / objective | 10 | Highlight can land on `observation-focus-lens` / `observation-focus-panel` because the token is still unspent. |
+| Day-to-day coverage | 10 | The live focus system is now the taught click, not a silent auto-spend. |
