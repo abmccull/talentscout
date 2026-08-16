@@ -1298,6 +1298,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         selectedPlayerId: resolved.openingCase?.playerId ?? get().selectedPlayerId,
         currentScreen: "reportWriter" as GameScreen,
       });
+      useTutorialStore.getState().completeMilestone("resolvedOpeningDiscovery");
       queueGameplayAutosave(snapshotPersistedGameState(resolved), set);
     },
 

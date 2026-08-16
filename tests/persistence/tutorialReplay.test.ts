@@ -1,22 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  getDiscoveryHookMilestoneOrder,
   useTutorialStore,
-  type GuidedMilestoneId,
 } from "@/stores/tutorialStore";
-
-const DISCOVERY_MILESTONES: GuidedMilestoneId[] = [
-  "attendedMatch",
-  "focusedPlayer",
-  "flaggedBreakthrough",
-  "completedMatch",
-  "wroteReport",
-  "submittedReport",
-  "checkedInbox",
-  "openedCalendar",
-  "scheduledActivity",
-  "advancedWeek",
-];
 
 beforeEach(() => {
   useTutorialStore.setState({
@@ -57,7 +44,7 @@ describe("forced guided-session replay", () => {
       currentGuidedTask: "attendedMatch",
     });
 
-    for (const milestone of DISCOVERY_MILESTONES) {
+    for (const milestone of getDiscoveryHookMilestoneOrder()) {
       expect(useTutorialStore.getState().currentGuidedTask).toBe(milestone);
       useTutorialStore.getState().completeMilestone(milestone);
     }

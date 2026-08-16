@@ -26,7 +26,7 @@ describe("guided milestone blocker copy", () => {
       milestoneId: "completedMatch",
       currentScreen: "observation",
       observationState: "reflection",
-    })).toBe("Complete Reflection to lock the read and the remaining doubt.");
+    })).toBe("Select Complete Reflection to lock the read and the remaining doubt.");
   });
 
   it("names the mandatory half-time decision before phase advance", () => {
@@ -45,5 +45,27 @@ describe("guided milestone blocker copy", () => {
       observationIsHalfTime: true,
       observationHalftimeApproach: "challenge",
     })).toBe("Select Next phase to apply your second-half plan.");
+  });
+
+  it("names the discovery call between Watch complete and the first report", () => {
+    expect(getGuidedMilestoneInstruction({
+      milestoneId: "resolvedOpeningDiscovery",
+      currentScreen: "openingDiscovery",
+      isYouthDiscoveryHook: true,
+    })).toBe("Choose who hears the name: keep it private, call a club, or ask your source to verify.");
+  });
+
+  it("names File initial assessment on the youth first-report path", () => {
+    expect(getGuidedMilestoneInstruction({
+      milestoneId: "submittedReport",
+      currentScreen: "reportWriter",
+      isYouthDiscoveryHook: true,
+    })).toBe("Select File initial assessment once the five decisions are ready.");
+
+    expect(getGuidedMilestoneInstruction({
+      milestoneId: "wroteReport",
+      currentScreen: "reportWriter",
+      isYouthDiscoveryHook: true,
+    })).toMatch(/five assessment decisions/i);
   });
 });

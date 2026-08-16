@@ -189,7 +189,12 @@ export function OpeningDiscoveryScreen() {
               </p>
             </div>
 
-            <div className="space-y-3" role="group" aria-label="Choose what to do with the lead">
+            <div
+              className="space-y-3"
+              role="group"
+              aria-label="Choose what to do with the lead"
+              data-tutorial-id="opening-discovery-choices"
+            >
               {choices.map((choice) => {
                 const Icon = CHOICE_ICONS[choice.id];
                 const choiceLabel = !veteranPrologue && choice.id === "verify"

@@ -193,7 +193,7 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
       "A school match started early and no academy scout is here yet. One player produced a moment worth a second look. " +
       "Begin the session. You are not here to confirm a star—you are here to notice evidence before everyone else.",
     mentorTextFreelance:
-      "A school match started early. Nobody from an academy has arrived, but I was told one name might be worth writing down. " +
+      "A school match started early. Nobody from an academy has arrived. " +
       "Start watching. One action can open a case, but it cannot finish one.",
     position: "top",
     interactive: true,
@@ -201,12 +201,12 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   },
   {
     id: "focusedPlayer",
-    target: "observation-focus-panel",
+    target: ["observation-focus-lens", "observation-focus-panel"],
     title: "Focus on a youth prospect",
     mentorText:
-      "Pick a prospect and commit focus. That is how you turn a busy school match into a usable read. Use the lens that matches what you're trying to learn.",
+      "Select Focus on your prospect, then choose a lens. That is how you turn a busy school match into a usable read.",
     mentorTextFreelance:
-      "Lock onto one prospect first. Focus is how you trade broad exposure for a deeper, cleaner read.",
+      "Select Focus on one prospect, then pick a lens. Focus trades a broad look for a cleaner read.",
     position: "left",
     interactive: true,
     screen: "observation",
@@ -238,21 +238,33 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     ],
     title: "Complete the observation session",
     mentorText:
-      "Now test the first impression against the rest of the match. Choose how you will watch the second half, then finish the reflection and preserve the uncertainty, not just the highlight.",
+      "Now test the first impression against the rest of the match. Choose a half-time approach, then select Complete Reflection so the doubt stays visible with the highlight.",
     mentorTextFreelance:
-      "Choose how you will challenge the first read in the second half. Then finish the reflection and decide what you actually believe.",
+      "Choose how you will watch the second half. Then select Complete Reflection and keep the uncertainty on the record.",
     position: "top",
     interactive: true,
     screen: "observation",
   },
   {
+    id: "resolvedOpeningDiscovery",
+    target: "opening-discovery-choices",
+    title: "Decide who hears the name",
+    mentorText:
+      "You have a lead, not a finished judgment. Choose one of the three next moves: keep the name private, call a club, or ask your source to verify.",
+    mentorTextFreelance:
+      "The watch is done. Pick who hears the name next. Each choice is a real career move, not a tutorial skip.",
+    position: "left",
+    interactive: true,
+    screen: "openingDiscovery",
+  },
+  {
     id: "wroteReport",
     target: "report-conviction",
-    title: "Write up what you learned",
+    title: "Write the first assessment",
     mentorText:
-      "You were first to write the name down. Now turn the moment and the contradiction into a professional opinion. Keep conviction proportional to the evidence.",
+      "This is the same report writer you will use later. Complete the five decisions: the saved evidence, what it suggests, what remains untested, the next test, and your confidence.",
     mentorTextFreelance:
-      "The name is in your notebook. Write the report while the evidence is fresh, and let the uncertainty stay visible.",
+      "File a first assessment, not a hunch. Work the five decisions on this page — evidence, claim, unknown, next test, confidence.",
     position: "right",
     interactive: true,
     screen: "reportWriter",
@@ -260,11 +272,11 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   {
     id: "submittedReport",
     target: "report-submit",
-    title: "Submit the scouting write-up",
+    title: "File the first assessment",
     mentorText:
-      "Submit once the summary reflects the school match properly. This opens an accountable case whose delivery and outcome can shape your reputation.",
+      "When the five decisions are complete, select File initial assessment. That opens an accountable case.",
     mentorTextFreelance:
-      "Send it when the notes are tight. A disciplined youth report is worth more than hype.",
+      "Select File initial assessment once the five decisions are ready. A tight first read beats hype.",
     position: "top",
     interactive: true,
     screen: "reportWriter",
@@ -287,8 +299,12 @@ function isYouthGuidedSession(): boolean {
   return useGameStore.getState().gameState?.scout.primarySpecialization === "youth";
 }
 
+export function getYouthGuidedMilestones(): readonly GuidedMilestoneDefinition[] {
+  return YOUTH_GUIDED_MILESTONES;
+}
+
 function getActiveGuidedMilestones(): GuidedMilestoneDefinition[] {
-  return isYouthGuidedSession() ? YOUTH_GUIDED_MILESTONES : DEFAULT_GUIDED_MILESTONES;
+  return isYouthGuidedSession() ? [...YOUTH_GUIDED_MILESTONES] : DEFAULT_GUIDED_MILESTONES;
 }
 
 export const GUIDED_MILESTONES = new Proxy([] as GuidedMilestoneDefinition[], {
@@ -335,7 +351,7 @@ export function getCompletedCount(
 }
 
 /**
- * Return the total number of guided milestones (always 10).
+ * Return the total number of guided milestones for the active path.
  */
 export function getTotalCount(): number {
   return getActiveGuidedMilestones().length;

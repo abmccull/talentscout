@@ -83,6 +83,7 @@ export type GuidedMilestoneId =
   | "focusedPlayer"
   | "flaggedBreakthrough"
   | "completedMatch"
+  | "resolvedOpeningDiscovery"
   | "wroteReport"
   | "submittedReport"
   | "checkedInbox";
@@ -350,13 +351,16 @@ const DISCOVERY_HOOK_MILESTONE_ORDER: GuidedMilestoneId[] = [
   "focusedPlayer",
   "flaggedBreakthrough",
   "completedMatch",
+  "resolvedOpeningDiscovery",
   "wroteReport",
   "submittedReport",
-  "checkedInbox",
-  "openedCalendar",
-  "scheduledActivity",
   "advancedWeek",
 ];
+
+/** Shipped youth first-session order. Tests must drive this function. */
+export function getDiscoveryHookMilestoneOrder(): GuidedMilestoneId[] {
+  return [...DISCOVERY_HOOK_MILESTONE_ORDER];
+}
 
 function milestoneOrder(kind: GuidedSessionKind): GuidedMilestoneId[] {
   return kind === "discoveryHook"
@@ -401,10 +405,15 @@ const initialMilestones: Record<GuidedMilestoneId, boolean> = {
   focusedPlayer: false,
   flaggedBreakthrough: false,
   completedMatch: false,
+  resolvedOpeningDiscovery: false,
   wroteReport: false,
   submittedReport: false,
   checkedInbox: false,
 };
+
+export function createEmptyGuidedMilestones(): Record<GuidedMilestoneId, boolean> {
+  return { ...initialMilestones };
+}
 
 // Merge persisted milestones with defaults (handles old saves).
 const restoredMilestones: Record<GuidedMilestoneId, boolean> = {

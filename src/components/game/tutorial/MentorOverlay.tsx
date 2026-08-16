@@ -204,6 +204,7 @@ export function MentorOverlay() {
   const dismissForever = useTutorialStore((s) => s.dismissForever);
   const guidedSessionActive = useTutorialStore((s) => s.guidedSessionActive);
   const currentGuidedTask = useTutorialStore((s) => s.currentGuidedTask);
+  const guidedSessionKind = useTutorialStore((s) => s.guidedSessionKind);
   const mentorName = useTutorialStore((s) => s.mentorName);
   const mentorTitle = useTutorialStore((s) => s.mentorTitle);
 
@@ -507,6 +508,7 @@ export function MentorOverlay() {
         observationPhaseIndex,
         observationIsHalfTime,
         observationHalftimeApproach,
+        isYouthDiscoveryHook: guidedSessionKind === "discoveryHook",
       })
     : "Complete the highlighted action to continue.";
 

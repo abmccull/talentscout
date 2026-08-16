@@ -26,7 +26,7 @@ test.describe("guided opening discovery hook", () => {
       sfx: 0.8,
       ambience: 0.35,
     });
-    await expect(page.getByText("Youth Scout Career ┬╖ Early Access", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Youth Scout Career .+ Early Access/)).toBeVisible();
     await expect(page.getByText(/Begin as a Youth Scout\. Follow leads, watch young players/i)).toBeVisible();
     await expect(page.getByRole("button", { name: "Start Youth Scout Career" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Continue Career" })).toBeVisible();
@@ -62,7 +62,7 @@ test.describe("guided opening discovery hook", () => {
 
     await expect(page.getByText("Your first scouting assignment", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "A trusted contact has spotted someone." })).toBeVisible();
-    await expect(page.getByText("School match underway ┬╖ Live lead", { exact: true })).toBeVisible();
+    await expect(page.getByText(/School match underway .+ Live lead/)).toBeVisible();
     await expect(page.getByText(/^Your edge:/)).toHaveCount(4);
     await expect(page.getByText(/first case:|guided opening|one important call|first decision in under five minutes|career DNA|observation beats|irreversible call/i)).toHaveCount(0);
     await page.screenshot({

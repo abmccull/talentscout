@@ -535,6 +535,7 @@ const FocusPanel = memo(function FocusPanel({
                           onClick={() => handleConfirmFocus(player.playerId, lens)}
                           className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition motion-reduce:transition-none hover:bg-[#27272a] ${LENS_VISUAL[lens].className}`}
                           aria-label={`Use ${lens} lens for ${player.name}`}
+                          data-tutorial-id={lens === LENS_KEYS[0] ? "observation-focus-lens" : undefined}
                         >
                           <LensMark lens={lens} />
                           <span className="font-medium">{LENS_VISUAL[lens].label}</span>
