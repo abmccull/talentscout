@@ -1520,12 +1520,12 @@ export function ObservationScreen() {
         <div className="relative z-10 flex flex-1 flex-col min-h-0">
 
           {/* ── Top info bar ────────────────────────────────────────────── */}
-          <div className={`shrink-0 border-b border-[#27272a] px-3 py-2.5 sm:px-4 ${isOpeningWatch ? "bg-[#14110c]" : "bg-[#0c0c0c]"}`}>
+          <div className="shrink-0 border-b border-[#27272a] bg-[#0c0c0c] px-3 py-2.5 sm:px-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <ModeIcon size={14} className="signal-focus shrink-0" aria-hidden="true" />
                 <span className="truncate text-sm font-semibold text-zinc-200">
-                  {isOpeningWatch ? "Watch" : MODE_LABELS[mode]}
+                  {MODE_LABELS[mode]}
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">

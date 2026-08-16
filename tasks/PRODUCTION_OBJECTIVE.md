@@ -60,9 +60,9 @@ Do **not** start another persist pass, settings pass, or first-hour rail-gating 
 A new player, desktop and 390px:
 
 1. Name + instinct + Take the call. No four-step creator on the default path.
-2. Watch one named kid. Flag one standout. Write the name (one stance, one file).
-3. Planner already has that kid on a day, named, announced.
-4. Week 1 is Desk + Planner only.
+2. Watch one named kid through the real session: phases, focus, flag, reflection.
+3. Make the discovery call, then file the first assessment in the real report writer.
+4. Week 1 rail is Desk / Planner / Prospects / Reports. Inbox / World / Career wait.
 5. Mentor is silent after file except Advance Week if still guided.
 6. Keyboard and 44px targets work. Color is not the only meaning.
 
@@ -74,9 +74,9 @@ Adult painted busts and unused type tokens are **accepted ceiling**, not tickets
 
 Advance Week must not feel like a sequel.
 
-1. Desk still leads with the opening kid. No emerald command-center dump.
-2. Rail is Desk / Planner / Prospects / Reports. Inbox may appear. World / Career stay off until week 5.
-3. Prospects opens with “the name you wrote down” as the figure.
+1. Desk is the same desk. Command center can appear once the first hour is over.
+2. Rail is Desk / Planner / Prospects / Reports, plus Inbox / World / Career from week 2.
+3. Prospects is the real board, not a fake kid room.
 4. Second-look Watch is the same room (school ground, gold, same face), with more tools — not FM tactics chrome.
 5. Copy says “same kid, test the first read,” never “welcome to the real game.”
 

@@ -33,8 +33,7 @@ import { MiniStarRange } from "@/components/ui/MiniStarRange";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getCountryDisplayName } from "@/lib/country";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
-import { isYouthFirstHour } from "@/lib/youthFirstHour";
-import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1107,9 +1106,6 @@ export function YouthScoutingScreen() {
 
   if (!gameState) return null;
   const { unsignedYouth, subRegions, legacyScore, scout } = gameState;
-  const openingYouth = gameState.openingCase
-    ? unsignedYouth[gameState.openingCase.youthId]
-    : undefined;
 
   const allYouthList = Object.values(unsignedYouth);
   const subRegionList = Object.values(subRegions);
@@ -1219,28 +1215,6 @@ export function YouthScoutingScreen() {
   return (
     <GameLayout>
       <div className="p-4 sm:p-6 lg:p-8">
-        {isYouthFirstHour(gameState) && openingYouth && (
-          <div className="mb-5 flex flex-col gap-4 rounded-sm border border-[color:var(--primary)]/25 bg-[#14110c] p-4 sm:flex-row sm:items-center">
-            <YouthPortraitWithFallback
-              playerId={openingYouth.player.id}
-              nationality={openingYouth.player.nationality}
-              age={openingYouth.player.age}
-              size={64}
-              alt={`${openingYouth.player.firstName} ${openingYouth.player.lastName}`}
-            />
-            <div className="min-w-0">
-              <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-[color:var(--primary)]">
-                First lead
-              </p>
-              <h2 className="text-xl font-bold text-white">
-                {openingYouth.player.firstName} {openingYouth.player.lastName}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-300">
-                This is the same Prospects board you will use all career. Start with this name.
-              </p>
-            </div>
-          </div>
-        )}
         {/* Header */}
         <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.12),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-xl shadow-black/20 sm:p-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">

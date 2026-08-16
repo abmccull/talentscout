@@ -2,43 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   canOpenReportWorkflowStep,
-  isConciseOpeningReportMode,
   resolveReportWorkflow,
 } from "@/components/game/reportWriterMode";
 
-describe("report writer opening mode", () => {
-  it("uses concise mode only for the first guided opening report", () => {
-    expect(isConciseOpeningReportMode({
-      isYouthScout: true,
-      openingStage: "report",
-      openingPlayerId: "lead",
-      selectedPlayerId: "lead",
-      previousReportExists: false,
-      observationCount: 1,
-      contextCount: 1,
-    })).toBe(true);
-
-    expect(isConciseOpeningReportMode({
-      isYouthScout: true,
-      openingStage: "report",
-      openingPlayerId: "lead",
-      selectedPlayerId: "lead",
-      previousReportExists: true,
-      observationCount: 1,
-      contextCount: 1,
-    })).toBe(false);
-
-    expect(isConciseOpeningReportMode({
-      isYouthScout: true,
-      openingStage: "report",
-      openingPlayerId: "lead",
-      selectedPlayerId: "lead",
-      previousReportExists: false,
-      observationCount: 2,
-      contextCount: 2,
-    })).toBe(false);
-  });
-
+describe("report writer workflow", () => {
   it("keeps the writer on the next unresolved decision and counts remaining choices", () => {
     const steps = [
       { id: "brief", complete: true, decisionsRemaining: 0 },

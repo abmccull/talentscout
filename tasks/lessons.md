@@ -6,6 +6,7 @@
 - It is not a separate toy. Do not replace those systems with one-beat Watch, notebook-only skip, two-tab rails, or fake kid rooms.
 - Progressive disclosure is for **nav** (Inbox / World / Career can wait until week 2). It is not permission to ship a second product that later swaps out.
 - If a first-hour change makes week 2 feel like a different game, undo it.
+- Do not keep a parallel notebook writer, seeded assessment, stance-on-report, or OpeningHourDesk. First report is InitialAssessmentBuilder. Discovery stays on its own screen.
 
 ## Keep the genuine engineering
 

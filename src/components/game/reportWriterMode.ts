@@ -1,13 +1,3 @@
-export interface ConciseOpeningReportModeInput {
-  isYouthScout: boolean;
-  openingStage?: string | null;
-  openingPlayerId?: string | null;
-  selectedPlayerId?: string | null;
-  previousReportExists: boolean;
-  observationCount: number;
-  contextCount: number;
-}
-
 export interface ReportWorkflowStep {
   id: string;
   complete: boolean;
@@ -21,14 +11,6 @@ export interface ReportWorkflowProgress {
   decisionsRemaining: number;
   nextRequiredStepId: string | null;
   requiredSteps: number;
-}
-
-export function isConciseOpeningReportMode(input: ConciseOpeningReportModeInput): boolean {
-  if (!input.isYouthScout) return false;
-  if (input.openingStage !== "report") return false;
-  if (!input.openingPlayerId || input.openingPlayerId !== input.selectedPlayerId) return false;
-  if (input.previousReportExists) return false;
-  return input.observationCount <= 1 && input.contextCount <= 1;
 }
 
 /**

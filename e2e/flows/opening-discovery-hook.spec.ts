@@ -250,8 +250,8 @@ test.describe("guided opening discovery hook", () => {
 
     await page.getByRole("button", { name: /Keep the name private/ }).click();
     await gamePage.waitForScreen("reportWriter");
-    await expect(page.getByText("Write the name down")).toBeVisible();
-    await expect(page.getByRole("group", { name: "Saved evidence" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Write Scouting Report" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Saved evidence" })).toBeVisible();
     await expect(page.getByText("Answer a real club need")).toHaveCount(0);
     await expect(page.getByLabel(/Ask (Margaret|Tommy) for help/i)).toHaveCount(0);
 
@@ -285,7 +285,7 @@ test.describe("guided opening discovery hook", () => {
         (violation) => violation.impact === "serious" || violation.impact === "critical",
       ),
     ).toEqual([]);
-    await page.getByRole("button", { name: "File the name" }).click();
+    await gamePage.submitCurrentReportViaUI("note");
     await gamePage.waitForScreen("calendar");
     await expect(page.locator('[data-tutorial-id="report-marketplace-prompt"]')).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /Planner/i })).toBeVisible();

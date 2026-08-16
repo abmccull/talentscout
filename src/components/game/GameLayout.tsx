@@ -9,7 +9,6 @@ import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import {
-  isYouthOpeningShell,
   shouldShowYouthInbox,
   shouldShowYouthWorldCareer,
 } from "@/lib/youthFirstHour";
@@ -293,7 +292,6 @@ export function GameLayout({
     effectiveWeek,
     observationCount,
     reportCount,
-    firstHourChrome,
     showWorldCareer,
     showInboxChrome,
     hasScheduledActivity,
@@ -329,7 +327,6 @@ export function GameLayout({
       reportCount: gameState
         ? selectLatestReportsByCase(Object.values(gameState.reports ?? {})).length
         : 0,
-      firstHourChrome: IS_YOUTH_EARLY_ACCESS && isYouthOpeningShell(gameState),
       showWorldCareer: !IS_YOUTH_EARLY_ACCESS || shouldShowYouthWorldCareer(gameState),
       showInboxChrome: IS_YOUTH_EARLY_ACCESS
         ? shouldShowYouthInbox(gameState)
@@ -506,13 +503,9 @@ export function GameLayout({
   }
 
   const watchChrome = chrome === "watch";
-  const firstHourFocus = firstHourChrome
-    ? "focus-visible:outline-amber-400"
-    : "focus-visible:outline-emerald-400";
-  const firstHourSelected = firstHourChrome
-    ? "bg-amber-400/12 font-semibold text-amber-200 ring-1 ring-inset ring-amber-400/20"
-    : "bg-emerald-400/12 font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20";
-  const firstHourMobileActive = firstHourChrome ? "text-amber-200" : "text-emerald-300";
+  const firstHourFocus = "focus-visible:outline-emerald-400";
+  const firstHourSelected = "bg-emerald-400/12 font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20";
+  const firstHourMobileActive = "text-emerald-300";
 
   return (
     <div className="flex min-h-screen bg-[#090b0e]">
