@@ -214,7 +214,7 @@ import {
   createOpeningCase,
   type OpeningCaseChoiceId,
 } from "@/engine/youth/openingCase";
-import { resolveCareerOpeningMode } from "@/engine/youth/openingMode";
+import { resolveCareerOpeningMode, shouldStartYouthGuidedHour } from "@/engine/youth/openingMode";
 import {
   readPlayerExperience,
   recordVeteranPrologueTemplate,
@@ -954,7 +954,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Teaching and career variety are separate: the authored case teaches the
     // loop once, while generated veteran prologues never reactivate mentor UI.
-    if (openingMode === "tutorial" && openingCase) {
+    if (shouldStartYouthGuidedHour({
+      openingMode,
+      guideFirstHour: effectiveConfig.guideFirstHour,
+    }) && openingCase) {
       useTutorialStore.getState().startGuidedSession(
         !!effectiveConfig.startingClubId,
         "discoveryHook",
@@ -963,6 +966,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             tutorialState.guidedSessionCompleted || tutorialState.dismissed,
         },
       );
+    } else if (openingMode === "tutorial" && openingCase) {
+      useTutorialStore.getState().skipGuidedSession();
     } else if (effectiveConfig.specialization !== "youth" && !scenario) {
       useTutorialStore.getState().startGuidedSession(
         !!effectiveConfig.startingClubId,

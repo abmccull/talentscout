@@ -2182,6 +2182,11 @@ export interface NewGameConfig {
    * tutorial only for a new profile and otherwise prefers a dynamic prologue.
    */
   openingMode?: "auto" | "tutorial" | "dynamic" | "desk";
+  /**
+   * When the opening is the teaching case, start the mentor hour.
+   * False plays the same assignment with no spotlight or nav lock.
+   */
+  guideFirstHour?: boolean;
 }
 
 // =============================================================================

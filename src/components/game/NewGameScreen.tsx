@@ -10,6 +10,7 @@ import {
   OpeningModeSelector,
   type VeteranOpeningMode,
 } from "@/components/game/new-game/OpeningModeSelector";
+import { GuidedHourChoice } from "@/components/game/new-game/GuidedHourChoice";
 import type { Specialization, NewGameConfig, ScoutSkill, DifficultyLevel } from "@/engine/core/types";
 import { DIFFICULTY_DESCRIPTIONS } from "@/engine/core/difficulty";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
@@ -466,6 +467,9 @@ export function NewGameScreen() {
   const effectiveOpeningMode: "auto" | VeteranOpeningMode = isExperiencedYouthPlayer
     ? openingMode === "auto" ? "dynamic" : openingMode
     : "auto";
+  const [guideFirstHour, setGuideFirstHour] = useState(!isExperiencedYouthPlayer);
+  const showGuidedHourChoice = IS_YOUTH_EARLY_ACCESS
+    && (!isExperiencedYouthPlayer || effectiveOpeningMode === "tutorial");
 
   const togglePerk = (perkId: string) => {
     setSelectedPerkIds((prev) => {
@@ -656,6 +660,7 @@ export function NewGameScreen() {
       flawId,
       doctrineIds: [doctrineId],
       openingMode: effectiveOpeningMode,
+      guideFirstHour: showGuidedHourChoice ? guideFirstHour : false,
       ...(effectiveSpecialization === "regional" && { startingCountry }),
       ...(effectiveStartingPosition === "club" && startingClubId && { startingClubId }),
     };
@@ -1133,7 +1138,17 @@ export function NewGameScreen() {
                     </div>
                     <CardContent className="space-y-4 pt-5">
                       {isExperiencedYouthPlayer && effectiveOpeningMode !== "auto" && (
-                        <OpeningModeSelector value={effectiveOpeningMode} onChange={setOpeningMode} />
+                        <OpeningModeSelector
+                          value={effectiveOpeningMode}
+                          onChange={(next) => {
+                            setOpeningMode(next);
+                            if (next === "tutorial") setGuideFirstHour(true);
+                          }}
+                        />
+                      )}
+
+                      {showGuidedHourChoice && (
+                        <GuidedHourChoice value={guideFirstHour} onChange={setGuideFirstHour} />
                       )}
 
                       <fieldset>
@@ -1186,8 +1201,12 @@ export function NewGameScreen() {
                             : effectiveOpeningMode === "dynamic"
                               ? "Follow a fresh lead unique to this career, gather evidence, and make a recommendation with lasting consequences."
                               : effectiveOpeningMode === "tutorial"
-                                ? "Replay the guided school-match assignment and work through its evidence, report, and follow-up."
-                                : "Start with a guided school-match assignment. Watch the key moments, save useful evidence, and decide whether the player is worth following."}
+                                ? guideFirstHour
+                                  ? "Replay the school-match assignment with the mentor highlighting each click."
+                                  : "Replay the school-match assignment without the mentor lock."
+                                : guideFirstHour
+                                  ? "The mentor will highlight Watch, focus, the discovery call, the first report, and Advance Week."
+                                  : "Same first assignment. No spotlight and no locked navigation."}
                         </p>
                         <p id="quick-start-requirements" className="mt-2 text-xs text-zinc-400" role="status" aria-live="polite">
                           {startError ?? (isStarting

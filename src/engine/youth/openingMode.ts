@@ -26,3 +26,11 @@ export function resolveCareerOpeningMode(input: {
     ? "dynamic"
     : "tutorial";
 }
+
+/** Mentor hour starts only when the opening is the teaching case and the player asked for it. */
+export function shouldStartYouthGuidedHour(input: {
+  openingMode: ResolvedCareerOpeningMode;
+  guideFirstHour?: boolean;
+}): boolean {
+  return input.openingMode === "tutorial" && input.guideFirstHour !== false;
+}

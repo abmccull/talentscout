@@ -81,4 +81,33 @@ describe("opening Watch focus beat", () => {
     ).toBe(true);
     expect(useTutorialStore.getState().currentGuidedTask).toBe("flaggedBreakthrough");
   }, 30_000);
+
+  it("skips the mentor hour when the player chose start without the guide", async () => {
+    await useGameStore.getState().startNewGame({
+      scoutFirstName: "Ava",
+      scoutLastName: "Morgan",
+      scoutAge: 24,
+      specialization: "youth",
+      difficulty: "normal",
+      worldSeed: "skip-guide-first-hour",
+      selectedCountries: ["england"],
+      startingCountry: "england",
+      nationality: "English",
+      skillAllocations: {
+        technicalEye: 2,
+        psychologicalRead: 2,
+        playerJudgment: 2,
+        potentialAssessment: 2,
+      },
+      originId: "academy-apprentice",
+      flawId: "fragile-network",
+      doctrineIds: ["evidence-first"],
+      openingMode: "tutorial",
+      guideFirstHour: false,
+    });
+
+    expect(useTutorialStore.getState().guidedSessionActive).toBe(false);
+    expect(useTutorialStore.getState().currentGuidedTask).toBeNull();
+    expect(useGameStore.getState().activeSession?.state).toBe("setup");
+  }, 30_000);
 });
