@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  getYouthWorkspacePhase,
-  isYouthEarlyCareer,
   isYouthFirstHour,
   isYouthOpeningWeek,
   shouldHoldAchievementToasts,
@@ -68,7 +66,7 @@ describe("youth first-hour rail", () => {
       currentWeek: 2,
       currentSeason: 1,
       openingCase: { id: "opening" },
-    })).toBe(true);
+    })).toBe(false);
     expect(shouldHoldAchievementToasts("dashboard", {
       currentWeek: 3,
       currentSeason: 1,
@@ -76,25 +74,19 @@ describe("youth first-hour rail", () => {
     })).toBe(false);
   });
 
-  it("opens four rooms in week 2 and holds World/Career until the case has weeks behind it", () => {
+  it("keeps week 1 on the four real rooms and opens World/Career after the opening week", () => {
+    const week1 = {
+      currentWeek: 1,
+      currentSeason: 1,
+      openingCase: { id: "opening" },
+    };
     const week2 = {
       currentWeek: 2,
       currentSeason: 1,
       openingCase: { id: "opening" },
     };
-    expect(getYouthWorkspacePhase({
-      currentWeek: 1,
-      currentSeason: 1,
-      openingCase: { id: "opening" },
-    })).toBe("opening");
-    expect(getYouthWorkspacePhase(week2)).toBe("case");
-    expect(isYouthEarlyCareer(week2)).toBe(true);
-    expect(shouldShowYouthWorldCareer(week2)).toBe(false);
-    expect(shouldShowYouthWorldCareer({
-      currentWeek: 5,
-      currentSeason: 1,
-      openingCase: { id: "opening" },
-    })).toBe(true);
+    expect(shouldShowYouthWorldCareer(week1)).toBe(false);
+    expect(shouldShowYouthWorldCareer(week2)).toBe(true);
     expect(shouldShowYouthWorldCareer({
       currentWeek: 2,
       currentSeason: 2,

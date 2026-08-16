@@ -98,7 +98,6 @@ import { normalizeCountryKey } from "@/lib/country";
 import {
   claimOpeningDiscovery,
   isOpeningDiscoverySession,
-  prepareOpeningWatchForComplete,
   resolveOpeningCaseChoice as resolveOpeningCaseChoiceEngine,
   shapeOpeningObservationSession,
   type OpeningCaseChoiceId,
@@ -1125,7 +1124,7 @@ export function createObservationActions(get: GetState, set: SetState) {
       });
     },
 
-    endObservationSession: (options?: { openingNotebook?: boolean }) => {
+    endObservationSession: () => {
       const {
         activeSession,
         gameState,
@@ -1134,43 +1133,29 @@ export function createObservationActions(get: GetState, set: SetState) {
         weekSimulation,
       } = get();
       if (!activeSession || !gameState) return;
-      const openingNotebook = Boolean(
-        options?.openingNotebook && isOpeningDiscoverySession(activeSession),
-      );
-      const openingStandoutFlagged = Boolean(
-        openingNotebook
-        && activeSession.flaggedMoments.some(
-          (flagged) => flagged.moment.isStandout
-            && flagged.moment.playerId === gameState.openingCase?.playerId,
-        ),
-      );
-      const preparedSession = openingStandoutFlagged
-        ? prepareOpeningWatchForComplete(activeSession)
-        : activeSession;
       if (
-        isOpeningDiscoverySession(preparedSession)
-        && preparedSession.state !== "reflection"
-        && preparedSession.state !== "complete"
+        isOpeningDiscoverySession(activeSession)
+        && activeSession.state !== "reflection"
+        && activeSession.state !== "complete"
       ) {
         return;
       }
       if (
-        !openingNotebook
-        && preparedSession.specialization === "youth"
-        && preparedSession.state === "reflection"
-        && buildSessionEvidenceCards(preparedSession).length > 0
-        && Object.keys(preparedSession.evidenceDecisions ?? {}).length === 0
+        activeSession.specialization === "youth"
+        && activeSession.state === "reflection"
+        && buildSessionEvidenceCards(activeSession).length > 0
+        && Object.keys(activeSession.evidenceDecisions ?? {}).length === 0
       ) {
         return;
       }
 
-      const sessionWithEvidence = preparedSession.state === "reflection"
-        ? applySessionEvidenceToHypotheses(preparedSession).session
-        : preparedSession;
+      const sessionWithEvidence = activeSession.state === "reflection"
+        ? applySessionEvidenceToHypotheses(activeSession).session
+        : activeSession;
       const completed = completeSession(sessionWithEvidence);
       const result = getSessionResult(completed);
       const didCompleteLifecycle =
-        preparedSession.state === "reflection" && completed.state === "complete";
+        activeSession.state === "reflection" && completed.state === "complete";
       const evidenceCards = didCompleteLifecycle
         ? buildSessionEvidenceCards(completed)
         : [];
@@ -1280,7 +1265,7 @@ export function createObservationActions(get: GetState, set: SetState) {
           ? gameState.openingCase?.playerId ?? get().selectedPlayerId
           : get().selectedPlayerId,
         currentScreen: openingDiscoveryCompleted
-          ? "reportWriter" as GameScreen
+          ? "openingDiscovery" as GameScreen
           : requestedNextScreen,
         weekSimulation: weekSimulation?.youthVenueResults && observationBatch.simulatedYouth
           ? {

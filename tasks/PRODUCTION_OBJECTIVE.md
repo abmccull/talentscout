@@ -33,12 +33,11 @@ Treat these as done unless a live audit files a 10/10-test failure:
 
 - One local tree. Old HTML prototype is gone. Settings are real or removed.
 - Persist mutex, Electron quit flush, fail-closed retainers.
-- First-week HUD: Inbox / World / Career / toasts off in week 1 (`isYouthOpeningShell`).
-- Opening Watch is one standout beat. Notebook is stance + file. Desk + Planner only in week 1.
+- First-week HUD: Inbox / World / Career / toasts off in week 1 (`isYouthOpeningShell`). Desk, Planner, Prospects, and Reports stay on — those are the real rooms.
+- Opening Watch is the real session: three phases, focus, flag, reflection. Then discovery, then the first report.
 - School-match plate, named fallback portraits, split `--signal-*` hues, ChoiceCard value + card focus.
 - Mentor does not teach marketplace or extra scheduling after file.
-- Week 2–4 is **case phase**: same kid, same gold, Desk/Planner/Prospects/Reports. World/Career wait until week 5 (`isYouthEarlyCareer` / `getYouthWorkspacePhase`).
-- Second-look Watch uses the school ground and “Same kid. New context.”
+- Week 2 opens World/Career. Do not build a second game, a fake kid room, or a week-2–4 hold.
 
 Do **not** start another persist pass, settings pass, or first-hour rail-gating pass.
 

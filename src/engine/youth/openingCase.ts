@@ -184,23 +184,41 @@ function reindexPhase(phase: SessionPhase, index: number): SessionPhase {
 }
 
 /**
- * Opening Watch is one beat: see the kid, flag the standout, write the name.
- * The session engine (halves, extra phases, reflection) waits until week 2.
+ * Opening Watch teaches the real session: three phases, focus, flag, and
+ * reflection. It is the first use of the match engine, not a toy substitute.
  */
 export function shapeOpeningObservationSession(
   session: ObservationSession,
   lead: Player,
 ): ObservationSession {
   if (!isOpeningDiscoverySession(session) || session.mode !== "fullObservation") return session;
-  const source = session.phases[0] ?? {
+  const source = session.phases.length > 0 ? session.phases : [{
     index: 0,
-    minute: 31,
-    description: "The shape breaks. For a few seconds, instinct matters more than instruction.",
+    minute: 8,
+    description: "The school match settles into an uncertain opening rhythm.",
     moments: [],
-  };
+  }];
+  const phases = [0, 1, 2].map((index) => reindexPhase(source[index] ?? source[source.length - 1], index));
 
-  const phase = reindexPhase({
-    ...source,
+  phases[0] = {
+    ...phases[0],
+    minute: 9,
+    description: "A loose opening gives you only fragments. Choose where to spend your attention.",
+    moments: [
+      openingMoment({
+        id: `${session.id}-opening-ambiguous`,
+        player: lead,
+        type: "technicalAction",
+        quality: 6,
+        attributes: ["firstTouch", "passing"],
+        description: `${lead.firstName} ${lead.lastName} receives under pressure, cushions the ball cleanly, then chooses the safe pass. The technique is interesting; the ambition is still unclear.`,
+        vagueDescription: "The player from the tip controls one awkward ball cleanly, but the next action is conservative.",
+      }),
+      ...(phases[0].moments ?? []).filter((moment) => moment.playerId !== lead.id).slice(0, 1),
+    ],
+  };
+  phases[1] = {
+    ...phases[1],
     minute: 31,
     description: "The shape breaks. For a few seconds, instinct matters more than instruction.",
     moments: [
@@ -214,6 +232,21 @@ export function shapeOpeningObservationSession(
         description: `${lead.firstName} ${lead.lastName} scans before the ball arrives, lets a defender commit, and splits two lines with a pass nobody else had seen. The move changes the match in one touch.`,
         vagueDescription: "One player appears to see a passing lane before everyone around him.",
       }),
+      ...(phases[1].moments ?? []).filter((moment) => moment.playerId !== lead.id).slice(0, 1),
+    ],
+    atmosphereEvent: {
+      id: `${session.id}-opening-crowd-shift`,
+      description: "The small touchline crowd reacts before the receiver even reaches the pass.",
+      effect: "reveal",
+      affectedAttributes: ["vision", "anticipation"],
+      noiseDelta: -0.1,
+    },
+  };
+  phases[2] = {
+    ...phases[2],
+    minute: 57,
+    description: "Now the match asks a different question: can the early impression survive pressure?",
+    moments: [
       openingMoment({
         id: `${session.id}-opening-contradiction`,
         player: lead,
@@ -224,44 +257,18 @@ export function shapeOpeningObservationSession(
         description: `${lead.firstName} ${lead.lastName} is closed down quickly and forces the next pass. It is the first reminder that one exceptional action is not a finished assessment.`,
         vagueDescription: "The earlier standout is rushed into a poor decision when the pressure arrives faster.",
       }),
+      ...(phases[2].moments ?? []).filter((moment) => moment.playerId !== lead.id).slice(0, 1),
     ],
-    atmosphereEvent: {
-      id: `${session.id}-opening-crowd-shift`,
-      description: "The small touchline crowd reacts before the receiver even reaches the pass.",
-      effect: "reveal",
-      affectedAttributes: ["vision", "anticipation"],
-      noiseDelta: -0.1,
-    },
-  }, 0);
+  };
 
   return {
     ...session,
-    phases: [phase],
+    phases,
     currentPhaseIndex: 0,
     players: [
       ...session.players.filter((player) => player.playerId === lead.id),
-      ...session.players.filter((player) => player.playerId !== lead.id).slice(0, 3),
+      ...session.players.filter((player) => player.playerId !== lead.id),
     ],
-  };
-}
-
-/** Skip reflection UI: flag is enough to file the name. */
-export function prepareOpeningWatchForComplete(
-  session: ObservationSession,
-): ObservationSession {
-  const flaggedIds = new Set(session.flaggedMoments.map((flagged) => flagged.moment.id));
-  const evidenceDecisions = { ...(session.evidenceDecisions ?? {}) };
-  for (const cue of session.cueReadings ?? []) {
-    if (!flaggedIds.has(cue.momentId) || evidenceDecisions[cue.id]) continue;
-    evidenceDecisions[cue.id] = {
-      cueId: cue.id,
-      classification: cue.suggestedClassifications[0] ?? "anomaly",
-    };
-  }
-  return {
-    ...session,
-    state: "reflection",
-    evidenceDecisions,
   };
 }
 

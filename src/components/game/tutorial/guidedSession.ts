@@ -236,11 +236,11 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
       "observation-complete-reflection",
       "observation-halftime-approach",
     ],
-    title: "Write the name",
+    title: "Complete the observation session",
     mentorText:
-      "You have the moment. Write the name down. The notebook is the next room — not another half of match engine.",
+      "Now test the first impression against the rest of the match. Choose how you will watch the second half, then finish the reflection and preserve the uncertainty, not just the highlight.",
     mentorTextFreelance:
-      "Flag was enough. Write the name and put the second look on the week.",
+      "Choose how you will challenge the first read in the second half. Then finish the reflection and decide what you actually believe.",
     position: "top",
     interactive: true,
     screen: "observation",

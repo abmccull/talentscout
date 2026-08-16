@@ -44,7 +44,7 @@ export function OpeningDiscoveryScreen() {
 
   useEffect(() => {
     if (!gameState?.openingCase) return;
-    if (gameState.openingCase.stage === "decision" || gameState.openingCase.stage === "report") {
+    if (gameState.openingCase.stage === "report") {
       useGameStore.getState().setScreen("reportWriter");
     }
   }, [gameState?.openingCase]);
@@ -106,7 +106,7 @@ export function OpeningDiscoveryScreen() {
             onClick={() => setScreen(gameState.openingCase?.stage === "report" ? "reportWriter" : "observation")}
             className="min-h-11 rounded-lg px-3 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white"
           >
-            {gameState.openingCase?.stage === "report" ? "Continue to the notebook" : "Back to Watch"}
+            {gameState.openingCase?.stage === "report" ? "Continue to the report" : "Back to Watch"}
           </button>
         </div>
 

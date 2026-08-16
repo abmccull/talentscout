@@ -9,7 +9,7 @@ import CareerEraThread from "@/components/game/workspace/CareerEraThread";
 import { YouthActiveCaseBoard } from "@/components/game/workspace/desk/YouthActiveCaseBoard";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import type { GameState } from "@/engine/core/types";
-import { isYouthEarlyCareer, isYouthFirstHour } from "@/lib/youthFirstHour";
+import { isYouthFirstHour } from "@/lib/youthFirstHour";
 import { DashboardCommandCenter } from "./DashboardCommandCenter";
 import type { DashboardActionTarget } from "./dashboardPriorityModel";
 import type { DashboardPriorityItem } from "./dashboardPriorityModel";
@@ -70,8 +70,6 @@ export function YouthDeskDashboard({
 }: YouthDeskDashboardProps) {
   const club = scout.currentClubId ? gameState.clubs[scout.currentClubId] : undefined;
   const firstHour = isYouthFirstHour(gameState);
-  const earlyCareer = isYouthEarlyCareer(gameState);
-  const sameCaseDesk = firstHour || earlyCareer;
 
   return (
     <GameLayout>
@@ -79,7 +77,7 @@ export function YouthDeskDashboard({
         className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7"
         data-tutorial-id="dashboard-overview"
       >
-        <ScreenBackground src={sameCaseDesk ? "/images/backgrounds/activities/school-match.png" : "/images/backgrounds/dashboard-office.png"} opacity={sameCaseDesk ? 0.45 : 0.95} />
+        <ScreenBackground src={firstHour ? "/images/backgrounds/activities/school-match.png" : "/images/backgrounds/dashboard-office.png"} opacity={firstHour ? 0.45 : 0.95} />
         <div className="relative z-10 mx-auto max-w-[1480px]">
           <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
@@ -87,7 +85,7 @@ export function YouthDeskDashboard({
               {club && <ClubCrest clubId={club.id} clubName={club.name} size={48} />}
               <div className="min-w-0">
                 <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-amber-200">
-                  {sameCaseDesk ? "The same case" : "Youth recruitment room"}
+                  Youth recruitment room
                 </p>
                 <h1 className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">
                   Scouting Desk
@@ -97,7 +95,6 @@ export function YouthDeskDashboard({
                 </p>
               </div>
             </div>
-            {!sameCaseDesk && (
             <div className="flex flex-wrap items-center gap-2" data-testid="desk-week-status">
               <span className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${phaseBadgeClassName}`}>
                 {phaseLabel}
@@ -118,19 +115,19 @@ export function YouthDeskDashboard({
                 {Math.round(scout.fatigue)}% fatigue
               </span>
             </div>
-            )}
           </header>
 
-          {earlyCareer && !firstHour && (
-            <div
-              role="status"
-              className="mb-5 rounded-sm border border-[color:var(--primary)]/25 bg-[#14110c] px-4 py-3 text-sm leading-6 text-zinc-200"
-            >
-              Same kid. Prospects and Reports are how you test the first read. World and Career wait until this case has another week behind it.
+          {firstHour && (
+            <div className="mb-5">
+              <OpeningHourDesk
+                gameState={gameState}
+                setScreen={setScreen}
+                selectPlayer={selectPlayer}
+              />
             </div>
           )}
 
-          {!sameCaseDesk && dashboardWorkspace && (
+          {!firstHour && dashboardWorkspace && (
             <DashboardCommandCenter
               model={dashboardWorkspace}
               onAction={onDashboardAction}
@@ -143,32 +140,20 @@ export function YouthDeskDashboard({
             />
           )}
 
-          <section aria-labelledby="dashboard-active-case-title" className={sameCaseDesk ? "" : "mt-8"}>
-            {!sameCaseDesk && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
-                  Scouting context
-                </p>
-                <h2 id="dashboard-active-case-title" className="mt-1 text-xl font-semibold text-white">
-                  Active case
-                </h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
-                  Use this case board after the priority queue tells you where attention belongs.
-                </p>
-              </div>
-            )}
-            {sameCaseDesk && (
-              <h2 id="dashboard-active-case-title" className="sr-only">
-                Next move
+          <section aria-labelledby="dashboard-active-case-title" className="mt-8">
+            <div className="mb-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                Scouting context
+              </p>
+              <h2 id="dashboard-active-case-title" className="mt-1 text-xl font-semibold text-white">
+                Active case
               </h2>
-            )}
-            {sameCaseDesk ? (
-              <OpeningHourDesk
-                gameState={gameState}
-                setScreen={setScreen}
-                selectPlayer={selectPlayer}
-              />
-            ) : (
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
+                {firstHour
+                  ? "This is the same desk you will use after the first lead. Watch, write, then keep the case moving."
+                  : "Use this case board after the priority queue tells you where attention belongs."}
+              </p>
+            </div>
             <YouthActiveCaseBoard
               model={activeCaseModel}
               eyebrow={youthDeskAction.eyebrow}
@@ -197,7 +182,6 @@ export function YouthDeskDashboard({
                 ) : undefined
               }
             />
-            )}
           </section>
         </div>
       </section>
@@ -219,7 +203,8 @@ function OpeningHourDesk({
   const player = youth?.player;
   const name = player ? `${player.firstName} ${player.lastName}` : "the kid";
   const week = gameState.currentWeek ?? 1;
-  const writeReady = week <= 1 && (opening?.stage === "report" || opening?.stage === "decision");
+  const writeReady = week <= 1 && opening?.stage === "report";
+  const decisionReady = week <= 1 && opening?.stage === "decision";
   const followUpBooked = (gameState.schedule?.activities ?? []).some(
     (activity) =>
       activity?.type === "followUpSession"
@@ -227,18 +212,24 @@ function OpeningHourDesk({
   );
   const destination = writeReady
     ? "reportWriter"
-    : followUpBooked || week > 1
-      ? "calendar"
-      : "observation";
+    : decisionReady
+      ? "openingDiscovery"
+      : followUpBooked || week > 1
+        ? "calendar"
+        : "observation";
   const blurb = writeReady
-    ? "Write the name down. Planner will hold the second look."
+    ? "File the first report from what you watched. This is the same writer you will use all career."
+    : decisionReady
+      ? "You have a lead. Decide who hears the name, then write the report."
     : week > 1
       ? followUpBooked
-        ? "The second look is on the week. Watch him again, then the board will mean something."
+        ? "The second look is on the week. Watch him again with the same tools."
         : "Book the second look. Same kid. A new context."
-      : "Watch this kid. One look is enough to write the name.";
+      : "Watch the school match. Focus, flag the standout, then reflect — the same session you will run later.";
   const cta = writeReady
-    ? "Write the name down"
+    ? "Write the report"
+    : decisionReady
+      ? "Decide who hears the name"
     : week > 1
       ? followUpBooked
         ? "Open the week"

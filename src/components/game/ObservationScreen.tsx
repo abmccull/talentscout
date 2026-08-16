@@ -845,13 +845,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
   const ModeIcon = MODE_ICONS[mode];
   const isOpeningDiscovery = isOpeningDiscoverySession(session);
   const veteranPrologue = useGameStore((state) => state.gameState?.veteranPrologue);
-  const openingPlayerId = useGameStore((state) => state.gameState?.openingCase?.playerId);
   const lead = players[0];
-  const isOpeningFollowUp = Boolean(
-    !isOpeningDiscovery
-    && openingPlayerId
-    && players.some((player) => player.playerId === openingPlayerId),
-  );
 
   if (
     isOpeningDiscovery
@@ -942,7 +936,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">10:42 · Local school ground</p>
               <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">The match started early.</h2>
               <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
-                No academy scout is here yet. {lead.name}, a {lead.position}, was mentioned quietly—but the source only saw one previous match. Watch the moment. Flag it. Write the name.
+                No academy scout is here yet. {lead.name}, a {lead.position}, was mentioned quietly—but the source only saw one previous match. Watch the match, spend your focus, and flag what changes the question.
               </p>
               <blockquote className="mt-4 rounded-xl border-l-2 border-amber-300/60 bg-amber-300/[0.06] px-4 py-3 text-sm italic leading-6 text-amber-50/90">
                 “Don&apos;t ask me if he&apos;s a star. I&apos;m telling you nobody important has written the name down yet.”
@@ -957,13 +951,14 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
                   <p className="text-eyebrow uppercase tracking-wider text-zinc-400">Time available</p>
-                  <p className="mt-1 text-sm font-semibold text-white">One look</p>
+                  <p className="mt-1 text-sm font-semibold text-white">Three passages</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
                   <p className="text-eyebrow uppercase tracking-wider text-zinc-400">What matters</p>
                   <p className="mt-1 text-sm font-semibold text-white">Being first, not being certain</p>
                 </div>
               </div>
+              <ScoutingQuestionSelector session={session} onChange={onQuestionChange} />
               <Button
                 onClick={onBegin}
                 size="lg"
@@ -975,34 +970,6 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               </Button>
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isOpeningFollowUp && lead) {
-    return (
-      <div className="relative flex flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-8">
-        <ScreenBackground src="/images/backgrounds/activities/school-match.png" opacity={0.38} />
-        <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-[color:var(--primary)]/25 bg-[#14110c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
-          <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">
-            Second look
-          </p>
-          <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
-            Same kid. New context.
-          </h2>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
-            You already wrote {lead.name} down. This look is to test the first read, not to start a different game.
-          </p>
-          <Button
-            onClick={onBegin}
-            size="lg"
-            className="mt-6 w-full gap-2 sm:w-auto"
-            data-tutorial-id="observation-begin-session"
-          >
-            <Play size={16} aria-hidden="true" />
-            Watch the match
-          </Button>
         </div>
       </div>
     );
@@ -1325,6 +1292,7 @@ export function ObservationScreen() {
     isOpeningDiscoverySession(activeSession)
     && activeSession?.mode === "fullObservation"
     && gameState?.veteranPrologue?.activityInstanceId !== activeSession?.activityInstanceId
+    && activeSession?.currentPhaseIndex === 1
     && !openingBreakthroughFlagged,
   );
 
@@ -1520,10 +1488,6 @@ export function ObservationScreen() {
     useGameStore.getState().endObservationSession();
   }, []);
 
-  const handleWriteOpeningName = useCallback(() => {
-    useGameStore.getState().endObservationSession({ openingNotebook: true });
-  }, []);
-
   const handleContinue = useCallback(() => {
     useGameStore.getState().endObservationSession();
     useGameStore.getState().setScreen("calendar");
@@ -1546,7 +1510,12 @@ export function ObservationScreen() {
   return (
     <GameLayout chrome="watch">
       <div className="relative flex min-h-dvh min-w-0 flex-col overflow-x-hidden pb-6 md:h-full md:min-h-0 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
-        <ScreenBackground src="/images/backgrounds/activities/school-match.png" opacity={0.72} />
+        <ScreenBackground
+          src={isOpeningWatch
+            ? "/images/backgrounds/activities/school-match.png"
+            : "/images/backgrounds/match-atmosphere.png"}
+          opacity={0.72}
+        />
 
         <div className="relative z-10 flex flex-1 flex-col min-h-0">
 
@@ -1732,7 +1701,7 @@ export function ObservationScreen() {
                 )}
 
                 {/* Insight action button — visible when scout has any IP available */}
-                {insightActions.length > 0 && !isOpeningDiscoverySession(activeSession) && (
+                {insightActions.length > 0 && (
                   <div className="shrink-0 border-t border-[#27272a] px-4 py-2">
                     <button
                       onClick={openInsightOverlay}
@@ -1766,17 +1735,7 @@ export function ObservationScreen() {
                   className="shrink-0 border-t border-[#27272a] p-4 space-y-2"
                   data-tutorial-id="observation-session-controls"
                 >
-                  {isOpeningWatch ? (
-                    <Button
-                      className="w-full"
-                      onClick={handleWriteOpeningName}
-                      disabled={openingPhaseRequiresFlag}
-                      data-tutorial-id="observation-session-controls"
-                    >
-                      <Flag size={14} className="mr-2" aria-hidden="true" />
-                      {openingPhaseRequiresFlag ? "Flag the standout moment" : "Write the name"}
-                    </Button>
-                  ) : isLastPhase ? (
+                  {isLastPhase ? (
                     <Button className="w-full" onClick={handleAdvancePhase}>
                       <Flag size={14} className="mr-2" aria-hidden="true" />
                       Go to Reflection
@@ -1814,8 +1773,8 @@ export function ObservationScreen() {
                 </div>
               </aside>
 
-              {/* Focus sheet: live watch uses it at every width. Opening watch is flag-only. */}
-              <section className={`border-t border-[#27272a] bg-[#0c0c0c] ${isOpeningWatch ? "hidden" : isLiveWatch ? "" : "lg:hidden"}`}>
+              {/* Focus sheet: live watch uses it at every width, including the opening match. */}
+              <section className={`border-t border-[#27272a] bg-[#0c0c0c] ${isLiveWatch ? "" : "lg:hidden"}`}>
                 <button
                   ref={mobileFocusToggleRef}
                   type="button"
@@ -1927,7 +1886,7 @@ export function ObservationScreen() {
                       End early
                     </Button>
                   )}
-                  {insightActions.length > 0 && !isOpeningDiscoverySession(activeSession) && (
+                  {insightActions.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1939,17 +1898,7 @@ export function ObservationScreen() {
                       Insight
                     </Button>
                   )}
-                  {isOpeningWatch ? (
-                    <Button
-                      className="min-h-11 flex-[1.35]"
-                      onClick={handleWriteOpeningName}
-                      disabled={openingPhaseRequiresFlag}
-                      data-tutorial-id="observation-session-controls"
-                    >
-                      <Flag size={14} className="mr-1.5" aria-hidden="true" />
-                      {openingPhaseRequiresFlag ? "Flag the moment" : "Write the name"}
-                    </Button>
-                  ) : isLastPhase ? (
+                  {isLastPhase ? (
                     <Button className="min-h-11 flex-[1.35]" onClick={handleAdvancePhase}>
                       <Flag size={14} className="mr-1.5" aria-hidden="true" />
                       Reflect
@@ -1959,10 +1908,18 @@ export function ObservationScreen() {
                       className="min-h-11 flex-[1.35]"
                       onClick={handleAdvancePhase}
                       disabled={openingPhaseRequiresFlag || requiresHalftimeChoice}
+                      data-tutorial-id={
+                        isOpeningDiscoverySession(activeSession)
+                        && activeSession.currentPhaseIndex === 0
+                          ? "observation-advance-to-standout"
+                          : undefined
+                      }
                     >
-                      {requiresHalftimeChoice
-                        ? "Choose half-time approach"
-                        : "Next phase"}
+                      {openingPhaseRequiresFlag
+                        ? "Flag the moment"
+                        : requiresHalftimeChoice
+                          ? "Choose half-time approach"
+                          : "Next phase"}
                       <ChevronRight size={14} className="ml-1.5" aria-hidden="true" />
                     </Button>
                   )}

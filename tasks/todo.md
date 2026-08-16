@@ -1,11 +1,13 @@
 # First-hour program (close it)
 
-Three programs. Do not reopen persist/HUD. Do not mix launch attestations.
+The first hour is an introduction to the **real** game systems while the player finds a first prospect. It is not a separate toy game.
 
-- [x] 1A: Youth EA new game default is name + instinct + Take the call (no stepper)
-- [x] 1C: Opening Planner copy + week-2 Desk “board is open”
+- [x] Undo the one-beat Watch / notebook skip / fake kid rooms / week-2–4 second game
+- [x] Restore 3-phase opening Watch + reflection + discovery + first report
+- [x] Restore real Desk / Planner / Prospects / Reports in week 1
+- [x] World / Career / Inbox stay progressive nav after week 1
 - [ ] 1B: Live first-hour playthrough + design-audit on this SHA (human/screens)
-- [ ] Program 2: Week 2 Desk / Prospects / Inbox / later Watch
+- [ ] Program 2: Week 2 uses the same rooms and systems, not a dump
 - [ ] Program 3: Push, freeze SHA, package, attest
 
 ---

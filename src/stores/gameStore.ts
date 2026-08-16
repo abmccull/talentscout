@@ -1016,13 +1016,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const scenarioSafeState = migrateSaveState(rawState);
     assertEarlyAccessSaveCompatibility(scenarioSafeState);
     const resumableSession = scenarioSafeState.activeObservationSession ?? null;
-    const awaitingOpeningNotebook = scenarioSafeState.openingCase?.stage === "decision"
-      || scenarioSafeState.openingCase?.stage === "report";
+    const openingStage = scenarioSafeState.openingCase?.stage;
     const restoreScreen = resumableSession
       ? "observation"
-      : awaitingOpeningNotebook
-        ? "reportWriter"
-        : "dashboard";
+      : openingStage === "decision"
+        ? "openingDiscovery"
+        : openingStage === "report"
+          ? "reportWriter"
+          : "dashboard";
     set({
       gameState: scenarioSafeState,
       isLoaded: true,

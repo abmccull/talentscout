@@ -9,10 +9,9 @@ import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import {
-  getYouthWorkspacePhase,
-  isYouthEarlyCareer,
   isYouthOpeningShell,
   shouldShowYouthInbox,
+  shouldShowYouthWorldCareer,
 } from "@/lib/youthFirstHour";
 import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 import { getCareerElapsedWeeks } from "@/engine/core/gameDate";
@@ -294,8 +293,8 @@ export function GameLayout({
     effectiveWeek,
     observationCount,
     reportCount,
-    youthWorkspacePhase,
-    earlyCareerChrome,
+    firstHourChrome,
+    showWorldCareer,
     showInboxChrome,
     hasScheduledActivity,
     hasAttendedMatch,
@@ -331,10 +330,7 @@ export function GameLayout({
         ? selectLatestReportsByCase(Object.values(gameState.reports ?? {})).length
         : 0,
       firstHourChrome: IS_YOUTH_EARLY_ACCESS && isYouthOpeningShell(gameState),
-      youthWorkspacePhase: IS_YOUTH_EARLY_ACCESS
-        ? getYouthWorkspacePhase(gameState)
-        : "career",
-      earlyCareerChrome: IS_YOUTH_EARLY_ACCESS && isYouthEarlyCareer(gameState),
+      showWorldCareer: !IS_YOUTH_EARLY_ACCESS || shouldShowYouthWorldCareer(gameState),
       showInboxChrome: IS_YOUTH_EARLY_ACCESS
         ? shouldShowYouthInbox(gameState)
         : true,
@@ -420,19 +416,15 @@ export function GameLayout({
   };
   const useYouthEarlyAccessNav =
     IS_YOUTH_EARLY_ACCESS && specialization === "youth";
-  const youthWorkspaceItems = youthWorkspacePhase === "opening"
-    ? YOUTH_WORKSPACE_ITEMS.filter(
-        (item) => item.screen === "dashboard" || item.screen === "calendar",
-      )
-    : youthWorkspacePhase === "case"
-      ? YOUTH_WORKSPACE_ITEMS.filter(
-          (item) =>
-            item.screen === "dashboard"
-            || item.screen === "calendar"
-            || item.screen === "youthScouting"
-            || item.screen === "reportHistory",
-        )
-      : YOUTH_WORKSPACE_ITEMS;
+  const youthWorkspaceItems = showWorldCareer
+    ? YOUTH_WORKSPACE_ITEMS
+    : YOUTH_WORKSPACE_ITEMS.filter(
+        (item) =>
+          item.screen === "dashboard"
+          || item.screen === "calendar"
+          || item.screen === "youthScouting"
+          || item.screen === "reportHistory",
+      );
 
   const isNavScreenVisible = (screen: GameScreen): boolean => {
     if (useYouthEarlyAccessNav) {
@@ -514,13 +506,13 @@ export function GameLayout({
   }
 
   const watchChrome = chrome === "watch";
-  const firstHourFocus = earlyCareerChrome
+  const firstHourFocus = firstHourChrome
     ? "focus-visible:outline-amber-400"
     : "focus-visible:outline-emerald-400";
-  const firstHourSelected = earlyCareerChrome
+  const firstHourSelected = firstHourChrome
     ? "bg-amber-400/12 font-semibold text-amber-200 ring-1 ring-inset ring-amber-400/20"
     : "bg-emerald-400/12 font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20";
-  const firstHourMobileActive = earlyCareerChrome ? "text-amber-200" : "text-emerald-300";
+  const firstHourMobileActive = firstHourChrome ? "text-amber-200" : "text-emerald-300";
 
   return (
     <div className="flex min-h-screen bg-[#090b0e]">

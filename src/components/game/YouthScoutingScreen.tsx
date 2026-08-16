@@ -33,8 +33,7 @@ import { MiniStarRange } from "@/components/ui/MiniStarRange";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getCountryDisplayName } from "@/lib/country";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
-import { OpeningHourKidRoom, shouldUseOpeningHourKidRoom } from "@/components/game/OpeningHourKidRoom";
-import { isYouthEarlyCareer } from "@/lib/youthFirstHour";
+import { isYouthFirstHour } from "@/lib/youthFirstHour";
 import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1107,10 +1106,6 @@ export function YouthScoutingScreen() {
   const [filterNationality, setFilterNationality] = useState("");
 
   if (!gameState) return null;
-  if (shouldUseOpeningHourKidRoom(gameState)) {
-    return <OpeningHourKidRoom title="This week's kid" gameState={gameState} />;
-  }
-
   const { unsignedYouth, subRegions, legacyScore, scout } = gameState;
   const openingYouth = gameState.openingCase
     ? unsignedYouth[gameState.openingCase.youthId]
@@ -1224,7 +1219,7 @@ export function YouthScoutingScreen() {
   return (
     <GameLayout>
       <div className="p-4 sm:p-6 lg:p-8">
-        {isYouthEarlyCareer(gameState) && openingYouth && (
+        {isYouthFirstHour(gameState) && openingYouth && (
           <div className="mb-5 flex flex-col gap-4 rounded-sm border border-[color:var(--primary)]/25 bg-[#14110c] p-4 sm:flex-row sm:items-center">
             <YouthPortraitWithFallback
               playerId={openingYouth.player.id}
@@ -1235,29 +1230,23 @@ export function YouthScoutingScreen() {
             />
             <div className="min-w-0">
               <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-[color:var(--primary)]">
-                The name you wrote down
+                First lead
               </p>
               <h2 className="text-xl font-bold text-white">
                 {openingYouth.player.firstName} {openingYouth.player.lastName}
               </h2>
               <p className="mt-1 text-sm text-zinc-300">
-                This board is still his case. Everyone else is context.
+                This is the same Prospects board you will use all career. Start with this name.
               </p>
             </div>
           </div>
         )}
         {/* Header */}
-        <div className={`mb-5 overflow-hidden rounded-2xl border p-5 shadow-xl shadow-black/20 sm:p-6 ${
-          isYouthEarlyCareer(gameState)
-            ? "border-[color:var(--primary)]/20 bg-[#10151b]/96"
-            : "border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.12),transparent_38%),rgba(16,21,27,0.96)]"
-        }`}>
+        <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.12),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-xl shadow-black/20 sm:p-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className={`mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] ${
-                isYouthEarlyCareer(gameState) ? "text-[color:var(--primary)]" : "text-emerald-300"
-              }`}>
-                {isYouthEarlyCareer(gameState) ? "The working list" : "Recruitment board"}
+              <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                Recruitment board
               </p>
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {IS_YOUTH_EARLY_ACCESS ? "Prospects" : "Youth Scouting"}

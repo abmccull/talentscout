@@ -31,33 +31,16 @@ export function isYouthOpeningWeek(state: {
 }
 
 /**
- * Steam first-week shell. Inbox, World, Career, and achievement juice stay
- * off the HUD until week 2 — including the Planner receipt after filing.
+ * Week-1 HUD: hide Inbox, World, and Career until the first case has a week
+ * behind it. Desk, Planner, Prospects, and Reports stay on — those are the
+ * real rooms the first hour teaches.
  */
 export function isYouthOpeningShell(state: OpeningState): boolean {
   return isOpeningSeasonOneWeekOne(state);
 }
 
-/**
- * The opening case is still the career. Week 2–4 must stay the same game:
- * same kid, same gold, four rooms — not a sudden World/Career OS.
- */
-export function isYouthEarlyCareer(state: OpeningState): boolean {
-  if (!state?.openingCase) return false;
-  if ((state.currentSeason ?? 1) !== 1) return false;
-  return (state.currentWeek ?? 1) <= 4;
-}
-
-export type YouthWorkspacePhase = "opening" | "case" | "career";
-
-export function getYouthWorkspacePhase(state: OpeningState): YouthWorkspacePhase {
-  if (isYouthOpeningShell(state)) return "opening";
-  if (isYouthEarlyCareer(state)) return "case";
-  return "career";
-}
-
 export function shouldShowYouthWorldCareer(state: OpeningState): boolean {
-  return getYouthWorkspacePhase(state) === "career";
+  return !isYouthOpeningShell(state);
 }
 
 export function isYouthWatchScreen(screen: string | null | undefined): boolean {
@@ -69,13 +52,12 @@ export function shouldShowYouthInbox(state: OpeningState): boolean {
   return !isYouthOpeningShell(state);
 }
 
-/** Hold Steam juice through Watch and the first two weeks of the same case. */
+/** Hold Steam juice through Watch and the opening week. */
 export function shouldHoldAchievementToasts(
   screen: string | null | undefined,
   state: OpeningState,
 ): boolean {
   if (isYouthWatchScreen(screen)) return true;
   if (screen === "internationalView") return true;
-  if (isYouthOpeningShell(state)) return true;
-  return isYouthEarlyCareer(state) && (state?.currentWeek ?? 1) <= 2;
+  return isYouthOpeningShell(state);
 }
