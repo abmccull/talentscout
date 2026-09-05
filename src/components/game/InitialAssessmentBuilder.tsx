@@ -448,7 +448,7 @@ export function InitialAssessmentBuilder({
               recommended={index === 0}
               title={option.label}
               description={option.statement}
-              meta={`${formatToken(option.category)} · ${formatToken(option.support)} support`}
+              meta={`${formatToken(option.category)} · ${formatToken(option.support)}`}
               onSelect={() => applyDraft((current) => ({
                 ...current,
                 claimOptionId: option.id,

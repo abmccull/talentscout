@@ -11,6 +11,7 @@
 
 import type { RNG } from "@/engine/rng";
 import type { AttributeDomain, Player } from "@/engine/core/types";
+import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import type {
   ObservationSession,
   Hypothesis,
@@ -116,117 +117,17 @@ const ACTIVITY_LABELS: Partial<Record<ObservationSession["activityType"], string
  * they reflect the scout sitting down after the session and processing what they saw.
  */
 export const GUT_FEELING_NARRATIVES: Record<AttributeDomain, string[]> = {
-  technical: [
-    "Something about the way {playerName} touches the ball... there's a quality there that the numbers don't capture.",
-    "You keep coming back to that one moment — {playerName} adjusting mid-stride to receive on the half-turn. It wasn't spectacular. But it was effortless.",
-    "In the car home, you find yourself replaying {playerName}'s first touch over and over. You've seen that kind of softness before. It tends to matter.",
-    "There's a cleanliness to {playerName}'s execution that stayed with you. Not flash — just right, every time. That's harder than it looks.",
-  ],
-  physical: [
-    "You can't quite explain it, but {playerName}'s movement reminds you of a player who went on to dominate at the highest level.",
-    "The athleticism you saw from {playerName} today isn't the kind that shows up in sprint tests. It's the efficiency — the economy of movement. Rare.",
-    "{playerName} covered more ground than anyone but you barely noticed the effort. That's the tell. Effortless coverage is the hardest thing to develop.",
-    "Something about the way {playerName} decelerates into space — the body control, the low centre of gravity. You've made worse calls on less.",
-  ],
-  mental: [
-    "There's a calmness in {playerName}'s eyes. In thirty years, you've learned to trust that look.",
-    "Twice today {playerName} made a decision that slowed the game down when everyone around them was rushing. That awareness doesn't come from coaching.",
-    "You noticed {playerName} scanning the field before every touch — three, four checks. That's not habit. That's how they think. It's going to compound.",
-    "The moment the pressure spiked, {playerName} got quieter. Most players panic or hide. Composure under duress is the scarcest thing in this game.",
-  ],
-  tactical: [
-    "{playerName} sees the game differently. The spaces they find, the timing of their runs — it's instinctive.",
-    "Watching {playerName} today, you kept noticing them in the right place a second before the ball arrived. You can't teach that read. It has to be felt.",
-    "{playerName} pressed in a way that felt rehearsed — except they were pressing triggers none of their teammates were cued to. Pure pattern recognition.",
-    "The positioning was textbook at first glance. Then you realised: no one coached that shape. {playerName} drifted into those pockets on instinct alone.",
-  ],
-  hidden: [
-    "Your gut tells you there's more to {playerName} than meets the eye. Something the data won't show.",
-    "You can't point to a single moment — but you left the ground certain that {playerName} is operating at a ceiling nobody around them can see yet.",
-    "There's a variable here that doesn't fit any of your frameworks. {playerName} has something. You don't have a word for it yet. You've felt it before.",
-    "It's the small things. The way {playerName} responded after a mistake. The way they communicated before a set piece. You've been doing this long enough to know.",
-  ],
+  technical: ["You are still weighing {playerName}'s technical execution. What would another watch need to show before you made a claim?"],
+  physical: ["Keep {playerName}'s physical development as a question. A different opponent or setting may give you a more useful comparison."],
+  mental: ["Your read of {playerName}'s decision-making remains tentative. Look for another situation that tests the same question."],
+  tactical: ["Keep an open question about {playerName}'s tactical choices. Another role or opponent could change your interpretation."],
+  hidden: ["Character is still an open question for {playerName}. Seek repeated behaviour before turning an impression into a judgment."],
 };
 
-// =============================================================================
-// REFLECTION PROMPT TEMPLATES
-// =============================================================================
-
-/** Templates that reference a specific flagged player. */
-const PLAYER_FOCUSED_PROMPTS = [
-  "You noticed {playerName} consistently drifting into space. Worth watching their off-the-ball movement next time.",
-  "{playerName}'s reaction to the referee's decision was telling. A character assessment might be valuable.",
-  "You couldn't pin down exactly what {playerName}'s ceiling is today. That uncertainty is worth revisiting.",
-  "{playerName} was quieter in the second half — fatigue or something else? A follow-up would settle it.",
-  "The contrast between {playerName} under pressure and at rest was striking. Mental resilience deserves a dedicated focus next time.",
-];
-
-/** Templates that reference the observation conditions. */
-const ATMOSPHERE_PROMPTS = [
-  "The atmosphere affected your readings today. Consider a follow-up session in calmer conditions.",
-  "The noise from the crowd made it hard to isolate individual behaviour. Don't over-weight today's data.",
-  "Chaotic conditions revealed raw instincts — but obscured fine technical detail. Factor that in.",
-  "You spent time managing distractions rather than watching. That's a session cost worth acknowledging.",
-];
-
-/** Templates about session focus distribution. */
-const FOCUS_DISTRIBUTION_PROMPTS = [
-  "You spent most of your focus on {playerName}. Don't forget the peripheral players who caught your eye.",
-  "Your focus was spread thin today. Next time, consider narrowing to two or three players at most.",
-  "You flagged {flagCount} moments — more than usual. Prioritise the standouts before writing the report.",
-  "You flagged fewer moments than expected. Consider whether the session conditions limited your reads.",
-];
-
-/** Generic reflective prompts that always apply. */
 const GENERIC_PROMPTS = [
-  "First impressions age. Come back to your notes in a week and see if they still hold.",
-  "Consider which moments you'd be comfortable defending in a scout meeting. Start with those.",
-  "You formed {hypothesisCount} hypothesis today. Each one is a reason to return.",
-];
-
-// ---- Investigation mode (meetings, conversations) ----
-
-const INVESTIGATION_PLAYER_PROMPTS = [
-  "You noticed {playerName}'s body language shift during the conversation. Worth following up on.",
-  "Something about the way {playerName} was described suggested hidden potential. Investigate further.",
-  "{playerName}'s name came up more than once — the people around them clearly have strong opinions.",
-  "The hesitation when discussing {playerName}'s weaknesses was telling. Dig deeper next time.",
-];
-
-const INVESTIGATION_ATMOSPHERE_PROMPTS = [
-  "The tone of the meeting was tense. Consider whether that coloured the information you received.",
-  "They were guarded today — the conversation yielded less than you hoped. A different approach may open doors.",
-  "The meeting felt one-sided. Next time, lead with something of value to balance the exchange.",
-  "Your counterpart was unusually forthcoming. Consider whether they had an agenda of their own.",
-];
-
-const INVESTIGATION_FOCUS_PROMPTS = [
-  "You asked a lot of questions but didn't leave much space for the other party. Consider a listening approach next time.",
-  "You spent most of the conversation on {playerName}. Don't forget to gather context about the wider situation.",
-  "Prioritise what's actionable — not everything from this conversation will age well.",
-  "You gathered {flagCount} key pieces of intel. Cross-reference them before committing to your file.",
-];
-
-// ---- Analysis mode (data, video) ----
-
-const ANALYSIS_PLAYER_PROMPTS = [
-  "{playerName}'s numbers stood out from the dataset. Worth a deeper statistical dive.",
-  "The data on {playerName} was inconsistent across metrics. That gap deserves investigation.",
-  "{playerName}'s trend line is moving in the right direction — but check the sample size.",
-  "The anomaly you flagged around {playerName} might be noise. Cross-reference with video before writing it up.",
-];
-
-const ANALYSIS_ATMOSPHERE_PROMPTS = [
-  "Data quality was patchy today — consider whether the source was reliable enough to base conclusions on.",
-  "Some of the metrics you reviewed had small sample sizes. Treat early signals with appropriate caution.",
-  "The dataset skewed towards a particular context. Factor that bias into your interpretation.",
-];
-
-const ANALYSIS_FOCUS_PROMPTS = [
-  "You focused heavily on statistical outliers. Don't forget to review the baseline numbers too.",
-  "You flagged {flagCount} data points. Prioritise the ones with the strongest signal-to-noise ratio.",
-  "Your analysis was broad today. Next session, consider narrowing the scope for deeper confidence.",
-  "Consider which data points you'd present to the manager. Lead with those in the report.",
+  "Which of your notes would you be comfortable defending in a scout meeting? Start with those.",
+  "What evidence would change your mind? Make that the question for a future watch.",
+  "Decide whether another watch would change your recommendation enough to justify the time.",
 ];
 
 // =============================================================================
@@ -259,6 +160,7 @@ function momentTypeToDomain(
  * flagged moments. Falls back to "technical" when there are no moments.
  */
 function dominantDomainFromFlagged(
+  session: ObservationSession,
   flagged: SessionFlaggedMoment[],
 ): AttributeDomain {
   if (flagged.length === 0) return "technical";
@@ -272,7 +174,13 @@ function dominantDomainFromFlagged(
   };
 
   for (const fm of flagged) {
-    counts[momentTypeToDomain(fm.moment.momentType)] += 1;
+    const cue = visibleFlaggedCue(session, fm);
+    const cueDomains = [...new Set(cue?.attributesHinted.map((attribute) => ATTRIBUTE_DOMAINS[attribute]) ?? [])];
+    if (cueDomains.length > 0) {
+      for (const domain of cueDomains) counts[domain] += 1 / cueDomains.length;
+    } else {
+      counts[momentTypeToDomain(fm.moment.momentType)] += 1;
+    }
   }
 
   let best: AttributeDomain = "technical";
@@ -310,6 +218,50 @@ function mostFocusedPlayer(
     if (!best) return p.focusedPhases.length > 0 ? p : undefined;
     return p.focusedPhases.length > best.focusedPhases.length ? p : best;
   }, undefined);
+}
+
+function visibleFlaggedCue(session: ObservationSession, flagged: SessionFlaggedMoment) {
+  return session.cueReadings?.find((cue) =>
+    cue.momentId === flagged.moment.id
+    && cue.playerId === flagged.moment.playerId
+    && cue.phaseIndex === flagged.phaseIndex
+    && cue.clarity !== "missed",
+  );
+}
+
+/** Use the scout's recorded read and visible cue; never hidden execution quality. */
+function describeFlaggedEvidence(session: ObservationSession, flagged: SessionFlaggedMoment[]) {
+  let positive = false;
+  let negative = false;
+  const reactions = { promising: 0, concerning: 0, inconclusive: 0 };
+  for (const flag of flagged) {
+    if (flag.reaction === "promising") reactions.promising += 1;
+    else if (flag.reaction === "concerning") reactions.concerning += 1;
+    else reactions.inconclusive += 1;
+    const cue = visibleFlaggedCue(session, flag);
+    positive ||= flag.reaction === "promising" || cue?.direction === "positive";
+    negative ||= flag.reaction === "concerning" || cue?.direction === "negative";
+  }
+  const stance = positive && negative ? "mixed"
+    : negative ? "concern"
+    : positive ? "promising"
+    : "unresolved";
+  return { stance, ...reactions };
+}
+
+function evidenceQuestion(session: ObservationSession, player: SessionPlayer): string {
+  const flagged = session.flaggedMoments.filter((flag) => flag.moment.playerId === player.playerId);
+  const { stance } = describeFlaggedEvidence(session, flagged);
+  if (stance === "concern") {
+    return `Your notes raise concerns about ${player.name}. What would a different context need to show before you reconsidered?`;
+  }
+  if (stance === "mixed") {
+    return `Your notes and cue readings for ${player.name} contain conflicting signals. Which uncertainty would another watch resolve?`;
+  }
+  if (stance === "promising") {
+    return `There are encouraging signals in your notes on ${player.name}. Would they hold up in another context?`;
+  }
+  return `Your read of ${player.name} remains open. Choose a specific question before spending another session on the player.`;
 }
 
 /**
@@ -402,69 +354,36 @@ function describeAtmosphere(session: ObservationSession): string {
 }
 
 function describePlayerFocus(session: ObservationSession): string {
-  if (session.mode === "investigation") {
-    const primary = session.players[0];
-    const speaker = session.players[1];
-    if (primary && speaker) {
-      return `Most of the conversation revolved around ${primary.name}, with ${speaker.name} shaping the read.`;
-    }
-    if (primary) {
-      return `Most of the conversation centered on ${primary.name}.`;
-    }
-    return "You spent the meeting gathering context rather than locking onto one clear subject.";
-  }
-
-  const focusedPlayers = session.players.filter((p) => p.focusedPhases.length > 0);
+  const focusedPlayers = session.players.filter((player) => player.focusedPhases.length > 0)
+    .sort((left, right) => right.focusedPhases.length - left.focusedPhases.length);
   if (focusedPlayers.length === 0) {
-    return "You kept your focus broad rather than locking onto one player for long.";
+    return "No player received recorded direct focus during this session.";
   }
-
+  const primary = focusedPlayers[0];
   if (focusedPlayers.length === 1) {
-    const player = focusedPlayers[0];
-    return `Most of your attention stayed on ${player.name}${formatLensPhrase(player.currentLens)}.`;
+    const lenses = new Set(primary.focusHistory?.map((focus) => focus.lens) ?? []);
+    return `Your direct focus stayed on ${primary.name}${lenses.size > 1 ? " through several lenses" : formatLensPhrase(primary.currentLens)}.`;
   }
-
-  if (focusedPlayers.length === 2) {
-    const [primary, secondary] = focusedPlayers;
-    return `Most of your attention stayed on ${primary.name}${formatLensPhrase(primary.currentLens)}, with ${secondary.name}${formatLensPhrase(secondary.currentLens)} as a secondary focus.`;
-  }
-
-  const [primary, secondary, tertiary] = focusedPlayers;
-  return `Your focus moved between ${primary.name}${formatLensPhrase(primary.currentLens)}, ${secondary.name}${formatLensPhrase(secondary.currentLens)}, and ${tertiary.name}${formatLensPhrase(tertiary.currentLens)}, though ${primary.name} drew the longest look.`;
+  const leaders = focusedPlayers.filter((player) => player.focusedPhases.length === primary.focusedPhases.length);
+  return leaders.length > 1
+    ? `You divided direct focus across ${focusedPlayers.length} players; ${leaders.map((player) => player.name).join(", ")} shared the longest watch.`
+    : `You divided direct focus across ${focusedPlayers.length} players; ${primary.name} received the longest watch.`;
 }
 
 function describeSessionTakeaway(session: ObservationSession): string {
   const flaggedCount = session.flaggedMoments.length;
   const noun = MODE_FLAGGED_NOUN[session.mode];
-  const hypCount = session.hypotheses.length;
-  const parts: string[] = [];
-
-  if (flaggedCount === 0) {
-    parts.push(
-      session.mode === "investigation"
-        ? "The meeting gave you a little texture, but nothing concrete enough to bank as fresh intel."
-        : session.mode === "analysis"
-          ? "There were a few loose signals in the material, but nothing strong enough to flag."
-          : "Nothing quite sharpened into a flagged moment."
-    );
-  } else if (flaggedCount === 1) {
-    parts.push(`One ${noun.singular} stood out enough to mark down for follow-up.`);
+  if (flaggedCount === 0) return `You recorded no flagged ${noun.plural}. The session leaves your judgment open.`;
+  const evidence = describeFlaggedEvidence(session, session.flaggedMoments);
+  const parts = [
+    `You recorded ${flaggedCount} ${flaggedCount === 1 ? noun.singular : noun.plural} for follow-up: ${evidence.promising} promising, ${evidence.concerning} concerning, ${evidence.inconclusive} inconclusive.`,
+  ];
+  const interpretationCount = Object.keys(session.evidenceDecisions ?? {}).length;
+  if (interpretationCount > 0) {
+    parts.push(`Your notebook contains ${interpretationCount} recorded evidence interpretation${interpretationCount === 1 ? "" : "s"}.`);
   } else {
-    parts.push(`${flaggedCount} ${noun.plural} stood out enough to flag for follow-up.`);
+    parts.push("Review the recorded evidence before deciding what it supports.");
   }
-
-  if (hypCount === 0) {
-    parts.push(
-      flaggedCount === 0
-        ? "It also stopped short of giving you a new hypothesis to chase."
-        : "It still wasn't enough to justify a new hypothesis."
-    );
-  } else if (hypCount === 1) {
-    parts.push("By the end, you had one new hypothesis worth tracking.");
-  } else {
-    parts.push(`By the end, you had ${hypCount} new hypotheses worth tracking.`);
-  }
-
   return parts.join(" ");
 }
 
@@ -673,7 +592,7 @@ export function checkGutFeelingTrigger(
   // Determine domain: majority vote over flagged moments; fall back to active lens.
   let domain: AttributeDomain;
   if (targetMoments.length > 0) {
-    domain = dominantDomainFromFlagged(targetMoments);
+    domain = dominantDomainFromFlagged(session, targetMoments);
   } else if (targetPlayer.currentLens) {
     domain = lensToDomain(targetPlayer.currentLens);
   } else {
@@ -683,18 +602,21 @@ export function checkGutFeelingTrigger(
   // Reliability scales with scout intuition, capped at 0.85.
   const reliability = Math.min(0.3 + scoutIntuition / 30, 0.85);
 
-  // Select a narrative template for this domain.
-  const templates = GUT_FEELING_NARRATIVES[domain];
-  const rawNarrative = rng.pick(templates);
-  const narrative = interpolate(rawNarrative, {
-    playerName: targetPlayer.name,
-  });
+  const evidence = describeFlaggedEvidence(session, targetMoments);
+  const domainLabel = domain === "hidden" ? "character" : domain;
+  const narrative = evidence.stance === "concern"
+    ? `Your ${domainLabel} read of ${targetPlayer.name} carries concerns from this session. That is a question to test, not a verdict on the player's future.`
+    : evidence.stance === "mixed"
+      ? `There are conflicting signals in your read of ${targetPlayer.name}. Keep the ${domainLabel} question open until another context helps separate them.`
+      : evidence.stance === "promising"
+        ? `There are encouraging signals in your ${domainLabel} notes on ${targetPlayer.name}. They may reward another look, but this session cannot settle the player's future.`
+        : interpolate(rng.pick(GUT_FEELING_NARRATIVES[domain]), { playerName: targetPlayer.name });
 
   // Build a trigger reason string.
   const triggerReasonParts: string[] = [];
   if (targetMoments.length > 0) {
     triggerReasonParts.push(
-      `${targetMoments.length} flagged ${domain} moment${targetMoments.length > 1 ? "s" : ""}`,
+      `${targetMoments.length} flagged moment${targetMoments.length > 1 ? "s" : ""}: ${evidence.promising} promising, ${evidence.concerning} concerning, ${evidence.inconclusive} inconclusive`,
     );
   }
   if (targetPlayer.focusedPhases.length > 0) {
@@ -715,8 +637,9 @@ export function checkGutFeelingTrigger(
     );
     const cueSignal = visibleCues.length > 0
       ? visibleCues.reduce((sum, cue) => sum + cue.score, 0) / visibleCues.length
-      : targetMoments.reduce((sum, moment) => sum + moment.moment.quality / 10, 0)
-        / Math.max(1, targetMoments.length);
+      : targetMoments.length > 0
+        ? targetMoments.reduce((sum, flag) => sum + (flag.reaction === "promising" ? 0.65 : flag.reaction === "concerning" ? 0.35 : 0.5), 0) / targetMoments.length
+        : 0.5;
     const hash = [...`${session.id}:${targetPlayer.playerId}`].reduce(
       (total, character) => total + character.charCodeAt(0),
       0,
@@ -752,60 +675,31 @@ export function generateReflectionPrompts(
   rng: RNG,
 ): string[] {
   const prompts: string[] = [];
-  const flaggedCount = session.flaggedMoments.length;
-  const hypothesisCount = session.hypotheses.length;
+  const focused = session.players.filter((player) => player.focusedPhases.length > 0);
   const primaryPlayer = mostFocusedPlayer(session.players)
-    ?? (session.players[0]?.focusedPhases.length === 0 ? session.players[0] : undefined);
+    ?? session.players.find((player) => session.flaggedMoments.some((flag) => flag.moment.playerId === player.playerId));
+  if (primaryPlayer) prompts.push(evidenceQuestion(session, primaryPlayer));
 
-  // Select template banks based on session mode
-  const playerPrompts =
-    session.mode === "investigation" ? INVESTIGATION_PLAYER_PROMPTS
-    : session.mode === "analysis" ? ANALYSIS_PLAYER_PROMPTS
-    : PLAYER_FOCUSED_PROMPTS;
-
-  const atmospherePrompts =
-    session.mode === "investigation" ? INVESTIGATION_ATMOSPHERE_PROMPTS
-    : session.mode === "analysis" ? ANALYSIS_ATMOSPHERE_PROMPTS
-    : ATMOSPHERE_PROMPTS;
-
-  const focusPrompts =
-    session.mode === "investigation" ? INVESTIGATION_FOCUS_PROMPTS
-    : session.mode === "analysis" ? ANALYSIS_FOCUS_PROMPTS
-    : FOCUS_DISTRIBUTION_PROMPTS;
-
-  // Always include one player-focused prompt if there is a primary subject.
-  if (primaryPlayer) {
-    const template = rng.pick(playerPrompts);
-    prompts.push(interpolate(template, { playerName: primaryPlayer.name }));
+  if (focused.length > 3) {
+    prompts.push(`You spread direct focus across ${focused.length} players. Consider narrowing the next watch to two or three if you need deeper evidence.`);
+  } else if (focused.length === 1) {
+    prompts.push(`You kept direct focus on ${focused[0].name}. A different lens or setting could test the parts of your judgment this watch left open.`);
+  } else if (focused.length > 1) {
+    prompts.push(`You divided direct focus between ${focused.length} players. Decide which unresolved question most deserves another session.`);
+  } else {
+    prompts.push("No player received recorded direct focus. Decide whether a targeted watch would add useful evidence.");
   }
 
-  // Atmosphere prompt: lower chaos threshold for investigation (meetings are always somewhat tense)
-  const chaos = session.venueAtmosphere?.chaosLevel ?? 0;
-  const atmosphereThreshold = session.mode === "investigation" ? 0.2 : 0.5;
-  if (chaos > atmosphereThreshold || session.mode === "investigation") {
-    prompts.push(rng.pick(atmospherePrompts));
+  if (session.mode === "investigation") {
+    prompts.push("Cross-check the information from this conversation against first-hand evidence before making a claim.");
+  } else if (session.mode === "analysis") {
+    prompts.push("Check the source and sample size before treating a data point as a lasting quality.");
+  } else if ((session.venueAtmosphere?.chaosLevel ?? 0) > 0.5) {
+    prompts.push("The recorded conditions were noisy. A calmer setting could help test whether your read holds.");
+  } else if (session.flaggedMoments.some((flag) => visibleFlaggedCue(session, flag)?.pressureContext)) {
+    prompts.push("Some of your recorded evidence came under pressure. Seek a comparable situation before deciding whether it represents a pattern.");
   }
-
-  // Include a focus/distribution prompt.
-  const focusTemplate = rng.pick(focusPrompts);
-  prompts.push(
-    interpolate(focusTemplate, {
-      playerName: primaryPlayer?.name ?? "your primary subject",
-      flagCount: flaggedCount,
-    }),
-  );
-
-  // Include a generic prompt if we have fewer than 3 prompts so far.
-  if (prompts.length < 3) {
-    const genericTemplate = rng.pick(GENERIC_PROMPTS);
-    prompts.push(
-      interpolate(genericTemplate, {
-        hypothesisCount,
-      }),
-    );
-  }
-
-  // Shuffle and cap at 4 prompts.
+  if (prompts.length < 3) prompts.push(rng.pick(GENERIC_PROMPTS));
   return rng.shuffle(prompts).slice(0, 4);
 }
 

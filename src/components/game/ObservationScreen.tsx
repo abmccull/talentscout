@@ -489,6 +489,7 @@ interface SetupViewProps {
 
 function formatSituationLabel(value: string): string {
   return value
+    .replace(/[_-]+/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/^./, (character) => character.toUpperCase());
 }
@@ -1212,7 +1213,7 @@ export function ObservationScreen() {
               <p className="mt-0.5 text-meta capitalize text-zinc-400">
                 {activeSession.activityType.replace(/([A-Z])/g, " $1").trim()}
                 {mode === "fullObservation" && activeSession.venueAtmosphere?.weather
-                  ? ` · ${activeSession.venueAtmosphere.weather}`
+                  ? ` · ${formatSituationLabel(activeSession.venueAtmosphere.weather)}`
                   : ""}
                 {activeSession.situation
                   ? ` · ${formatSituationLabel(activeSession.situation.stakes)} stakes · ${formatSituationLabel(activeSession.situation.tacticalFrame)}`

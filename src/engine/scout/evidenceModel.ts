@@ -345,12 +345,18 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
         direction,
         summary: text.summary,
         detail: text.detail,
-        suggestedClassifications: unique([
-          primaryClassification,
-          ...definition.classifications,
-          "anomaly" as const,
-          "noConclusion" as const,
-        ]).slice(0, 4),
+        // Withholding judgment must survive the option limit. An unreadable
+        // passage cannot support a football classification in the first place.
+        suggestedClassifications: clarity === "glimpse" || clarity === "missed"
+          ? ["noConclusion"]
+          : [
+              ...unique([
+                primaryClassification,
+                ...definition.classifications,
+                "anomaly" as const,
+              ]).filter((classification) => classification !== "noConclusion").slice(0, 3),
+              "noConclusion",
+            ],
         attributesHinted: moment.attributesHinted.slice(0, attributeLimit),
         pressureContext: moment.pressureContext,
         contextKey: input.session.situation?.repetitionKey ?? input.session.activityType,
@@ -389,8 +395,9 @@ export function buildSessionEvidenceCards(session: ObservationSession): Scouting
           direction: "mixed", attributesHinted: [], suggestedClassifications: ["noConclusion"] }
       : savedCue;
     const decision = session.evidenceDecisions?.[cue.id];
-    const classification = decision?.classification
-      ?? (cue.clarity === "missed" ? "noConclusion" : cue.suggestedClassifications[0]);
+    const classification = cue.clarity === "missed" || cue.clarity === "glimpse"
+      ? "noConclusion"
+      : decision?.classification ?? cue.suggestedClassifications[0];
     return [{
       ...cue,
       version: 1 as const,
@@ -542,8 +549,8 @@ export const FORMAL_CATEGORY_UNKNOWN_OPTIONS: Record<
   potential: [
     {
       id: "formal-unknown:potential:repeatability",
-      label: "You have only seen this once",
-      statement: "You have only seen this development cue once, so it may not hold against different opposition.",
+      label: "Development needs independent confirmation",
+      statement: "The development projection needs corroboration across different opposition and demands.",
       questionId: "projection",
       contextRequirement: "A second live setting with different opposition and development demands.",
     },
@@ -558,15 +565,15 @@ export const FORMAL_CATEGORY_UNKNOWN_OPTIONS: Record<
   roleFit: [
     {
       id: "formal-unknown:role:alternate",
-      label: "Another tactical role is untested",
-      statement: "The player has not been tested with a different tactical responsibility.",
+      label: "Role translation needs testing",
+      statement: "The role projection needs comparison with a different tactical responsibility.",
       questionId: "movement",
       contextRequirement: "A second role or team shape that changes the player's off-ball responsibilities.",
     },
     {
       id: "formal-unknown:role:speed",
-      label: "Faster opposition is untested",
-      statement: "The role fit has not been tested against a faster, more organised opponent.",
+      label: "Fit against faster opposition",
+      statement: "The role fit needs comparison against faster, more organised opposition.",
       questionId: "decisions",
       contextRequirement: "A stronger opponent that reduces time and space.",
     },
@@ -574,15 +581,15 @@ export const FORMAL_CATEGORY_UNKNOWN_OPTIONS: Record<
   characterRisk: [
     {
       id: "formal-unknown:character:pressure",
-      label: "Sustained pressure is untested",
-      statement: "The player's response to sustained pressure remains untested.",
+      label: "Response under sustained pressure",
+      statement: "The character assessment needs repeated evidence under sustained pressure.",
       questionId: "pressure",
       contextRequirement: "A live period with mistakes, contact, and little recovery time.",
     },
     {
       id: "formal-unknown:character:independent",
-      label: "Independent character view is missing",
-      statement: "The character read has not been challenged by an independent source.",
+      label: "Independent character view",
+      statement: "The character read needs independent corroboration from another setting.",
       questionId: "pressure",
       contextRequirement: "A coach or family source who has seen the player in another setting.",
     },
@@ -609,8 +616,8 @@ export function getEvidenceUnknownOptions(card: ScoutingEvidenceCard): EvidenceU
     {
       id: `unknown:${card.id}:pressure`,
       category,
-      label: "Untested under sustained pressure",
-      statement: "We have not seen whether the same decision survives sustained pressure.",
+      label: "Repeatability under sustained pressure",
+      statement: "This passage alone cannot establish how reliably the decision holds under sustained pressure.",
       recommendedQuestionId: "pressure",
       activityType: "followUpSession",
       contextRequirement: "A live period with repeated pressure and little recovery time.",
@@ -618,8 +625,10 @@ export function getEvidenceUnknownOptions(card: ScoutingEvidenceCard): EvidenceU
     {
       id: `unknown:${card.id}:late`,
       category,
-      label: "Untested late in the session",
-      statement: "We have not seen whether the quality holds when fatigue changes the picture.",
+      label: card.minute >= 60 ? "Repeat the late-game test" : "Quality later in the session",
+      statement: card.minute >= 60
+        ? "Another late-game look is needed to distinguish fatigue from a one-off action."
+        : "This passage alone cannot establish how the quality changes later in a tiring match.",
       recommendedQuestionId: "repeatability",
       activityType: "followUpSession",
       contextRequirement: "A full session where the player can be watched after the hour mark.",
@@ -627,8 +636,8 @@ export function getEvidenceUnknownOptions(card: ScoutingEvidenceCard): EvidenceU
     {
       id: `unknown:${card.id}:level`,
       category,
-      label: "Untested against stronger opposition",
-      statement: "We have not seen this signal against a faster or more organised opponent.",
+      label: "Translation to stronger opposition",
+      statement: "Another context is needed to judge whether this signal transfers to faster or better-organised opposition.",
       recommendedQuestionId: card.questionId,
       activityType: "youthTournament",
       contextRequirement: "A stronger opponent or tournament match with less time and space.",
@@ -638,8 +647,8 @@ export function getEvidenceUnknownOptions(card: ScoutingEvidenceCard): EvidenceU
     shared[1] = {
       id: `unknown:${card.id}:role`,
       category,
-      label: "Untested in another role",
-      statement: "We have not seen whether the read survives a different tactical responsibility.",
+      label: "Translation to another role",
+      statement: "This passage cannot by itself establish whether the read translates to a different tactical responsibility.",
       recommendedQuestionId: "movement",
       activityType: "followUpSession",
       contextRequirement: "A second live look with a different starting role or team shape.",

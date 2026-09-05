@@ -36,6 +36,28 @@ async function readDecisionCheckpoint(page: Page, source: "live" | "autosave") {
   }, source);
 }
 
+/**
+ * Saves materialize these six optional finance defaults in
+ * gameStateGameplayMigration. Keep every field and every non-default value;
+ * only absence and its documented persisted default are equivalent here.
+ * The before/after filing check below still compares the raw live snapshot.
+ */
+function checkpointWithSaveDefaults(checkpoint: Awaited<ReturnType<typeof readDecisionCheckpoint>>) {
+  if (!checkpoint?.finances) return checkpoint;
+  return {
+    ...checkpoint,
+    finances: {
+      ...checkpoint.finances,
+      creditScore: checkpoint.finances.creditScore ?? 50,
+      distressLevel: checkpoint.finances.distressLevel ?? "healthy",
+      weeksInDistress: checkpoint.finances.weeksInDistress ?? 0,
+      failedContractCount: checkpoint.finances.failedContractCount ?? 0,
+      blacklistedClubs: checkpoint.finances.blacklistedClubs ?? [],
+      bankruptcyRecoveryCooldown: checkpoint.finances.bankruptcyRecoveryCooldown ?? 0,
+    },
+  };
+}
+
 async function openAssessmentStep(page: Page, step: string) {
   const button = page.getByRole("button", { name: new RegExp(`^${step}\\b`) });
   await expect(button).toBeEnabled();
@@ -106,16 +128,18 @@ test("a real observed Pass for now survives autosave and reload without recruitm
   expect(filed.openingStage).toBe("complete");
   expect(await page.evaluate(() => (window as any).__GAME_STORE__.getState().pendingListingReportId)).toBeNull();
 
-  // IndexedDB must already contain the exact committed decision before unload.
-  await expect.poll(() => readDecisionCheckpoint(page, "autosave"), { timeout: 20_000 }).toEqual(filed);
+  // IndexedDB must contain the committed decision before unload. Only the
+  // documented optional finance defaults may differ from the live object.
+  const persistedCheckpoint = checkpointWithSaveDefaults(filed);
+  await expect.poll(async () => checkpointWithSaveDefaults(await readDecisionCheckpoint(page, "autosave")), { timeout: 20_000 }).toEqual(persistedCheckpoint);
   await page.screenshot({ path: testInfo.outputPath("pass-filed-report-history.png"), fullPage: true });
   await page.reload({ waitUntil: "domcontentloaded" });
   const continueCareer = page.getByRole("button", { name: "Continue Career", exact: true });
   await expect(continueCareer).toBeEnabled();
   await continueCareer.click();
   await gamePage.waitForScreen("dashboard", 60_000);
-  await expect.poll(() => readDecisionCheckpoint(page, "live"), { timeout: 15_000 }).toEqual(filed);
-  await expect.poll(() => readDecisionCheckpoint(page, "autosave"), { timeout: 15_000 }).toEqual(filed);
+  await expect.poll(async () => checkpointWithSaveDefaults(await readDecisionCheckpoint(page, "live")), { timeout: 15_000 }).toEqual(persistedCheckpoint);
+  await expect.poll(async () => checkpointWithSaveDefaults(await readDecisionCheckpoint(page, "autosave")), { timeout: 15_000 }).toEqual(persistedCheckpoint);
   await gamePage.navigateTo("youthScouting");
   await expect(page.getByText("No next look planned; spend attention elsewhere.").first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("pass-retained-after-reload.png"), fullPage: true });

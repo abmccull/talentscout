@@ -377,7 +377,7 @@ interface DayCardProps {
   onLaunchInteractiveSession?: () => void;
 }
 
-function DayCard({
+export function DayCard({
   dayResult,
   allDayResults,
   currentDay,
@@ -417,10 +417,6 @@ function DayCard({
   }, [dayResult, allDayResults, currentDay]);
 
   const maxFocusPlayers = dayResult.interaction?.maxFocusPlayers ?? 3;
-  const narrativeParts = dayResult.narrative
-    .split(/\n\s*\n/)
-    .map((part) => part.trim())
-    .filter(Boolean);
   const selectedInteraction = dayResult.interaction?.options.find(
     (option) => option.id === dayResult.interaction?.selectedOptionId,
   );
@@ -439,6 +435,11 @@ function DayCard({
   const isConsequenceResolved = !dayResult.interaction
     || Boolean(dayResult.interaction.selectedOptionId)
     || Boolean(interactiveSessionCompleted);
+  // The week preview already contains seeded outcome rolls. Narrative must
+  // follow the same reveal boundary as the outcome counters below.
+  const narrativeParts = isConsequenceResolved
+    ? dayResult.narrative.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean)
+    : ["Choose an approach or complete a live session to reveal this day’s result."];
 
   const toggleFocusCandidate = (playerId: string) => {
     setPendingFocusIds((prev) => {

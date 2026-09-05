@@ -40,6 +40,10 @@ Validation for this batch: `tests/invariants/equipmentLiquidation.test.ts` cover
 
 ## Coverage and removal safeguards
 
+The second integration also replaces the active but disconnected generic moment-template tables with `observation/momentActions.ts` (**MERGE**: action, contributing attributes, pressure and outcome wording have one authority). No separate consumer of the replaced template exports was found. Existing saved moments remain historical records. Reflection templates that invented unseen incidents were replaced by evidence-grounded prompts (**REFACTOR**). The shared activity-quality template bank was then replaced with session-opportunity narration (**REFACTOR**): a scout-work roll cannot establish player, weather, relationship or transfer facts. All 40 activity types preserve their RNG consumption and mechanical modifiers. Continuation exports keep their keys/list sizes for compatibility, with unsupported outcome claims removed.
+
+The initial assessment's next-test backend is now connected to actual opening calendar bookings (**RESTORE**). Tournament duration, meeting mode and authored question are carried through the existing calendar/session APIs; an unavailable activity does not silently become another test.
+
 - `GAME_SYSTEM_MAP.md` inventories every meaningful engine directory and separates truth, knowledge, UI, background simulation, future-mode scope and persistence ownership.
 - No route, table, migration, save field, worker, online service or whole mode was deleted in this cleanup.
 - Imports/re-exports and exact identifier searches were checked before removal. Typecheck is the final local check for missed TypeScript consumers; it does not prove external integrations or future untracked plugins.

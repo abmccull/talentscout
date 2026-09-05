@@ -70,7 +70,9 @@ test("opening watch resumes saved decisions through real browser reloads", async
 
   const controls = page.getByTestId("mobile-observation-controls");
   await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  await page.getByRole("button", { name: "Flag standout moment", exact: true }).click();
+  // Any observed passage can be saved; the generated opening need not contain
+  // an exceptional performance to test durable scouting decisions.
+  await page.locator('[data-tutorial-id="observation-flag-moment"]:visible').first().click();
   await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').click();
   await page.getByRole("button", { name: /^Confirm the first read\b/ }).click();
   await checkpointAndReload(page);

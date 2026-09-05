@@ -794,7 +794,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         : undefined;
       const scheduledActivity = activityInstanceId
         ? gameState.schedule?.activities.find(
-            (activity) => activity?.instanceId === activityInstanceId,
+            (activity) => activity?.instanceId === activityInstanceId.replace(/:d\d+$/, ""),
           ) ?? undefined
         : undefined;
       const caseFocus = canonicalTargetId

@@ -7,6 +7,8 @@ import { performance } from "node:perf_hooks";
 import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
+import { createSaveEnvelope } from "@/lib/saveEnvelope";
+import type { SaveGameCommit } from "@/lib/db";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import {
   observeWeeklySimulationTelemetry,
@@ -45,6 +47,25 @@ import {
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({
     save: async () => undefined,
+    // Match the current structured provider boundary without claiming durable writes.
+    saveState: async (_slotName: string, rawState: unknown, displayName?: string): Promise<SaveGameCommit> => {
+      const state = rawState as GameState;
+      return {
+        record: {
+          ...createSaveEnvelope(state, state.lastSaved),
+          slot: 0,
+          name: displayName ?? "Autosave",
+          season: state.currentSeason,
+          week: state.currentWeek,
+          scoutName: `${state.scout.firstName} ${state.scout.lastName}`,
+          specialization: state.scout.primarySpecialization,
+          reputation: state.scout.reputation,
+        },
+        wrote: false,
+        payloadBytes: null,
+        archivedBytes: 0,
+      };
+    },
   }),
   isSupabaseCloudSaveActive: async () => false,
 }));
