@@ -49,8 +49,14 @@ test("opening watch resumes saved decisions through real browser reloads", async
   await expect(page.getByRole("button", { name: "Watch the match", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /^Use technical lens for / }).click();
   await expect(page.getByRole("button", { name: /^Remove focus from / }).first()).toBeVisible();
+  // A generated first passage may already offer a useful moment. Preserve the
+  // actual guide instruction instead of assuming the scout must wait for one.
+  const mentorBeforeReload = page.getByRole("complementary", { name: /^Mentor: / });
+  await expect(mentorBeforeReload).toBeVisible();
+  const mentorLabel = await mentorBeforeReload.getAttribute("aria-label");
+  expect(mentorLabel).toMatch(/^Mentor: /);
   await checkpointAndReload(page);
-  const resumedMentor = page.getByLabel("Mentor: Keep watching", { exact: true });
+  const resumedMentor = page.getByLabel(mentorLabel!, { exact: true });
   await expect(resumedMentor).toBeVisible();
   // Resizing can capture a frame before the mentor has remeasured its target.
   // Require the actual settled panel to fit before saving visual evidence.

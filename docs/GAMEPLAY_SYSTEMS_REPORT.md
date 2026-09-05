@@ -33,9 +33,10 @@ The baseline contains functioning world, report, career and persistence foundati
 | Planning focused tests | 39 passed | Baseline only |
 | Planning canonical season | 1 passed, 46 ticks | Save provider mocked; no decades claim |
 | Opening observation → report → booked second look | Played | Existing local export; final candidate unverified |
-| Integrated unit suite | 1,819 passed in 326 files | Wave-two integration; final build and endurance remain separate |
+| Integrated unit suite | 1,828 passed in 327 files on `9ec81eb` | Endurance remains separate |
 | Integrated typecheck / architecture | Passed; 724 modules, 3,381 edges, zero cycles | Final export and browser journeys pending |
 | Checkpoint `66b51d1` export / browser play | Export passed; guided opening, unguided opening/reload and private-pass save journey passed | Subsequent actual play found pricing, action/narrative and calendar defects; that checkpoint is intermediate |
+| Corrected `9ec81eb` export and browser journeys | Export passed; 9 journeys passed across the full run and one corrected-test rerun | The resumed-guide test now compares the actual saved instruction; it no longer assumes a forced opening sequence |
 | Intermediate strict canonical season | Passed; 46 ticks, 33,790,364 save bytes | Intermediate source, mocked persistence, no replay or decades claim |
 | 5/10/20/30-season diagnostics and replay | Pending | Required |
 | Actual save-provider endurance/recovery | Pending | Required |
@@ -53,4 +54,4 @@ A separate adversarial report-sale probe reproduced a concrete pricing exploit: 
 
 **GAME SYSTEMS NOT READY**
 
-Blockers: outstanding implementation and combined validation; missing final-source long-career distribution/real-save evidence; missing independent human gameplay validation. No package, provider, publication or release-readiness claim is made.
+Blockers: missing final-source long-career distribution and retained-career real-save evidence; missing independent human gameplay validation. No package, online-provider, publication or release-readiness claim is made.
