@@ -5,6 +5,7 @@ import { ArrowRight, Compass, FileText, Link2, Radar, Target } from "lucide-reac
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
 import type { YouthActiveCaseModel } from "./youthDeskModel";
 import { WorkspaceDisclosure } from "../WorkspaceDisclosure";
 
@@ -70,12 +71,12 @@ export function YouthActiveCaseBoard({
       data-testid="desk-primary-decision"
       className="relative w-full min-w-0 overflow-hidden border-white/12 bg-[#0f1519]/[0.98] shadow-2xl shadow-black/35"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(52,211,153,0.18),transparent_32%)]" aria-hidden="true" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(212,168,67,0.16),transparent_32%)]" aria-hidden="true" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" aria-hidden="true" />
       <CardContent className="relative grid min-w-0 gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.74fr)] xl:p-7">
         <div className="min-w-0 space-y-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="border-emerald-400/30 bg-emerald-400/10 text-emerald-200" variant="outline">
+            <Badge className="border-[color:var(--primary)]/30 bg-[color:var(--primary)]/10 text-[color:var(--primary)]" variant="outline">
               {eyebrow}
             </Badge>
             <Badge className="border-white/12 bg-white/[0.06] text-zinc-100" variant="outline">
@@ -87,13 +88,24 @@ export function YouthActiveCaseBoard({
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-meta font-semibold uppercase tracking-[0.18em] text-emerald-200/85">
+            <div className="flex items-center gap-2 text-meta font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]/85">
               <ArrowRight size={14} aria-hidden="true" />
               Next move
             </div>
-            <h2 className="max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl xl:text-[2.15rem]">
-              {model.title}
-            </h2>
+            <div className="flex items-start gap-3">
+              {model.playerId && (
+                <YouthPortrait
+                  playerId={model.playerId}
+                  age={model.subjectAge}
+                  size={64}
+                  alt={model.subjectName ?? "Active case"}
+                  className="shrink-0"
+                />
+              )}
+              <h2 className="max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl xl:text-[2.15rem]">
+                {model.title}
+              </h2>
+            </div>
             <p className="max-w-3xl text-sm leading-6 text-zinc-200 sm:text-base">
               {model.summary}
             </p>

@@ -52,6 +52,15 @@ function club(
 }
 
 describe("club economics", () => {
+  it.each([0, 1, 125, 749])("preserves a spent or partial scouting budget of %i through serialization and normalization", (budget) => {
+    const saved = JSON.parse(JSON.stringify(club("spent", { scoutingBudget: budget }))) as Club;
+    const normalized = normalizeClubEconomics(saved, {});
+    expect(normalized.scoutingBudget).toBe(budget);
+    expect(normalizeClubEconomics(normalized, {}).scoutingBudget).toBe(budget);
+    expect(reapproveAnnualClubEconomics({ spent: normalized }, {}).spent.scoutingBudget)
+      .toBeGreaterThan(budget);
+  });
+
   it("bulk annual reapproval is formula-identical to per-club derivation", () => {
     const players = Object.fromEntries(
       Array.from({ length: 120 }, (_, index) => {

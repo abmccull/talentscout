@@ -195,7 +195,7 @@ const MomentCard = memo(function MomentCard({
                     key={attr}
                     className="rounded bg-zinc-800 px-1.5 py-0.5 text-eyebrow text-zinc-400"
                   >
-                    {attr}
+                    {formatSituationLabel(attr)}
                   </span>
                 ))}
               </div>
@@ -1003,7 +1003,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <span className="text-eyebrow text-emerald-500 mr-1">Amplified:</span>
               {venueAtmosphere.amplifiedAttributes.map((a) => (
                 <span key={a} className="rounded bg-emerald-900/30 px-1.5 py-0.5 text-eyebrow text-emerald-400">
-                  {a}
+                  {formatSituationLabel(a)}
                 </span>
               ))}
             </div>
@@ -1013,7 +1013,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <span className="text-eyebrow text-red-500 mr-1">Dampened:</span>
               {venueAtmosphere.dampenedAttributes.map((a) => (
                 <span key={a} className="rounded bg-red-900/30 px-1.5 py-0.5 text-eyebrow text-red-400">
-                  {a}
+                  {formatSituationLabel(a)}
                 </span>
               ))}
             </div>
@@ -1260,7 +1260,12 @@ const CompleteView = memo(function CompleteView({ session, onContinue }: Complet
 export function ObservationScreen() {
   const activeSession = useGameStore((s) => s.activeSession);
   const gameState = useGameStore((s) => s.gameState);
+  const setScreen = useGameStore((s) => s.setScreen);
   const { playSFX } = useAudio();
+
+  useEffect(() => {
+    if (!activeSession) setScreen("dashboard");
+  }, [activeSession, setScreen]);
 
   // Local UI state — all hooks must be called before any early return
   const [showInsightOverlay, setShowInsightOverlay] = useState(false);
@@ -1500,7 +1505,13 @@ export function ObservationScreen() {
   }, [closeInsightOverlay]);
 
   // ── Guard ──────────────────────────────────────────────────────────────────
-  if (!activeSession) return null;
+  if (!activeSession) {
+    return (
+      <GameLayout chrome="watch">
+        <p className="sr-only">Returning to the desk. The watch session has ended.</p>
+      </GameLayout>
+    );
+  }
 
   const { state, mode } = activeSession;
   const ModeIcon = MODE_ICONS[mode];

@@ -19,8 +19,11 @@ interface ElectronAPI {
     onFullScreenChange: (listener: (enabled: boolean) => void) => () => void;
   };
   game?: {
-    onFlushSaveRequest: (listener: () => void) => () => void;
-    notifySaveFlushed: () => Promise<void>;
+    onFlushSaveRequest: (listener: (requestId: number) => void) => () => void;
+    notifySaveFlushed: (result: {
+      requestId: number;
+      status: "saved" | "failed";
+    }) => Promise<{ ok: boolean }>;
   };
 }
 

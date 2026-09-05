@@ -19,10 +19,11 @@ import { generateAvatarParams } from "@/lib/avatarGenerator";
 
 export interface PlayerAvatarProps {
   playerId: string;
-  size?: 48 | 64 | 96;
+  size?: 32 | 48 | 64 | 96;
   nationality?: string;
   age?: number;
   className?: string;
+  alt?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,14 +147,17 @@ export function PlayerAvatar({
   nationality,
   age,
   className,
+  alt = "Player avatar",
 }: PlayerAvatarProps) {
   const params = generateAvatarParams(playerId, nationality, age);
+  const youth = age != null && age < 21;
 
   const cx = 50;
   const cy = 50;
 
   const headShape = HEAD_SHAPES[params.headShape % HEAD_SHAPES.length] ?? HEAD_SHAPES[0];
-  const [hrx, hry] = headShape;
+  const [hrx, rawHry] = headShape;
+  const hry = youth ? rawHry + 2 : rawHry;
 
   // Derived face landmark positions (all in 0–100 viewBox units)
   const eyeY = cy - 4;
@@ -163,7 +167,9 @@ export function PlayerAvatar({
   const browY = getEyebrowY(cy, eyeY, params.headShape);
 
   const eyeShape = EYE_SHAPES[params.eyeShape % EYE_SHAPES.length] ?? EYE_SHAPES[0];
-  const [erx, ery] = eyeShape;
+  const [rawErx, rawEry] = eyeShape;
+  const erx = youth ? rawErx * 1.12 : rawErx;
+  const ery = youth ? rawEry * 1.12 : rawEry;
 
   const nose = NOSE_SHAPES[params.noseType % NOSE_SHAPES.length] ?? NOSE_SHAPES[0];
   const mouth = MOUTH_STYLES[params.mouthType % MOUTH_STYLES.length] ?? MOUTH_STYLES[0];
@@ -188,7 +194,7 @@ export function PlayerAvatar({
       viewBox="0 0 100 100"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
-      aria-label="Player avatar"
+      aria-label={alt}
       role="img"
     >
       {/* Background */}

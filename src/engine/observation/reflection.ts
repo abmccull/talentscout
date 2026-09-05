@@ -20,6 +20,17 @@ import type {
 } from "@/engine/observation/types";
 import { MODE_FLAGGED_NOUN } from "@/engine/observation/types";
 
+/** Flagging preserves a scout's read; it never reveals an unseen event. */
+export function getPerceivedFlaggedMomentDescription(
+  session: Pick<ObservationSession, "cueReadings">,
+  flagged: SessionFlaggedMoment,
+): string {
+  const cue = session.cueReadings?.find((reading) =>
+    reading.momentId === flagged.moment.id && reading.playerId === flagged.moment.playerId,
+  );
+  return cue?.detail ?? flagged.moment.vagueDescription;
+}
+
 // =============================================================================
 // RESULT TYPES
 // =============================================================================

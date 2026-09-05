@@ -341,6 +341,16 @@ export function getGuidedMilestone(
   return getActiveGuidedMilestones().find((m) => m.id === id);
 }
 
+/** Navigation is restricted only when this career can present an actual task. */
+export function shouldLockGuidedNavigation(
+  active: boolean,
+  task: GuidedMilestoneId | null,
+): boolean {
+  if (!active || task === null) return false;
+  const milestone = getGuidedMilestone(task);
+  return Boolean(milestone?.screen && milestone.target.length > 0);
+}
+
 /**
  * Count how many milestones have been marked complete in the given record.
  */

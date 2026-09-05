@@ -1156,7 +1156,7 @@ export function ReportHistory() {
                   className={`min-h-11 text-xs ${
                     isUpgrade
                       ? "bg-amber-600 hover:bg-amber-500"
-                      : "bg-emerald-700 hover:bg-emerald-600"
+                      : "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                   }`}
                   onClick={() =>
                     isUpgrade
@@ -1717,7 +1717,7 @@ export function ReportHistory() {
                                             className={`min-h-11 text-xs ${
                                               isUpgrade
                                                 ? "bg-amber-600 hover:bg-amber-500"
-                                                : "bg-emerald-700 hover:bg-emerald-600"
+                                                : "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                                             }`}
                                             onClick={() =>
                                               isUpgrade

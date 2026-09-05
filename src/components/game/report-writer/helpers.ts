@@ -365,7 +365,8 @@ export function buildSectionNavigatorItems({
         detail:
           caseRemaining === 0
             ? `${completedJudgmentCount}/${JUDGMENT_CATEGORIES.length} defended`
-            : `${caseRemaining} decision${caseRemaining === 1 ? "" : "s"} still need support`,
+            : reportStatus.blockers.find((blocker) => blocker.stepId === "case")?.message
+              ?? `${caseRemaining} decision${caseRemaining === 1 ? " still needs" : "s still need"} support`,
         complete: caseRemaining === 0,
         decisionsRemaining: caseRemaining,
       },

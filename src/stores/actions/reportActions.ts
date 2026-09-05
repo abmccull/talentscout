@@ -10,7 +10,7 @@ import {
   queueGameplayAutosave,
   snapshotPersistedGameState,
 } from "./persistGameplayAutosave";
-import { bookOpeningFollowUp } from "@/engine/youth/openingFollowUp";
+import { bookOpeningFollowUp, reconcileOpeningReportStage } from "@/engine/youth/openingFollowUp";
 import type {
   ConvictionLevel,
   FinancialRecord,
@@ -704,10 +704,10 @@ export function createReportActions(get: GetState, set: SetState) {
       }
 
       const isOpeningReport = Boolean(
-        gameState.openingCase
+        gameState.openingCase?.stage === "report"
         && gameState.openingCase.playerId === scoredReport.playerId,
       );
-      // Marketplace is optional after the first hour. Opening reports land on Desk.
+      // The first report returns to its booked follow-up in Planner; listing stays optional.
       const shouldOfferMarketplaceListing = isNewCase
         && gameState.scout.careerPath === "independent"
         && !isOpeningReport;
@@ -757,7 +757,7 @@ export function createReportActions(get: GetState, set: SetState) {
         ],
       });
       const nextState = isOpeningReport
-        ? bookOpeningFollowUp(committedState)
+        ? bookOpeningFollowUp(reconcileOpeningReportStage(committedState))
         : committedState;
       set({
         gameState: nextState,

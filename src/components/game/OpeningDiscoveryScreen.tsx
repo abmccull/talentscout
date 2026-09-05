@@ -24,6 +24,7 @@ export function OpeningDiscoveryScreen() {
   const gameState = useGameStore((state) => state.gameState);
   const resolveChoice = useGameStore((state) => state.resolveOpeningDiscoveryChoice);
   const setScreen = useGameStore((state) => state.setScreen);
+  const activeSession = useGameStore((state) => state.activeSession);
   const { playStinger } = useAudio();
   const [pendingChoice, setPendingChoice] = useState<OpeningCaseChoiceId | null>(null);
   const projection = gameState ? buildOpeningCaseProjection(gameState) : null;
@@ -103,10 +104,20 @@ export function OpeningDiscoveryScreen() {
         <div className="mt-4">
           <button
             type="button"
-            onClick={() => setScreen(gameState.openingCase?.stage === "report" ? "reportWriter" : "observation")}
+            onClick={() => {
+              if (gameState.openingCase?.stage === "report") {
+                setScreen("reportWriter");
+                return;
+              }
+              setScreen(activeSession ? "observation" : "dashboard");
+            }}
             className="min-h-11 rounded-lg px-3 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white"
           >
-            {gameState.openingCase?.stage === "report" ? "Continue to the report" : "Back to Watch"}
+            {gameState.openingCase?.stage === "report"
+              ? "Continue to the report"
+              : activeSession
+                ? "Back to Watch"
+                : "Back to Desk"}
           </button>
         </div>
 

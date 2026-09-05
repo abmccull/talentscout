@@ -36,6 +36,8 @@ export interface YouthActiveCaseModel {
   title: string;
   summary: string;
   subjectName?: string;
+  playerId?: string;
+  subjectAge?: number;
   stageId: "lead" | "liveLook" | "case" | "recommendation" | "tracked";
   stageLabel: string;
   stageSteps: Array<{
@@ -159,6 +161,8 @@ export function buildYouthActiveCaseModel(args: {
     title: titles[stageId],
     summary: summaries[stageId],
     subjectName,
+    playerId: focusEntry.youth.player.id,
+    subjectAge: focusEntry.youth.player.age,
     stageId,
     stageLabel,
     stageSteps,

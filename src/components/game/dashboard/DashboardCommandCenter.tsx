@@ -184,7 +184,7 @@ export function DashboardCommandCenter({
           </p>
           <Button
             type="button"
-            className="mt-3 min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-600"
+            className="mt-3 min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
             onClick={() => {
               if (nextAction?.actionTarget) {
                 onAction(nextAction.actionTarget);
@@ -352,7 +352,7 @@ export function DashboardCommandCenter({
                   </div>
                   <Button
                     type="button"
-                    className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-600"
+                    className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                     onClick={() => {
                       if (nextAction.actionTarget) {
                         onAction(nextAction.actionTarget);

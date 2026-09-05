@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import { MODE_FLAGGED_LABEL } from "@/engine/observation/types";
-import { formatObservationActivityLabel, type ReflectionResult } from "@/engine/observation/reflection";
+import { formatObservationActivityLabel, getPerceivedFlaggedMomentDescription, type ReflectionResult } from "@/engine/observation/reflection";
 import type { EvidenceClassificationId, ScoutCueReading } from "@/engine/core/types";
 import { resolveObservationSignalAssessment } from "@/engine/observation/questions";
 
@@ -178,7 +178,8 @@ function EvidenceSynthesisPanel({
 // FLAGGED MOMENT TIMELINE
 // =============================================================================
 
-function MomentTimeline({ flaggedMoments }: { flaggedMoments: SessionFlaggedMoment[] }) {
+function MomentTimeline({ session }: { session: ObservationSession }) {
+  const { flaggedMoments } = session;
   if (flaggedMoments.length === 0) {
     return (
       <p className="text-sm text-zinc-500 italic py-2">No moments were flagged during this session.</p>
@@ -213,7 +214,7 @@ function MomentTimeline({ flaggedMoments }: { flaggedMoments: SessionFlaggedMome
                 </span>
                 <span className="text-[10px] text-zinc-500">Phase {fm.phaseIndex + 1}</span>
               </div>
-              <p className="text-sm text-zinc-300 leading-snug">{fm.moment.description}</p>
+              <p className="text-sm text-zinc-300 leading-snug">{getPerceivedFlaggedMomentDescription(session, fm)}</p>
               {fm.note && (
                 <p className="text-xs text-zinc-500 italic">Note: {fm.note}</p>
               )}
@@ -485,7 +486,7 @@ export function ReflectionScreen({
         </div>
         <Card className="border-[#27272a] bg-[#141414]">
           <CardContent className="p-4">
-            <MomentTimeline flaggedMoments={session.flaggedMoments} />
+            <MomentTimeline session={session} />
           </CardContent>
         </Card>
       </section>

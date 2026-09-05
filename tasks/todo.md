@@ -1,3 +1,58 @@
+# One loop — year 1 day 1 through year 30 (2026-08-17)
+
+Y1/Y2 were work slices, not other games. The product is one loop:
+
+Spend time → See → File → Live with it  
+Desk · Planner · Prospects · Reports · World · Career
+
+- [x] Play the whole week in order; focus the open case, do not skip Monday
+- [x] Working cases exclude placed/poached; those names live on Desk as alumni
+- [x] Honest rival heat (a signing is not “imminent”)
+- [x] Season review is this season’s names; inbox shows that mail
+- [x] No hidden CA/PA on Desk / Career / inbox
+- [x] Skip guide = same school assignment, no mentor, not a veteran prologue
+- [x] Discovery Back never lands on a null Watch; Desk is the recovery
+- [x] Desk “Place the next look” is honest (Watch costs a day)
+- [x] Mentor card is not a modal trap over Watch controls
+- [x] Tests + typecheck
+
+# One look — floodlight chrome + youth mark (2026-08-17)
+
+- [x] Amber token is the only do-this-now; emerald reserved for success/progress
+- [x] Nav, splash, New Game, Desk, week sim, and command CTAs use primary
+- [x] YouthPortrait is one stylized age-aware mark (no adult bust, no onError cartoon lock)
+- [x] Same mark on Desk active case
+
+---
+
+## Review
+
+One loop, not two products. Advance Week starts Monday and keeps the open case focused. Prospects is working cases only; placed names live on Desk. Season review mail is visible and scoped to this season. Skip guide no longer graduates a veteran opening. Discovery Back cannot land on a null Watch. Mentor on Watch is complementary, not a modal trap. Floodlight amber is the do-this-now color; emerald is success only. The kid is one stylized youth mark on Watch, Discovery, Desk, Prospects, and Reports — not an adult bust or a locked cartoon. Typecheck passed. Portrait and dashboard tests passed.
+
+---
+
+# Y1 / Y2 — one core, Youth EA as proof (2026-08-16)
+
+Approved plan: raise the 6.1 toward a 30-year scout career. Same four verbs. Do not ship other modes. Do not invent launch certs.
+
+- [x] Y1 venues: pool by public buzz / visibility / known names, never true PA
+- [x] Y1 week: Advance Week lands on the booked case watch
+- [x] Y1 desk CTA: Write the report / Watch again, not a dossier dump
+- [x] Y1 Prospects: last look, open question, next test, rival heat
+- [x] Y1 inbox: actionRequired or case-linked only (chrome unread uses the same filter)
+- [x] Y1 desk stakes: alumni + file money + reputation on Desk after first hour
+- [x] Y1 handbook: game loop + youth articles match Spend / See / File / Live with it
+- [x] Y2 season review: case language on Career and the end-of-season inbox
+- [x] Y2 rival heat: watching / contested / imminent from real rival activity
+- [ ] Program M: First Team / Regional / Data as activity + report + World skins (after Y1 is one game)
+- [ ] Program L: packages / NVDA / VO on a frozen SHA — do not invent
+
+## Review
+
+Y1 and Y2 shipped on existing engines. Venue pools score public buzz / visibility / known names and throw if true PA is read. Advance Week starts on the booked case watch. Desk primary CTA is Write the report or Watch again. Prospects cards speak last look / question / next test / rival heat. Youth inbox and the HUD unread badge share `shouldShowYouthInboxMessage`. Desk after first hour shows alumni, file money, and a reputation line. Handbook game-loop + youth articles match Spend / See / File / Live with it. Season review (Career + end-of-season inbox) talks named cases, rival heat, alumni, and file money. Typecheck passed. Targeted tests passed (`youthCaseLoop`, `youthVenuePool`, season review context, youth EA content scope, opening follow-up, dashboard priority, inbox authority). Program M is not a mode flip. Program L is not attested.
+
+---
+
 # First-hour program (close it)
 
 The first hour is an introduction to the **real** game systems while the player finds a first prospect. It is not a separate toy game.

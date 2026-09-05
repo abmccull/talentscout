@@ -17,6 +17,8 @@ export const YOUTH_EARLY_ACCESS_HIDDEN_WIKI_ARTICLE_SLUGS = new Set([
 export const YOUTH_EARLY_ACCESS_SEARCH_TEXT_OVERRIDES: Readonly<
   Record<string, string>
 > = {
+  "the-game-loop":
+    "Youth Scout is one loop from the first hour through a long career: spend time, see something, file a judgment, and live with the money, reputation, and alumni that follow. Desk, Planner, Prospects, and Reports stay on the same names.",
   "scouting-activities":
     "Youth Scout observation contexts include live matches, video, training and academy visits, youth tournaments, school and grassroots football, trial days, festivals, and follow-up sessions. Each context answers different questions. Changed context tests a hypothesis; repeating the same easy observation has diminishing returns.",
   "achievement-categories":

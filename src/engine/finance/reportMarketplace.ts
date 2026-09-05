@@ -54,10 +54,33 @@ const BASE_BID_PROBABILITY = 0.20;
 
 /** Legacy clubs derive a ring-fenced procurement budget until saves persist one. */
 export function getClubScoutingBudget(club: Club): number {
+  if (Number.isFinite(club.scoutingBudget)) {
+    return Math.max(0, Math.round(club.scoutingBudget!));
+  }
   return Math.max(
     750,
-    Math.round(club.scoutingBudget ?? Math.min(club.budget * 0.08, 50_000)),
+    Math.round(Math.min(club.budget * 0.08, 50_000)),
   );
+}
+
+/** A club purchases a report version, regardless of how often it is listed. */
+function getPreviousReportBuyerIds(finances: FinancialRecord, reportId: string): Set<string> {
+  const buyers = new Set<string>();
+  for (const listing of finances.reportListings) {
+    if (listing.reportId !== reportId) continue;
+    for (const bid of listing.bids) {
+      if (bid.status === "accepted") buyers.add(bid.clubId);
+    }
+    if (listing.status === "sold" && listing.buyerClubId) buyers.add(listing.buyerClubId);
+    // Older records may retain the cash receipt without the accepted bid.
+    const prefix = `marketplace:${listing.id}:buyer:`;
+    for (const transaction of finances.transactions) {
+      if (transaction.referenceId?.startsWith(prefix)) {
+        buyers.add(transaction.referenceId.slice(prefix.length));
+      }
+    }
+  }
+  return buyers;
 }
 
 /** Priority multipliers for bid amounts */
@@ -420,6 +443,7 @@ function generateBidsForListing(
   week: number,
   season: number,
   clientRelationships: ClientRelationship[],
+  previousBuyerIds: ReadonlySet<string>,
   guaranteeBid: boolean = false,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
   marketContext: {
@@ -441,13 +465,9 @@ function generateBidsForListing(
   const candidateClubs = listing.targetClubId
     ? [clubs[listing.targetClubId]].filter(Boolean) as Club[]
     : Object.values(clubs).filter((c) => getClubScoutingBudget(c) >= listing.price * 0.5);
-  const previousBuyerIds = new Set(
-    listing.bids
-      .filter((bid) => bid.status === "accepted")
-      .map((bid) => bid.clubId),
-  );
-
-  const scoredCandidates = candidateClubs.map((club) => ({
+  const scoredCandidates = candidateClubs.filter((club) =>
+    !previousBuyerIds.has(club.id) && getClubScoutingBudget(club) >= 50
+  ).map((club) => ({
     club,
     needMatchScore: calculateNeedMatchScore(report, player, club, players),
   }));
@@ -706,6 +726,7 @@ export function processMarketplaceBids(
     const { bids: newBids, inboxMessages } = generateBidsForListing(
       rng, listing, report, clubs, marketplacePlayers, scout, week, season,
       updatedFinances.clientRelationships,
+      getPreviousReportBuyerIds(updatedFinances, listing.reportId),
       firstBidGuaranteeAvailable,
       seasonLength,
       marketContext,
@@ -786,9 +807,7 @@ export function acceptBid(
   if (finances.transactions.some((transaction) =>
     transaction.referenceId === `marketplace:${listingId}:buyer:${bid.clubId}`
   )) return finances;
-  if (listing.bids.some((candidate) =>
-    candidate.clubId === bid.clubId && candidate.status === "accepted"
-  )) return finances;
+  if (getPreviousReportBuyerIds(finances, listing.reportId).has(bid.clubId)) return finances;
 
   // Complete the sale with the bid amount
   let updated = completeSale(finances, listingId, bid.clubId, bid.amount, week, season);
@@ -863,6 +882,7 @@ export function acceptExclusiveUpgrade(
 
   const bid = listing.bids.find((b) => b.id === bidId);
   if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return finances;
+  if (getPreviousReportBuyerIds(finances, listing.reportId).has(bid.clubId)) return finances;
   if (finances.transactions.some((transaction) =>
     transaction.referenceId === `marketplace:${listingId}:buyer:${bid.clubId}`
   )) return finances;

@@ -46,6 +46,8 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { useShallow } from "zustand/react/shallow";
 import { getActionableGossipItems } from "@/engine/network/gossip";
 import { ConsequenceDecisionCard } from "@/components/game/inbox/ConsequenceDecisionCard";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { collectYouthCasePlayerIds, shouldShowYouthInboxMessage } from "@/engine/youth/youthCaseFocus";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -892,8 +894,12 @@ export function InboxScreen() {
       changed = true;
       return { ...message, actionRequired };
     });
-    return changed ? repaired : source;
-  }, [gameState?.inbox, liveInboxActionIds]);
+    const caseIds = IS_YOUTH_EARLY_ACCESS && gameState ? collectYouthCasePlayerIds(gameState) : undefined;
+    const visible = IS_YOUTH_EARLY_ACCESS && gameState
+      ? (changed ? repaired : source).filter((message) => shouldShowYouthInboxMessage(gameState, message, caseIds))
+      : (changed ? repaired : source);
+    return visible;
+  }, [gameState, liveInboxActionIds]);
   const currentWeek = gameState?.currentWeek ?? 1;
   const currentSeason = gameState?.currentSeason ?? 1;
   const seasonLength = gameState

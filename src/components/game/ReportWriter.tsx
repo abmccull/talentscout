@@ -62,6 +62,7 @@ import { getPendingInsightReportQualityEffect } from "@/engine/insight/effects";
 import {
   canOpenReportWorkflowStep,
   resolveReportWorkflow,
+  shouldUseInitialAssessment,
 } from "@/components/game/reportWriterMode";
 import { buildReportWriterStatus } from "@/components/game/reportWriterStatus";
 import {
@@ -131,6 +132,7 @@ export function ReportWriter() {
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
   const [initialAssessmentInput, setInitialAssessmentInput] = useState<InitialAssessmentInput | null>(null);
+  const [initialAssessmentCompletedSteps, setInitialAssessmentCompletedSteps] = useState(0);
   const [briefId, setBriefId] = useState("");
   const [intendedAudience, setIntendedAudience] = useState<StructuredReportInput["intendedAudience"]>("academyDirector");
   const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
@@ -332,7 +334,12 @@ export function ReportWriter() {
       : undefined,
     [canonicalPlayerId, freshObservationIds, gameState],
   );
-  const initialAssessmentMode = isYouthCase && matchingBriefs.length === 0;
+  const initialAssessmentMode = shouldUseInitialAssessment({
+    isYouthCase,
+    hasOpenBrief: matchingBriefs.length > 0,
+    playerId: canonicalPlayerId,
+    openingCase: gameState?.openingCase,
+  });
   const analystReview = useMemo(
     () => gameState?.finances && canonicalPlayerId
       ? getApplicableAnalystReview(
@@ -788,7 +795,7 @@ export function ReportWriter() {
     hasFreshEvidence: freshObservationIds.length > 0,
     hasSummary: effectiveSummary.trim().length > 0,
     initialAssessmentReady: Boolean(initialAssessmentInput && initialAssessmentResult?.valid),
-    openingDecisionCount: initialAssessmentInput ? 1 : 5,
+    openingDecisionCount: 5 - initialAssessmentCompletedSteps,
     youthValidationErrors: structuredValidation.errors,
   });
   const canSubmit = reportStatus.canSubmit;
@@ -1519,6 +1526,7 @@ export function ReportWriter() {
                 cards={initialAssessmentCards}
                 playerName={`${player.firstName} ${player.lastName}`}
                 value={initialAssessmentInput}
+                onProgressChange={setInitialAssessmentCompletedSteps}
                 onChange={(nextValue) => {
                   setInitialAssessmentInput(nextValue);
                   setIsDirty(true);

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { hashString } from "@/lib/avatarGenerator";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 
@@ -10,6 +9,7 @@ export function youthPortraitSlot(playerId: string): number {
   return (hashString(playerId) % YOUTH_PORTRAIT_COUNT) + 1;
 }
 
+/** @deprecated Adult bust sheets are not the youth identity. Kept for save-era callers. */
 export function youthPortraitSrc(playerId: string): string {
   const slot = String(youthPortraitSlot(playerId)).padStart(2, "0");
   return `/images/avatars/youth-${slot}.png`;
@@ -31,46 +31,34 @@ const sizeClasses: Record<number, string> = {
   96: "h-24 w-24",
 };
 
+/**
+ * One youth identity for Watch, Discovery, Desk, Prospects, and Reports.
+ * Stylized and age-aware — never the adult 3D bust sheet, never a locked cartoon fallback.
+ */
 export function YouthPortrait({
   playerId,
   size = 48,
   nationality,
-  age,
+  age = 16,
   className = "",
   alt = "Youth portrait",
 }: YouthPortraitProps) {
   return (
-    <Image
-      src={youthPortraitSrc(playerId)}
-      alt={alt}
-      width={size}
-      height={size}
-      unoptimized
-      className={`rounded-full object-cover ${sizeClasses[size] ?? sizeClasses[48]} ${className}`}
-      draggable={false}
-      onError={(event) => {
-        const target = event.currentTarget;
-        target.style.display = "none";
-        const fallback = target.nextElementSibling;
-        if (fallback instanceof HTMLElement) fallback.hidden = false;
-      }}
-    />
+    <span
+      className={`inline-flex overflow-hidden rounded-full ring-2 ring-[color:var(--primary)]/45 ring-offset-2 ring-offset-[#0b0e12] ${sizeClasses[size] ?? sizeClasses[48]} ${className}`}
+    >
+      <PlayerAvatar
+        playerId={playerId}
+        size={size === 32 ? 48 : size}
+        nationality={nationality}
+        age={age < 21 ? age : 16}
+        className="h-full w-full"
+        alt={alt}
+      />
+    </span>
   );
 }
 
 export function YouthPortraitWithFallback(props: YouthPortraitProps) {
-  return (
-    <span className="relative inline-flex">
-      <YouthPortrait {...props} />
-      <span hidden>
-        <PlayerAvatar
-          playerId={props.playerId}
-          size={props.size === 32 ? 48 : props.size}
-          nationality={props.nationality}
-          age={props.age}
-          className={props.className}
-        />
-      </span>
-    </span>
-  );
+  return <YouthPortrait {...props} />;
 }

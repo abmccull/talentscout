@@ -30,6 +30,7 @@ import {
 import type { UnsignedYouth, SubRegion, Observation, TournamentEvent } from "@/engine/core/types";
 import { getPerceivedAbility, type PerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { MiniStarRange } from "@/components/ui/MiniStarRange";
+import { listYouthCases, type YouthCaseListItem } from "@/engine/youth/youthCaseList";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getCountryDisplayName } from "@/lib/country";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
@@ -277,6 +278,7 @@ interface YouthCardProps {
   reportedIds: Set<string>;
   /** Number of observation sessions this scout has logged for this player. */
   observationCount: number;
+  caseItem?: YouthCaseListItem;
   onClick: () => void;
 }
 
@@ -286,6 +288,7 @@ function YouthCard({
   scoutId,
   reportedIds,
   observationCount,
+  caseItem,
   onClick,
 }: YouthCardProps) {
   const stage = getPipelineStage(youth, scoutId, reportedIds, observationCount);
@@ -332,6 +335,14 @@ function YouthCard({
         </div>
       </div>
 
+      {caseItem ? (
+        <div className="mb-3 space-y-2 text-xs leading-5 text-zinc-300">
+          <p><span className="text-zinc-500">Last look:</span> {caseItem.lastLookLabel}</p>
+          <p><span className="text-zinc-500">Open question:</span> {caseItem.openQuestion}</p>
+          <p><span className="text-zinc-500">Next test:</span> {caseItem.nextTest}</p>
+          <p><span className="text-zinc-500">Rivals:</span> {caseItem.rivalHeatLabel}</p>
+        </div>
+      ) : (
       <div className="mb-3 grid grid-cols-2 gap-3">
         <div>
           <div className="mb-1 flex items-center justify-between text-[10px]">
@@ -352,6 +363,7 @@ function YouthCard({
           <MiniStarRange perceived={perceived} mode="pa" />
         </div>
       </div>
+      )}
 
       {/* Buzz level */}
       <div className="mb-2">
@@ -439,6 +451,7 @@ interface UnsignedYouthTabProps {
   filterNationality: string;
   setFilterNationality: (n: string) => void;
   observations: Observation[];
+  caseByPlayerId?: Map<string, YouthCaseListItem>;
 }
 
 function UnsignedYouthTab({
@@ -469,6 +482,7 @@ function UnsignedYouthTab({
   filterNationality,
   setFilterNationality,
   observations,
+  caseByPlayerId,
 }: UnsignedYouthTabProps) {
   const [tableSortKey, setTableSortKey] = useState<YouthSortKey>("buzz");
   const [tableSortDir, setTableSortDir] = useState<SortDir>("desc");
@@ -886,6 +900,7 @@ function UnsignedYouthTab({
               scoutId={scoutId}
               reportedIds={reportedIds}
               observationCount={observationCountByPlayer.get(y.player.id) ?? 0}
+              caseItem={caseByPlayerId?.get(y.player.id)}
               onClick={() => onSelectYouth(y.player.id)}
             />
           ))}
@@ -1209,6 +1224,9 @@ export function YouthScoutingScreen() {
       filterNationality={filterNationality}
       setFilterNationality={setFilterNationality}
       observations={Object.values(gameState.observations)}
+      caseByPlayerId={IS_YOUTH_EARLY_ACCESS
+        ? new Map(listYouthCases(gameState).map((item) => [item.playerId, item]))
+        : undefined}
     />
   );
 
@@ -1220,20 +1238,19 @@ export function YouthScoutingScreen() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                Recruitment board
+                {IS_YOUTH_EARLY_ACCESS ? "Working cases" : "Recruitment board"}
               </p>
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {IS_YOUTH_EARLY_ACCESS ? "Prospects" : "Youth Scouting"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
-                Your working pipeline of leads, repeat observations, placement decisions, and outcomes. Ratings reflect what your evidence can support today, not certainty about a player&apos;s future.
+                {IS_YOUTH_EARLY_ACCESS
+                  ? "Names you have looked at. Last look, the open question, the next test, and whether a rival is moving."
+                  : "Your working pipeline of leads, repeat observations, placement decisions, and outcomes. Ratings reflect what your evidence can support today, not certainty about a player&apos;s future."}
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
                   {totalYouth} known in current markets
-                </span>
-                <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 font-semibold text-amber-200">
-                  {legacyScore.totalScore} legacy points
                 </span>
               </div>
             </div>

@@ -1048,7 +1048,7 @@ export function WeekSimulationScreen() {
               {isComplete ? (
                 <Button
                   size="lg"
-                  className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                  className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                   onClick={weeklyTransactionError ? fastForwardWithFeedback : () => setScreen("calendar")}
                   disabled={isAdvancingWeek}
                 >
@@ -1057,7 +1057,7 @@ export function WeekSimulationScreen() {
               ) : isLastDay ? (
                 <Button
                   size="lg"
-                  className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                  className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                   onClick={advanceDayWithFeedback}
                   aria-label="Complete the week and process results"
                   disabled={interactionPending || isAdvancingWeek}
@@ -1068,7 +1068,7 @@ export function WeekSimulationScreen() {
                 <>
                   <Button
                     size="lg"
-                    className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                    className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                     onClick={advanceDayWithFeedback}
                     aria-label="Advance to next day"
                     disabled={interactionPending || isAdvancingWeek}

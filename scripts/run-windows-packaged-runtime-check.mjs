@@ -29,6 +29,7 @@ import { constants as fsConstants, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const ROOT = process.cwd();
@@ -236,9 +237,10 @@ async function waitForProcessExit(child, timeoutMs = 12_000) {
   });
 }
 
-async function connectToPackagedApp({ executable, profileDirectory }) {
+async function connectToPackagedApp({ executable, profileDirectory, entryPath = null }) {
   const port = await freeTcpPort();
   const launchArgs = [
+    ...(entryPath ? [entryPath] : []),
     `--user-data-dir=${profileDirectory}`,
     `--remote-debugging-port=${port}`,
     "--proxy-server=http://127.0.0.1:9",
@@ -252,6 +254,7 @@ async function connectToPackagedApp({ executable, profileDirectory }) {
     env: {
       ...process.env,
       ELECTRON_DEV: "0",
+      ELECTRON_RUN_AS_NODE: undefined,
       NODE_OPTIONS: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -315,6 +318,13 @@ async function connectToPackagedApp({ executable, profileDirectory }) {
     uploadThroughput: 0,
     connectionType: "none",
   });
+  // Browser networking controls do not disable the native Steam SDK. A fresh
+  // isolated profile may proceed only when Steam cannot write externally.
+  const steam = await steamUnavailableProbe(page);
+  if (!steam.bridgePresent || steam.available !== false) {
+    await terminateProcessTree(child.pid);
+    throw new Error("Offline runtime verification requires an unavailable Steam bridge before creating or loading a career");
+  }
 
   async function closeGracefully() {
     try {
@@ -330,6 +340,7 @@ async function connectToPackagedApp({ executable, profileDirectory }) {
     const exited = await waitForProcessExit(child);
     if (!exited) await terminateProcessTree(child.pid);
     return {
+      exitedWithoutForce: exited,
       exitCode: child.exitCode,
       signalCode: child.signalCode,
       stdout,
@@ -363,18 +374,53 @@ async function skipSplash(page) {
   await page.getByTestId("main-menu-actions").waitFor({ timeout: 30_000 });
 }
 
+async function requireCheckedRadio(radio, label) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (await radio.isChecked()) return;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+  }
+  throw new Error(`${label} was not selected within five seconds`);
+}
+
 async function createOfflineCareer(page) {
   await skipSplash(page);
   await page.getByRole("button", { name: "Start Youth Scout Career" }).click();
   await page.locator("#scout-first-name").fill("Offline");
   await page.locator("#scout-last-name").fill("Verifier");
   await page.getByText("Field Investigator", { exact: true }).click();
-  for (let step = 0; step < 3; step += 1) {
-    const button = page.getByRole("button", { name: "Continue", exact: true });
-    await button.waitFor({ state: "visible", timeout: 10_000 });
-    await button.click();
+  await page.getByRole("button", { name: "Take the call", exact: true }).click();
+  await page.getByRole("button", { name: "Watch the match", exact: true }).click({ timeout: 60_000 });
+  await page.getByRole("button", { name: /^Focus targets and lenses/ }).click();
+  const focusSheet = page.getByRole("dialog", { name: "Choose your focus", exact: true });
+  await focusSheet.getByRole("button", { name: /^Use technical lens for / }).click();
+  await focusSheet.getByRole("button", { name: "Close focus controls", exact: true }).click();
+  await page.locator('[data-tutorial-id="observation-advance-to-standout"]:visible').click();
+  await page.locator('[data-tutorial-id="observation-flag-moment"]:visible').click();
+  await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').click();
+  await page.getByRole("button", { name: /^Confirm the first read\b/ }).click();
+  const controls = page.getByTestId("mobile-observation-controls");
+  await controls.getByRole("button", { name: "Next phase", exact: true }).click();
+  await controls.getByRole("button", { name: "Reflect", exact: true }).click();
+  await page.getByRole("group", { name: "What did this passage show?" }).getByRole("radio").first().check();
+  await page.getByRole("button", { name: "Complete Reflection", exact: true }).click();
+  await page.getByRole("button", { name: /Keep the name private/ }).click();
+  await page.getByRole("heading", { name: "Write Scouting Report", exact: true }).waitFor();
+  const fileTheName = page.getByRole("button", { name: "File the name", exact: true });
+  if (await fileTheName.isVisible().catch(() => false)) {
+    await fileTheName.click();
+  } else {
+    for (const group of ["Saved evidence", "What it suggests", "What remains untested", "Next test"]) {
+      await page.getByRole("group", { name: group, exact: true }).getByRole("radio").first().locator("..").click();
+    }
+    const recommendation = page.getByRole("group", { name: "Recommended action", exact: true }).getByRole("radio", { name: /^Keep private\b/i });
+    await recommendation.locator("..").click();
+    await requireCheckedRadio(recommendation, "Keep private recommendation");
+    const confidence = page.getByRole("group", { name: "Confidence", exact: true }).getByRole("radio", { name: /^Tentative\b/i });
+    await confidence.locator("..").click();
+    await requireCheckedRadio(confidence, "Tentative confidence");
+    await page.getByRole("button", { name: "File initial assessment", exact: true }).click();
   }
-  await page.getByRole("button", { name: "Begin Career" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).waitFor({
     timeout: 60_000,
   });
@@ -1010,9 +1056,7 @@ async function main() {
         : "The packaged app did not instantiate its weekly simulation Web Worker.",
     );
     evidence.controls.offlineRemoteQueueCoalescing = control(
-      persistedBeforeRestart.queue.length === 1
-        && persistedBeforeRestart.queue[0]?.target === "steam"
-        && persistedBeforeRestart.queue[0]?.slot === 1
+      persistedBeforeRestart.queue.filter((entry) => entry.target === "steam" && entry.slot === 1).length === 1
         ? "Passed"
         : "Failed",
       {
@@ -1069,6 +1113,7 @@ async function main() {
     });
     evidence.controls.offlineSaveQuitReopenContinue = control(
       secondOffline.navigatorOnline === false && identityPreserved && exactHeadPreserved
+        && runLog.exitedWithoutForce && secondLog.exitedWithoutForce
         ? "Passed"
         : "Failed",
       {
@@ -1313,7 +1358,21 @@ async function main() {
   if (strict && evidence.result !== "supporting_pass") process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.stack : error);
-  process.exitCode = 1;
-});
+// Source-only diagnostics reuse the UI journey without entering the package
+// certification path. Direct execution keeps every existing installer gate.
+export {
+  connectToPackagedApp,
+  createOfflineCareer,
+  inspectPersistence,
+  openSettings,
+  quickSaveToFirstSlot,
+  restoreLoadFromMainMenu,
+  terminateProcessTree,
+};
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.stack : error);
+    process.exitCode = 1;
+  });
+}

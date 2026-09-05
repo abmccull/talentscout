@@ -87,7 +87,7 @@ function toneClasses(
           categoryPill: "border-emerald-300/25 bg-emerald-300/10 text-emerald-100",
           severityPill: "border-amber-300/30 bg-amber-300/12 text-amber-100",
           metaIcon: "text-amber-200",
-          action: "bg-emerald-700 text-white hover:bg-emerald-600",
+          action: "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90",
         };
       case "high":
         return {
@@ -99,7 +99,7 @@ function toneClasses(
           categoryPill: "border-emerald-300/25 bg-emerald-300/10 text-emerald-100",
           severityPill: "border-emerald-300/25 bg-emerald-300/10 text-emerald-100",
           metaIcon: "text-emerald-200",
-          action: "bg-emerald-700 text-white hover:bg-emerald-600",
+          action: "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90",
         };
       default:
         return {
@@ -111,7 +111,7 @@ function toneClasses(
           categoryPill: "border-sky-300/25 bg-sky-300/10 text-sky-100",
           severityPill: "border-white/15 bg-white/[0.06] text-zinc-200",
           metaIcon: "text-sky-200",
-          action: "bg-emerald-700 text-white hover:bg-emerald-600",
+          action: "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90",
         };
     }
   }
@@ -139,7 +139,7 @@ function toneClasses(
         categoryPill: "border-amber-300/25 bg-amber-300/10 text-amber-100",
         severityPill: "border-amber-300/25 bg-amber-300/10 text-amber-100",
         metaIcon: "text-amber-200",
-        action: "bg-emerald-700 text-white hover:bg-emerald-600",
+        action: "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90",
       };
     case "medium":
       return {
@@ -151,7 +151,7 @@ function toneClasses(
         categoryPill: "border-emerald-300/25 bg-emerald-300/10 text-emerald-100",
         severityPill: "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
         metaIcon: "text-emerald-200",
-        action: "bg-emerald-700 text-white hover:bg-emerald-600",
+        action: "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90",
       };
     default:
       return {
@@ -163,7 +163,7 @@ function toneClasses(
         categoryPill: "border-white/15 bg-white/[0.05] text-zinc-100",
         severityPill: "border-white/15 bg-white/[0.05] text-zinc-200",
         metaIcon: "text-zinc-300",
-        action: "bg-emerald-700 text-white hover:bg-emerald-600",
+        action: "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90",
       };
   }
 }

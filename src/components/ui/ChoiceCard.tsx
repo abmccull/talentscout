@@ -71,13 +71,13 @@ export function ChoiceCard({
               Working…
             </span>
           ) : selected ? selectedMark : idleMark}
-          {recommended && !pending && (
-            <span className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
-              Recommended
-            </span>
-          )}
         </span>
       </span>
+      {recommended && !pending && (
+        <span className="mt-2 text-eyebrow font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
+          Recommended
+        </span>
+      )}
       {disabled && disabledReason && (
         <span className="text-meta mt-2 text-quiet">{disabledReason}</span>
       )}
