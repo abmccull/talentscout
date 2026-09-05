@@ -20,6 +20,7 @@ import { generatePersonalityTraits } from "./personality";
 import { generateBehavioralTraits } from "./behavioralTraits";
 import { generatePersonalityProfile } from "./personalityEffects";
 import { getBestRole } from "./roles";
+import { getClubAbilityRange } from "./clubAbility";
 import type { ClubData, LeagueData, NamePool, NationalityWeight } from "@/data/types";
 import type { CountryData } from "@/data/types";
 // England data is imported only to supply backward-compatible defaults.
@@ -473,6 +474,15 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     seasonRatings: [],
   };
 
+  // Start tracking from world entry; an absent legacy history remains unknown.
+  player.injuryHistory = {
+    playerId: player.id,
+    injuries: [],
+    totalWeeksMissed: 0,
+    injuryProneness: 0,
+    reinjuryWindowWeeksLeft: 0,
+  };
+
   // Generate behavioral traits based on position + actual attributes
   player.playerTraits = generateBehavioralTraits(rng, player);
 
@@ -501,7 +511,12 @@ function buildPositionSlots(rng: RNG, size: number): Position[] {
     "LW", "LW", "RW", "RW",
     "ST", "ST", "ST",
   ];
-  return rng.shuffle(slots).slice(0, size);
+  const selected = rng.shuffle(slots).slice(0, size);
+  // The requested 26–28-player squads extend the same authored position mix.
+  while (selected.length < size) selected.push(rng.pick(slots));
+  // Truncating the shuffle must not remove every professional goalkeeper.
+  if (!selected.includes("GK")) selected[selected.length - 1] = "GK";
+  return selected;
 }
 
 /**
@@ -531,9 +546,7 @@ export function generateSquad(
 ): Player[] {
   const squadSize = rng.nextInt(22, 28);
   const slots = buildPositionSlots(rng, squadSize);
-  const repFraction = (club.reputation - 10) / 90;
-  const caMin = Math.round(15 + repFraction * 110);
-  const caMax = Math.round(40 + repFraction * 160);
+  const [caMin, caMax] = getClubAbilityRange(club.reputation);
 
   // Prefer the caller-supplied weights; fall back to the England tier table.
   const resolvedWeights: NationalityWeight[] =

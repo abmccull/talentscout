@@ -6,9 +6,11 @@ Original systems score: **58/100 (provisional)**.
 
 Final systems score: **not yet assessed**. Implemented changes, tests, gameplay evidence and remaining deductions must be reviewed before assigning a final score.
 
-The baseline contains functioning world, report, career and persistence foundations, alongside reproduced chronology, claim-polarity and weekly-ownership defects. See GAMEPLAY_SYSTEMS_AUDIT.md for each finding and GAMEPLAY_SYSTEMS_PLAN.md for milestones. The overhaul is now integrated locally; acceptance remains in progress.
+The baseline contains functioning world, report, career and persistence foundations, alongside reproduced chronology, claim-polarity and weekly-ownership defects. See GAMEPLAY_SYSTEMS_AUDIT.md for each finding and GAMEPLAY_SYSTEMS_PLAN.md for milestones. The source changes, including the additional report-lifecycle and native-order repair in SYS-63, are integrated locally. Combined checks passed: 1,993 tests in 343 files, full typecheck, and architecture validation with 732 modules, 3,429 edges and zero cycles. Final build and career acceptance have not begun for this candidate.
 
 ## Implemented systems
+
+- The latest repair wave adds annual recruitment funding, club-relative contract retention, viable transfer selection, guaranteed initial keeper coverage and ordered historical report hydration. Injuries and retainer briefs now have consistent creation/load semantics. Promotion funding preserves debt and recurring capacity across division cycles. These repairs have focused regression evidence; they are awaiting combined long-career and native-provider acceptance.
 
 - Interactive numeric knowledge comes from focused, noticed football events. Hidden ability and potential cannot recenter those estimates. Repeated independent contexts refine confidence; conflicting performances widen uncertainty. Personality clues require supporting evidence.
 - A focused glimpse preserves the visit with empty readings and no ability/personality reveal. It supports an honest withheld judgment or private pass. Wholly missed/unfocused outings retain no first-hand observation and route to planning instead of an unfileable form. Halftime guidance explicitly reminds the player to refocus.
@@ -31,7 +33,21 @@ The baseline contains functioning world, report, career and persistence foundati
 - Question and focus controls explain the actual skill/lens connection. The searchable planner includes all known active unsigned prospects, and uses the same latest authored judgment as pitch delivery so private passes cannot consume a pitching day.
 - The mocked soak provider uses the existing structured-save interface. This eliminates discarded full-state serialization while preserving all persistence-helper calls, deterministic outcomes and explicit save checks; real-provider verification remains separate.
 
+- Annual club recruitment allocations restore a fixed board-approved envelope with bounded carryover and no debt cancellation. Renewals share the generation ability reference; transfers select once among viable packages. Initial squads honor requested size and retain a goalkeeper. Recurring promotion/relegation funding is reciprocal and idempotent.
+- New alumni appearances, goals and young-player recognition require dated match evidence. Unsupported call-up/captaincy/Team-of-Week generation and duplicate alumni feedback were removed; historical milestones and contacts remain.
+- The calendar now shows only actual reputation/fatigue effects. Its ten decorative or dominated choice sets are suppressed across UI and authority, with no automatic reward and no new simulation invented to justify them.
+
 ## Validation ledger
+
+Latest completed candidate evidence is bound to `48315c33270d207364800063949abd7d51d0dfa8` (tree `d5636acf9154d98b09e5c85ab8a4807a649a44f1`). Its clean export passed at 1,047,486 gzip bytes and all nine browser journeys passed. Actual unguided play changed questions/lenses, retained negative evidence, filed a tentative private report, booked a real follow-up and verified mobile/desktop interruption recovery. The affected-journey visual review scored 7.8/10; this is separate from systems readiness and human enjoyment.
+
+The bounded consequence case completed 98 canonical ticks: two earned recommendations led to actual signings, four placement reviews and two private-pass reviews resolved on schedule, and a rival signed the passed player. With no senior ratings yet, placement reviews correctly remained unscored; no numeric success or calibration claim follows. Immutable reports, ownership, contract/roster settlement and duplicate feedback checks passed.
+
+The same candidate's long run was stopped after both running seeds completed five seasons. Seed 1 had 16/282 clubs below 11 jointly registered players; seed 2 had 21/282, including a three-player squad. These failures are retained despite zero configured structural invariant violations. No 10/20/30-season or fresh replay acceptance was obtained. The new roster/funding repair wave must be validated from a fresh source candidate.
+
+Native S1 verification is also failed, not complete. After correcting exact HTTP status handling and shortening a Windows profile path, a real IndexedDB commit exposed four report-pointer regressions plus producer/migration gameplay differences. The guard stopped before browser restart. The first source repairs and stricter boundary tests are integrated. Independent review then reproduced SYS-63; its additional lifecycle and RNG-map-order corrections are now integrated with 78 focused tests passing. Actual native execution remains pending. Verification separately checks receipt bytes, an approved migration oracle, immediate load state, documented Dashboard actions, the complete committed row and a whole-browser restart; the mocked simulation provider does not substitute for this evidence.
+
+The following historical rows describe evidence and limits at each named checkpoint; they do not certify the new source candidate.
 
 | Evidence | Result | Limit |
 |---|---|---|
@@ -59,7 +75,8 @@ The baseline contains functioning world, report, career and persistence foundati
 | Planner reachability regressions | Both hidden-prospect and invalid-pass pitch defects reproduced; corrected focused suite passed | New combined export and final source identity required before decades acceptance |
 | Planner and lens integration | 1,904 tests in 336 files passed; the targeted consequence coverage repair additionally passed 30 tests across three files | Scenario execution on the next frozen source remains required; fixture completeness found by integrated typechecking was corrected |
 | Further actual-play information boundaries | Pending focus picker no longer exposes future attribute readings; regression passes | Action/category and leave-watch corrections integrated; final export pending |
-| Actual save-provider endurance/recovery | Pending | Required |
+| Combined roster, save, alumni and season repair checks | 1,993 tests in 343 files passed; full typecheck and architecture passed (732 modules, 3,429 edges, zero cycles); diff check passed | Fresh build, five-season preflight and complete acceptance remain required |
+| Native save-provider endurance/recovery | Completed-season 1/10/30 exact commits and whole-browser restarts pending | Required; separate from mocked soak and ordinary save journeys |
 | Human comprehension, attachment, repeat play | Pending | Cannot infer from simulation diversity |
 
 ## Intermediate world and economy evidence
@@ -74,4 +91,4 @@ A separate adversarial report-sale probe reproduced a concrete pricing exploit: 
 
 **GAME SYSTEMS NOT READY**
 
-Blockers: missing final-source long-career distribution and retained-career real-save evidence; missing independent human gameplay validation. No package, online-provider, publication or release-readiness claim is made.
+Blockers: final-source long-career distribution and retained-career real-save evidence are missing; independent human gameplay validation is missing. No package, online-provider, publication or release-readiness claim is made.

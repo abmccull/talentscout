@@ -206,6 +206,7 @@ function MomentTimeline({ session }: { session: ObservationSession }) {
             {/* Moment content */}
             <div className="mb-2 min-w-0 space-y-1.5 pb-1">
               <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-quiet">Your reaction</span>
                 <span
                   className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${reactionColor}`}
                 >

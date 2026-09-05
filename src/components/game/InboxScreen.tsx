@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { canResolveSeasonEvent, getSeasonEventChoiceOptions } from "@/engine/core/seasonEventEffects";
 import { useGameStore } from "@/stores/gameStore";
 import type { GameScreen } from "@/stores/gameStore";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -551,7 +552,13 @@ function MessageItem({
 }: MessageItemProps) {
   const config = getMessageConfig(message.type);
   const Icon = config.icon;
-  const requiresAction = message.actionRequired && !seasonEvent?.resolved;
+  const actionableSeasonEvent = seasonEvent && canResolveSeasonEvent(seasonEvent, currentWeek,
+    useGameStore.getState().gameState?.scout.primarySpecialization);
+  const requiresAction = seasonEvent ? Boolean(actionableSeasonEvent) : message.actionRequired;
+  const displayTitle = seasonEvent && !actionableSeasonEvent
+    ? message.title.replace(/\s+— Decision Required$/, "") : message.title;
+  const displayBody = seasonEvent && !actionableSeasonEvent && !seasonEvent.resolved
+    ? `${seasonEvent.description}. Check your planner for scheduled activities.` : message.body;
   const relatedPlayerId = gossipItem?.playerId
     ?? (message.relatedEntityType === "player" ? message.relatedId : undefined);
   const MessageContainer = isExpanded ? "div" : "button";
@@ -561,7 +568,7 @@ function MessageItem({
         type: "button" as const,
         onClick,
         "aria-expanded": false,
-        "aria-label": `${message.read ? "Read" : "Unread"} message: ${message.title}`,
+        "aria-label": `${message.read ? "Read" : "Unread"} message: ${displayTitle}`,
       };
 
   return (
@@ -600,7 +607,7 @@ function MessageItem({
                   !message.read ? "text-white" : "text-zinc-300"
                 }`}
               >
-                {message.title}
+                {displayTitle}
               </span>
             </div>
             <span className="shrink-0 text-xs text-zinc-400">
@@ -626,7 +633,7 @@ function MessageItem({
           {isExpanded ? (
             <>
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
-                {message.body}
+                {displayBody}
               </p>
               {relatedPlayerId && (
                 <div className="mt-3 flex gap-2">
@@ -755,9 +762,9 @@ function MessageItem({
                     <p className="text-xs text-zinc-500">
                       Decision made: {seasonEvent.choices?.[seasonEvent.choiceSelected ?? -1]?.label ?? "Resolved"}
                     </p>
-                  ) : seasonEvent.choices && onResolveSeasonEvent ? (
+                  ) : actionableSeasonEvent && onResolveSeasonEvent ? (
                     <div className="flex flex-wrap gap-2">
-                      {seasonEvent.choices.map((choice, index) => (
+                      {getSeasonEventChoiceOptions(seasonEvent).map(({ choice, index }) => (
                         <Button
                           key={`${seasonEvent.id}-${choice.label}`}
                           size="sm"
@@ -785,7 +792,7 @@ function MessageItem({
                   variant="ghost"
                   className="h-7 px-2 text-xs text-zinc-500 hover:text-white"
                   onClick={onClick}
-                  aria-label={`Collapse message: ${message.title}`}
+                  aria-label={`Collapse message: ${displayTitle}`}
                 >
                   <ChevronDown
                     size={12}
@@ -797,7 +804,7 @@ function MessageItem({
               </div>
             </>
           ) : (
-            <p className="line-clamp-2 text-sm leading-relaxed text-zinc-400">{message.body}</p>
+            <p className="line-clamp-2 text-sm leading-relaxed text-zinc-400">{displayBody}</p>
           )}
         </div>
 

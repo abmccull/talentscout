@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { GameState } from "@/engine/core/types";
+import type { GameState, SeasonEvent } from "@/engine/core/types";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SeasonTimeline } from "@/components/game/SeasonTimeline";
+import { RNG } from "@/engine/rng";
+import { generateSeasonEvents, getActiveSeasonEvents, isInternationalBreak } from "@/engine/core/seasonEvents";
+import { applySeasonEventEffects, canResolveSeasonEvent, getSeasonEventChoiceOptions,
+  getActiveSeasonEventDisplayEffects, resolveSeasonEventChoice } from "@/engine/core/seasonEventEffects";
+import { reconcileInboxActionRequirements } from "@/engine/world/inboxActionAuthority";
+import { migrateSaveState } from "@/lib/db";
+import goldenSave from "../fixtures/saves/v0-save-record.json";
 import type { DecisionRecord } from "@/engine/consequences/types";
 import { useGameStore } from "@/stores/gameStore";
 import {
@@ -293,20 +303,24 @@ describe("autonomous youth career driver profiles", () => {
 
       const seasonEvents = [
         {
-          id: "season-1",
+          id: "season-1", type: "midSeasonReview", name: "Review", startWeek: 8, endWeek: 8,
+          description: "Review", resolved: false, choiceSelected: undefined as number | undefined,
           choices: [
-            { label: "Verify privately", description: "Protect the source and wait for proof." },
-            { label: "Take the offer", description: "Accept the agency fee under exclusive terms." },
-            { label: "Exploit the leak publicly", description: "Threaten an ultimatum, force the move, and cash-out now." },
+            { label: "Verify privately", description: "Protect the source and wait for proof.", effects: [{ type: "reputationBonus", value: 1 }, { type: "fatigueModifier", value: 0.1 }] },
+            { label: "Take the offer", description: "Accept the agency fee under exclusive terms.", effects: [{ type: "reputationBonus", value: 2 }, { type: "fatigueModifier", value: 0.2 }] },
+            { label: "Exploit the leak publicly", description: "Threaten an ultimatum, force the move, and cash-out now.", effects: [{ type: "reputationBonus", value: 3 }, { type: "fatigueModifier", value: 0.3 }] },
           ],
         },
       ];
+      gameState.seasonEvents = seasonEvents as GameState["seasonEvents"];
       const store = {
         gameState,
         getActiveSeasonEvents: () => seasonEvents,
         getActiveNarrativeEvents: () => [],
         resolveSeasonEvent: vi.fn((eventId: string, choiceIndex: number) => {
           (gameState.finances as unknown as Record<string, unknown>)[`season:${eventId}`] = choiceIndex;
+          seasonEvents[0].resolved = true;
+          seasonEvents[0].choiceSelected = choiceIndex;
         }),
         resolveNarrativeEventChoice: vi.fn(),
         acknowledgeNarrativeEvent: vi.fn(),
@@ -589,5 +603,162 @@ describe("autonomous career presentation signals", () => {
     expect(signals.careerFingerprintTitle).toBe("Relationships First");
     expect(signals.careerFingerprintId).toHaveLength(16);
     expect(signals.visibleCareerCallbackCount).toBe(3);
+  });
+});
+
+
+describe("season event promises follow actual consequences", () => {
+  function stateFor(event: SeasonEvent): GameState {
+    return { currentSeason: 1, currentWeek: event.startWeek,
+      scout: { primarySpecialization: "youth", reputation: 20, fatigue: 40 },
+      seasonEvents: [event], players: { prospect: { id: "prospect", injured: false } },
+      fixtures: { fixture: { id: "fixture", season: 1, week: event.startWeek, played: false } },
+      inbox: [] } as unknown as GameState;
+  }
+
+  it("does not offer or resolve decorative price/reveal choices and demotes legacy inbox prompts", () => {
+    const event = generateSeasonEvents(1).find((candidate) => candidate.type === "winterTransferWindow")!;
+    const state = stateFor(event);
+    state.scout.primarySpecialization = "firstTeam";
+    expect(getSeasonEventChoiceOptions(event)).toEqual([]);
+    expect(canResolveSeasonEvent(event, state.currentWeek, "firstTeam")).toBe(false);
+    expect(resolveSeasonEventChoice(state, event.id, 0)).toBe(state);
+    const message = { id: "legacy", type: "event", title: `${event.name} — Decision Required`,
+      body: "Old promise", week: state.currentWeek, season: 1, read: false,
+      actionRequired: true, relatedId: event.id, relatedEntityType: "seasonEvent" } as const;
+    state.inbox = [{ ...message }];
+    expect(reconcileInboxActionRequirements(state)[0].actionRequired).toBe(false);
+    const applied = applySeasonEventEffects(state, [event], new RNG("decorative-window"));
+    expect(applied.messages[0].actionRequired).toBe(false);
+    expect(applied.messages[0].title).toBe(event.name);
+    expect(applied.state.scout).toEqual(state.scout);
+  });
+
+  it("suppresses all current dominated calendar choices without selecting a winner or changing base effects", () => {
+    const events = generateSeasonEvents(1);
+    expect(events).toHaveLength(21);
+    expect(events.filter((event) => event.choices?.length)).toHaveLength(10);
+    expect(events.flatMap(getSeasonEventChoiceOptions)).toEqual([]);
+    const calendar = renderToStaticMarkup(createElement(SeasonTimeline, { seasonEvents: events, currentWeek: 2, seasonLength: 38, onResolveEvent: () => {} }));
+    expect(calendar).not.toContain(">Choose<");
+    for (const event of events.filter((candidate) => candidate.choices?.length)) {
+      const state = stateFor(event);
+      state.scout.primarySpecialization = "firstTeam";
+      const before = JSON.stringify(state);
+      for (let index = 0; index < event.choices!.length; index += 1) {
+        expect(resolveSeasonEventChoice(state, event.id, index)).toBe(state);
+      }
+      expect(JSON.stringify(state)).toBe(before);
+      expect(event.resolved).toBe(false);
+      const base = applySeasonEventEffects(state, [event], new RNG(event.id));
+      const baseEffectsOnly = applySeasonEventEffects(state, [{ ...event, choices: undefined }], new RNG(event.id));
+      expect(base.state.scout).toEqual(baseEffectsOnly.state.scout);
+      expect(base.messages.every((message) => !message.actionRequired)).toBe(true);
+    }
+  });
+
+  it("keeps genuine reputation-for-fatigue tradeoffs while removing a dominated original index", () => {
+    const event: SeasonEvent = { id: "tradeoff", name: "Present findings", type: "midSeasonReview",
+      startWeek: 2, endWeek: 2, description: "Choose workload", choices: [
+        { label: "Focused presentation", description: "Reward with work", effects: [{ type: "reputationBonus", value: 3 }, { type: "fatigueModifier", value: 0.2 }] },
+        { label: "Less effective presentation", description: "Strictly worse", effects: [{ type: "reputationBonus", value: 2 }, { type: "fatigueModifier", value: 0.3 }] },
+        { label: "Rest", description: "Recovery", effects: [{ type: "fatigueModifier", value: -0.1 }] },
+      ] };
+    expect(getSeasonEventChoiceOptions(event).map((option) => option.index)).toEqual([0, 2]);
+    const state = stateFor(event);
+    expect(resolveSeasonEventChoice(state, event.id, 1)).toBe(state);
+    const rendered = renderToStaticMarkup(createElement(SeasonTimeline, { seasonEvents: [event], currentWeek: 2, seasonLength: 38, onResolveEvent: () => {} }));
+    expect(rendered).toContain(">Choose<");
+    const resolved = resolveSeasonEventChoice(state, event.id, 0);
+    expect(resolved.seasonEvents[0].choiceSelected).toBe(0);
+    expect(applySeasonEventEffects(resolved, resolved.seasonEvents, new RNG("tradeoff")).state.scout)
+      .toMatchObject({ reputation: 23, fatigue: 42 });
+  });
+
+  it("retains real effects, original indices and an immutable already-resolved selection", () => {
+    const event: SeasonEvent = { id: "choice", name: "Review", type: "midSeasonReview", startWeek: 2, endWeek: 3,
+      description: "Review", effects: [{ type: "reputationBonus", value: 1 }], choices: [
+        { label: "One", description: "One", effects: [{ type: "reputationBonus", value: 2 }] },
+        { label: "Duplicate", description: "Duplicate", effects: [{ type: "reputationBonus", value: 2 }, { type: "attributeRevealBonus", value: 1 }] },
+        { label: "Rest", description: "Rest", effects: [{ type: "fatigueModifier", value: -0.3 }] },
+      ] };
+    const state = stateFor(event);
+    expect(getSeasonEventChoiceOptions(event).map((option) => option.index)).toEqual([0, 2]);
+    expect(resolveSeasonEventChoice(state, event.id, 1)).toBe(state);
+    const resolved = resolveSeasonEventChoice(state, event.id, 2);
+    expect(resolved.seasonEvents[0].choiceSelected).toBe(2);
+    expect(resolved.seasonEvents[0].choices).toEqual(event.choices);
+    expect(applySeasonEventEffects(resolved, resolved.seasonEvents, new RNG("rest")).state.scout)
+      .toMatchObject({ fatigue: 37, reputation: 20 });
+    expect(resolveSeasonEventChoice(resolved, event.id, 0)).toBe(resolved);
+    const historical = { ...state, seasonEvents: [{ ...event, resolved: true, choiceSelected: 1 }] };
+    expect(applySeasonEventEffects(historical, historical.seasonEvents, new RNG("historical")).state.scout.reputation).toBe(22);
+    expect(historical.seasonEvents[0].choiceSelected).toBe(1);
+  });
+
+  it("rejects expired, future, wrong-specialization and fractional choice bypasses", () => {
+    const event = generateSeasonEvents(1).find((candidate) => candidate.type === "preSeasonTournament")!;
+    event.choices![0].effects = [{ type: "reputationBonus", value: 5 }, { type: "fatigueModifier", value: 0.2 }];
+    event.choices![1].effects = [{ type: "reputationBonus", value: 3 }];
+    const state = stateFor(event);
+    expect(resolveSeasonEventChoice(state, event.id, 1)).toBe(state);
+    state.scout.primarySpecialization = "firstTeam";
+    expect(canResolveSeasonEvent(event, state.currentWeek, "firstTeam")).toBe(true);
+    expect(resolveSeasonEventChoice(state, event.id, 0.5)).toBe(state);
+    for (const week of [event.startWeek - 1, event.endWeek + 1]) {
+      state.currentWeek = week;
+      expect(resolveSeasonEventChoice(state, event.id, 1)).toBe(state);
+    }
+  });
+
+  it("shows actual combined fatigue points and no unsupported badges in the rendered timeline", () => {
+    const events: SeasonEvent[] = [0, 1].map((index) => ({ id: `active-${index}`, name: "Workload",
+      type: "fixtureCongestion", startWeek: 2, endWeek: 2, description: "Workload", effects: [
+        { type: "fatigueModifier", value: 0.15 }, { type: "attributeRevealBonus", value: 0.5 },
+        { type: "playerAvailability", value: -0.2 },
+      ] }));
+    const state = stateFor(events[0]); state.seasonEvents = events;
+    expect(applySeasonEventEffects(state, events, new RNG("sum")).state.scout.fatigue).toBe(43);
+    expect(getActiveSeasonEventDisplayEffects(events)).toEqual([{ type: "fatigueModifier", value: 0.3 }]);
+    const rendered = renderToStaticMarkup(createElement(SeasonTimeline, { seasonEvents: events, currentWeek: 2, seasonLength: 38, onResolveEvent: () => {} }));
+    expect(rendered).toContain("Scout fatigue");
+    expect(rendered).toContain("+3 / week");
+    expect(rendered).not.toMatch(/Reveal Quality|Availability|15%|20%/);
+  });
+
+  it("keeps international-period fixtures and player availability intact while applying actual fatigue", () => {
+    const event = generateSeasonEvents(1).find((candidate) => candidate.type === "internationalBreak")!;
+    const state = stateFor(event);
+    expect(isInternationalBreak(state.seasonEvents, state.currentWeek)).toBe(true);
+    const active = getActiveSeasonEvents(state.seasonEvents, state.currentWeek);
+    const applied = applySeasonEventEffects(state, active, new RNG("international-context"));
+    expect(applied.state.scout.fatigue).toBe(39);
+    expect(applied.state.fixtures).toBe(state.fixtures);
+    expect(applied.state.players).toBe(state.players);
+    expect(event.description).toContain("Listed club fixtures remain scheduled");
+    expect(event.description).not.toMatch(/unavailable|higher-quality|suspended/);
+  });
+
+  it("does not resurrect decorative prompts on migration or rewrite historical selected effects", () => {
+    const state = migrateSaveState(goldenSave.state);
+    const events = generateSeasonEvents(state.currentSeason, 38);
+    const winter = events.find((event) => event.type === "winterTransferWindow")!;
+    const review = events.find((event) => event.type === "endOfSeasonReview")!;
+    review.resolved = true; review.choiceSelected = 1;
+    review.choices![1] = { label: "Original saved choice", description: "Original saved explanation",
+      effects: [{ type: "reputationBonus", value: 7 }, { type: "attributeRevealBonus", value: 0.8 }] };
+    state.seasonEvents = events;
+    state.currentWeek = winter.startWeek;
+    state.scout.primarySpecialization = "firstTeam";
+    state.inbox = [{ id: "old-season-prompt", type: "event", title: `${winter.name} — Decision Required`,
+      body: "Old scouting discount promise", week: state.currentWeek, season: state.currentSeason,
+      read: false, actionRequired: true, relatedId: winter.id, relatedEntityType: "seasonEvent" }];
+    const loaded = migrateSaveState(state);
+    const restoredReview = loaded.seasonEvents.find((event) => event.name === review.name)!;
+    expect(restoredReview.choiceSelected).toBe(1);
+    expect(restoredReview.choices).toEqual(review.choices);
+    expect(restoredReview.effects).toEqual(review.effects);
+    expect(loaded.inbox.find((message) => message.id === "old-season-prompt"))
+      .toMatchObject({ title: winter.name, actionRequired: false });
   });
 });

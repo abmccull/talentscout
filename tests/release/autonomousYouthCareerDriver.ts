@@ -1,3 +1,4 @@
+import { canResolveSeasonEvent, getSeasonEventChoiceOptions } from "@/engine/core/seasonEventEffects";
 import { canChooseCareerPath } from "@/engine/career/pathChoice";
 import {
   deriveCareerFingerprintAuthority,
@@ -905,13 +906,15 @@ function enrollCourseIfAffordable(telemetry: AutonomousCareerTelemetry): void {
 function resolveSeasonEvents(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   for (const event of store.getActiveSeasonEvents()) {
-    if (!event.choices || event.choices.length === 0) continue;
-    const choiceIndex = chooseAutonomousOptionIndex(
-      event.choices,
-      telemetry.chooserProfile,
-    );
-    store.resolveSeasonEvent(event.id, choiceIndex);
-    recordMeaningfulDecision(telemetry, "seasonEventChoices");
+    const state = useGameStore.getState().gameState;
+    if (!state || !canResolveSeasonEvent(event, state.currentWeek, state.scout.primarySpecialization)) continue;
+    const options = getSeasonEventChoiceOptions(event);
+    const selected = options[chooseAutonomousOptionIndex(options.map((option) => option.choice), telemetry.chooserProfile)];
+    store.resolveSeasonEvent(event.id, selected.index);
+    const persisted = useGameStore.getState().gameState?.seasonEvents.find((candidate) => candidate.id === event.id);
+    if (persisted?.resolved && persisted.choiceSelected === selected.index) {
+      recordMeaningfulDecision(telemetry, "seasonEventChoices");
+    }
   }
 }
 
@@ -1064,7 +1067,7 @@ function countUnresolvedActionBacklog(state: GameState): number {
     .filter((message) => message.actionRequired && !message.read)
     .length;
   const seasonEvents = getActiveSeasonEvents(state.seasonEvents, state.currentWeek)
-    .filter((event) => (event.choices?.length ?? 0) > 0)
+    .filter((event) => canResolveSeasonEvent(event, state.currentWeek, state.scout.primarySpecialization))
     .length;
   const narrativeChoices = state.narrativeEvents.filter((event) =>
     !event.acknowledged

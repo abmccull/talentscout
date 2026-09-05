@@ -59,10 +59,10 @@ const MILESTONE_COLORS: Record<AlumniMilestoneType, string> = {
 };
 
 const MILESTONE_LABELS: Record<AlumniMilestoneType, string> = {
-  firstTeamDebut: "First Team Debut",
-  firstGoal: "First Goal",
+  firstTeamDebut: "First Tracked Senior Appearance",
+  firstGoal: "First Tracked Senior Goal",
   internationalCallUp: "International Call-Up",
-  wonderkidStatus: "Wonderkid Status",
+  wonderkidStatus: "Young-Player Recognition",
   transfer: "Transfer",
 };
 
@@ -438,7 +438,7 @@ export function AlumniDashboard() {
             <dl className="grid gap-x-8 gap-y-4 border-t border-[var(--border)] py-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div><dt className="text-[var(--muted-foreground)]">Youth found</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{legacyScore.youthFound}</dd></div>
               <div><dt className="text-[var(--muted-foreground)]">First-team breakthroughs</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{legacyScore.firstTeamBreakthroughs}</dd></div>
-              <div><dt className="text-[var(--muted-foreground)]">International caps from finds</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{legacyScore.internationalCapsFromFinds}</dd></div>
+              <div><dt className="text-[var(--muted-foreground)]">Recorded international call-ups</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{legacyScore.internationalCapsFromFinds}</dd></div>
               <div><dt className="text-[var(--muted-foreground)]">Placement success rate</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{successRate}%</dd></div>
             </dl>
             {contactGraduates > 0 && <p className="pb-4 text-sm text-[var(--muted-foreground)]">{contactGraduates} alumni {contactGraduates === 1 ? "has" : "have"} joined your contact network.</p>}

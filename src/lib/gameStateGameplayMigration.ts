@@ -1,3 +1,4 @@
+import { canResolveSeasonEvent } from "@/engine/core/seasonEventEffects";
 import { migrateVisualIdentities } from "@/engine/players/portraits/state";
 import type {
   ActionableGossipItem,
@@ -221,13 +222,9 @@ function migrateMatchRatings(state: GameState): void {
 
 function migrateInjurySystem(state: GameState): void {
   const migratePlayer = (player: Player): void => {
-    player.injuryHistory ??= {
-      playerId: player.id,
-      injuries: [],
-      totalWeeksMissed: 0,
-      injuryProneness: 0,
-      reinjuryWindowWeeksLeft: 0,
-    };
+    // Missing legacy history is unknown evidence, not a recorded healthy career.
+    // New players start explicit tracking in generatePlayer. Filling this on load
+    // would silently change availability scores in recommendation reviews.
     if (player.injured && !player.currentInjury) {
       const weeksRemaining = Math.max(0, player.injuryWeeksRemaining ?? 0);
       player.currentInjury = {
@@ -264,6 +261,9 @@ function migrateSeasonEvents(state: GameState): void {
           ...template,
           resolved: existing.resolved ?? false,
           choiceSelected: existing.choiceSelected,
+          // A resolved decision keeps its original option labels, indices and
+          // actual effects. Current templates only correct future promises.
+          ...(existing.resolved ? { choices: existing.choices, effects: existing.effects } : {}),
         }
       : template;
   });
@@ -277,16 +277,13 @@ function migrateInboxMessages(state: GameState): void {
     const titleBase = message.title.replace(/\s+— Decision Required$/, "");
     const seasonEvent = seasonEventsByName.get(titleBase);
     if (!seasonEvent) return message;
-    const actionable = !seasonEvent.resolved && (
-      !seasonEvent.relevantSpecializations
-      || seasonEvent.relevantSpecializations.includes(state.scout.primarySpecialization)
-    );
+    const actionable = canResolveSeasonEvent(seasonEvent, state.currentWeek, state.scout.primarySpecialization);
     return {
       ...message,
       title: actionable ? `${seasonEvent.name} — Decision Required` : seasonEvent.name,
       body: actionable
         ? `${seasonEvent.description}. You have a decision to make regarding your scouting strategy during this period.`
-        : `${seasonEvent.description}. This shapes the wider football landscape, but there is nothing you need to decide directly right now.`,
+        : `${seasonEvent.description}. Check your planner for scheduled activities.`,
       actionRequired: actionable,
       relatedId: seasonEvent.id,
       relatedEntityType: "seasonEvent",

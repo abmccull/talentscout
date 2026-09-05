@@ -239,7 +239,10 @@ export function collectGameSystemsHealth(state: GameState, completedSeasons: num
     return { clubId: club.id, leagueId: club.leagueId, reputation: club.reputation,
       seniorCount: club.playerIds.length, academyCount: club.academyPlayerIds?.length ?? 0,
       registeredCount: registered.length, availableCount: available.length,
+      registeredKeepers: registered.filter((player) => player.position === "GK").length,
       availableKeepers: available.filter((player) => player.position === "GK").length,
+      annualRecruitmentBudget: club.annualRecruitmentBudget ?? null,
+      lastRecruitmentAllocation: club.lastRecruitmentAllocation ?? null,
       budget: club.budget, weeklyWageBudget: club.weeklyWageBudget ?? null, weeklyPayroll: payroll.get(club.id) ?? 0 };
   });
   return {
@@ -262,6 +265,7 @@ export function collectGameSystemsHealth(state: GameState, completedSeasons: num
       clubsWithFewerThanElevenRegistered: clubDepth.filter((club) => club.registeredCount < 11).length,
       clubsWithFewerThanElevenAvailable: clubDepth.filter((club) => club.availableCount < 11).length,
       clubsWithoutAvailableKeeper: clubDepth.filter((club) => club.availableKeepers === 0).length,
+      clubsWithoutRegisteredKeeper: clubDepth.filter((club) => club.registeredKeepers === 0).length,
       clubDepth,
       freeAgents: state.freeAgentPool?.agents.length ?? 0,
       activeLoans: state.activeLoans?.length ?? 0,

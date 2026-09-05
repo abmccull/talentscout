@@ -115,7 +115,7 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
       {
         speakerKey: "scout",
         textTemplate:
-          "You arrange a private session with {playerName}. The training ground is quiet — just the two of you. How do you structure the time?",
+          "You arrange a focused training session with {playerName}. The training ground is quiet. How do you structure the time?",
         options: [
           {
             text: "Start with simple passing drills to build rapport",

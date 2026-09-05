@@ -126,8 +126,8 @@ function movementDescription(state: GameState, movement: PlayerMovementEvent): s
 
 function alumniUpdateTitle(type: AlumniCareerUpdateType): string {
   const titles: Record<AlumniCareerUpdateType, string> = {
-    debut: "Made a first-team debut",
-    firstGoal: "Scored a first senior goal",
+    debut: "First tracked senior appearance",
+    firstGoal: "First tracked senior goal",
     teamOfWeek: "Earned Team of the Week recognition",
     loanMove: "Moved on loan",
     transfer: "Changed clubs",

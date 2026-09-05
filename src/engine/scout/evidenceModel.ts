@@ -254,7 +254,7 @@ function cueText(
       ? "The action is clear enough to support a working claim, but it still needs another context."
       : "This was an unusually clear cue. It remains one passage of play rather than proof of a repeatable trait.";
   return {
-    summary: `${clarity === "exceptional" ? "Exceptional" : clarity === "strong" ? "Strong" : "Usable"} ${label}`,
+    summary: `${clarity === "exceptional" ? "Exceptional" : clarity === "strong" ? "Strong" : "Usable"} evidence: ${label}`,
     detail: `${moment.description} ${qualifier}`,
   };
 }

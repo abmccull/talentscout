@@ -1060,7 +1060,7 @@ export function createWeeklyActions(
         season: stateWithScheduleApplied.currentSeason,
         type: "feedback",
         title: `${review.checkpoint === "oneSeason" ? "One-Season" : "Two-Season"} Recommendation Review`,
-        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} scored ${review.overallScore ?? "unresolved"}/100. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
+        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} ${review.overallScore !== undefined ? `scored ${review.overallScore}/100` : "cannot yet be scored from the recorded outcomes"}. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
         read: false,
         actionRequired: false,
         relatedId: reviewedPlayer.id,

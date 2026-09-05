@@ -21,19 +21,16 @@ import {
 import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import { getContractWageBaseline } from "@/engine/finance/wages";
+import { getClubAbilityMidpoint } from "@/engine/players/clubAbility";
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
-/** Base renewal probabilities by CA tier. */
-const RENEWAL_CHANCE_HIGH = 0.70;    // CA > 70
-const RENEWAL_CHANCE_MID = 0.50;     // CA 50-70
-const RENEWAL_CHANCE_LOW = 0.30;     // CA < 50
-
-/** Club reputation tiers — top clubs renew more aggressively. */
-const HIGH_REP_RENEWAL_BOOST = 0.15;   // rep > 75
-const LOW_REP_RENEWAL_PENALTY = -0.10; // rep < 30
+/** Sporting value relative to the club's generated senior ability range. */
+const RENEWAL_CHANCE_HIGH = 0.70;    // At or above the club's level
+const RENEWAL_CHANCE_MID = 0.50;     // Within 20 CA below the club's level
+const RENEWAL_CHANCE_LOW = 0.30;     // Further below the club's level
 
 /** Senior contracts above this depth are allowed to expire by ability order. */
 export const SENIOR_SQUAD_RENEWAL_CAP = 32;
@@ -81,7 +78,7 @@ export interface ContractExpiryResult {
  * Process all expiring contracts at the end of a season.
  *
  * For each player whose contractExpiry <= currentSeason:
- *   1. Roll for renewal (based on CA, club rep, form)
+ *   1. Roll for renewal (based on relative ability, role, usage and form)
  *   2. If not renewed and old + low CA: roll for retirement
  *   3. Otherwise: release to free agent pool
  */
@@ -202,16 +199,11 @@ export function processContractExpiries(
 // HELPERS
 // =============================================================================
 
-function getRenewalChance(ca: number): number {
-  if (ca > 70) return RENEWAL_CHANCE_HIGH;
-  if (ca >= 50) return RENEWAL_CHANCE_MID;
+function getRenewalChance(ca: number, clubReputation: number): number {
+  const abilityAboveClubLevel = ca - getClubAbilityMidpoint(clubReputation);
+  if (abilityAboveClubLevel >= 0) return RENEWAL_CHANCE_HIGH;
+  if (abilityAboveClubLevel >= -20) return RENEWAL_CHANCE_MID;
   return RENEWAL_CHANCE_LOW;
-}
-
-function getClubReputationModifier(reputation: number): number {
-  if (reputation > 75) return HIGH_REP_RENEWAL_BOOST;
-  if (reputation < 30) return LOW_REP_RENEWAL_PENALTY;
-  return 0;
 }
 
 function currentSeasonAppearances(playerId: string, clubId: string, state: GameState): number {
@@ -349,8 +341,7 @@ export function calculateContractRenewalChance(
   club: Club,
   state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
 ): number {
-  let chance = getRenewalChance(player.currentAbility);
-  chance += getClubReputationModifier(club.reputation);
+  let chance = getRenewalChance(player.currentAbility, club.reputation);
   chance += Math.max(-0.12, Math.min(0.12, player.form * 0.035));
   chance += Math.max(-0.12, Math.min(0.12, ((player.morale ?? 5) - 5) * 0.025));
 

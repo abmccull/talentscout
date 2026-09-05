@@ -2,8 +2,8 @@
  * Season Event Effects — applies mechanical effects from active season events.
  *
  * This module is the bridge between the season calendar (informational) and
- * actual game-state changes. Each effect type has a handler that modifies
- * the appropriate part of the state.
+ * actual scout reputation and fatigue changes. Other serialized modifiers are
+ * retained for save compatibility; they have no live simulation consumer.
  *
  * All functions are pure: they take state in and return new state out.
  * No React imports, no side effects.
@@ -13,7 +13,7 @@ import type {
   GameState,
   SeasonEvent,
   SeasonEventEffect,
-  SeasonEventEffectType,
+  Specialization,
   InboxMessage,
 } from "./types";
 import type { RNG } from "../rng/index";
@@ -24,8 +24,8 @@ import type { RNG } from "../rng/index";
 
 /**
  * Aggregated modifiers from all currently active season events.
- * Consumed by other systems (scouting, transfers, match sim) to adjust
- * their calculations without coupling to the event system directly.
+ * Only reputationBonus and fatigueModifier currently affect simulation.
+ * Remaining fields retain the compatibility query shape, not implemented buffs.
  */
 export interface ActiveEffectModifiers {
   /** Multiplicative modifier on transfer prices (e.g., 0.3 = +30%). */
@@ -123,16 +123,54 @@ function getEffectiveEffects(event: SeasonEvent): SeasonEventEffect[] {
   return event.effects ?? [];
 }
 
-function isSeasonEventActionable(event: SeasonEvent, state: GameState): boolean {
-  if (!event.choices || event.choices.length === 0 || event.resolved) {
-    return false;
-  }
+/** Aggregate only effects that actually reach scout state at the weekly tick. */
+export function getSupportedSeasonEventEffects(effects: readonly SeasonEventEffect[]): SeasonEventEffect[] {
+  const reputation = effects.filter((effect) => effect.type === "reputationBonus")
+    .reduce((total, effect) => total + effect.value, 0);
+  const fatigue = effects.filter((effect) => effect.type === "fatigueModifier")
+    .reduce((total, effect) => total + effect.value, 0);
+  return [
+    ...(reputation !== 0 ? [{ type: "reputationBonus" as const, value: reputation }] : []),
+    ...(Math.round(fatigue * 10) !== 0 ? [{ type: "fatigueModifier" as const, value: fatigue }] : []),
+  ];
+}
 
-  if (!event.relevantSpecializations || event.relevantSpecializations.length === 0) {
-    return true;
-  }
+/** Preserve authored indices; only real, non-dominated tradeoffs form a decision. */
+export function getSeasonEventChoiceOptions(event: SeasonEvent) {
+  const seen = new Set<string>();
+  const options = (event.choices ?? []).flatMap((choice, index) => {
+    const supported = getSupportedSeasonEventEffects(choice.effects ?? []);
+    const signature = JSON.stringify(supported.map((effect) => [effect.type,
+      effect.type === "fatigueModifier" ? Math.round(effect.value * 10) : effect.value]));
+    if (seen.has(signature)) return [];
+    seen.add(signature);
+    const reputation = supported.find((effect) => effect.type === "reputationBonus")?.value ?? 0;
+    const fatigue = Math.round((supported.find((effect) => effect.type === "fatigueModifier")?.value ?? 0) * 10);
+    return [{ choice, index, reputation, fatigue }];
+  });
+  const tradeoffs = options.filter((option) => !options.some((other) =>
+    other.reputation >= option.reputation && other.fatigue <= option.fatigue
+    && (other.reputation > option.reputation || other.fatigue < option.fatigue)));
+  // Do not auto-select the winner of a decorative choice. The event's existing
+  // base effects continue, and previously resolved selections remain untouched.
+  return tradeoffs.length > 1 ? tradeoffs.map(({ choice, index }) => ({ choice, index })) : [];
+}
 
-  return event.relevantSpecializations.includes(state.scout.primarySpecialization);
+export function canResolveSeasonEvent(
+  event: SeasonEvent,
+  currentWeek: number,
+  specialization?: Specialization,
+): boolean {
+  return !event.resolved
+    && currentWeek >= event.startWeek && currentWeek <= event.endWeek
+    && getSeasonEventChoiceOptions(event).length > 1
+    && (!(event.relevantSpecializations?.length)
+      || (specialization !== undefined && event.relevantSpecializations.includes(specialization)));
+}
+
+/** Aggregate before rounding fatigue, matching the actual combined weekly effect. */
+export function getActiveSeasonEventDisplayEffects(activeEvents: SeasonEvent[]): SeasonEventEffect[] {
+  return getSupportedSeasonEventEffects(activeEvents.flatMap(getEffectiveEffects));
 }
 
 // =============================================================================
@@ -169,9 +207,8 @@ export function getActiveEffectModifiers(
  * - reputationBonus: added to scout reputation
  * - fatigueModifier: adjusts scout fatigue
  *
- * Modifier-based effects (transferPriceModifier, scoutingCostModifier, etc.)
- * are NOT applied here — they are queried via getActiveEffectModifiers() by
- * the systems that need them (transfer engine, scouting engine, etc.).
+ * Other serialized modifier types currently have no gameplay consumer and are
+ * intentionally excluded from player-facing effects and decision eligibility.
  *
  * @param state        - Current game state (not mutated).
  * @param activeEvents - Events active this week.
@@ -222,14 +259,14 @@ export function applySeasonEventEffects(
       // Only send a message on the first week the event is active
       if (state.currentWeek === event.startWeek) {
         const choiceId = `se_choice_${rng.nextInt(100000, 999999)}`;
-        const actionable = isSeasonEventActionable(event, state);
+        const actionable = canResolveSeasonEvent(event, state.currentWeek, state.scout.primarySpecialization);
         messages.push({
           id: choiceId,
           type: "event",
           title: actionable ? `${event.name} — Decision Required` : event.name,
           body: actionable
             ? `${event.description}. You have a decision to make regarding your scouting strategy during this period.`
-            : `${event.description}. This shapes the wider football landscape, but there is nothing you need to decide directly right now.`,
+            : `${event.description}. Check your planner for scheduled activities.`,
           week: state.currentWeek,
           season: state.currentSeason,
           read: false,
@@ -270,10 +307,11 @@ export function resolveSeasonEventChoice(
   const event = state.seasonEvents[eventIndex];
 
   // Cannot resolve if already resolved or no choices available
-  if (event.resolved) return state;
+  if (!canResolveSeasonEvent(event, state.currentWeek, state.scout.primarySpecialization)) return state;
   if (!event.choices || choiceIndex < 0 || choiceIndex >= event.choices.length) {
     return state;
   }
+  if (!getSeasonEventChoiceOptions(event).some((option) => option.index === choiceIndex)) return state;
 
   const updatedEvent: SeasonEvent = {
     ...event,

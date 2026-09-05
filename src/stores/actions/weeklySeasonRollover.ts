@@ -952,7 +952,7 @@ export function processWeeklySeasonRollover(
       // unused scouting budget to compound forever.
       newState = {
         ...newState,
-        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players),
+        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players, newState.currentSeason),
       };
 
       // Generate new season fixtures for core leagues only (skip secondary talent pools)

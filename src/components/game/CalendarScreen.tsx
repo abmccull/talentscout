@@ -811,7 +811,7 @@ export function CalendarScreen() {
         {internationalBreak && (
           <div className="mb-4 flex items-center gap-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm text-sky-300">
             <Info size={14} className="shrink-0" aria-hidden="true" />
-            International Break — League matches suspended
+            International calendar period — listed club fixtures remain scheduled
           </div>
         )}
 

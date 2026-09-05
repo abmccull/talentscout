@@ -1,3 +1,4 @@
+import { canResolveSeasonEvent } from "@/engine/core/seasonEventEffects";
 import { gameWeeksBetween, getSeasonLength } from "@/engine/core/gameDate";
 import type { GameState, InboxMessage } from "@/engine/core/types";
 import type { DecisionRecord } from "@/engine/consequences/types";
@@ -39,7 +40,8 @@ function hasLiveRelatedAction(state: GameState, message: InboxMessage): boolean 
     );
   }
   if (kind === "seasonEvent") {
-    return state.seasonEvents.some((event) => event.id === relatedId && !event.resolved);
+    return state.seasonEvents.some((event) => event.id === relatedId
+      && canResolveSeasonEvent(event, state.currentWeek, state.scout.primarySpecialization));
   }
   if (kind === "assignment") {
     return state.activeInternationalAssignment?.id === relatedId

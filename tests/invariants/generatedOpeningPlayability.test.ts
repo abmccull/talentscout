@@ -35,9 +35,11 @@ afterEach(() => {
 
 describe("generated opening playability", () => {
   it("lets a focused glimpse become a tentative private pass when halftime attention is not renewed", async () => {
+    // This generated fixture begins with a genuine glimpse after squad generation.
+    // Keep the precondition explicit: usable evidence exercises a different path.
     await useGameStore.getState().startNewGame({
       scoutFirstName: "Opening", scoutLastName: "Scout", scoutAge: 24,
-      specialization: "youth", difficulty: "normal", worldSeed: "opening-identity-0",
+      specialization: "youth", difficulty: "normal", worldSeed: "opening-identity-11",
       selectedCountries: ["england"], startingCountry: "england", nationality: "English",
       skillAllocations: { technicalEye: 2, psychologicalRead: 2, playerJudgment: 2, potentialAssessment: 2 },
       originId: "academy-apprentice", flawId: "fragile-network", doctrineIds: ["evidence-first"],
@@ -55,6 +57,7 @@ describe("generated opening playability", () => {
       session = useGameStore.getState().activeSession!;
       const moment = phase.moments.find((entry) => entry.playerId === opening.playerId)!;
       const cue = session.cueReadings!.find((entry) => entry.momentId === moment.id)!;
+      if (step === 0) expect(cue.clarity).toBe("glimpse");
       expect(["glimpse", "missed"]).toContain(cue.clarity);
       expect(session.players.find((entry) => entry.playerId === opening.playerId)?.isFocused).toBe(step === 0);
       useGameStore.getState().flagSessionMoment(moment.id, "needs_more_data");

@@ -79,7 +79,7 @@ function LegacyBreakdown({ score }: { score: LegacyScore }) {
   const components: Array<{ label: string; value: number; color: string }> = [
     { label: "Youth Found", value: score.youthFound, color: "bg-emerald-500" },
     { label: "First Team Breakthroughs", value: score.firstTeamBreakthroughs, color: "bg-blue-500" },
-    { label: "International Caps from Finds", value: score.internationalCapsFromFinds, color: "bg-purple-500" },
+    { label: "Recorded International Call-ups", value: score.internationalCapsFromFinds, color: "bg-purple-500" },
     { label: "Clubs Worked At", value: score.clubsWorkedAt, color: "bg-amber-500" },
     { label: "Countries Scouted", value: score.countriesScouted, color: "bg-teal-500" },
     { label: "Scenarios Completed", value: score.scenariosCompleted, color: "bg-pink-500" },

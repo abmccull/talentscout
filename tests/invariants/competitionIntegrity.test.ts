@@ -213,7 +213,7 @@ describe("competition season integrity", () => {
 
     expect(result.events).toHaveLength(12);
     for (const event of result.events) {
-      expect(applied.clubs[event.clubId].weeklyWageBudget).toBe(Math.round(20_000 * event.budgetMultiplier));
+      expect(applied.clubs[event.clubId].weeklyWageBudget).toBe(Math.round(20_000 * (event.type === "promoted" ? 1.25 : 0.8)));
     }
     expect(applied.leagues.l1.clubIds).toEqual(
       expect.arrayContaining(["a1", "a2", "a3", "b1", "b2", "b3"]),
