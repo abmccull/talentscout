@@ -77,9 +77,9 @@ test.describe("Academy placement case", () => {
     await seedStructuredEvidenceForPlayer(gamePage.page, setup.playerId);
 
     await gamePage.waitForScreen("playerProfile");
-    await expect(gamePage.page.getByRole("heading", { name: "Brief fit and opportunity cost" })).toBeVisible();
-    await expect(gamePage.page.getByRole("heading", { name: "Highest-value next evidence" })).toBeVisible();
-    await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+    await expect(gamePage.page.getByRole("heading", { name: "Recruitment fit" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "What to test next" })).toBeVisible();
+    await gamePage.page.getByRole("button", { name: "Write the report", exact: true }).click();
     await gamePage.waitForScreen("reportWriter");
 
     await gamePage.page.getByRole("tab", { name: /^Brief\b/ }).click();
@@ -88,7 +88,7 @@ test.describe("Academy placement case", () => {
     await expect(identityBriefing).toBeVisible();
     await expect(identityBriefing).toContainText(/same case can land differently/i);
     await gamePage.page.getByRole("tab", { name: /^Build the case\b/ }).click();
-    await expect(gamePage.page.getByText("Development potential", { exact: true })).toBeVisible();
+    await expect(gamePage.page.getByRole("group", { name: "Development potential", exact: true })).toBeVisible();
     const presentationRoom = gamePage.page.getByTestId("report-presentation-room");
     await expect(presentationRoom).toBeVisible();
     await presentationRoom.getByRole("radio", { name: /^Pathway-led\b/ }).click();

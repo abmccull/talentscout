@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { useGameStore } from "@/stores/gameStore";
 import type { LegacyScore, Scout, GameState } from "@/engine/core/types";
 import {
@@ -204,6 +205,11 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
         position="center top"
       />
       <div className="relative z-10 mx-auto max-w-3xl">
+        {!canCompleteCareer && (
+          <Button variant="outline" className="mb-6" onClick={() => setScreen("career")}>
+            <ArrowLeft size={16} aria-hidden="true" /> Back to Career
+          </Button>
+        )}
         <div className="mb-10 text-center">
           <div className="mb-4 flex justify-center">
             <div className="rounded-full ring-2 ring-yellow-500/30">
@@ -211,7 +217,7 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
             </div>
           </div>
 
-          <h1 className="mb-1 text-4xl font-bold tracking-tight text-white">
+          <h1 className="mb-1 font-editorial text-4xl text-white">
             {canCompleteCareer ? "Career Complete" : "Hall of Fame Snapshot"}
           </h1>
           <p className="mb-4 text-zinc-400">
@@ -220,7 +226,7 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
           <p className="mx-auto max-w-2xl text-sm text-zinc-500">
             {canCompleteCareer
               ? "Your career has reached a real ending. Save it to your legacy profile to unlock New Game+."
-              : "This is a live legacy snapshot for your active career. Viewing it does not end the save or unlock New Game+."}
+              : "Your career is still unfolding. Return to scouting whenever you are ready."}
           </p>
 
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#333] bg-[#111] px-5 py-2">
@@ -231,50 +237,7 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-[#222] bg-[#111] p-4 text-center">
-            <p className="text-3xl font-bold text-white">{seasonsPlayed}</p>
-            <p className="mt-1 text-xs text-zinc-500">Seasons Played</p>
-          </div>
-          <div className="rounded-xl border border-[#222] bg-[#111] p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-400">
-              {legacyScore.careerHighTier > 0 ? legacyScore.careerHighTier : scout.careerTier}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">Highest Tier Reached</p>
-          </div>
-          <div className="rounded-xl border border-[#222] bg-[#111] p-4 text-center">
-            <p className="text-3xl font-bold text-amber-400">{legacyScore.totalScore}</p>
-            <p className="mt-1 text-xs text-zinc-500">Legacy Score</p>
-          </div>
-        </div>
-
-        <div className="mb-6 space-y-2">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-            Career Statistics
-          </h3>
-          <StatRow icon={FileText} label="Total Reports" value={totalReports} />
-          <StatRow icon={Eye} label="Total Observations" value={totalObservations} />
-          <StatRow icon={Globe} label="Countries Scouted" value={countriesScouted} />
-          <StatRow
-            icon={Star}
-            label="High-Upside Projections"
-            value={highUpsideFinds}
-            accent="text-yellow-400"
-          />
-          <StatRow icon={Users} label="Clubs Worked At" value={legacyScore.clubsWorkedAt} />
-          <StatRow
-            icon={TrendingUp}
-            label="Scenarios Completed"
-            value={legacyScore.scenariosCompleted}
-            accent="text-emerald-400"
-          />
-        </div>
-
-        <div className="mb-6">
-          <LegacyBreakdown score={legacyScore} />
-        </div>
-
-        <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-5">
+        <div className="mb-6 border-y border-[var(--border)] bg-[var(--surface)] p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-amber-400/80">
             {canCompleteCareer ? "What this career became" : "What this career is becoming"}
           </p>
@@ -306,6 +269,51 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
             </div>
           )}
         </div>
+
+        <div className="mb-6 grid grid-cols-3 gap-3">
+          <div className="border-b border-[var(--border)] p-3 text-center">
+            <p className="text-3xl font-bold text-white">{seasonsPlayed}</p>
+            <p className="mt-1 text-xs text-zinc-500">Seasons Played</p>
+          </div>
+          <div className="border-b border-[var(--border)] p-3 text-center">
+            <p className="text-3xl font-bold text-emerald-400">
+              {legacyScore.careerHighTier > 0 ? legacyScore.careerHighTier : scout.careerTier}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">Highest Tier Reached</p>
+          </div>
+          <div className="border-b border-[var(--border)] p-3 text-center">
+            <p className="text-3xl font-bold text-amber-400">{legacyScore.totalScore}</p>
+            <p className="mt-1 text-xs text-zinc-500">Legacy Score</p>
+          </div>
+        </div>
+
+        <details className="mb-6 space-y-2" open={canCompleteCareer}><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-zinc-300">Career statistics</summary>
+          <StatRow icon={FileText} label="Total Reports" value={totalReports} />
+          <StatRow icon={Eye} label="Total Observations" value={totalObservations} />
+          <StatRow icon={Globe} label="Countries Scouted" value={countriesScouted} />
+          <StatRow
+            icon={Star}
+            label="High-Upside Projections"
+            value={highUpsideFinds}
+            accent="text-yellow-400"
+          />
+          <StatRow icon={Users} label="Clubs Worked At" value={legacyScore.clubsWorkedAt} />
+          <StatRow
+            icon={TrendingUp}
+            label="Scenarios Completed"
+            value={legacyScore.scenariosCompleted}
+            accent="text-emerald-400"
+          />
+        </details>
+
+        {legacyScore.totalScore > 0 || canCompleteCareer ? (
+          <div className="mb-6"><LegacyBreakdown score={legacyScore} /></div>
+        ) : (
+          <details className="dossier-section mb-6 p-4">
+            <summary className="min-h-6 cursor-pointer text-sm text-zinc-300">How legacy is earned</summary>
+            <div className="mt-4"><LegacyBreakdown score={legacyScore} /></div>
+          </details>
+        )}
 
         <div className="mb-8">
           <TopDiscoveries state={gameState} />
@@ -358,21 +366,21 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
                 {canRetire && !confirmingRetirement && (
                   <button
                     onClick={() => setConfirmingRetirement(true)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-amber-700 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-amber-600 active:scale-[0.98]"
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-6 py-3 text-sm font-medium text-zinc-300 transition hover:bg-white/5"
                   >
                     Retire Career
                   </button>
                 )}
                 <button
                   onClick={() => setScreen("career")}
-                  className="inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-zinc-700 active:scale-[0.98]"
+                  className="inline-flex items-center gap-2 rounded-md bg-[var(--accent)] px-8 py-3 text-base font-semibold text-[#15120c] transition hover:brightness-110"
                 >
                   <ArrowLeft size={18} aria-hidden="true" />
                   Back to Career
                 </button>
                 <button
                   onClick={() => setScreen("mainMenu")}
-                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-emerald-500 active:scale-[0.98]"
+                  className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-6 py-3 text-sm font-medium text-zinc-300 transition hover:bg-white/5"
                 >
                   <Home size={18} aria-hidden="true" />
                   Main Menu

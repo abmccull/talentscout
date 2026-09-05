@@ -1,31 +1,54 @@
 @import "tailwindcss";
 
 :root {
-  --background: #090b0e;
-  --foreground: #f2f5f7;
-  --card: #11161c;
-  --card-foreground: #f2f5f7;
-  --primary: #d4a843;
-  --primary-foreground: #0a1628;
-  --secondary: #19232d;
-  --secondary-foreground: #f2f5f7;
-  --muted: #171c22;
-  --muted-foreground: #aeb7c2;
-  --accent: #d4a843;
-  --accent-foreground: #0a1628;
-  --destructive: #ef4444;
-  --border: #29313a;
-  --ring: #d4a843;
-  --radius: 0.75rem;
+  --background: #101411;
+  --foreground: #f2f0e8;
+  --surface: #181e19;
+  --surface-elevated: #222a23;
+  --surface-interactive: #29342b;
+  --surface-selected: #263d2d;
+  --surface-overlay: #141a16;
+  --card: var(--surface);
+  --card-foreground: var(--foreground);
+  --primary: #b7d6a0;
+  --primary-foreground: #172216;
+  --success: #77ad86;
+  --success-foreground: #e8fff4;
+  --secondary: var(--surface-interactive);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--surface-elevated);
+  --muted-foreground: #b4bbb2;
+  --accent: #ddb777;
+  --accent-foreground: #201b12;
+  --destructive: #a33f35;
+  --border: #354137;
+  --ring: #b7d6a0;
+  --radius: 0.375rem;
   --text-eyebrow: 0.75rem;
   --text-meta: 0.8125rem;
   --text-ui: 0.875rem;
   --text-body: 1rem;
-  --signal-focus: #5b8def;
-  --signal-moment: #d4a843;
-  --signal-warn: #e07a3d;
-  --signal-danger: #c44b6a;
-  --signal-general: #aeb7c2;
+  --signal-focus: #9bbccc;
+  --signal-moment: #ddb777;
+  --signal-warn: #ddb777;
+  --signal-danger: #e49a8e;
+  --signal-general: #b4bbb2;
+}
+
+/* Shared football editorial vocabulary. Layout, rather than nested cards,
+   separates the subject, the evidence and the decision. */
+.font-editorial { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.dossier-eyebrow { color: var(--muted-foreground); font-size: .75rem; font-weight: 600; line-height: 1.4; letter-spacing: .14em; text-transform: uppercase; }
+.dossier-section { padding-block: 1.5rem; border-top: 1px solid var(--border); }
+.dossier-title { font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.75rem, 2.5vw, 2.5rem); line-height: 1.12; font-weight: 400; letter-spacing: -.025em; }
+.game-workspace { margin-inline: auto; max-width: 1480px; padding: 1.5rem clamp(1rem, 3vw, 3rem) 3rem; }
+.game-workspace :where(h1, h2, h3) { text-wrap: balance; }
+.game-workspace :where(p) { overflow-wrap: break-word; }
+
+@media (max-width: 639px) {
+  .game-workspace { padding-top: .75rem; }
+  #game-main :where(button, [role="button"]) { min-height: 2.75rem; min-width: 2.75rem; }
+  .game-workspace :where(select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"])) { min-height: 2.75rem; }
 }
 
 .text-eyebrow {
@@ -46,15 +69,12 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  background-image:
-    radial-gradient(circle at 85% -10%, rgba(212, 168, 67, 0.08), transparent 32rem),
-    linear-gradient(180deg, #0b1220 0%, #0a1628 100%);
-  background-attachment: fixed;
+  background-image: none;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgba(212, 168, 67, 0.28);
+  background: rgba(183, 214, 160, 0.28);
   color: #ffffff;
 }
 
@@ -186,16 +206,14 @@ html.reduced-motion *::after {
   }
 }
 
-/* Lightweight workspace transition. Keeping this in CSS avoids pulling the
-   animation runtime into /play while preserving the same directional cue. */
+/* Keep the workspace transition opacity-only: a transformed ancestor changes
+   the containing block of fixed navigation and Watch controls, even at 0px. */
 @keyframes game-screen-enter {
   from {
     opacity: 0;
-    transform: translateY(0.625rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 

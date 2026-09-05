@@ -16,11 +16,6 @@ import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useAudio } from "@/lib/audio/useAudio";
 import { DELEGATION_POLICIES } from "@/engine/core/weeklyStrategy";
-import {
-  WeekJourney,
-  WeekJourneyBeat,
-  WeekProgressMeter,
-} from "./week-journey/WeekJourney";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -298,24 +293,24 @@ function TimelineDay({ dayName, activityLabel, status, dayIndex }: TimelineDayPr
 
   const containerClass =
     status === "current"
-      ? "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-emerald-400/50 bg-emerald-400/12 px-1 py-2 shadow-[0_0_24px_rgba(52,211,153,0.08)] md:flex-row md:justify-start md:gap-3 md:px-3 md:py-2.5"
+      ? "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--accent)]/60 bg-white/5 px-1 py-2  lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5"
       : status === "past"
-        ? "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-zinc-700/80 bg-zinc-900/90 px-1 py-2 md:flex-row md:justify-start md:gap-3 md:px-3 md:py-2.5"
-        : "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950/70 px-1 py-2 md:flex-row md:justify-start md:gap-3 md:px-3 md:py-2.5";
+        ? "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-zinc-700/80 bg-zinc-900/90 px-1 py-2 lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5"
+        : "flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950/70 px-1 py-2 lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5";
 
   const dayLabelClass =
     status === "current"
-      ? "text-[11px] font-bold text-emerald-300 md:w-8 md:shrink-0 md:text-xs"
+      ? "text-[11px] font-bold text-[var(--accent)] lg:w-8 lg:shrink-0 lg:text-xs"
       : status === "past"
-        ? "text-[11px] font-semibold text-zinc-300 md:w-8 md:shrink-0 md:text-xs"
-        : "text-[11px] font-semibold text-zinc-400 md:w-8 md:shrink-0 md:text-xs";
+        ? "text-[11px] font-semibold text-zinc-300 lg:w-8 lg:shrink-0 lg:text-xs"
+        : "text-[11px] font-semibold text-zinc-400 lg:w-8 lg:shrink-0 lg:text-xs";
 
   const activityClass =
     status === "current"
-      ? "hidden min-w-0 truncate text-xs font-medium text-white md:block"
+      ? "hidden min-w-0 truncate text-xs font-medium text-white lg:block"
       : status === "past"
-        ? "hidden min-w-0 truncate text-xs text-zinc-300 md:block"
-        : "hidden min-w-0 truncate text-xs text-zinc-400 md:block";
+        ? "hidden min-w-0 truncate text-xs text-zinc-300 lg:block"
+        : "hidden min-w-0 truncate text-xs text-zinc-400 lg:block";
 
   return (
     <li
@@ -353,7 +348,7 @@ function TimelineDay({ dayName, activityLabel, status, dayIndex }: TimelineDayPr
           </span>
         )}
         {status === "current" && (
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-300 motion-safe:animate-pulse" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
         )}
         {status === "future" && (
           <span className="h-2.5 w-2.5 rounded-full border border-zinc-500 bg-zinc-800" />
@@ -454,15 +449,13 @@ function DayCard({
   };
 
   return (
-    <Card className="h-full min-w-0 overflow-hidden border-white/10 bg-zinc-900/88 shadow-2xl backdrop-blur-md">
-      <CardHeader className="border-b border-white/10 bg-gradient-to-r from-white/[0.05] to-transparent pb-4">
+    <Card className="min-w-0 overflow-hidden border-[var(--border)] bg-[var(--surface)]">
+      <CardHeader className="border-b border-[var(--border)] pb-4" data-testid="week-journey-beat-1">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-              Today&apos;s scouting route
-            </p>
-            <CardTitle className="mt-1 text-2xl text-white">{dayResult.dayName}</CardTitle>
-            <p className="mt-0.5 truncate text-sm text-zinc-300">{activityLabel}</p>
+            <p className="text-xs text-zinc-400">{dayResult.dayName}</p>
+            <CardTitle className="mt-1 font-editorial text-2xl text-white">{activityLabel}</CardTitle>
+            {!dayResult.activity && <p className="mt-1 text-xs text-zinc-400">Protected recovery time</p>}
           </div>
           {dayResult.activity && (
             <Badge variant="outline" className="shrink-0 border-white/15 bg-black/20 text-xs text-zinc-200">
@@ -472,26 +465,9 @@ function DayCard({
         </div>
       </CardHeader>
 
-      <CardContent className="p-3 sm:p-5">
-        <WeekJourney label={`${dayResult.dayName} scouting journey`}>
-          <WeekJourneyBeat step={1} eyebrow="Commitment" title="What you set out to do" tone="plan">
-            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-              <div className="min-w-0 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Activity</p>
-                <p className="mt-1 truncate text-sm font-medium text-white">{activityLabel}</p>
-              </div>
-              <div className="min-w-0 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Attention cost</p>
-                <p className="mt-1 text-sm font-medium text-white">
-                  {dayResult.activity
-                    ? `${dayResult.activity.slots} schedule slot${dayResult.activity.slots !== 1 ? "s" : ""}`
-                    : "Protected recovery time"}
-                </p>
-              </div>
-            </div>
-          </WeekJourneyBeat>
-
-          <WeekJourneyBeat step={2} eyebrow="Context" title="What unfolded" tone="context">
+      <CardContent className="p-4 sm:p-5">
+        <div className="space-y-5" aria-label={`${dayResult.dayName} scouting journey`}>
+          <section data-testid="week-journey-beat-2" aria-label="Today’s story and decision">
             <div className="space-y-4">
               <div className="space-y-2">
                 {narrativeParts.length > 0 ? (
@@ -512,7 +488,7 @@ function DayCard({
 
               {dayResult.interaction && (
                 <section aria-labelledby={`decision-${dayResult.dayIndex}`}>
-                  <h4 id={`decision-${dayResult.dayIndex}`} className="text-xs font-semibold uppercase tracking-[0.14em] text-white">
+                  <h4 id={`decision-${dayResult.dayIndex}`} className="font-editorial text-xl text-white">
                     Your call
                   </h4>
                   <p className="mb-3 mt-1 text-sm text-zinc-300">{dayResult.interaction.prompt}</p>
@@ -580,7 +556,7 @@ function DayCard({
                       <div className="grid grid-cols-1 gap-2 sm:flex">
                         <Button
                           size="sm"
-                          className="min-h-11 bg-amber-600 text-white hover:bg-amber-700"
+                          className="min-h-11"
                           onClick={() => onChooseInteraction?.("focus", pendingFocusIds)}
                           disabled={availableFocusCandidates.length > 0 && pendingFocusIds.length === 0}
                         >
@@ -601,7 +577,7 @@ function DayCard({
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
                         {dayResult.interaction.options.map((option) => (
                           <Button
                             key={option.id}
@@ -639,8 +615,8 @@ function DayCard({
               )}
 
               {(canLaunchInteractiveSession || interactiveSessionCompleted) && (
-                <section className="rounded-lg border border-blue-400/20 bg-blue-400/[0.05] p-3" aria-label="Live observation session">
-                  <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-200">Live observation</h4>
+                <section className="border-l-2 border-[var(--accent)]/50 bg-white/[0.03] p-4" aria-label="Live observation session">
+                  <h4 className="text-sm font-semibold text-zinc-200">Live observation</h4>
                   <p className="mt-1 text-xs leading-relaxed text-zinc-300">
                     Step into the session for deeper reads, extra insight points, and stronger activity outcomes.
                   </p>
@@ -651,7 +627,7 @@ function DayCard({
                   ) : (
                     <Button
                       size="sm"
-                      className="mt-3 min-h-11 bg-blue-600 text-white hover:bg-blue-700"
+                      className="mt-3 min-h-11"
                       onClick={onLaunchInteractiveSession}
                       disabled={!canLaunchInteractiveSession}
                     >
@@ -661,48 +637,44 @@ function DayCard({
                 </section>
               )}
             </div>
-          </WeekJourneyBeat>
+          </section>
 
-          <WeekJourneyBeat
-            step={3}
-            eyebrow="Consequence"
-            title={isConsequenceResolved ? "What changed" : "Outcome waiting on your call"}
-            tone="outcome"
-          >
+          <section className="border-t border-[var(--border)] pt-4" data-testid="week-journey-beat-3" aria-label="Day outcome">
+            <h3 className="mb-3 font-editorial text-xl text-white">{isConsequenceResolved ? "Today’s result" : "Decision pending"}</h3>
             {isConsequenceResolved ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 lg:grid-cols-5" role="group" aria-label="Day outcome summary">
+                <div className="flex flex-wrap gap-x-5 gap-y-3 border-b border-[var(--border)] pb-4" role="group" aria-label="Day outcome summary">
                   {dayResult.playersDiscovered > 0 && (
-                    <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2">
+                    <div className="min-w-20">
                       <p className="text-lg font-bold text-emerald-300">{dayResult.playersDiscovered}</p>
                       <p className="text-[11px] text-zinc-300">Discovered</p>
                     </div>
                   )}
                   {dayResult.observations.length > 0 && (
-                    <div className="rounded-lg border border-blue-500/25 bg-blue-500/[0.07] px-3 py-2">
-                      <p className="text-lg font-bold text-blue-300">{dayResult.observations.length}</p>
+                    <div className="min-w-20">
+                      <p className="text-lg font-bold text-zinc-200">{dayResult.observations.length}</p>
                       <p className="text-[11px] text-zinc-300">Observations</p>
                     </div>
                   )}
                   {dayResult.reportsWritten.length > 0 && (
-                    <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2">
-                      <p className="text-lg font-bold text-amber-300">{dayResult.reportsWritten.length}</p>
+                    <div className="min-w-20">
+                      <p className="text-lg font-bold text-zinc-200">{dayResult.reportsWritten.length}</p>
                       <p className="text-[11px] text-zinc-300">Reports</p>
                     </div>
                   )}
                   {dayResult.profilesGenerated > 0 && (
-                    <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/[0.07] px-3 py-2">
-                      <p className="text-lg font-bold text-cyan-300">{dayResult.profilesGenerated}</p>
+                    <div className="min-w-20">
+                      <p className="text-lg font-bold text-zinc-200">{dayResult.profilesGenerated}</p>
                       <p className="text-[11px] text-zinc-300">Profiles</p>
                     </div>
                   )}
                   {dayResult.anomaliesFound > 0 && (
-                    <div className="rounded-lg border border-purple-500/25 bg-purple-500/[0.07] px-3 py-2">
-                      <p className="text-lg font-bold text-purple-300">{dayResult.anomaliesFound}</p>
+                    <div className="min-w-20">
+                      <p className="text-lg font-bold text-zinc-200">{dayResult.anomaliesFound}</p>
                       <p className="text-[11px] text-zinc-300">Anomalies</p>
                     </div>
                   )}
-                  <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <div className="min-w-20">
                     <p className={`text-sm font-semibold ${fatigue.className}`}>{fatigue.text}</p>
                     <p className="text-[11px] text-zinc-300">Fatigue</p>
                   </div>
@@ -770,8 +742,8 @@ function DayCard({
                 </p>
               </div>
             )}
-          </WeekJourneyBeat>
-        </WeekJourney>
+          </section>
+        </div>
       </CardContent>
     </Card>
   );
@@ -786,7 +758,7 @@ function FreeDayCard({ dayName }: { dayName: string }) {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-zinc-400">No activity scheduled for this day.</p>
-        <p className="mt-2 text-xs text-zinc-600">
+        <p className="mt-2 text-xs text-zinc-400">
           Use free days to recover fatigue naturally.
         </p>
       </CardContent>
@@ -920,17 +892,20 @@ export function WeekSimulationScreen() {
       <div
         data-testid="week-journey-screen"
         data-reduced-motion={prefersReducedMotion ? "true" : "false"}
-        className="relative min-h-[calc(100dvh-7.5rem)] min-w-0 overflow-x-hidden bg-zinc-950 px-4 py-5 sm:p-6 md:h-screen md:min-h-0 md:overflow-hidden"
+        className="relative min-h-[calc(100dvh-7.5rem)] min-w-0 overflow-x-clip bg-[var(--background)] px-4 py-5 sm:p-6 lg:h-screen lg:min-h-0 lg:overflow-hidden"
       >
-        <ScreenBackground src={currentBg} opacity={0.78} />
-        <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col md:h-full">
-          <header className="mb-4 flex shrink-0 flex-col gap-3 rounded-xl border border-white/10 bg-black/25 p-4 backdrop-blur-sm sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+        <ScreenBackground src={currentBg} opacity={0.4} />
+        <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col lg:h-full">
+          <header className="mb-4 flex shrink-0 flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">The week unfolds</p>
-              <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">Week in Progress</h1>
-              <p className="mt-1 text-sm text-zinc-300">Commit, read the context, then live with the outcome.</p>
+              <h1 className="font-editorial text-2xl text-white sm:text-3xl">Week in Progress</h1>
             </div>
-            <WeekProgressMeter currentDay={currentDay} isComplete={isComplete} />
+            <div className="w-full sm:max-w-xs">
+              <p className="mb-2 text-xs text-zinc-400">{isComplete ? "All seven days complete" : "Day " + Math.max(1, Math.min(7, currentDay + 1)) + " of 7"}</p>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Weekly journey progress" aria-valuemin={0} aria-valuemax={7} aria-valuenow={isComplete ? 7 : Math.max(1, Math.min(7, currentDay + 1))} aria-valuetext={isComplete ? "All 7 days complete" : `Viewing day ${Math.max(1, Math.min(7, currentDay + 1))} of 7`}>
+                <div data-testid="weekly-progress-fill" data-reduced-motion={prefersReducedMotion ? "true" : "false"} className="h-full bg-[var(--accent)] transition-[width] duration-200 motion-reduce:transition-none" style={{ width: (isComplete ? 100 : (Math.max(1, Math.min(7, currentDay + 1)) / 7) * 100) + "%" }} />
+              </div>
+            </div>
           </header>
 
           <p
@@ -943,10 +918,10 @@ export function WeekSimulationScreen() {
             {journeyStatus}
           </p>
 
-          <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 md:min-h-0 md:grid-cols-[13.5rem_minmax(0,1fr)] md:gap-6">
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-[13.5rem_minmax(0,1fr)] lg:gap-6">
             <aside className="min-w-0" aria-label="Weekly timeline" data-testid="week-timeline">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-300">Seven-day route</p>
-              <ol className="grid min-w-0 grid-cols-7 gap-1 md:block md:space-y-1.5" aria-label="Day-by-day progress">
+              <p className="sr-only">Seven-day route</p>
+              <ol className="grid min-w-0 grid-cols-7 gap-1 lg:block lg:space-y-1.5" aria-label="Day-by-day progress">
                 {DAY_NAMES.map((dayName, i) => {
                   const dayResult = dayResults[i];
                   const activityLabel = dayResult
@@ -976,7 +951,7 @@ export function WeekSimulationScreen() {
             </aside>
 
             <section
-              className="min-w-0 overflow-visible md:overflow-y-auto md:pr-1"
+              className="min-w-0 overflow-visible lg:overflow-y-auto lg:pr-1"
               aria-labelledby="current-day-journey-heading"
               data-testid="current-day-journey"
             >
@@ -1043,12 +1018,12 @@ export function WeekSimulationScreen() {
             </section>
           </div>
 
-          <footer className="mt-4 flex shrink-0 flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <footer className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 mt-4 flex shrink-0 flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between md:bottom-0 lg:static lg:px-0">
             <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
               {isComplete ? (
                 <Button
                   size="lg"
-                  className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                  className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                   onClick={weeklyTransactionError ? fastForwardWithFeedback : () => setScreen("calendar")}
                   disabled={isAdvancingWeek}
                 >
@@ -1057,7 +1032,7 @@ export function WeekSimulationScreen() {
               ) : isLastDay ? (
                 <Button
                   size="lg"
-                  className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                  className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                   onClick={advanceDayWithFeedback}
                   aria-label="Complete the week and process results"
                   disabled={interactionPending || isAdvancingWeek}
@@ -1068,7 +1043,7 @@ export function WeekSimulationScreen() {
                 <>
                   <Button
                     size="lg"
-                    className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                    className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                     onClick={advanceDayWithFeedback}
                     aria-label="Advance to next day"
                     disabled={interactionPending || isAdvancingWeek}
@@ -1088,12 +1063,8 @@ export function WeekSimulationScreen() {
                 </>
               )}
             </div>
-            {!isComplete && (
-              <p className="text-xs leading-relaxed text-zinc-300 sm:max-w-xs sm:text-right">
-                {interactionPending
-                  ? "Your current decision must be resolved before moving one day at a time."
-                  : "The next day preserves every result and consequence already revealed."}
-              </p>
+            {!isComplete && interactionPending && (
+              <p className="text-xs leading-relaxed text-zinc-300 sm:max-w-xs sm:text-right">Choose today’s approach to continue one day at a time.</p>
             )}
           </footer>
         </div>

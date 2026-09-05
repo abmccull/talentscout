@@ -1,0 +1,1827 @@
+{
+  "schemaVersion": 1,
+  "status": "13 delivered atlases; 52 preserved lineages; 46 eligible for new allocation after root review",
+  "createdAt": "2026-09-04",
+  "tool": "built-in image_gen.imagegen",
+  "generationMode": "four distinct fictional footballers per atlas, eight photographic ages each; offline proposed assets",
+  "requestedSize": {
+    "width": 3840,
+    "height": 1920
+  },
+  "ages": [
+    15,
+    18,
+    22,
+    27,
+    31,
+    35,
+    39,
+    45
+  ],
+  "photoCount": 416,
+  "lineageCount": 52,
+  "consumptionNotes": [
+    "All outputs are actual1774x887; requested size was not delivered by built-in tool.",
+    "Use recorded rowBoundariesPx to extract each lineage; atlases2and4 have unequal row heights, accepted for crop-based packaging per root instruction.",
+    "columnBoundariesPx use rounded eighths; avoid seam pixels when cropping.",
+    "Subject identity/age QA is editorial judgment, not biometric certification. Root integrator should independently inspect before shipping.",
+    "First column must remain teen; no runtime regeneration or annual image calls. No nationality assigned to appearance lineages."
+  ],
+  "atlases": [
+    {
+      "id": "atlas-01",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-01.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-7241c841-dc29-48b1-9f83-bf6ccd3618e9.png",
+      "sha256": "A9D3C019CE968BC99A3EB39591FEC72D6B3A1643B37CF3FBB3D16AFC213B8FA7",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nFour identities by rows from TOP TO BOTTOM:\nROW1 lineage cedar: warm medium-brown skin unchanged throughout life, long narrow oval face, small close-set dark hazel eyes beneath gently arched uneven brows, long straight narrow nose with rounded tip, thin upper lip/full lower lip, prominent softly protruding ears, small mole on viewer-left lower cheek, very dark loose corkscrew curls. At15 small soft face and short unruly curls, at18 longer curls brushed away from eyes, at22-31 cropped curls and lean adult cheek planes, after31 slightly shorter curls, only sparse fine stubble after27, minimal temple gray at45.\nROW2 lineage flint: very fair cool-rosy skin and plentiful light freckles unchanged through aging, broad round face with a short chin and wide-set pale blue eyes, straight short nose with softly upturned tip, small bow-shaped mouth and a subtle lower-lip asymmetry, small round ears, dense naturally copper-red straight hair with a gentle cowlick. At15 short adolescent face and floppy fringe; at18-27 textured crop; at31-39 slight maturing hairline, clean-shaven all ages, at45 modest temple recession and barely gray sideburns.\nROW3 lineage estuary: rich dark brown complexion with neutral undertone unchanged throughout life, broad cheekbones narrowing into a slightly pointed chin, long almond-shaped dark-brown eyes with subtly hooded lids, broad nose bridge with gently flattened rounded tip, full soft lips, distinctive small notch in viewer-right eyebrow, very tight black coiled hair. At15 clean youthful soft cheeks and very short coil crop; at18 gentle increased facial definition; at22-31 close fade with coiled top, at35-45 keep tight coil texture and same dark complexion, small neat moustache only after27 and modest stubble at39-45. Do not morph him into a lighter-skinned older man.\nROW4 lineage slate: light golden-olive skin, compact rectangular face, low straight dark eyebrows, narrow dark eyes with small inner eyelid folds, short broad straight nose, wide mouth with thin lower lip and slight off-center smile line, large attached ears, thick black straight hair. At15 soft adolescent rectangle and side-swept fringe, clean-shaven through22; at27-35 tidy side-part with no facial hair; at39-45 slightly shorter hair, small gray streak above viewer-left ear at45, same eye/nose/mouth proportions. Do not reuse pilot East Asian face; this man has notably smaller eyes, wider mouth and rectangular face.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "cedar",
+          "row": 0,
+          "description": "ROW1 lineage cedar: warm medium-brown skin unchanged throughout life, long narrow oval face, small close-set dark hazel eyes beneath gently arched uneven brows, long straight narrow nose with rounded tip, thin upper lip/full lower lip, prominent softly protruding ears, small mole on viewer-left lower cheek, very dark loose corkscrew curls. At15 small soft face and short unruly curls, at18 longer curls brushed away from eyes, at22-31 cropped curls and lean adult cheek planes, after31 slightly shorter curls, only sparse fine stubble after27, minimal temple gray at45.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "flint",
+          "row": 1,
+          "description": "ROW2 lineage flint: very fair cool-rosy skin and plentiful light freckles unchanged through aging, broad round face with a short chin and wide-set pale blue eyes, straight short nose with softly upturned tip, small bow-shaped mouth and a subtle lower-lip asymmetry, small round ears, dense naturally copper-red straight hair with a gentle cowlick. At15 short adolescent face and floppy fringe; at18-27 textured crop; at31-39 slight maturing hairline, clean-shaven all ages, at45 modest temple recession and barely gray sideburns.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "square",
+            "eyeShape": "hooded",
+            "eyeColor": "blue",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "broad",
+            "hairColor": "auburn",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "estuary",
+          "row": 2,
+          "description": "ROW3 lineage estuary: rich dark brown complexion with neutral undertone unchanged throughout life, broad cheekbones narrowing into a slightly pointed chin, long almond-shaped dark-brown eyes with subtly hooded lids, broad nose bridge with gently flattened rounded tip, full soft lips, distinctive small notch in viewer-right eyebrow, very tight black coiled hair. At15 clean youthful soft cheeks and very short coil crop; at18 gentle increased facial definition; at22-31 close fade with coiled top, at35-45 keep tight coil texture and same dark complexion, small neat moustache only after27 and modest stubble at39-45. Do not morph him into a lighter-skinned older man.",
+          "reviewedAnchors": {
+            "skinTone": "brown",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "angular",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "slate",
+          "row": 3,
+          "description": "ROW4 lineage slate: light golden-olive skin, compact rectangular face, low straight dark eyebrows, narrow dark eyes with small inner eyelid folds, short broad straight nose, wide mouth with thin lower lip and slight off-center smile line, large attached ears, thick black straight hair. At15 soft adolescent rectangle and side-swept fringe, clean-shaven through22; at27-35 tidy side-part with no facial hair; at39-45 slightly shorter hair, small gray streak above viewer-left ear at45, same eye/nose/mouth proportions. Do not reuse pilot East Asian face; this man has notably smaller eyes, wider mouth and rectangular face.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: natural photography, eye-level framing, unbranded training kit",
+        "identityContinuity": "pass on visual comparison of all eight cells in each row",
+        "age15": "pass: softer adolescent faces, clean-shaven, narrower frames",
+        "age35": "pass: mature adults, no elderly caricature",
+        "age45": "pass: middle-aged; restrained to moderate lines and individual hair changes",
+        "skinToneContinuity": "pass; atlas2 was corrected for row3teen complexion",
+        "framing": "full crown/head visible; upper chest varies slightly by photo",
+        "grid": "Equal grid within one-pixel quantization.",
+        "notes": []
+      }
+    },
+    {
+      "id": "atlas-02",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-02.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-950da211-7db2-4937-814d-ef3f6659d1c5.png",
+      "sha256": "B560ED8FD9635CC4D0D3182B492F1626A9822A27F1FF6F56871DDF017D5AF047",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        235,
+        461,
+        669,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nFour NEW identities by rows from TOP TO BOTTOM, distinct from all earlier generated faces:\nROW1 lineage basalt: deepest espresso-brown skin with cool undertone maintained identically at ALL ages, tall long face and high forehead, slightly wide-set deep dark eyes with very softly downturned outer corners, long broad-tipped nose, narrow gently protruding chin, upper lip more full than lower lip, notably protruding ears and small asymmetrical cleft in chin. Very tight dense black coils worn short. Age15 has soft youthful jaw, boyish expression, absolutely hairless face and slight shoulders; age18 still no beard. A short natural coil high-top at22-31, very short coils at35-45, only a fine moustache after27 and faint beard shadow at39-45. Preserve dark skin, ear projection and long nose when older.\nROW2 lineage dune: fair warm beige complexion with scattered subtle freckles, long narrow triangular face with a thin rounded chin, light gray-green close-set eyes, fine straight blonde brows, long slender nose with small bent bridge, thin gently downturned lips, small attached ears, straight light ash-blond hair. At15 floppy uneven forward fringe and very slim neck; at18 swept-aside hair; at22-31 medium-length swept-back hair, clean-shaven throughout, at35 subtle temple recession, at39-45 modest hairline recession and gently increased eye lines. Keep light ash-blond hair, narrow face and thin mouth at every age.\nROW3 lineage ember: medium honey-brown complexion with a warm undertone held stable, broad pear-shaped face with fuller lower cheeks, small round brown eyes beneath high uneven eyebrows, short wide nose with round tip, generous wide mouth and full lower lip, attached asymmetric ears, dark reddish-brown softly wavy hair rather than black curls. At15 fluffy wavy fringe and round adolescent cheeks with faint acne, narrow child shoulders; at18 still boyish with no facial hair; at22-31 short waves combed loosely to the side, at27-45 small neat beard mainly along chin, at35 still unlined adult, at45 only a few gray hairs and shallow lines. His round friendly face stays completely unlike sharp cheekboned faces elsewhere.\nROW4 lineage willow: light neutral-tan complexion, long oval face with high broad forehead and a narrow softly square jaw, small dark almond eyes beneath long low straight brows, long straight broad-bridge nose, thin uneven upper lip with a slightly fuller lower lip, noticeable single mole next to viewer-right mouth corner, slightly long attached ears, thick black hair with a subtle natural wave. At15 airy center-part fringe, soft adolescent proportions; at18 longer curtain hair; at22-31 neat short side-part; at35-45 increasingly cropped but dense, clean-shaven at all ages, very light temple gray at45. Keep the distinct long broad nose and mouth mole fixed in all columns.",
+      "editPrompts": [
+        "Use case: identity-preserve. Edit this generated portrait atlas into a precise production sprite sheet while preserving the same four fictional people and the same eight age checkpoints 15,18,22,27,31,35,39,45 left to right.\nCritical repair: the current horizontal row boundaries are uneven. Recompose into EXACTLY8 equal columns and4 equal rows on a 2:1 canvas requested3840x1920. Every cell must be an equal square; horizontal cuts precisely at25%,50%,75% of image height, vertical cuts precisely at12.5%,25%,37.5%,50%,62.5%,75%,87.5% of width. NO text, separator lines, borders, gutters or margins. Full head, small headroom, shoulders and upper chest centered in every square. All photo seams tile edge-to-edge at exact boundaries.\nKeep all four identities exactly: top-row dark brown long-faced footballer, second-row pale ash-blonde long-faced footballer, third-row round-faced wavy-brown-haired footballer, bottom-row straight-black-haired long-faced footballer. Keep noses, eyes, spacing, lips, ears, moles, expression, hairstyles and ages.\nIn row3 only, make the age15 first portrait's complexion the same warm medium honey-brown skin as that SAME man's age18 second portrait. Maintain this identical underlying complexion across all eight row3 cells, not a lighter teenager. Keep him clearly15 with soft cheeks, no facial hair, narrow shoulders. All other first-column subjects remain clearly adolescent15 with clean-shaven faces and narrow shoulders.\nPreserve the photographic quality, unretouched skin texture, soft overcast light, blurred training ground, unbranded dark kits. The35-year-olds remain active adult athletes, not elderly. No new people or style changes."
+      ],
+      "lineages": [
+        {
+          "id": "basalt",
+          "row": 0,
+          "description": "ROW1 lineage basalt: deepest espresso-brown skin with cool undertone maintained identically at ALL ages, tall long face and high forehead, slightly wide-set deep dark eyes with very softly downturned outer corners, long broad-tipped nose, narrow gently protruding chin, upper lip more full than lower lip, notably protruding ears and small asymmetrical cleft in chin. Very tight dense black coils worn short. Age15 has soft youthful jaw, boyish expression, absolutely hairless face and slight shoulders; age18 still no beard. A short natural coil high-top at22-31, very short coils at35-45, only a fine moustache after27 and faint beard shadow at39-45. Preserve dark skin, ear projection and long nose when older.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "oblong",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "dune",
+          "row": 1,
+          "description": "ROW2 lineage dune: fair warm beige complexion with scattered subtle freckles, long narrow triangular face with a thin rounded chin, light gray-green close-set eyes, fine straight blonde brows, long slender nose with small bent bridge, thin gently downturned lips, small attached ears, straight light ash-blond hair. At15 floppy uneven forward fringe and very slim neck; at18 swept-aside hair; at22-31 medium-length swept-back hair, clean-shaven throughout, at35 subtle temple recession, at39-45 modest hairline recession and gently increased eye lines. Keep light ash-blond hair, narrow face and thin mouth at every age.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "oblong",
+            "eyeShape": "hooded",
+            "eyeColor": "hazel",
+            "noseStructure": "narrow",
+            "mouthStructure": "narrow",
+            "jawStructure": "tapered",
+            "hairColor": "blond",
+            "hairTexture": "wavy",
+            "baselineHairline": "high",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "ember",
+          "row": 2,
+          "description": "ROW3 lineage ember: medium honey-brown complexion with a warm undertone held stable, broad pear-shaped face with fuller lower cheeks, small round brown eyes beneath high uneven eyebrows, short wide nose with round tip, generous wide mouth and full lower lip, attached asymmetric ears, dark reddish-brown softly wavy hair rather than black curls. At15 fluffy wavy fringe and round adolescent cheeks with faint acne, narrow child shoulders; at18 still boyish with no facial hair; at22-31 short waves combed loosely to the side, at27-45 small neat beard mainly along chin, at35 still unlined adult, at45 only a few gray hairs and shallow lines. His round friendly face stays completely unlike sharp cheekboned faces elsewhere.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "round",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "softBridge",
+            "mouthStructure": "full",
+            "jawStructure": "broad",
+            "hairColor": "darkBrown",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "broad",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "willow",
+          "row": 3,
+          "description": "ROW4 lineage willow: light neutral-tan complexion, long oval face with high broad forehead and a narrow softly square jaw, small dark almond eyes beneath long low straight brows, long straight broad-bridge nose, thin uneven upper lip with a slightly fuller lower lip, noticeable single mole next to viewer-right mouth corner, slightly long attached ears, thick black hair with a subtle natural wave. At15 airy center-part fringe, soft adolescent proportions; at18 longer curtain hair; at22-31 neat short side-part; at35-45 increasingly cropped but dense, clean-shaven at all ages, very light temple gray at45. Keep the distinct long broad nose and mouth mole fixed in all columns.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "oblong",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: natural photography, eye-level framing, unbranded training kit",
+        "identityContinuity": "pass on visual comparison of all eight cells in each row",
+        "age15": "pass: softer adolescent faces, clean-shaven, narrower frames",
+        "age35": "pass: mature adults, no elderly caricature",
+        "age45": "pass: middle-aged; restrained to moderate lines and individual hair changes",
+        "skinToneContinuity": "pass; atlas2 was corrected for row3teen complexion",
+        "framing": "full crown/head visible; upper chest varies slightly by photo",
+        "grid": "Unequal row heights: extract using exact recorded row boundaries. Parent accepted this packaging variation.",
+        "notes": []
+      }
+    },
+    {
+      "id": "atlas-03",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-03.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-d3ec8f21-3f2d-426e-9a16-635345cbc42c.png",
+      "sha256": "8CFBC39A290F723A45BCAED3369D0131576C525F32A11CD5662FBAD72FEDFB38",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout is essential: each row occupies exactly ONE QUARTER of total canvas height and each column occupies exactly ONE EIGHTH of total canvas width. Thirty-two same-sized square photo cells. Do not make some rows taller than other rows. No white seam lines.\nFour NEW individuals by rows from TOP TO BOTTOM:\nROW1 lineage copper: medium-light peach skin with a little natural cheek redness, very broad square face with wide jaw and shallow chin cleft, small close-set brown eyes under thick slightly uneven dark auburn brows, short nose with a pronounced rounded bridge and broad tip, straight thin-lipped wide mouth, small low ears, chestnut-auburn wiry curly hair. At15 soft broad child face, curly fringe and narrow shoulders, no facial hair through18; at22-31 short messy curls, sparse red-brown stubble after27; at35 only slight smile creases; at39-45 subtle hairline recession and beard peppered sparsely gray. Preserve distinctly broad square proportions even as cheeks mature.\nROW2 lineage river: medium warm-brown complexion, slim diamond face with quite broad temples and a small pointed chin, large wide-set hazel-brown eyes beneath thin softly arched brows, straight narrow nose with a subtly asymmetric tip, wide well-defined cupid-bow upper lip and narrower lower lip, angular outward ears, dense black corkscrew hair naturally swept high with shorter sides. At15 very soft young cheeks, slight acne and no beard, narrow adolescent neck and shoulders; at18 no beard; at22-31 natural textured high crop, little facial hair only after27; at35-45 modestly shorter curls with subtle thinning at45, keep eyes and long narrow nose identical. Skin does not lighten with age.\nROW3 lineage cloud: very fair neutral porcelain complexion, round short face with a softly blunt chin and high cheeks, narrow almond-shaped dark-brown eyes and low gently curved black brows, small straight narrow nose with slight flared nostrils, small full mouth with a slightly thicker upper lip, small detached earlobes, black straight fine hair. At15 long forward fringe and unmistakably soft adolescent cheeks; at18 side-part fringe; at22-31 shorter close tidy haircut, clean-shaven at all ages; at35 soft eye creases, at39-45 very modest temple gray with no recession. Preserve rounded youthful geometry rather than turning the older man into a long-faced person.\nROW4 lineage ochre: deep golden-brown complexion, heavy long rectangular face, pronounced straight brow ridge with small wide-spaced dark eyes, broad long nose with flat straight bridge, narrow mouth with full but gently downturned lips, large prominent rounded ears, close-cropped black tightly curled hair. At15 broad soft baby cheeks, no facial hair, a narrow child's frame; at18 slight jaw definition; at22-31 naturally larger athletic frame and short tight curl crop; after27 neat very short full beard; at35 small eye lines,39 slightly less hair density,45 close crop and very limited gray at temples. No scars. His face is visibly long and broad, fundamentally unlike the narrow chinned row2.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "copper",
+          "row": 0,
+          "description": "ROW1 lineage copper: medium-light peach skin with a little natural cheek redness, very broad square face with wide jaw and shallow chin cleft, small close-set brown eyes under thick slightly uneven dark auburn brows, short nose with a pronounced rounded bridge and broad tip, straight thin-lipped wide mouth, small low ears, chestnut-auburn wiry curly hair. At15 soft broad child face, curly fringe and narrow shoulders, no facial hair through18; at22-31 short messy curls, sparse red-brown stubble after27; at35 only slight smile creases; at39-45 subtle hairline recession and beard peppered sparsely gray. Preserve distinctly broad square proportions even as cheeks mature.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "square",
+            "eyeShape": "hooded",
+            "eyeColor": "brown",
+            "noseStructure": "broad",
+            "mouthStructure": "narrow",
+            "jawStructure": "broad",
+            "hairColor": "auburn",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "broad",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "river",
+          "row": 1,
+          "description": "ROW2 lineage river: medium warm-brown complexion, slim diamond face with quite broad temples and a small pointed chin, large wide-set hazel-brown eyes beneath thin softly arched brows, straight narrow nose with a subtly asymmetric tip, wide well-defined cupid-bow upper lip and narrower lower lip, angular outward ears, dense black corkscrew hair naturally swept high with shorter sides. At15 very soft young cheeks, slight acne and no beard, narrow adolescent neck and shoulders; at18 no beard; at22-31 natural textured high crop, little facial hair only after27; at35-45 modestly shorter curls with subtle thinning at45, keep eyes and long narrow nose identical. Skin does not lighten with age.",
+          "reviewedAnchors": {
+            "skinTone": "brown",
+            "faceShape": "heart",
+            "eyeShape": "round",
+            "eyeColor": "brown",
+            "noseStructure": "narrow",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "cloud",
+          "row": 2,
+          "description": "ROW3 lineage cloud: very fair neutral porcelain complexion, round short face with a softly blunt chin and high cheeks, narrow almond-shaped dark-brown eyes and low gently curved black brows, small straight narrow nose with slight flared nostrils, small full mouth with a slightly thicker upper lip, small detached earlobes, black straight fine hair. At15 long forward fringe and unmistakably soft adolescent cheeks; at18 side-part fringe; at22-31 shorter close tidy haircut, clean-shaven at all ages; at35 soft eye creases, at39-45 very modest temple gray with no recession. Preserve rounded youthful geometry rather than turning the older man into a long-faced person.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "round",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "softBridge",
+            "mouthStructure": "balanced",
+            "jawStructure": "soft",
+            "hairColor": "black",
+            "hairTexture": "straight",
+            "baselineHairline": "low",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "ochre",
+          "row": 3,
+          "description": "ROW4 lineage ochre: deep golden-brown complexion, heavy long rectangular face, pronounced straight brow ridge with small wide-spaced dark eyes, broad long nose with flat straight bridge, narrow mouth with full but gently downturned lips, large prominent rounded ears, close-cropped black tightly curled hair. At15 broad soft baby cheeks, no facial hair, a narrow child's frame; at18 slight jaw definition; at22-31 naturally larger athletic frame and short tight curl crop; after27 neat very short full beard; at35 small eye lines,39 slightly less hair density,45 close crop and very limited gray at temples. No scars. His face is visibly long and broad, fundamentally unlike the narrow chinned row2.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "square",
+            "eyeShape": "deepSet",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "dense",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: natural photography, eye-level framing, unbranded training kit",
+        "identityContinuity": "pass on visual comparison of all eight cells in each row",
+        "age15": "pass: softer adolescent faces, clean-shaven, narrower frames",
+        "age35": "pass: mature adults, no elderly caricature",
+        "age45": "pass: middle-aged; restrained to moderate lines and individual hair changes",
+        "skinToneContinuity": "pass; atlas2 was corrected for row3teen complexion",
+        "framing": "full crown/head visible; upper chest varies slightly by photo",
+        "grid": "Equal grid within one-pixel quantization.",
+        "notes": []
+      }
+    },
+    {
+      "id": "atlas-04",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-04.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-493d7f32-964b-4071-8014-a8cdd1ef3e05.png",
+      "sha256": "32D1ABBDB8712D111BF4CFAA1772AE2DF506A5617CC9D113ADD5FBC1099D3338",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        236,
+        452,
+        670,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout is essential: each row occupies exactly ONE QUARTER of total canvas height and each column occupies exactly ONE EIGHTH of total canvas width. Thirty-two same-sized square photo cells. Do not make some rows taller than other rows. No white seam lines.\nFour NEW individuals by rows from TOP TO BOTTOM:\nROW1 lineage moss: light olive complexion with neutral undertones unchanged throughout life, strongly elongated heart-shaped face with very high broad cheekbones and a narrow pointed chin, large hazel-green eyes with noticeable low upper eyelids, sparse straight eyebrows, long aquiline nose with subtly hooked rounded tip, small thin mouth and a prominent long philtrum, small ears, dark near-black coarse loosely curling hair. At15 soft adolescent face and untidy ear-length curls, clean-shaven no facial shadow, slight neck and shoulders; at18 center-part waves still clean-shaven; at22-31 wavy hair brushed back above ears and sparse stubble after27, at35-45 short loose curls with only small temple recession and a few gray strands at45. Keep prominent aquiline nose, large eyelids and pointed chin fixed.\nROW2 lineage tide: rich dark chocolate-brown skin consistently, short wide round face with high full cheeks, small lively wide-set brown eyes under high arched uneven brows, short broad nose with flat bridge and a slightly upturned tip, very wide full-lipped mouth with a subtle asymmetry at the viewer-left corner, attached compact ears, naturally black tight coiled hair worn as short small twists. At15 youthful full cheeks, NO beard, NO moustache and narrow shoulders; at18 short neat twists and still clean-shaven; at22-31 short twists across top with close sides and clean-shaven; at35-45 tightly cropped coils replacing the twists, clean-shaven all ages, modest forehead lines after39. Distinct gentle broad face stays the same person from15 to45, without becoming a long narrow face.\nROW3 lineage reed: fair warm cream complexion, long bony oval face with small narrow jaw, large pale blue eyes slightly uneven in height, light sparse eyebrows, notably long narrow straight nose with a small bump at bridge, medium-width mouth with a thick lower lip, large detached earlobes, dirty-blond softly wavy hair. At15 shaggy soft wavy fringe, softer adolescent face with a few forehead blemishes, slight child frame and no stubble; at18 longer side-swept waves; at22-31 short loosely swept waves and clean-shaven; at35 tidy short crop with maturing hairline, at39-45 stronger hairline recession and small eye creases, light mustache only at39-45. Do not turn him into a red-haired or broad-jawed man.\nROW4 lineage umber: deep tan warm-olive complexion, compact wide square face with a short flat chin, small deep-set dark-green eyes underneath thick nearly joined dark brows, broad blunt nose with wide bridge, full compressed lips and a slightly longer viewer-right ear, dark-brown tightly waving hair. At15 straight-ish forward short fringe and visibly round soft adolescent cheeks, no facial hair or adult neck; at18 short waves with no beard; at22-31 short natural buzz crop, dense neat stubble beginning27; at35 close beard and same dark hair, at39-45 slightly recessed hairline with a few gray beard hairs. Stable strongly defined nose, brow, eye color, mouth and medium-dark complexion across the entire row.",
+      "editPrompts": [
+        "Use case: identity-preserve. Make one precise correction to this footballer aging portrait atlas. Change ONLY the portrait in bottom row, first column, the lower-left corner of the image. That man is supposed to be the SAME person at age15. He currently looks like an adult.\nRephotograph him as an unmistakably15-year-old football academy boy. Preserve his identity anchors: olive-tan complexion, compact wide face, broad blunt nose, thick dark straight brows, dark green eyes, full compressed lips, dark brown tightly waving fringe, viewer-right ear slightly longer. Make the jaw and cheek planes noticeably softer and less angular, cheeks fuller with adolescent baby fat, slimmer child neck and MUCH narrower adolescent shoulders and overall slight15-year-old build. Give him an innocent attentive teenage expression. Clean-shaven: zero beard, zero stubble, zero moustache, no dark facial-hair shadow. Keep his same natural skin tone, his recognizable eyes/nose/lips and no beauty retouching. His head size stays consistent with adjacent photos but his shoulder frame is younger.\nLeave ALL31other photographs entirely unchanged: same people, same ages, same layouts, same kits, same photography, same background. No text, no labels, no borders or gutters. Preserve full-crown-to-upper-chest crop with headroom in corrected cell."
+      ],
+      "lineages": [
+        {
+          "id": "moss",
+          "row": 0,
+          "description": "ROW1 lineage moss: light olive complexion with neutral undertones unchanged throughout life, strongly elongated heart-shaped face with very high broad cheekbones and a narrow pointed chin, large hazel-green eyes with noticeable low upper eyelids, sparse straight eyebrows, long aquiline nose with subtly hooked rounded tip, small thin mouth and a prominent long philtrum, small ears, dark near-black coarse loosely curling hair. At15 soft adolescent face and untidy ear-length curls, clean-shaven no facial shadow, slight neck and shoulders; at18 center-part waves still clean-shaven; at22-31 wavy hair brushed back above ears and sparse stubble after27, at35-45 short loose curls with only small temple recession and a few gray strands at45. Keep prominent aquiline nose, large eyelids and pointed chin fixed.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "oblong",
+            "eyeShape": "round",
+            "eyeColor": "hazel",
+            "noseStructure": "narrow",
+            "mouthStructure": "narrow",
+            "jawStructure": "tapered",
+            "hairColor": "darkBrown",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "tide",
+          "row": 1,
+          "description": "ROW2 lineage tide: rich dark chocolate-brown skin consistently, short wide round face with high full cheeks, small lively wide-set brown eyes under high arched uneven brows, short broad nose with flat bridge and a slightly upturned tip, very wide full-lipped mouth with a subtle asymmetry at the viewer-left corner, attached compact ears, naturally black tight coiled hair worn as short small twists. At15 youthful full cheeks, NO beard, NO moustache and narrow shoulders; at18 short neat twists and still clean-shaven; at22-31 short twists across top with close sides and clean-shaven; at35-45 tightly cropped coils replacing the twists, clean-shaven all ages, modest forehead lines after39. Distinct gentle broad face stays the same person from15 to45, without becoming a long narrow face.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "round",
+            "eyeShape": "round",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "reed",
+          "row": 2,
+          "description": "ROW3 lineage reed: fair warm cream complexion, long bony oval face with small narrow jaw, large pale blue eyes slightly uneven in height, light sparse eyebrows, notably long narrow straight nose with a small bump at bridge, medium-width mouth with a thick lower lip, large detached earlobes, dirty-blond softly wavy hair. At15 shaggy soft wavy fringe, softer adolescent face with a few forehead blemishes, slight child frame and no stubble; at18 longer side-swept waves; at22-31 short loosely swept waves and clean-shaven; at35 tidy short crop with maturing hairline, at39-45 stronger hairline recession and small eye creases, light mustache only at39-45. Do not turn him into a red-haired or broad-jawed man.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "oval",
+            "eyeShape": "round",
+            "eyeColor": "blue",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "darkBlond",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        },
+        {
+          "id": "umber",
+          "row": 3,
+          "description": "ROW4 lineage umber: deep tan warm-olive complexion, compact wide square face with a short flat chin, small deep-set dark-green eyes underneath thick nearly joined dark brows, broad blunt nose with wide bridge, full compressed lips and a slightly longer viewer-right ear, dark-brown tightly waving hair. At15 straight-ish forward short fringe and visibly round soft adolescent cheeks, no facial hair or adult neck; at18 short waves with no beard; at22-31 short natural buzz crop, dense neat stubble beginning27; at35 close beard and same dark hair, at39-45 slightly recessed hairline with a few gray beard hairs. Stable strongly defined nose, brow, eye color, mouth and medium-dark complexion across the entire row.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "square",
+            "eyeShape": "deepSet",
+            "eyeColor": "brown",
+            "noseStructure": "broad",
+            "mouthStructure": "balanced",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "dense",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manually classified from delivered image across age15and27; detailed prompt may differ from visible output. No unsupported mole/scar encoded."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: natural photography, eye-level framing, unbranded training kit",
+        "identityContinuity": "pass on visual comparison of all eight cells in each row",
+        "age15": "pass: softer adolescent faces, clean-shaven, narrower frames",
+        "age35": "pass: mature adults, no elderly caricature",
+        "age45": "pass: middle-aged; restrained to moderate lines and individual hair changes",
+        "skinToneContinuity": "pass; atlas2 was corrected for row3teen complexion",
+        "framing": "full crown/head visible; upper chest varies slightly by photo",
+        "grid": "Unequal row heights: extract using exact recorded row boundaries. Parent accepted this packaging variation.",
+        "notes": [
+          "Original bottom-left teen was too mature; edited output now has smaller adolescent neck/shoulders and softer face."
+        ]
+      }
+    },
+    {
+      "id": "atlas-05",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-05.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-9768f443-1385-4755-b8d8-173eb8180228.png",
+      "sha256": "14E15CFEFD80343FB29D049C4AB0B7CE522CE6D5BDD689F5D72FB062671955E8",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        248,
+        473,
+        689,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        241,
+        494,
+        728,
+        953,
+        1170,
+        1382,
+        1579,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage larch: medium-light warm olive skin; very long oval face, high forehead, small close-set amber eyes, uneven shallow brows, prominent long convex nose with a bulbous tip, thin upper lip and broad lower lip, narrow chin, large outward ears; naturally dark-brown loose waves. At15 soft cheeks, floppy medium fringe, slightly nervous expression; at18 fringe swept aside; at22-31 short swept-back waves; clean-shaven through31; at35-45 sparse moustache and modest hairline recession, no heavy graying.\nROW2 lineage harbor: deep cool brown skin; compact broad pentagonal face, wide cheekbones, low forehead, very small wide-set dark eyes with low lids, broad short nose with rounded nostrils, full asymmetrical lips, tiny attached ears; dense small black coils. At15 soft full youthful cheeks and very short coils, quiet half-smile and slight shoulders; at18-31 close cropped coils, clean-shaven through22, narrow chin beard after27; at35-45 close crop with a little gray only at45, keep broad proportions.\nROW3 lineage fawn: light warm beige skin; broad cheekbones, short oval face with tiny round chin, narrow dark-brown eyes with clear inner-lid fold and strongly arched slender eyebrows, short small straight nose, small thin upper lip with a fuller lower lip, detached rounded ears, sparse small cheek moles; naturally fine straight dark-brown hair. At15 untidy ear-length rounded haircut, soft young cheeks and no facial hair; at18-31 side-part medium hair moving to short crop; clean-shaven at every age; at35-45 mild eye creases, high hair density.\nROW4 lineage garnet: warm medium-brown skin; narrow angular heart-shaped face, large pale hazel eyes, broad nearly-straight brows, slim nose with broad flattened tip, large defined cupid-bow mouth, jutting small chin, large long earlobes; black coarse curls. At15 short corkscrew fringe and soft adolescent cheeks, slight frame; at18 longer curls above forehead; at22-31 high textured crop and clean-shaven through22, sparse dark stubble after27; at35-45 close textured crop, tiny temple gray at45.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "larch",
+          "row": 0,
+          "description": "medium-light warm olive skin; very long oval face, high forehead, small close-set amber eyes, uneven shallow brows, prominent long convex nose with a bulbous tip, thin upper lip and broad lower lip, narrow chin, large outward ears; naturally dark-brown loose waves. At15 soft cheeks, floppy medium fringe, slightly nervous expression; at18 fringe swept aside; at22-31 short swept-back waves; clean-shaven through31; at35-45 sparse moustache and modest hairline recession, no heavy graying.",
+          "reviewedAnchors": {
+            "skinTone": "medium",
+            "faceShape": "oblong",
+            "eyeShape": "round",
+            "eyeColor": "brown",
+            "noseStructure": "narrow",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "brown",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographic cells, not prompt metadata."
+        },
+        {
+          "id": "harbor",
+          "row": 1,
+          "description": "deep cool brown skin; compact broad pentagonal face, wide cheekbones, low forehead, very small wide-set dark eyes with low lids, broad short nose with rounded nostrils, full asymmetrical lips, tiny attached ears; dense small black coils. At15 soft full youthful cheeks and very short coils, quiet half-smile and slight shoulders; at18-31 close cropped coils, clean-shaven through22, narrow chin beard after27; at35-45 close crop with a little gray only at45, keep broad proportions.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "round",
+            "eyeShape": "round",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographic cells, not prompt metadata."
+        },
+        {
+          "id": "fawn",
+          "row": 2,
+          "description": "light warm beige skin; broad cheekbones, short oval face with tiny round chin, narrow dark-brown eyes with clear inner-lid fold and strongly arched slender eyebrows, short small straight nose, small thin upper lip with a fuller lower lip, detached rounded ears, sparse small cheek moles; naturally fine straight dark-brown hair. At15 untidy ear-length rounded haircut, soft young cheeks and no facial hair; at18-31 side-part medium hair moving to short crop; clean-shaven at every age; at35-45 mild eye creases, high hair density.",
+          "reviewedAnchors": {
+            "skinTone": "medium",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "full",
+            "jawStructure": "soft",
+            "hairColor": "darkBrown",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographic cells, not prompt metadata."
+        },
+        {
+          "id": "garnet",
+          "row": 3,
+          "description": "warm medium-brown skin; narrow angular heart-shaped face, large pale hazel eyes, broad nearly-straight brows, slim nose with broad flattened tip, large defined cupid-bow mouth, jutting small chin, large long earlobes; black coarse curls. At15 short corkscrew fringe and soft adolescent cheeks, slight frame; at18 longer curls above forehead; at22-31 high textured crop and clean-shaven through22, sparse dark stubble after27; at35-45 close textured crop, tiny temple gray at45.",
+          "reviewedAnchors": {
+            "skinTone": "brown",
+            "faceShape": "oval",
+            "eyeShape": "round",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographic cells, not prompt metadata."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: natural sports photography",
+        "identityContinuity": "pass: core eye, nose, mouth, ear geometry recognizable throughout each row",
+        "age15": "pass: clean-shaven adolescent cells with smaller frame",
+        "age35": "pass: active adults; row1 has naturally pronounced adult face structure",
+        "skinToneContinuity": "pass within natural photographic light variation",
+        "framing": "Full crown visible, but upper chest is tighter in bottom row. Use rectangular source crops.",
+        "grid": "Unequal columns and rows. Recorded manual column seams and measured row seams for crop-based packaging.",
+        "notes": [
+          "Middle adulthood in row1 reads more mature than some lineages; retain as candidate for root's independent QA."
+        ]
+      }
+    },
+    {
+      "id": "atlas-06",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-06.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-8528bd18-b5cc-45ba-8957-c6f79377e5a9.png",
+      "sha256": "71A064BB995EBC261C576919516DB942609C2A711F979196F7B2530639932745",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        221,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage alder: very fair pink-beige skin with tiny scattered freckles; heavy rounded square face, high forehead, very pale gray close-set eyes with deep upper lids, almost invisible light-red eyebrows, long straight thick nose, narrow flat mouth and small chin cleft, medium prominent ears; light ginger straight hair. At15 uneven fringe and very soft adolescent cheeks, slender neck, no beard; at18-31 short neat side sweep; sparse ginger stubble after27; at35-45 receding temples with modest thinning, no elderly lines.\nROW2 lineage quartz: golden tan complexion; small long diamond face, narrow high cheeks, large round near-black eyes and low curved brows, long hooked narrow nose with distinct sloping tip, wide thin lips, pointed ears with tiny detached lobes; thick black wavy hair. At15 slightly long shaggy wave fringe, boyish soft jaw, no beard through18; at22-31 short combed-back waves; after27 light full stubble, at35-45 dense waves with minimal temple gray.\nROW3 lineage heath: rich warm ebony-brown skin; long broad face with heavy rounded jaw, high wide cheekbones, wide-set narrow deep dark eyes, arching thick eyebrows, broad nose with a high strong bridge, large lower lip and smaller upper lip, long attached ears; tight naturally black coils. At15 soft child jaw and very short coil crop, no facial hair and small shoulders; at18-31 slightly taller coil crop and clean-shaven; at35-45 very close crop and small neat moustache after35, deep skin remains unchanged.\nROW4 lineage sable: pale neutral-olive skin; round face with very small short chin and soft low cheeks, long thin dark almond eyes with hooded upper lids, very straight thick brows, wide tiny nose with blunt tip, narrow mouth with full bow-shaped lips, large wide ears; thick pin-straight black hair. At15 blunt messy fringe and clean youthful face; at18 textured fringe; at22-31 short side-part; clean-shaven all ages; at35-45 little recession and restrained crease beside eyes.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "alder",
+          "row": 0,
+          "description": "very fair pink-beige skin with tiny scattered freckles; heavy rounded square face, high forehead, very pale gray close-set eyes with deep upper lids, almost invisible light-red eyebrows, long straight thick nose, narrow flat mouth and small chin cleft, medium prominent ears; light ginger straight hair. At15 uneven fringe and very soft adolescent cheeks, slender neck, no beard; at18-31 short neat side sweep; sparse ginger stubble after27; at35-45 receding temples with modest thinning, no elderly lines.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "oval",
+            "eyeShape": "hooded",
+            "eyeColor": "blue",
+            "noseStructure": "straight",
+            "mouthStructure": "narrow",
+            "jawStructure": "angular",
+            "hairColor": "auburn",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "quartz",
+          "row": 1,
+          "description": "golden tan complexion; small long diamond face, narrow high cheeks, large round near-black eyes and low curved brows, long hooked narrow nose with distinct sloping tip, wide thin lips, pointed ears with tiny detached lobes; thick black wavy hair. At15 slightly long shaggy wave fringe, boyish soft jaw, no beard through18; at22-31 short combed-back waves; after27 light full stubble, at35-45 dense waves with minimal temple gray.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "oval",
+            "eyeShape": "round",
+            "eyeColor": "brown",
+            "noseStructure": "narrow",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "heath",
+          "row": 2,
+          "description": "rich warm ebony-brown skin; long broad face with heavy rounded jaw, high wide cheekbones, wide-set narrow deep dark eyes, arching thick eyebrows, broad nose with a high strong bridge, large lower lip and smaller upper lip, long attached ears; tight naturally black coils. At15 soft child jaw and very short coil crop, no facial hair and small shoulders; at18-31 slightly taller coil crop and clean-shaven; at35-45 very close crop and small neat moustache after35, deep skin remains unchanged.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "oblong",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "sable",
+          "row": 3,
+          "description": "pale neutral-olive skin; round face with very small short chin and soft low cheeks, long thin dark almond eyes with hooded upper lids, very straight thick brows, wide tiny nose with blunt tip, narrow mouth with full bow-shaped lips, large wide ears; thick pin-straight black hair. At15 blunt messy fringe and clean youthful face; at18 textured fringe; at22-31 short side-part; clean-shaven all ages; at35-45 little recession and restrained crease beside eyes.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "soft",
+            "hairColor": "black",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass",
+        "identityContinuity": "pass across all four age rows",
+        "age15": "pass: youthful soft faces and no facial hair",
+        "age35": "pass: adult athletes, subtle aging",
+        "skinToneContinuity": "pass: stable base complexion",
+        "framing": "Full head in every cell; upper chest visible",
+        "grid": "Near-uniform grid; remove seam pixels with packaging trim",
+        "notes": [
+          "Fine pale seams are visible at some tile boundaries; packaging trims2px per edge."
+        ]
+      }
+    },
+    {
+      "id": "atlas-07",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-07.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-4fdfeac1-7708-4c23-a32c-8c05c7a497c0.png",
+      "sha256": "3B74285770E90D5946294F0F6B49D88C2ACA3C06BBB6D3F2C647B95ED85AF1C3",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage bracken: medium honey-brown complexion; very broad low square face with wide blunt jaw, large green-brown slightly downturned eyes beneath almost-joined broad brows, long broad straight nose, small narrow mouth, huge rounded ear lobes; dark brown tight waves. At15 clean-shaven soft broad child cheeks and short wavy fringe, very narrow child shoulders; at18-31 shorter waves then close buzz; fine full stubble only after27, at35-45 same blunt face with slightly higher hairline and salt flecks only45.\nROW2 lineage elm: light cool cream skin; long thin face with a high narrow forehead and sharply pointed chin, large wide-set blue-gray eyes with deep upper lids, fine brown brows, a slightly crooked long thin nose, unusually wide mouth with small thin lips, small detached ears; medium brown fine straight hair. At15 loose overlong fringe and soft jaw, narrow neck; at18 side fringe; at22-31 short textured hair, clean-shaven at every age; at35-45 mild recession and under-eye creases.\nROW3 lineage hollow: deep dark brown skin with a warm undertone; short triangular face, wide high temples and broad high cheeks, close-set large very dark eyes, high thin brows, short wide nose with upturned rounded tip, very full upper lip, narrow rounded jaw, large protruding ears; short soft black coils. At15 boyish soft cheeks and very short coil crop, no facial hair, very slim shoulders; at18-31 short twist top and close sides; clean-shaven through31, small moustache after35; at45 only tiny sideburn gray.\nROW4 lineage linen: fair golden-beige complexion with small cheek freckles; compact round face, wide open dark hazel eyes, thick gently curved brows, short upturned nose with narrow nostrils, small downturned mouth with full lower lip, large high ears; dark ash-blond naturally wavy hair. At15 fluffy wavy fringe with a slightly awkward shy expression, child shoulders; at18-31 side-swept waves moving to short crop; no beard through27, faint stubble31-45; at35-45 mild thinning and very subtle lines.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "bracken",
+          "row": 0,
+          "description": "medium honey-brown complexion; very broad low square face with wide blunt jaw, large green-brown slightly downturned eyes beneath almost-joined broad brows, long broad straight nose, small narrow mouth, huge rounded ear lobes; dark brown tight waves. At15 clean-shaven soft broad child cheeks and short wavy fringe, very narrow child shoulders; at18-31 shorter waves then close buzz; fine full stubble only after27, at35-45 same blunt face with slightly higher hairline and salt flecks only45.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "square",
+            "eyeShape": "deepSet",
+            "eyeColor": "brown",
+            "noseStructure": "broad",
+            "mouthStructure": "balanced",
+            "jawStructure": "broad",
+            "hairColor": "darkBrown",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "elm",
+          "row": 1,
+          "description": "light cool cream skin; long thin face with a high narrow forehead and sharply pointed chin, large wide-set blue-gray eyes with deep upper lids, fine brown brows, a slightly crooked long thin nose, unusually wide mouth with small thin lips, small detached ears; medium brown fine straight hair. At15 loose overlong fringe and soft jaw, narrow neck; at18 side fringe; at22-31 short textured hair, clean-shaven at every age; at35-45 mild recession and under-eye creases.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "oblong",
+            "eyeShape": "round",
+            "eyeColor": "blue",
+            "noseStructure": "narrow",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "brown",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "hollow",
+          "row": 2,
+          "description": "deep dark brown skin with a warm undertone; short triangular face, wide high temples and broad high cheeks, close-set large very dark eyes, high thin brows, short wide nose with upturned rounded tip, very full upper lip, narrow rounded jaw, large protruding ears; short soft black coils. At15 boyish soft cheeks and very short coil crop, no facial hair, very slim shoulders; at18-31 short twist top and close sides; clean-shaven through31, small moustache after35; at45 only tiny sideburn gray.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "heart",
+            "eyeShape": "round",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "linen",
+          "row": 3,
+          "description": "fair golden-beige complexion with small cheek freckles; compact round face, wide open dark hazel eyes, thick gently curved brows, short upturned nose with narrow nostrils, small downturned mouth with full lower lip, large high ears; dark ash-blond naturally wavy hair. At15 fluffy wavy fringe with a slightly awkward shy expression, child shoulders; at18-31 side-swept waves moving to short crop; no beard through27, faint stubble31-45; at35-45 mild thinning and very subtle lines.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "round",
+            "eyeShape": "round",
+            "eyeColor": "hazel",
+            "noseStructure": "softBridge",
+            "mouthStructure": "balanced",
+            "jawStructure": "soft",
+            "hairColor": "darkBlond",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass",
+        "identityContinuity": "pass across all four age rows",
+        "age15": "Clean-shaven soft faces. Row1 broad build and row2 long lean face are naturally less baby-faced; root should inspect those adolescent readings.",
+        "age35": "pass: adult athletes, subtle aging",
+        "skinToneContinuity": "pass",
+        "framing": "Full head and upper chest in each cell",
+        "grid": "Near-uniform grid; trim seam pixels",
+        "notes": [
+          "Broad face in row1 remains a stable distinctive trait at all ages; row2 retains his naturally long narrow face."
+        ]
+      }
+    },
+    {
+      "id": "atlas-08",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-08.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-6bdfff7d-7206-4dfc-8e4f-6405e4114326.png",
+      "sha256": "43DE6CD2741CB317CA8F3C90D52962AA5CA5A9D3BED3396BCA4B3F9AF181B746",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage acorn: medium-light tan skin with neutral undertone; broad square face with high outer cheekbones, narrow black hooded eyes and thick high angled eyebrows, long straight thin-bridge nose with blunt tip, medium thin-lipped mouth tilted slightly at viewer-right, prominent attached ears; coarse black straight hair. At15 long tousled fringe, soft adolescent jaw, thin neck, no beard through18; at22-31 very short tidy sides and side-part top; clean-shaven throughout; at35-45 modest hairline change and few temple grays.\nROW2 lineage gorse: light warm peach skin and a few vivid freckles on nose; short heart-shaped face with broad upper cheeks and tiny round chin, large wide-set green eyes, fine curved red-brown brows, narrow short nose with strong rounded tip, full bow-shaped mouth, tiny ears; naturally bright auburn loose coils. At15 soft boyish cheeks and a chaotic curl halo, narrow shoulders; at18-31 medium curl top then short curls; fine red stubble only after27; at35-45 medium natural hairline with slight gray at45.\nROW3 lineage ink: deep neutral-brown skin; narrow long rectangular face, flat straight cheek planes, small close-set nearly black eyes beneath low broad brows, notably long thin nose with softly widened base, narrow slightly protruding mouth with full lips, high small ears; tight black curls. At15 soft youthful slender face, longer small twists, clean-shaven and skinny neck; at18-31 short twist crop then very short coils; clean-shaven through27, small chin beard after31; at35-45 minimal gray and slightly higher forehead.\nROW4 lineage jasper: medium warm-olive skin; broad long oval face, big hazel-brown almond eyes with prominent lashes and slightly uneven height, low thin brows, broad blunt nose with flat bridge, very wide mouth with thick lower lip, small cleft chin, outward round ears; coarse dark brown loose curls. At15 playful but closed-mouth expression, floppy curls, baby cheeks and slim shoulders; at18-31 shorter curled top, beard only after27; at35-45 mature short curls and modest stubble, preserve broad nose and cleft.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "acorn",
+          "row": 0,
+          "description": "medium-light tan skin with neutral undertone; broad square face with high outer cheekbones, narrow black hooded eyes and thick high angled eyebrows, long straight thin-bridge nose with blunt tip, medium thin-lipped mouth tilted slightly at viewer-right, prominent attached ears; coarse black straight hair. At15 long tousled fringe, soft adolescent jaw, thin neck, no beard through18; at22-31 very short tidy sides and side-part top; clean-shaven throughout; at35-45 modest hairline change and few temple grays.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "square",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "gorse",
+          "row": 1,
+          "description": "light warm peach skin and a few vivid freckles on nose; short heart-shaped face with broad upper cheeks and tiny round chin, large wide-set green eyes, fine curved red-brown brows, narrow short nose with strong rounded tip, full bow-shaped mouth, tiny ears; naturally bright auburn loose coils. At15 soft boyish cheeks and a chaotic curl halo, narrow shoulders; at18-31 medium curl top then short curls; fine red stubble only after27; at35-45 medium natural hairline with slight gray at45.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "heart",
+            "eyeShape": "round",
+            "eyeColor": "hazel",
+            "noseStructure": "softBridge",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "auburn",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "lean",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "ink",
+          "row": 2,
+          "description": "deep neutral-brown skin; narrow long rectangular face, flat straight cheek planes, small close-set nearly black eyes beneath low broad brows, notably long thin nose with softly widened base, narrow slightly protruding mouth with full lips, high small ears; tight black curls. At15 soft youthful slender face, longer small twists, clean-shaven and skinny neck; at18-31 short twist crop then very short coils; clean-shaven through27, small chin beard after31; at35-45 minimal gray and slightly higher forehead.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "jasper",
+          "row": 3,
+          "description": "medium warm-olive skin; broad long oval face, big hazel-brown almond eyes with prominent lashes and slightly uneven height, low thin brows, broad blunt nose with flat bridge, very wide mouth with thick lower lip, small cleft chin, outward round ears; coarse dark brown loose curls. At15 playful but closed-mouth expression, floppy curls, baby cheeks and slim shoulders; at18-31 shorter curled top, beard only after27; at35-45 mature short curls and modest stubble, preserve broad nose and cleft.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "full",
+            "jawStructure": "angular",
+            "hairColor": "darkBrown",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass",
+        "identityContinuity": "pass: same eye, nose, mouth and face geometry throughout each row",
+        "age15": "pass: all four read as youthful clean-shaven academy teenagers",
+        "age35": "pass: mature active adults",
+        "skinToneContinuity": "pass",
+        "framing": "Full crown and upper torso; some thin seam lines at exact photo edges",
+        "grid": "Near-uniform8x4 grid; trim seam pixels",
+        "notes": []
+      }
+    },
+    {
+      "id": "atlas-09",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-09.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-58498b4a-6caf-41df-97fe-0546ade39241.png",
+      "sha256": "22A31277F7A6AB2FAE74A9007F9391B0AE2A21CEF08680CA9218A903F055ED40",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        444,
+        666,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage marl: fair cool porcelain skin; narrow elongated face with high cheekbones and a soft rounded chin, small gray eyes set very far apart, heavy straight dark brows, short narrow straight nose, small full mouth and long upper-lip area, round detached ears; near-black thick straight hair. At15 loose middle-part fringe and unmistakably soft child face; at18 longer curtains; at22-31 short neat side part; no facial hair throughout, at35-45 mild temple recession and eye creases.\nROW2 lineage nutmeg: medium copper-brown skin with scattered freckles; round face with full cheeks and broad short chin, large medium-brown downturned eyes, light sparse curved brows, a high small nose with rounded asymmetric tip, thin upper lip and thick lower lip, slightly protruding medium ears; dark auburn fine wavy hair. At15 messy short waves and boyish soft features, narrow frame, no beard through18; at22-31 cropped waves, sparse moustache after27; at35-45 small beard along chin and gentle thinning.\nROW3 lineage opal: very dark cool-brown skin; broad tall oval face with a long rounded jaw, small wide-set almond eyes and thin high curved eyebrows, broad high-bridge nose with small blunt tip, narrow mouth with full pursed lips, unusually large detached earlobes; dense tight coiled black hair. At15 short coil crop, soft adolescent cheek planes, slender neck and shoulders; at18-31 modest natural coil high-top; clean-shaven through31, very fine stubble after35; at45 tiny temples gray and subtle forehead lines.\nROW4 lineage pumice: light golden-brown complexion; compact angular face with strong high cheeks and short rounded chin, dark narrow eyes with long lower lids, straight sparse black brows, long fine nose with subtly bent bridge, small slightly off-center full mouth, large high protruding ears; naturally black thick wavy hair. At15 short floppy wave fringe and soft teenager jaw, no beard; at18-31 longer side-sweep turning to short crop, clean-shaven at all ages; at35-45 slight gray at sides, keep hair density.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "marl",
+          "row": 0,
+          "description": "fair cool porcelain skin; narrow elongated face with high cheekbones and a soft rounded chin, small gray eyes set very far apart, heavy straight dark brows, short narrow straight nose, small full mouth and long upper-lip area, round detached ears; near-black thick straight hair. At15 loose middle-part fringe and unmistakably soft child face; at18 longer curtains; at22-31 short neat side part; no facial hair throughout, at35-45 mild temple recession and eye creases.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "nutmeg",
+          "row": 1,
+          "description": "medium copper-brown skin with scattered freckles; round face with full cheeks and broad short chin, large medium-brown downturned eyes, light sparse curved brows, a high small nose with rounded asymmetric tip, thin upper lip and thick lower lip, slightly protruding medium ears; dark auburn fine wavy hair. At15 messy short waves and boyish soft features, narrow frame, no beard through18; at22-31 cropped waves, sparse moustache after27; at35-45 small beard along chin and gentle thinning.",
+          "reviewedAnchors": {
+            "skinTone": "brown",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "softBridge",
+            "mouthStructure": "full",
+            "jawStructure": "soft",
+            "hairColor": "auburn",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "average",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "opal",
+          "row": 2,
+          "description": "very dark cool-brown skin; broad tall oval face with a long rounded jaw, small wide-set almond eyes and thin high curved eyebrows, broad high-bridge nose with small blunt tip, narrow mouth with full pursed lips, unusually large detached earlobes; dense tight coiled black hair. At15 short coil crop, soft adolescent cheek planes, slender neck and shoulders; at18-31 modest natural coil high-top; clean-shaven through31, very fine stubble after35; at45 tiny temples gray and subtle forehead lines.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "high",
+            "facialHairTendency": "medium",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "pumice",
+          "row": 3,
+          "description": "light golden-brown complexion; compact angular face with strong high cheeks and short rounded chin, dark narrow eyes with long lower lids, straight sparse black brows, long fine nose with subtly bent bridge, small slightly off-center full mouth, large high protruding ears; naturally black thick wavy hair. At15 short floppy wave fringe and soft teenager jaw, no beard; at18-31 longer side-sweep turning to short crop, clean-shaven at all ages; at35-45 slight gray at sides, keep hair density.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "oblong",
+            "eyeShape": "almond",
+            "eyeColor": "darkBrown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: consistent natural sports photography",
+        "identityContinuity": "pass: same eye, nose, mouth and face geometry throughout each row",
+        "age15": "pass: youthful clean-shaven academy teenagers",
+        "age35": "pass: mature active adults, restrained lines",
+        "skinToneContinuity": "pass: stable underlying complexion within natural lighting variation",
+        "framing": "Full crown and upper torso in all photos",
+        "grid": "Near-uniform8x4 grid; trim seam pixels",
+        "notes": []
+      }
+    },
+    {
+      "id": "atlas-10",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-10.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-94426643-257a-43a2-8a5f-f7ccb5f1ab89.png",
+      "sha256": "C806726152E7F37C60E393A92FF11197FF7F1F710E0B1856ED465B636CB445F5",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage rush: pale rosy complexion; broad angular face with wide jaw, close-set gray-green eyes with very deep lids, bushy dark blond brows, broad long bulbous nose, large thin-lipped straight mouth, medium attached ears; ash-brown straight thick hair. At15 soft child jaw and cheeks with short unruly fringe, noticeably slender child's shoulders, no facial hair through18; at22-31 messy cropped hair; light brown stubble after27; at35-45 mild widow's peak, gray at sideburns only45.\nROW2 lineage saffron: warm medium-brown skin; long delicate oval face with small chin, large black eyes under uneven slender high-arched brows, prominent long aquiline nose, thin lips with subtly raised viewer-left corner, long narrow ears; black loose springy curls. At15 soft cheeks and small curl ringlets over forehead, clean-shaven and slight frame; at18-31 loosely brushed-back curls, sparse moustache after27; at35-45 curls trimmed shorter, a few gray strands45, keep his distinctive nose.\nROW3 lineage thistle: fair golden-beige complexion; very short round face and high full cheeks, tiny dark eyes beneath low straight brows, broad tiny nose with rounded tip, wide softly curved thin mouth, compact pointed ears; naturally very thick straight dark-brown hair. At15 heavy shaggy fringe and soft adolescent cheeks, slim neck, no beard; at18-31 short fringe becoming side-part crop; clean-shaven at every age; at35-45 increasingly visible forehead but very mild aging lines.\nROW4 lineage violet: rich medium-dark brown complexion; narrow pentagonal face with long pointed chin, large wide-set amber-brown eyes, thick angled brows with a small natural gap at viewer-left edge, short wide nose with a soft dipped tip, very full lips and distinct cupid's bow, large outward rounded ears; dense black fine coils. At15 short uneven coil fringe, boyish soft cheeks and no beard; at18-31 slightly longer small twist top; small stubble after27; at35-45 short coils, little temple gray45.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "rush",
+          "row": 0,
+          "description": "pale rosy complexion; broad angular face with wide jaw, close-set gray-green eyes with very deep lids, bushy dark blond brows, broad long bulbous nose, large thin-lipped straight mouth, medium attached ears; ash-brown straight thick hair. At15 soft child jaw and cheeks with short unruly fringe, noticeably slender child's shoulders, no facial hair through18; at22-31 messy cropped hair; light brown stubble after27; at35-45 mild widow's peak, gray at sideburns only45.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "square",
+            "eyeShape": "deepSet",
+            "eyeColor": "blue",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "angular",
+            "hairColor": "darkBlond",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "saffron",
+          "row": 1,
+          "description": "warm medium-brown skin; long delicate oval face with small chin, large black eyes under uneven slender high-arched brows, prominent long aquiline nose, thin lips with subtly raised viewer-left corner, long narrow ears; black loose springy curls. At15 soft cheeks and small curl ringlets over forehead, clean-shaven and slight frame; at18-31 loosely brushed-back curls, sparse moustache after27; at35-45 curls trimmed shorter, a few gray strands45, keep his distinctive nose.",
+          "reviewedAnchors": {
+            "skinTone": "brown",
+            "faceShape": "oblong",
+            "eyeShape": "round",
+            "eyeColor": "brown",
+            "noseStructure": "narrow",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "thistle",
+          "row": 2,
+          "description": "fair golden-beige complexion; very short round face and high full cheeks, tiny dark eyes beneath low straight brows, broad tiny nose with rounded tip, wide softly curved thin mouth, compact pointed ears; naturally very thick straight dark-brown hair. At15 heavy shaggy fringe and soft adolescent cheeks, slim neck, no beard; at18-31 short fringe becoming side-part crop; clean-shaven at every age; at35-45 increasingly visible forehead but very mild aging lines.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "round",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "softBridge",
+            "mouthStructure": "balanced",
+            "jawStructure": "soft",
+            "hairColor": "brown",
+            "hairTexture": "straight",
+            "baselineHairline": "low",
+            "facialHairTendency": "light",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "violet",
+          "row": 3,
+          "description": "rich medium-dark brown complexion; narrow pentagonal face with long pointed chin, large wide-set amber-brown eyes, thick angled brows with a small natural gap at viewer-left edge, short wide nose with a soft dipped tip, very full lips and distinct cupid's bow, large outward rounded ears; dense black fine coils. At15 short uneven coil fringe, boyish soft cheeks and no beard; at18-31 slightly longer small twist top; small stubble after27; at35-45 short coils, little temple gray45.",
+          "reviewedAnchors": {
+            "skinTone": "brown",
+            "faceShape": "heart",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: consistent natural sports photography",
+        "identityContinuity": "pass: same eye, nose, mouth and face geometry throughout each row",
+        "age15": "pass: youthful clean-shaven academy teenagers",
+        "age35": "pass: mature active adults, restrained lines",
+        "skinToneContinuity": "pass: stable underlying complexion within natural lighting variation",
+        "framing": "Full crown and upper torso in all photos",
+        "grid": "Near-uniform8x4 grid; trim seam pixels",
+        "notes": [
+          "Row1 develops stronger skin lines by35; remains a plausible mature athlete."
+        ]
+      }
+    },
+    {
+      "id": "atlas-11",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-11.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-f9cb998e-b78a-459e-8a92-b77f1cce566f.png",
+      "sha256": "074FCDD32453EA92EB2CE316E01FFD1175B680D7AD252F9F2317217BD51950F8",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage wren: fair neutral beige skin and faint freckles; small triangular face with wide cheekbones and short blunt chin, large pale blue eyes beneath high thin blond brows, long narrow upturned nose, wide full lower lip and fine upper lip, small attached ears; sandy-blond loose curls. At15 full soft cheeks and shaggy curly fringe, no facial hair and narrow shoulders; at18-31 loosely styled curls cropped shorter with years; clean-shaven through31, light stubble35-45; slight temple recession45.\nROW2 lineage yarrow: deep golden-brown complexion; broad strong oval face with short low forehead, small hooded dark-brown eyes and broad curved brows, long thick straight nose with broad base, medium full mouth with slightly thinner lower lip, medium outward ears; tight black short coils. At15 soft adolescent cheeks and jaw, short coils and hairless face, thin neck; at18-31 neatly cropped coils, moustache only after27; at35-45 short close beard and minimally gray temples, never lightened skin.\nROW3 lineage agate: medium olive-tan complexion; unusually long narrow rectangle face and long chin, tiny dark eyes with inner-lid folds and low heavy straight brows, long straight wide-bridge nose, small tightly defined mouth with thin lips, very large soft earlobes; straight thick black hair. At15 loose overlong fringe with soft youthful jaw, no beard through18; at22-31 short side sweep, clean-shaven; at35-45 short crop and fine small moustache, subtle hair recession45.\nROW4 lineage birch: light warm-brown skin with a small mole high on viewer-left cheek; broad round face with narrow small chin, big hazel eyes slightly uneven in height, low arched dark brows, tiny blunt nose with wide base, full wide mouth with a deep cupid bow, small pointed ears; dark chocolate fine waves. At15 floppy thick waves and very soft child cheeks, narrow shoulders; at18-31 short natural swept waves; no facial hair through27, chin stubble after31; at35-45 restrained gray at temples45.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "wren",
+          "row": 0,
+          "description": "fair neutral beige skin and faint freckles; small triangular face with wide cheekbones and short blunt chin, large pale blue eyes beneath high thin blond brows, long narrow upturned nose, wide full lower lip and fine upper lip, small attached ears; sandy-blond loose curls. At15 full soft cheeks and shaggy curly fringe, no facial hair and narrow shoulders; at18-31 loosely styled curls cropped shorter with years; clean-shaven through31, light stubble35-45; slight temple recession45.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "heart",
+            "eyeShape": "round",
+            "eyeColor": "blue",
+            "noseStructure": "softBridge",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "blond",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "yarrow",
+          "row": 1,
+          "description": "deep golden-brown complexion; broad strong oval face with short low forehead, small hooded dark-brown eyes and broad curved brows, long thick straight nose with broad base, medium full mouth with slightly thinner lower lip, medium outward ears; tight black short coils. At15 soft adolescent cheeks and jaw, short coils and hairless face, thin neck; at18-31 neatly cropped coils, moustache only after27; at35-45 short close beard and minimally gray temples, never lightened skin.",
+          "reviewedAnchors": {
+            "skinTone": "brown",
+            "faceShape": "oval",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "angular",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "dense",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "agate",
+          "row": 2,
+          "description": "medium olive-tan complexion; unusually long narrow rectangle face and long chin, tiny dark eyes with inner-lid folds and low heavy straight brows, long straight wide-bridge nose, small tightly defined mouth with thin lips, very large soft earlobes; straight thick black hair. At15 loose overlong fringe with soft youthful jaw, no beard through18; at22-31 short side sweep, clean-shaven; at35-45 short crop and fine small moustache, subtle hair recession45.",
+          "reviewedAnchors": {
+            "skinTone": "medium",
+            "faceShape": "oblong",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "straight",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "birch",
+          "row": 3,
+          "description": "light warm-brown skin with a small mole high on viewer-left cheek; broad round face with narrow small chin, big hazel eyes slightly uneven in height, low arched dark brows, tiny blunt nose with wide base, full wide mouth with a deep cupid bow, small pointed ears; dark chocolate fine waves. At15 floppy thick waves and very soft child cheeks, narrow shoulders; at18-31 short natural swept waves; no facial hair through27, chin stubble after31; at35-45 restrained gray at temples45.",
+          "reviewedAnchors": {
+            "skinTone": "medium",
+            "faceShape": "round",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "softBridge",
+            "mouthStructure": "full",
+            "jawStructure": "soft",
+            "hairColor": "darkBrown",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: consistent natural sports photography",
+        "identityContinuity": "pass: same eye, nose, mouth and face geometry throughout each row",
+        "age15": "pass: youthful clean-shaven academy teenagers",
+        "age35": "pass: mature active adults, restrained lines",
+        "skinToneContinuity": "pass: stable underlying complexion within natural lighting variation",
+        "framing": "Full crown and upper torso in all photos",
+        "grid": "Near-uniform8x4 grid; trim seam pixels",
+        "notes": [
+          "Cross-catalog visual uniqueness still requires root review; hashes alone do not prove distinct-looking people."
+        ]
+      }
+    },
+    {
+      "id": "atlas-12",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-12.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-a910c224-7233-4797-98fd-d94d57f1188d.png",
+      "sha256": "DB73B762B92943DFD16ED6F2C30CE762EEBE0EA1348CB40DB73A5CA9757F0C0E",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nPrecise layout: each row occupies exactly one quarter of the canvas height, each column exactly one eighth of canvas width.32 equally sized square photos, edge-to-edge.\nCreate FOUR completely new people, different facial identities from every previous atlas. Avoid the familiar generic male-model face. Do not make15-year-olds into small adults: actual adolescent facial fat and softness, narrow child neck/shoulders, hairless face.\nFour independent identities TOP TO BOTTOM:\nROW1 lineage cairn: warm peach-fair skin with small freckles across nose; long heavy rectangular face, high square forehead, very small close-set light blue eyes under bushy auburn brows, large curved broad nose, wide thin mouth and big chin with shallow cleft, large low attached ears; brownish-red short straight hair. At15 soft boyish jaw and full cheeks, shaggy fringe, no beard, very slim shoulders; at18-31 short messy crop; thin red beard after27; at35-45 maturing hairline and restrained stubble gray45.\nROW2 lineage drift: medium warm olive skin; small diamond face with broad high cheeks and tiny chin, big long dark-brown eyes, straight fine black brows, short narrow nose with a bulbous tip, small plump mouth with asymmetric upper lip, large rounded detached ears; dark black straight fine hair. At15 straight loose side fringe and soft adolescent contours, no beard through22; at27-45 clean-shaven, hair moves from brushed-back to short crop, tiny temple gray45, keep high cheek geometry.\nROW3 lineage eider: deep dark neutral-brown skin; broad round face with rounded jaw, very large wide-set dark hazel eyes, low sparse arching brows, short broad upturned nose, wide thin upper lip and full lower lip, medium attached ears; small tight black corkscrew curls. At15 short soft curl top, soft child cheeks and no facial hair, slim neck; at18-31 longer tiny twists then short curls, clean-shaven through31; at35-45 close-cropped curls and a thin moustache, a little sideburn gray45.\nROW4 lineage fern: light golden-tan skin; long narrow heart-shaped face with prominent hollow temples and pointed chin, tiny green-brown eyes beneath thick curved brows, long slender hooked nose, wide thin lips and small natural mole beside viewer-right nose, large outward ears; coarse dark brown wavy hair. At15 fluffy wavy fringe and gentle soft adolescent cheeks, narrow neck and shoulders, clean-shaven through18; at22-31 short waves; light stubble after27; at35-45 short crop, modest thinning and gray hair45.\nOnly mature the person naturally across the row. The35-year-old is a present-day active athlete, with very subtle fine lines only, not gray elderly skin. Same exact underlying complexion, stable natural identity anchors at all ages.\nAdditional cross-catalog uniqueness requirement: These must be ordinary individually cast footballers, not generic handsome stock-model faces. Each row has its own independently different skull proportions, face length/width, eye distance, nose-to-mouth distance, ear projection and asymmetry. In row1 Cairn, make a notably TALL forehead and a LONG middle third of the face, deep-set VERY WIDELY SPACED small eyes, a very long broad curved nose, broad thin-lipped horizontal mouth and prominent low ears; he MUST NOT resemble a common short-nosed redheaded man with square eyes and balanced square jaw. In row3 Eider, make a noticeably SHORT wide round face with small high-set ears, SHORT face midsection and broad low nose; do not reuse the generic long oval dark-skinned short-curled footballer face. These structural distinctions remain natural and present from age15 through45; never caricature.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "cairn",
+          "row": 0,
+          "description": "warm peach-fair skin with small freckles across nose; long heavy rectangular face, high square forehead, very small close-set light blue eyes under bushy auburn brows, large curved broad nose, wide thin mouth and big chin with shallow cleft, large low attached ears; brownish-red short straight hair. At15 soft boyish jaw and full cheeks, shaggy fringe, no beard, very slim shoulders; at18-31 short messy crop; thin red beard after27; at35-45 maturing hairline and restrained stubble gray45.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "oblong",
+            "eyeShape": "deepSet",
+            "eyeColor": "blue",
+            "noseStructure": "broad",
+            "mouthStructure": "narrow",
+            "jawStructure": "broad",
+            "hairColor": "auburn",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "medium",
+            "build": "average",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "drift",
+          "row": 1,
+          "description": "medium warm olive skin; small diamond face with broad high cheeks and tiny chin, big long dark-brown eyes, straight fine black brows, short narrow nose with a bulbous tip, small plump mouth with asymmetric upper lip, large rounded detached ears; dark black straight fine hair. At15 straight loose side fringe and soft adolescent contours, no beard through22; at27-45 clean-shaven, hair moves from brushed-back to short crop, tiny temple gray45, keep high cheek geometry.",
+          "reviewedAnchors": {
+            "skinTone": "medium",
+            "faceShape": "round",
+            "eyeShape": "round",
+            "eyeColor": "brown",
+            "noseStructure": "softBridge",
+            "mouthStructure": "full",
+            "jawStructure": "soft",
+            "hairColor": "black",
+            "hairTexture": "straight",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "eider",
+          "row": 2,
+          "description": "deep dark neutral-brown skin; broad round face with rounded jaw, very large wide-set dark hazel eyes, low sparse arching brows, short broad upturned nose, wide thin upper lip and full lower lip, medium attached ears; small tight black corkscrew curls. At15 short soft curl top, soft child cheeks and no facial hair, slim neck; at18-31 longer tiny twists then short curls, clean-shaven through31; at35-45 close-cropped curls and a thin moustache, a little sideburn gray45.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "round",
+            "eyeShape": "round",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "broad",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "fern",
+          "row": 3,
+          "description": "light golden-tan skin; long narrow heart-shaped face with prominent hollow temples and pointed chin, tiny green-brown eyes beneath thick curved brows, long slender hooked nose, wide thin lips and small natural mole beside viewer-right nose, large outward ears; coarse dark brown wavy hair. At15 fluffy wavy fringe and gentle soft adolescent cheeks, narrow neck and shoulders, clean-shaven through18; at22-31 short waves; light stubble after27; at35-45 short crop, modest thinning and gray hair45.",
+          "reviewedAnchors": {
+            "skinTone": "medium",
+            "faceShape": "oblong",
+            "eyeShape": "deepSet",
+            "eyeColor": "brown",
+            "noseStructure": "narrow",
+            "mouthStructure": "balanced",
+            "jawStructure": "tapered",
+            "hairColor": "brown",
+            "hairTexture": "wavy",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: consistent natural sports photography",
+        "identityContinuity": "pass: same eye, nose, mouth and face geometry throughout each row",
+        "age15": "Rows1-3 pass: visibly adolescent. Row4 Fern has a naturally long narrow face and more pronounced contours; hold for age review.",
+        "age35": "pass: mature active adults, restrained lines",
+        "skinToneContinuity": "pass: stable underlying complexion within natural lighting variation",
+        "framing": "Full crown and upper torso in all photos",
+        "grid": "Near-uniform8x4 grid; trim seam pixels",
+        "notes": [
+          "Cairn nose/forehead proportions are visibly different from Flint/Gorse, but redhead cluster still merits pair review.",
+          "Fern has over-pronounced nasolabial and eye texture at22, similar age-realism risk to Larch. Hold Fern from final acceptance pending root review."
+        ]
+      }
+    },
+    {
+      "id": "atlas-13",
+      "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/visual-overhaul-20260904/proposals/portrait-art/atlas-13.png",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-8926914c-111c-471f-8b68-7a325476d14e.png",
+      "sha256": "D620AC6187EE8CBD62892C2B276B54B21D4C1559E8DE2C183C3F3B29DB98544A",
+      "width": 1774,
+      "height": 887,
+      "rowBoundariesPx": [
+        0,
+        222,
+        443,
+        665,
+        887
+      ],
+      "columnBoundariesPx": [
+        0,
+        222,
+        444,
+        665,
+        887,
+        1109,
+        1331,
+        1552,
+        1774
+      ],
+      "prompt": "Use case: photorealistic-natural.\nAsset type: offline football scouting game portrait aging atlas, photographic sprite sheet.\nProduce ONE new image requested at exactly 3840 pixels wide by 1920 pixels high, landscape 2:1. It contains exactly EIGHT equal columns and FOUR equal rows: 32 equal SQUARE photographic portrait cells. Absolutely no text, labels, numbers, watermarks, lines, margins or gutters. Photos tile edge to edge with exact equal grid divisions.\nEach row is ONE distinct fictional human male footballer, photographed again throughout his life. The eight columns are exactly ages 15, 18, 22, 27, 31, 35, 39, 45 from left to right. Create four completely new identities; do not reuse the reference pilot's people. Across each row rigorously preserve the same nose silhouette and nostrils, eye shape and eye spacing, ear shape, lips, asymmetry, complexion and underlying face proportions. No skin-tone fading or ethnicity drift. Each row is an independent face geometry, never one template recolored.\nEvery cell: real documentary sports PHOTOGRAPH, unretouched believable skin and pores, natural hair strands, small imperfections, quiet neutral attentive expression, direct front-on eye-level 85mm camera. Soft overcast daylight, muted natural color, softly defocused green football training pitch background. Wearing plain unbranded charcoal or dark forest-green sports crew-neck kit. Identical photographic language and camera distance in all 32 cells. Centered head plus shoulders and upper chest, ENTIRE crown and all hair visible with a little headroom, both ears and shoulder contour visible. Neck and build age naturally. No illustrations, no 3D or CGI, no glamour retouching, no perfect symmetry.\nAge progression: column1 must unmistakably be a 15-year-old academy child: softer adolescent cheeks and jaw, slight frame and narrow shoulders, clean-shaven NO beard, NO moustache, NO stubble. Column2 at18 is youthfully emerging adult with only subtle jaw maturation and usually clean-shaven. Column3 at22 young adult. Column4 at27 fully adult athlete. Column5 at31 is mature prime. Column6 at35 still youthful adult athlete, only subtle fine lines, NOT elderly or heavily gray. Column7 at39 subtly older. Column8 at45 middle-aged with restrained fine lines and modest individual hair changes, never elderly. Hair changes and facial hair after22 must not obscure identity anchors. Natural subtle aging rather than abrupt face replacement.\nStricter age control: ages15and18 must be unmistakably teenagers, with youthful facial fat and zero forehead lines, zero crow's feet and no deep nasolabial folds. Age22 is a young college-age adult with smooth youthful contours and natural pores, also no crow's feet or deep etched folds. Even if he has a long nose, thin face or angular skull, do NOT add middle-aged skin folds in18,22or27. At35 only very subtle fine lines; deeper lines belong exclusively39and45. Preserve ordinary skin texture without beauty retouching.\nCatalog uniqueness: independently cast four ordinary real-looking fictional footballers, not idealized model archetypes. Facial differences must come from distinctive skull and feature proportions, not hair color, skin recoloring or accessories. Retain plausible anatomy and soft15-year-old appearance. Do not reuse any person from earlier images.\nFour rows TOP TO BOTTOM:\nROW1 lineage frost: very fair pink-neutral complexion; genuinely ROUND short skull and face, almost equal face width/height below the hairline, a broad low forehead, very widely spaced small green eyes beneath thin low nearly-horizontal pale brows, very short broad softly upturned nose, a small thin upper lip and full lower lip, wide low cheeks and softly round chin, small high attached ears. Pale flax-blond straight fine hair with a messy fine fringe at15/18, short brushed-forward crop at22-31, very subtle temple thinning35-45. Clean-shaven at every age. This is an ordinary boyish rounded face, not a square-jawed redhead, not a handsome angular model. At15 soft full child cheeks and very narrow shoulders. At22 retain compact round proportions but mature naturally with smooth skin; no wrinkles before35.\nROW2 lineage kelp: deep neutral espresso-brown skin; unusually TALL broad forehead above a short compact midface, a slender long lower jaw and very small round chin; tiny widely spaced hooded dark eyes beneath thin curved eyebrows, broad flat nose with a small short bridge and wide softly rounded nostrils, noticeably NARROW mouth with tall full upper lip and small lower lip, large low outward ears. Natural black tightly coiled hair worn in short neat small braids at15/18, little twist crop22-31, cropped coils35-45. Clean-shaven through31; very fine moustache only35-45. Avoid the generic balanced oval broad-mouth dark-skinned stock face. Same small eyes, very high forehead, narrow mouth and ears through every age.15 has soft baby cheeks, tiny neck, slight shoulders, no facial hair;22 still smooth young skin.\nROW3 lineage pebble: medium warm golden-olive complexion; very WIDE short trapezoidal face with broad low cheekbones, short rounded jaw and small short chin; big round close-set brown eyes under thin high curved brows, tiny narrow straight nose with a lifted tip and small nostrils, unusually WIDE smiling closed mouth with a fine upper lip, softly full lower lip and tiny cheek dimple on viewer-right, compact low ears. Dark chocolate-brown loose corkscrew hair with longer floppy coils at15/18, short tousled curls22-31 and shorter curls35-45; little facial hair, no beard until very sparse stubble39. An approachable compact ordinary footballer, not a lean high-cheeked model.15 slight frame and soft young cheeks;22-31 smooth youthful adult texture,35 tiny fine lines only,45 naturally middle-aged.\nROW4 lineage solstice: light neutral beige skin, scattered light freckles only across bridge of nose; very LONG rectangular skull with a notably high square forehead, small widely spaced pale gray-blue deep-set eyes beneath thick straight light-brown brows, noticeably long broad straight nose with rounded prominent tip, a wide very thin-lipped horizontal mouth, long blunt chin, large rounded ears with long lobes; ash-brown almost-straight fine hair. At15 light soft floppy fringe and adolescent fat smoothing every angle, very thin neck and narrow shoulders;18 longer side fringe;22-31 short brushed-flat side part and clean-shaven, smooth young adult skin with NO deep folds;35-45 clean short haircut with gentle widow's peak, clean-shaven. Distinct broad long nose and wide thin mouth stay stable; no wrinkles before35.\nGrid:32 head-and-shoulder photographs, eight equal columns by four equal rows. No text. Preserve each row's bone structure and feature placement across all eight ages. Young adulthood must NOT introduce aging lines.",
+      "editPrompts": [],
+      "lineages": [
+        {
+          "id": "frost",
+          "row": 0,
+          "description": "very fair pink-neutral complexion; genuinely ROUND short skull and face, almost equal face width/height below the hairline, a broad low forehead, very widely spaced small green eyes beneath thin low nearly-horizontal pale brows, very short broad softly upturned nose, a small thin upper lip and full lower lip, wide low cheeks and softly round chin, small high attached ears. Pale flax-blond straight fine hair with a messy fine fringe at15/18, short brushed-forward crop at22-31, very subtle temple thinning35-45. Clean-shaven at every age. This is an ordinary boyish rounded face, not a square-jawed redhead, not a handsome angular model. At15 soft full child cheeks and very narrow shoulders. At22 retain compact round proportions but mature naturally with smooth skin; no wrinkles before35.",
+          "reviewedAnchors": {
+            "skinTone": "veryLight",
+            "faceShape": "round",
+            "eyeShape": "round",
+            "eyeColor": "green",
+            "noseStructure": "broad",
+            "mouthStructure": "balanced",
+            "jawStructure": "soft",
+            "hairColor": "blond",
+            "hairTexture": "straight",
+            "baselineHairline": "low",
+            "facialHairTendency": "light",
+            "build": "broad",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "kelp",
+          "row": 1,
+          "description": "deep neutral espresso-brown skin; unusually TALL broad forehead above a short compact midface, a slender long lower jaw and very small round chin; tiny widely spaced hooded dark eyes beneath thin curved eyebrows, broad flat nose with a small short bridge and wide softly rounded nostrils, noticeably NARROW mouth with tall full upper lip and small lower lip, large low outward ears. Natural black tightly coiled hair worn in short neat small braids at15/18, little twist crop22-31, cropped coils35-45. Clean-shaven through31; very fine moustache only35-45. Avoid the generic balanced oval broad-mouth dark-skinned stock face. Same small eyes, very high forehead, narrow mouth and ears through every age.15 has soft baby cheeks, tiny neck, slight shoulders, no facial hair;22 still smooth young skin.",
+          "reviewedAnchors": {
+            "skinTone": "deep",
+            "faceShape": "oblong",
+            "eyeShape": "hooded",
+            "eyeColor": "darkBrown",
+            "noseStructure": "broad",
+            "mouthStructure": "full",
+            "jawStructure": "tapered",
+            "hairColor": "black",
+            "hairTexture": "coily",
+            "baselineHairline": "high",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "none",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "pebble",
+          "row": 2,
+          "description": "medium warm golden-olive complexion; very WIDE short trapezoidal face with broad low cheekbones, short rounded jaw and small short chin; big round close-set brown eyes under thin high curved brows, tiny narrow straight nose with a lifted tip and small nostrils, unusually WIDE smiling closed mouth with a fine upper lip, softly full lower lip and tiny cheek dimple on viewer-right, compact low ears. Dark chocolate-brown loose corkscrew hair with longer floppy coils at15/18, short tousled curls22-31 and shorter curls35-45; little facial hair, no beard until very sparse stubble39. An approachable compact ordinary footballer, not a lean high-cheeked model.15 slight frame and soft young cheeks;22-31 smooth youthful adult texture,35 tiny fine lines only,45 naturally middle-aged.",
+          "reviewedAnchors": {
+            "skinTone": "tan",
+            "faceShape": "round",
+            "eyeShape": "almond",
+            "eyeColor": "brown",
+            "noseStructure": "softBridge",
+            "mouthStructure": "full",
+            "jawStructure": "soft",
+            "hairColor": "brown",
+            "hairTexture": "curly",
+            "baselineHairline": "even",
+            "facialHairTendency": "light",
+            "build": "average",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        },
+        {
+          "id": "solstice",
+          "row": 3,
+          "description": "light neutral beige skin, scattered light freckles only across bridge of nose; very LONG rectangular skull with a notably high square forehead, small widely spaced pale gray-blue deep-set eyes beneath thick straight light-brown brows, noticeably long broad straight nose with rounded prominent tip, a wide very thin-lipped horizontal mouth, long blunt chin, large rounded ears with long lobes; ash-brown almost-straight fine hair. At15 light soft floppy fringe and adolescent fat smoothing every angle, very thin neck and narrow shoulders;18 longer side fringe;22-31 short brushed-flat side part and clean-shaven, smooth young adult skin with NO deep folds;35-45 clean short haircut with gentle widow's peak, clean-shaven. Distinct broad long nose and wide thin mouth stay stable; no wrinkles before35.",
+          "reviewedAnchors": {
+            "skinTone": "light",
+            "faceShape": "oblong",
+            "eyeShape": "hooded",
+            "eyeColor": "hazel",
+            "noseStructure": "straight",
+            "mouthStructure": "narrow",
+            "jawStructure": "tapered",
+            "hairColor": "brown",
+            "hairTexture": "straight",
+            "baselineHairline": "high",
+            "facialHairTendency": "light",
+            "build": "lean",
+            "distinctiveFeature": "freckles",
+            "cameraAngle": "front"
+          },
+          "anchorReview": "Manual visual classification from delivered photographs."
+        }
+      ],
+      "qa": {
+        "status": "accepted-candidate",
+        "photorealism": "pass: consistent natural sports photography",
+        "identityContinuity": "pass: same eye, nose, mouth and face geometry throughout each row",
+        "age15": "pass: youthful clean-shaven academy teenagers",
+        "age35": "pass: mature active adults, restrained lines",
+        "skinToneContinuity": "pass: stable underlying complexion within natural lighting variation",
+        "framing": "Full crown and upper torso in all photos",
+        "grid": "Near-uniform8x4 grid; trim seam pixels",
+        "notes": [
+          "Stronger independent skull proportions were requested. Frost and Kelp visibly differ from earlier archetypes. Pebble/Ember and Solstice/Elm should be included in the catalog-level resemblance review rather than assumed unique from hashes."
+        ]
+      }
+    }
+  ],
+  "rejectedAttempts": [
+    {
+      "atlas": "atlas-02",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-7f1f952c-0527-4213-a9ca-aaea9e6d9114.png",
+      "reason": "Row3teen complexion too light; edited to same honey-brown skin as age18. Unequal rows recorded in final metadata."
+    },
+    {
+      "atlas": "atlas-04",
+      "sourcePath": "C:/Users/hands/.codex/generated_images/01a06e0c-0744-7850-bb65-d28fd2766343/exec-5aab0643-966f-4398-9a69-d38803c0f6ad.png",
+      "reason": "Bottom-row age15 too mature; replaced with visibly softer adolescent face, smaller neck and narrower shoulders."
+    }
+  ],
+  "crossCatalogQa": {
+    "reviewedMontage": "portrait-packaging/checks/canonical-faces-1920.png",
+    "reviewedCount": 36,
+    "findings": [
+      {
+        "lineages": [
+          "flint",
+          "gorse"
+        ],
+        "severity": "quarantine-later-lineage",
+        "verdict": "Near-duplicate visual identity: broad jaw, brow/eye relationship, short nose and mouth; hair differences insufficient."
+      },
+      {
+        "lineages": [
+          "flint",
+          "copper"
+        ],
+        "severity": "pair-review",
+        "verdict": "Secondary similarity risk within redhead cluster; stronger square geometry may distinguish but needs root pair review."
+      },
+      {
+        "lineages": [
+          "heath",
+          "ink"
+        ],
+        "severity": "quarantine-later-lineage",
+        "verdict": "Closest broad-nosed oval-face pair among reviewed dark-skinned lineages; same apparent underlying face geometry."
+      },
+      {
+        "lineages": [
+          "estuary",
+          "heath"
+        ],
+        "severity": "pair-review",
+        "verdict": "Secondary near-match risk; root should assess at original crop size."
+      },
+      {
+        "lineages": [
+          "heath",
+          "opal"
+        ],
+        "severity": "acceptable-with-review",
+        "verdict": "Opal shows wider nose, different cheek volume and eye spacing; do not reject purely on similar complexion and hair."
+      },
+      {
+        "lineages": [
+          "larch"
+        ],
+        "severity": "age-rejection",
+        "verdict": "Age22 has deeply developed nasolabial/eye lines and reads significantly older. Exclude until explicit revision or replacement."
+      }
+    ],
+    "releasePolicy": "Do not equate distinct hashes with distinct-looking people. Root decides quarantine/exclusion before final pack. Existing developmental asset bytes are immutable."
+  },
+  "rootReview": {
+    "date": "2026-09-04",
+    "reviewedAtlases": 13,
+    "reviewedLineages": 52,
+    "newAllocationCapacity": 46,
+    "excludedFromNewAllocation": {
+      "gorse": "Near-duplicate facial geometry of Flint.",
+      "ink": "Near-duplicate facial geometry of Heath.",
+      "larch": "Age 22 appears too mature.",
+      "copper": "Conservative hold: close resemblance within Flint/Gorse cluster.",
+      "fern": "Age 18/22 eye and nasolabial folds read older than intended.",
+      "pebble": "Strong resemblance to Ember at 15 and 22; hairstyle does not establish a distinct person."
+    },
+    "pairAcceptance": {
+      "solstice/elm": "Solstice has narrower eyes, longer chin and flatter lips; Elm has rounder eyes, more prominent lower lip and shorter chin. Distinction sufficient at normal dossier size.",
+      "estuary/heath": "Estuary has narrower chin and fuller upper lip; Heath has broader lower face and distinct eyelid/brow relationship. Shared complexion/hair does not imply the same face."
+    },
+    "limitations": [
+      "Identity continuity and apparent age are visual judgments, not biometric or age certification.",
+      "Several rows use similar haircuts and lighting; subsequent packs should broaden those photographic variations.",
+      "Existing development bindings remain resolvable; held images are never silently replaced."
+    ],
+    "evidence": [
+      "Original atlas rows viewed at native dimensions.",
+      "Packaged canonical-face contact sheet inspected."
+    ]
+  }
+}

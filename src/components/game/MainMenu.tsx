@@ -171,7 +171,7 @@ export function MainMenu() {
             id="talentscout-splash-title"
             className="mb-3 text-5xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] sm:text-7xl"
           >
-            Talent<span className="text-emerald-500 drop-shadow-[0_0_24px_rgba(16,185,129,0.5)]">Scout</span>
+            Talent<span className="text-amber-400 drop-shadow-[0_0_24px_rgba(212,168,67,0.5)]">Scout</span>
           </h1>
           <p className="text-lg tracking-wide text-zinc-400 animate-[splashFadeIn_1000ms_ease-out_400ms_both] drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
             The scout&apos;s eye sees what others miss
@@ -180,7 +180,7 @@ export function MainMenu() {
         <button
           type="button"
           onClick={() => setShowSplash(false)}
-          className="absolute bottom-6 right-6 z-10 min-h-11 rounded-lg border border-white/15 bg-black/35 px-4 text-sm font-medium text-zinc-300 backdrop-blur transition hover:border-white/30 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+          className="absolute bottom-6 right-6 z-10 min-h-11 rounded-lg border border-white/15 bg-black/35 px-4 text-sm font-medium text-zinc-300 backdrop-blur transition hover:border-white/30 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ring)]"
         >
           Skip intro
         </button>
@@ -202,7 +202,7 @@ export function MainMenu() {
       >
         <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.8} />
         <div className="relative z-10">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-[color:var(--primary)]" />
           <p className="mt-4 text-zinc-400">Loading save...</p>
         </div>
       </main>
@@ -210,40 +210,36 @@ export function MainMenu() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4 py-10">
-      <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.65} />
+    <main className="relative isolate flex min-h-dvh flex-col items-start justify-center bg-[var(--background)] px-6 py-10 sm:px-12 lg:px-24">
+      <div className="absolute inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: "url('/images/backgrounds/activities/touchline-documentary.webp')" }} aria-hidden="true" />
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(16,20,17,.97)_0%,rgba(16,20,17,.88)_40%,rgba(16,20,17,.28)_100%)] max-sm:bg-black/65" aria-hidden="true" />
       {/* Title */}
-      <div className="relative z-10 mb-10 text-center md:mb-14">
+      <div className="relative z-10 mb-8 max-w-2xl text-left md:mb-10">
         {IS_YOUTH_EARLY_ACCESS && (
-          <Badge className="mb-4 border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+          <Badge className="mb-5 rounded-none border-0 bg-transparent px-0 text-xs font-medium uppercase tracking-[0.16em] text-[var(--primary)]">
             Youth Scout Career · Early Access
           </Badge>
         )}
-        <h1 className="mb-2 text-6xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
-          Talent<span className="text-amber-400">Scout</span>
+        <h1 className="mb-5 font-editorial text-5xl leading-none tracking-tight text-[var(--foreground)] sm:text-7xl lg:text-8xl">
+          Talent <span className="text-[var(--primary)]">Scout</span>
         </h1>
-        <p className="text-lg text-zinc-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+        <p className="max-w-lg text-lg leading-relaxed text-zinc-200">
           {IS_YOUTH_EARLY_ACCESS
             ? "Discover young players. Build the evidence. Back your judgement."
             : "Football Scout Career Simulator"}
         </p>
-        {IS_YOUTH_EARLY_ACCESS && (
-          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-zinc-400">
-            Begin as a Youth Scout. Follow leads, watch young players, build trusted reports,
-            and grow from an unknown observer into a sought-after talent expert. More scouting
-            careers will arrive as Early Access grows.
-          </p>
-        )}
+
       </div>
 
       {!showLoadPicker ? (
         <div
-          className="relative z-10 flex w-64 flex-col gap-3"
+          className="relative z-10 flex w-full max-w-sm flex-col gap-2"
           data-testid="main-menu-actions"
         >
           <Button
             size="lg"
-            className="w-full text-base"
+            variant={hasLoadableSave ? "outline" : "default"}
+            className="w-full justify-between text-base"
             onClick={() => {
               if (selectedScenarioId) {
                 setSelectedScenario(null);
@@ -254,9 +250,9 @@ export function MainMenu() {
             {IS_YOUTH_EARLY_ACCESS ? "Start Youth Scout Career" : "New Game"}
           </Button>
           <Button
-            variant="secondary"
+            variant="default"
             size="lg"
-            className="w-full text-base"
+            className={hasLoadableSave ? "order-first w-full justify-between text-base" : "hidden"}
             disabled={!hasLoadableSave}
             onClick={() => void handleContinue()}
           >
@@ -269,7 +265,7 @@ export function MainMenu() {
           <Button
             variant="outline"
             size="lg"
-            className="w-full text-base"
+            className={hasSaveEntries ? "w-full justify-between text-base" : "hidden"}
             disabled={!hasSaveEntries}
             onClick={() => setShowLoadPicker(true)}
           >
@@ -487,7 +483,7 @@ export function MainMenu() {
         </div>
       )}
 
-      <p className="mt-16 text-xs text-zinc-600">
+      <p className="relative z-10 mt-10 text-xs text-zinc-400">
         v{APP_VERSION} — The scout&apos;s eye sees what others miss
       </p>
 

@@ -521,7 +521,7 @@ export default function Home() {
           launch path while retaining their existing priority and evaluation. */}
       {activeCareerId && (
         <>
-          <TutorialRuntime />
+          {!hasWeekSummary && !showCelebration && !showInsight && !showScenario && !showFeedback && !showCareerMoment && <TutorialRuntime />}
           <AchievementRuntime />
         </>
       )}

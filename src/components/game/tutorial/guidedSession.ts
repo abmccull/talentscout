@@ -204,9 +204,9 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     target: ["observation-focus-lens", "observation-focus-panel"],
     title: "Focus on a youth prospect",
     mentorText:
-      "Select Focus on your prospect, then choose a lens. That is how you turn a busy school match into a usable read.",
+      "Choose your prospect in Players in view, then choose a lens under Your attention. Stay with a player long enough to test your first impression.",
     mentorTextFreelance:
-      "Select Focus on one prospect, then pick a lens. Focus trades a broad look for a cleaner read.",
+      "Choose a prospect, then a lens under Your attention. Focus trades a broad look for a cleaner read.",
     position: "left",
     interactive: true,
     screen: "observation",
@@ -339,6 +339,16 @@ export function getGuidedMilestone(
   id: GuidedMilestoneId,
 ): GuidedMilestoneDefinition | undefined {
   return getActiveGuidedMilestones().find((m) => m.id === id);
+}
+
+/** Navigation is restricted only when this career can present an actual task. */
+export function shouldLockGuidedNavigation(
+  active: boolean,
+  task: GuidedMilestoneId | null,
+): boolean {
+  if (!active || task === null) return false;
+  const milestone = getGuidedMilestone(task);
+  return Boolean(milestone?.screen && milestone.target.length > 0);
 }
 
 /**

@@ -1073,11 +1073,11 @@ function collectPlannerCandidate(state: GameState): DashboardPriorityCandidate[]
     collector: "planner",
     category: "required_action",
     title: openDays === 1
-      ? "1 day is still unallocated this week"
-      : `${openDays} days are still unallocated this week`,
+      ? "Choose how to spend your remaining day"
+      : `Plan your next ${openDays} days`,
     explanation: scheduledObservationCount > 0
-      ? `You already have ${scheduledObservationCount} observation block${scheduledObservationCount === 1 ? "" : "s"} booked, but unused planner space still leaves attention on the table.`
-      : "The current week still has no complete plan, so your next evidence and recovery tradeoffs remain undefined.",
+      ? `${scheduledObservationCount} observation block${scheduledObservationCount === 1 ? "" : "s"} booked. Make room for another look, a report, or recovery.`
+      : "Choose a match to watch, a report to write, or a day to recover.",
     consequence: "Unused planner space turns into lost attention when the week advances.",
     relatedEntityIds: [],
     sourceSystem: "planner",

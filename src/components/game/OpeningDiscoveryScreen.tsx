@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
-import { Clock3, Eye, LockKeyhole, Phone, Sparkles, Users } from "lucide-react";
+import { Clock3, LockKeyhole, Phone, Users } from "lucide-react";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -24,6 +23,7 @@ export function OpeningDiscoveryScreen() {
   const gameState = useGameStore((state) => state.gameState);
   const resolveChoice = useGameStore((state) => state.resolveOpeningDiscoveryChoice);
   const setScreen = useGameStore((state) => state.setScreen);
+  const activeSession = useGameStore((state) => state.activeSession);
   const { playStinger } = useAudio();
   const [pendingChoice, setPendingChoice] = useState<OpeningCaseChoiceId | null>(null);
   const projection = gameState ? buildOpeningCaseProjection(gameState) : null;
@@ -70,95 +70,71 @@ export function OpeningDiscoveryScreen() {
 
   return (
     <main
-      className="relative min-h-screen overflow-x-hidden bg-[#070a09] text-white"
+      className="relative min-h-screen overflow-x-hidden bg-[color:var(--background)] text-[color:var(--foreground)]"
       aria-labelledby="opening-discovery-heading"
       data-testid="opening-discovery"
     >
-      <ScreenBackground src={background} opacity={0.72} />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(212,168,67,0.16),transparent_35%),linear-gradient(to_bottom,rgba(4,7,6,0.15),#070a09_75%)]" />
-
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-8 sm:py-10">
-        <header className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/images/branding/icon-notebook.png"
-              alt=""
-              width={44}
-              height={44}
-              unoptimized
-              className="h-11 w-11 rounded-xl border border-[color:var(--primary)]/25 object-cover"
-            />
-            <div>
-              <p className="text-eyebrow font-semibold uppercase tracking-[0.22em] text-[color:var(--primary)]">
-                {projection.eyebrow}
-              </p>
-              <p className="mt-0.5 text-xs text-zinc-400">{projection.venueLabel} · Week {gameState.currentWeek}, Season {gameState.currentSeason}</p>
-            </div>
+      <ScreenBackground src={background} opacity={0.9} />
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 py-5 sm:px-8 sm:py-8">
+        <header className="mb-7 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] pb-4">
+          <div>
+            <p className="dossier-eyebrow">{projection.eyebrow}</p>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{projection.venueLabel} · Week {gameState.currentWeek}, Season {gameState.currentSeason}</p>
           </div>
-          <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300 sm:flex">
-            <Eye size={14} className="text-[color:var(--primary)]" aria-hidden="true" />
-            You were first to notice
-          </div>
-        </header>
-        <div className="mt-4">
           <button
             type="button"
-            onClick={() => setScreen(gameState.openingCase?.stage === "report" ? "reportWriter" : "observation")}
-            className="min-h-11 rounded-lg px-3 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white"
+            onClick={() => {
+              if (gameState.openingCase?.stage === "report") {
+                setScreen("reportWriter");
+                return;
+              }
+              setScreen(activeSession ? "observation" : "dashboard");
+            }}
+            className="min-h-11 rounded px-3 text-sm font-medium text-[color:var(--muted-foreground)] transition hover:bg-[color:var(--surface-interactive)] hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--ring)]"
           >
-            {gameState.openingCase?.stage === "report" ? "Continue to the report" : "Back to Watch"}
+            {gameState.openingCase?.stage === "report"
+              ? "Continue to the report"
+              : activeSession
+                ? "Back to Watch"
+                : "Back to Desk"}
           </button>
-        </div>
+        </header>
 
-        <section className="grid flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-12">
-          <div className="mx-auto w-full max-w-xl text-center lg:text-left">
-            <div className="mx-auto mb-5 flex w-fit items-end gap-3 lg:mx-0">
-              <div className="rounded-full border-2 border-[color:var(--primary)]/50 bg-[#14110c] p-1 shadow-[0_0_50px_rgba(212,168,67,0.18)]">
-                <YouthPortraitWithFallback
-                  playerId={projection.playerId}
-                  nationality={youth.player.nationality}
-                  age={projection.age}
-                  size={96}
-                  className="rounded-full"
-                  alt={projection.playerName}
-                />
+        <section className="grid items-start gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-12">
+          <div className="min-w-0">
+            <div className="flex items-center gap-5">
+              <YouthPortraitWithFallback
+                playerId={projection.playerId}
+                nationality={youth.player.nationality}
+                age={projection.age}
+                size={96}
+                className="shrink-0"
+                alt={projection.playerName}
+              />
+              <div className="min-w-0">
+                <p className="dossier-eyebrow">Write the name down</p>
+                <h1 id="opening-discovery-heading" className="font-editorial mt-2 text-3xl leading-tight sm:text-4xl">
+                  {projection.playerName}
+                </h1>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{projection.position} · Age {projection.age}</p>
               </div>
-              <span className="mb-1 rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-200">
-                {projection.position} · Age {projection.age}
-              </span>
             </div>
+            <p className="font-editorial mt-6 text-2xl leading-snug">{projection.headline}</p>
+            {projection.premise && <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">{projection.premise}</p>}
+            <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">{projection.uncertainty}</p>
 
-            <div className="mb-3 flex items-center justify-center gap-2 lg:justify-start">
-              <Sparkles size={18} className="text-amber-300" aria-hidden="true" />
-              <p className="font-handwritten text-lg text-amber-100">Write the name down.</p>
-            </div>
-            <h1 id="opening-discovery-heading" className="text-balance text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
-              {projection.playerName}
-            </h1>
-            <p className="mt-4 text-balance text-lg leading-7 text-zinc-200">
-              {projection.headline}
-            </p>
-            {projection.premise && (
-              <p className="mt-2 text-sm leading-6 text-zinc-300">
-                {projection.premise}
-              </p>
-            )}
-            <p className="mt-3 text-sm leading-6 text-zinc-400">
-              {projection.uncertainty}
-            </p>
-
-            <div className="mt-6 grid gap-3 text-left sm:grid-cols-2">
-              <div className="rounded-xl border border-[color:var(--primary)]/20 bg-[color:var(--primary)]/[0.06] p-4">
-                <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-[color:var(--primary)]">{projection.signalLabel}</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-200">
+            <div className="dossier-section mt-6 space-y-5">
+              <div>
+                <h2 className="dossier-eyebrow">{projection.signalLabel}</h2>
+                <p className="mt-2 text-sm leading-6">
                   {breakthrough?.description
                     ?? veteranPrologue?.evidenceBeats[1].focused
                     ?? "A pressured action showed vision and anticipation beyond the rhythm of the match."}
                 </p>
               </div>
-              <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.05] p-4">
-                <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-amber-300">The open question</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-200">
+              <div>
+                <h2 className="dossier-eyebrow">The open question</h2>
+                <p className="mt-2 text-sm leading-6">
                   {hypothesis?.text
                     ?? veteranPrologue?.contradiction
                     ?? "Was that natural composure—or one exceptional moment in an otherwise uneven performance?"}
@@ -166,29 +142,23 @@ export function OpeningDiscoveryScreen() {
               </div>
             </div>
             {projection.deadline && (
-              <div className="mt-3 flex items-start gap-3 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-4 text-left">
-                <Clock3 size={17} className="mt-0.5 shrink-0 text-rose-200" aria-hidden="true" />
+              <div className="flex items-start gap-3 border-l-2 border-[color:var(--signal-warn)] pl-4">
+                <Clock3 size={17} className="mt-0.5 shrink-0 text-[color:var(--signal-warn)]" aria-hidden="true" />
                 <div>
-                  <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-rose-200">Decision window</p>
-                  <p className="mt-1 text-sm leading-6 text-zinc-200">{projection.deadline}</p>
-                  {projection.stakeholderConflict && (
-                    <p className="mt-1 text-xs leading-5 text-zinc-400">{projection.stakeholderConflict}</p>
-                  )}
+                  <p className="dossier-eyebrow">Decision window</p>
+                  <p className="mt-1 text-sm leading-6">{projection.deadline}</p>
+                  {projection.stakeholderConflict && <p className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">{projection.stakeholderConflict}</p>}
                 </div>
               </div>
             )}
           </div>
 
-          <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0d1210]/95 p-4 shadow-2xl backdrop-blur sm:p-6">
+          <div className="min-w-0 border-t-2 border-[color:var(--primary)] pt-5">
             <div className="mb-5">
-              <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">Your next move</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">{projection.questionLabel}</h2>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-                The call you make now will shape who gets access, how quickly the name spreads,
-                and whether people trust your judgment later.
-              </p>
+              <p className="dossier-eyebrow">Your next move</p>
+              <h2 className="font-editorial mt-2 text-3xl leading-tight">{projection.questionLabel}</h2>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">Your choice affects access, discretion, and trust.</p>
             </div>
-
             <div
               className="space-y-3"
               role="group"
@@ -208,25 +178,17 @@ export function OpeningDiscoveryScreen() {
                     disabled={pendingChoice !== null && pendingChoice !== choice.id}
                     disabledReason={pendingChoice && pendingChoice !== choice.id ? "Choice already committed." : undefined}
                     onSelect={() => handleChoice(choice.id)}
-                    className="min-h-24"
+                    className="min-h-24 bg-[color:var(--surface)] px-4 py-4"
                   >
-                    <span className="flex items-start gap-4">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-[color:var(--primary)]">
-                        <Icon size={19} aria-hidden="true" />
-                      </span>
+                    <span className="flex items-start gap-3">
+                      <Icon size={20} className="mt-0.5 shrink-0 text-[color:var(--primary)]" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-semibold text-white">{choiceLabel}</span>
-                        <span className="mt-1.5 block text-sm leading-5 text-quiet">{choice.description}</span>
-                        {choice.effect && (
-                          <span className="mt-1.5 block text-xs leading-5 text-[color:var(--primary)]">
-                            What this means: {choice.effect}
-                          </span>
-                        )}
-                        <span className="mt-2 flex flex-wrap gap-1.5">
-                          {choice.knownTradeoffs.map((tradeoff) => (
-                            <span key={tradeoff} className="rounded-full border border-white/10 px-2 py-1 text-eyebrow text-zinc-300">
-                              {tradeoff}
-                            </span>
+                        <span className="block text-base font-semibold">{choiceLabel}</span>
+                        <span className="mt-1 block text-sm leading-6 text-[color:var(--muted-foreground)]">{choice.description}</span>
+                        {choice.effect && <span className="mt-2 block text-sm leading-6 text-[color:var(--primary)]">{choice.effect}</span>}
+                        <span className="mt-2 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+                          {choice.knownTradeoffs.map((tradeoff, index) => (
+                            <span key={tradeoff}>{index > 0 && <span aria-hidden="true"> · </span>}{tradeoff}</span>
                           ))}
                         </span>
                       </span>
@@ -235,11 +197,6 @@ export function OpeningDiscoveryScreen() {
                 );
               })}
             </div>
-
-            <p className="mt-4 text-center text-meta leading-5 text-zinc-400">
-              No one knows what this player will become. What you record, who you tell, and
-              whether you return will decide whether this first read earns trust or becomes a lesson.
-            </p>
           </div>
         </section>
       </div>

@@ -8,6 +8,13 @@
 - If a first-hour change makes week 2 feel like a different game, undo it.
 - Do not keep a parallel notebook writer, seeded assessment, stance-on-report, or OpeningHourDesk. First report is InitialAssessmentBuilder. Discovery stays on its own screen.
 
+## One loop from day 1 to year 30
+
+- Y1/Y2 are sequencing labels, not modes. Do not build a second game for “season identity.”
+- Skip guide means no mentor UI. It does not mark the player a veteran or swap the school assignment for a dynamic prologue.
+- Advance Week plays every booked day. The open case is the figure, not a reason to skip earlier days.
+- Placed and poached kids leave the working list. They stay on Desk as people you live with.
+
 ## Keep the genuine engineering
 
 - Persist, rem type, ChoiceCard, portraits, colorblind remaps, school-match plate, and mentor-as-dialog stay.

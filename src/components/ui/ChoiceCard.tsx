@@ -52,10 +52,10 @@ export function ChoiceCard({
 }: ChoiceCardProps) {
   const locked = disabled || pending;
   const surface = cn(
-    "relative flex min-h-16 w-full cursor-pointer flex-col rounded-xl border p-4 text-left transition",
+    "relative flex min-h-14 w-full cursor-pointer flex-col rounded border px-4 py-3 text-left transition-colors",
     selected
-      ? "border-[color:var(--primary)] bg-[color:var(--primary)]/12"
-      : "border-[color:var(--border)] bg-[color:var(--card)] hover:border-[color:var(--muted-foreground)]/40",
+      ? "border-[color:var(--primary)]/70 bg-[color:var(--surface-selected)]"
+      : "border-[color:var(--border)] bg-transparent hover:bg-[color:var(--surface-interactive)]",
     pending && "cursor-wait",
     disabled && !pending && "cursor-not-allowed opacity-55",
     className,
@@ -64,19 +64,15 @@ export function ChoiceCard({
   const body = (
     <>
       <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0 flex-1">{children}</span>
-        <span className="flex shrink-0 flex-col items-end gap-1">
-          {pending ? (
-            <span className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
-              Working…
-            </span>
-          ) : selected ? selectedMark : idleMark}
-          {recommended && !pending && (
-            <span className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
-              Recommended
+        <span className="min-w-0 flex-1">
+          {children}
+          {(pending || recommended) && (
+            <span className="mt-2 block text-xs font-semibold text-[color:var(--primary)]">
+              {pending ? "Working…" : "Recommended"}
             </span>
           )}
         </span>
+        {selected ? selectedMark : idleMark}
       </span>
       {disabled && disabledReason && (
         <span className="text-meta mt-2 text-quiet">{disabledReason}</span>

@@ -1,3 +1,4 @@
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 /**
  * Finance, economics, equipment, agency, transfer negotiation, free agent,
  * and player loan actions extracted from gameStore.
@@ -389,8 +390,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const signOffSummary = reviewPreview.reviewDebtPenalty > 0
         ? `${reviewPreview.signedOffQualityScore}/100 after ${reviewPreview.reviewDebtPenalty} review-debt points`
         : `${reviewPreview.signedOffQualityScore}/100 with no review debt`;
-      set({
-        gameState: {
+      const nextState = revealGamePortraits({
           ...gameState,
           finances,
           scout: {
@@ -414,8 +414,9 @@ export function createFinanceActions(get: GetState, set: SetState) {
             relatedId: product.playerId,
             relatedEntityType: "player",
           }],
-        },
-      });
+      }, [product.playerId], "tracked");
+      set({ gameState: nextState });
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession), set);
     },
 
     rejectStaffWorkProduct: (workProductId: string) => {

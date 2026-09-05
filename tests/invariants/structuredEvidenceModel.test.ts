@@ -16,8 +16,10 @@ import {
 import type {
   ObservationSession,
   PlayerMoment,
+  SessionFlaggedMoment,
   SessionPhase,
 } from "@/engine/observation/types";
+import { getPerceivedFlaggedMomentDescription } from "@/engine/observation/reflection";
 import { createRNG } from "@/engine/rng";
 import {
   buildInitialAssessment,
@@ -117,6 +119,47 @@ function firstCue(
 }
 
 describe("structured scouting evidence model", () => {
+  it("keeps a flagged missed read vague through reflection and serialization", () => {
+    const session = liveSession({ quality: 1, isStandout: false });
+    session.players = session.players.map((player) => ({
+      ...player, isFocused: false, focusedPhases: [], focusHistory: [],
+    }));
+    const cue = firstCue(session, scout(1, 100), "movement", 0);
+    expect(cue.clarity).toBe("missed");
+    session.cueReadings = [cue];
+    const flagged: SessionFlaggedMoment = {
+      id: "missed-flag", phaseIndex: 0, minute: 24,
+      moment: session.phases[0].moments[0], reaction: "promising",
+    };
+    const restored = JSON.parse(JSON.stringify({ session, flagged }));
+    const description = getPerceivedFlaggedMomentDescription(restored.session, restored.flagged);
+    expect(description).toContain(flagged.moment.vagueDescription);
+    expect(description).toContain("could not isolate a defensible cue");
+    expect(description).not.toContain(flagged.moment.description);
+  });
+
+  it("retains earned detailed evidence when a clearly read moment is flagged", () => {
+    const session = liveSession({ quality: 10, isStandout: true });
+    const cue = firstCue(session, scout(20), "execution", 100);
+    expect(["usable", "strong", "exceptional"]).toContain(cue.clarity);
+    session.cueReadings = [cue];
+    const flagged: SessionFlaggedMoment = {
+      id: "clear-flag", phaseIndex: 0, minute: 24,
+      moment: session.phases[0].moments[0], reaction: "promising",
+    };
+    expect(getPerceivedFlaggedMomentDescription(session, flagged)).toContain(flagged.moment.description);
+  });
+
+  it("does not invent detailed evidence when a legacy flag has no saved cue", () => {
+    const session = liveSession();
+    const flagged: SessionFlaggedMoment = {
+      id: "legacy-flag", phaseIndex: 0, minute: 24,
+      moment: session.phases[0].moments[0], reaction: "interesting",
+    };
+    session.cueReadings = undefined;
+    expect(getPerceivedFlaggedMomentDescription(session, flagged)).toBe(flagged.moment.vagueDescription);
+  });
+
   it("is deterministic for the same save state and player decisions", () => {
     const session = liveSession();
     const input = {

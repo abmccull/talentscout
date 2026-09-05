@@ -61,7 +61,6 @@ import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability
 import { generateWeekPreview } from "@/engine/core/weekPreview";
 import type { WeekPreview } from "@/engine/core/weekPreview";
 import { BatchSummary } from "./BatchSummary";
-import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
 import { assessYouthMobility } from "@/engine/youth/youthMobility";
@@ -579,9 +578,9 @@ export function CalendarScreen() {
     <GameLayout>
       <div
         data-testid="planner-scroll-region"
-        className="relative h-[calc(100dvh_-_8.5rem_-_env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain p-4 md:h-screen md:p-6"
+        className="game-workspace relative min-h-full"
       >
-        <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.85} />
+
         <div className="relative z-10">
         {/* Week Summary Overlay */}
         {lastWeekSummary && (
@@ -600,7 +599,7 @@ export function CalendarScreen() {
                 {/* Activity Results */}
                 {lastWeekSummary.activityQualities.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2">Activity Results</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">Activity Results</p>
                     <div className="space-y-2">
                       {lastWeekSummary.activityQualities.map((aq, i) => {
                         const cfg = ACTIVITY_DISPLAY[aq.activityType as ActivityType];
@@ -617,11 +616,11 @@ export function CalendarScreen() {
                           <div key={i} className="rounded-md border border-[#27272a] px-3 py-2">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-xs font-medium text-white">{label}</span>
-                              <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tierClass}`}>
+                              <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-medium ${tierClass}`}>
                                 {aq.tier.charAt(0).toUpperCase() + aq.tier.slice(1)}
                               </span>
                             </div>
-                            <p className="text-[11px] text-zinc-400 leading-snug">{aq.narrative}</p>
+                            <p className="text-xs text-zinc-400 leading-snug">{aq.narrative}</p>
                           </div>
                         );
                       })}
@@ -689,10 +688,10 @@ export function CalendarScreen() {
                 {/* XP gains */}
                 {Object.keys(lastWeekSummary.skillXpGained).length > 0 && (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">Skill XP</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">Skill XP</p>
                     <div className="flex flex-wrap gap-1">
                       {Object.entries(lastWeekSummary.skillXpGained).map(([skill, xp]) => (
-                        <Badge key={skill} variant="secondary" className="text-[10px]">
+                        <Badge key={skill} variant="secondary" className="text-xs">
                           {t(`skills.${skill}` as Parameters<typeof t>[0])} +{xp}
                         </Badge>
                       ))}
@@ -701,10 +700,10 @@ export function CalendarScreen() {
                 )}
                 {Object.keys(lastWeekSummary.attributeXpGained).length > 0 && (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">Attribute XP</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">Attribute XP</p>
                     <div className="flex flex-wrap gap-1">
                       {Object.entries(lastWeekSummary.attributeXpGained).map(([attr, xp]) => (
-                        <Badge key={attr} variant="secondary" className="text-[10px]">
+                        <Badge key={attr} variant="secondary" className="text-xs">
                           {t(`attributes.${attr}` as Parameters<typeof t>[0])} +{xp}
                         </Badge>
                       ))}
@@ -740,13 +739,13 @@ export function CalendarScreen() {
         )}
 
         {/* Header */}
-        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-[#10151b]/92 p-4 shadow-xl shadow-black/20 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">
-              {openingShell ? "This week" : "Weekly command"}
+              {openingShell ? "This week" : "In the diary"}
             </p>
             <div className="mb-1 flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Planner</h1>
+              <h1 className="dossier-title">Planner</h1>
               <span
                 className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${SEASON_PHASE_CLASSES[seasonPhase]}`}
               >
@@ -758,26 +757,10 @@ export function CalendarScreen() {
             </p>
             <p className="mt-1 max-w-2xl text-sm text-zinc-300">
               {openingShell
-                ? "The second look is on the week. Advance Week opens the board — Prospects, Reports, and Inbox — together."
+                ? "Choose work for your open days, or begin the week with your current plan."
                 : "Spend seven finite days on the evidence, access, and recovery that matter most."}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200">
-                {slotsUsed}/7 days committed
-              </span>
-              <span className={`rounded-full border px-3 py-1.5 font-semibold ${
-                severity === "danger"
-                  ? "border-red-400/25 bg-red-400/10 text-red-200"
-                  : severity === "warn"
-                    ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
-                    : "border-sky-400/25 bg-sky-400/10 text-sky-200"
-              }`}>
-                {Math.round(scout.fatigue)}% fatigue
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                {openDayCount} open day{openDayCount === 1 ? "" : "s"}
-              </span>
-            </div>
+
           </div>
           <div className="w-full sm:w-auto">
             <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -813,11 +796,6 @@ export function CalendarScreen() {
                 Advance Week
               </Button>
             </Tooltip>
-            {openingShell && (
-              <p className="mt-2 max-w-xs text-right text-xs leading-5 text-zinc-400 sm:ml-auto">
-                Next week the board opens. Stay here until you advance.
-              </p>
-            )}
           </div>
         </div>
 
@@ -873,33 +851,8 @@ export function CalendarScreen() {
           isWeekBlank={slotsUsed === 0}
           playerNames={bookedPlayerNames}
           openingShell={openingShell}
-          prelude={openingShell ? undefined : (
+          prelude={(
             <div className="grid gap-3 lg:hidden">
-              <article className="rounded-xl border border-violet-400/20 bg-[linear-gradient(145deg,rgba(38,32,58,0.92),rgba(15,20,27,0.96))] p-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-200">
-                      Planner stance
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-white">
-                      {weeklyIntent?.label ?? "Balanced desk"}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-zinc-300">
-                      {weeklyIntent?.promise ?? "Keep discovery, evidence, and relationships moving without forcing an edge."}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-zinc-200">
-                    {selectedActivity ? "Opportunity selected" : "Next call"}
-                  </span>
-                </div>
-                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
-                    {selectedActivity ? "Selected opportunity" : "Priority live opportunity"}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-white">{featuredPlannerActivityLabel}</p>
-                  <p className="mt-1 text-xs leading-5 text-zinc-300">{featuredPlannerActivitySummary}</p>
-                </div>
-              </article>
               <PlannerOpportunitySheet
                 open={showMobileOpportunitySheet}
                 activityCount={engineActivities.length}
@@ -938,11 +891,10 @@ export function CalendarScreen() {
           receiptMessage={plannerReceipt}
         />
 
-        {!openingShell && (
         <section
           data-tutorial-id="calendar-activities"
           aria-labelledby="planner-opportunity-heading"
-          className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]"
+          className={`mb-4 grid gap-4 ${openingShell ? "" : "xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]"}`}
         >
           <div ref={opportunityBoardRef} className="space-y-4">
             <div className="lg:hidden">
@@ -980,7 +932,7 @@ export function CalendarScreen() {
             </div>
           </div>
 
-          <div className="space-y-4">
+          {!openingShell && <div className="space-y-4">
             <div className="hidden lg:block">
               <PlannerWeeklyStanceCard
                 strategy={weeklyStrategy}
@@ -1011,9 +963,8 @@ export function CalendarScreen() {
               onSelectIntent={setWeeklyIntent}
               onSelectPolicy={setDelegationPolicy}
             />
-          </div>
+          </div>}
         </section>
-        )}
 
         {/* Week Preview Panel (F16) */}
         {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (
@@ -1025,16 +976,16 @@ export function CalendarScreen() {
               <div className="flex items-center gap-2">
                 <Eye size={14} className="text-violet-400" aria-hidden="true" />
                 <span className="text-sm font-semibold text-violet-300">Week Preview</span>
-                <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-400">
+                <Badge variant="outline" className="text-xs border-violet-500/30 text-violet-400">
                   {weekPreview.totalFixtures} fixture{weekPreview.totalFixtures !== 1 ? "s" : ""}
                 </Badge>
                 {weekPreview.relevantMatches.length > 0 && (
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
+                  <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400">
                     {weekPreview.relevantMatches.length} with targets
                   </Badge>
                 )}
                 {weekPreview.congestion === "heavy" && (
-                  <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400">
+                  <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
                     Heavy schedule
                   </Badge>
                 )}
@@ -1061,7 +1012,7 @@ export function CalendarScreen() {
                 {/* Relevant matches */}
                 {weekPreview.relevantMatches.length > 0 && (
                   <div>
-                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                       Key Matches This Week
                     </p>
                     <div className="space-y-1.5">
@@ -1095,7 +1046,7 @@ export function CalendarScreen() {
                                     .join(", ")}`}
                                   side="top"
                                 >
-                                  <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                                  <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-xs text-emerald-400">
                                     <Target size={10} aria-hidden="true" />
                                     {pm.watchlistPlayerIds.length}
                                   </span>
@@ -1111,7 +1062,7 @@ export function CalendarScreen() {
                                     .join(", ")}`}
                                   side="top"
                                 >
-                                  <span className="inline-flex items-center gap-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">
+                                  <span className="inline-flex items-center gap-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-xs text-blue-400">
                                     <Sparkles size={10} aria-hidden="true" />
                                     {pm.directivePlayerIds.length}
                                   </span>
@@ -1129,13 +1080,13 @@ export function CalendarScreen() {
                 {weekPreview.suggestions.length > 0 && (
                   <div>
                     <div className="mb-1.5 flex items-center justify-between">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
                         Suggested Schedule
                       </p>
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="h-6 px-2 text-[10px]"
+                        className="h-6 px-2 text-xs"
                         onClick={handleApplySuggestions}
                       >
                         Apply All
@@ -1148,13 +1099,13 @@ export function CalendarScreen() {
                           className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-1.5"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-semibold text-zinc-500 uppercase w-6">
+                            <span className="text-xs font-semibold text-zinc-500 uppercase w-6">
                               {DAY_KEYS[s.dayIndex] ?? `D${s.dayIndex}`}
                             </span>
                             <span className="text-xs text-white">{s.activity.description}</span>
                           </div>
                           <Tooltip content={s.reason} side="left">
-                            <span className="max-w-[180px] truncate text-[10px] text-zinc-500">
+                            <span className="max-w-[180px] truncate text-xs text-zinc-500">
                               {s.reason}
                             </span>
                           </Tooltip>
@@ -1276,7 +1227,7 @@ export function CalendarScreen() {
                 {openDayCount}
               </span>{" "}
               unplanned day(s). Empty days recover a small amount of fatigue but
-              scheduled activities earn XP and progress. Advance anyway?
+              scheduled activities earn XP and progress. Scheduled work will resolve and the football world will move forward. This cannot be undone. Advance anyway?
             </p>
             <div className="flex justify-end gap-3">
               <Button
@@ -1290,7 +1241,7 @@ export function CalendarScreen() {
                 onClick={() => {
                   setShowEmptyDayWarning(false);
                   playSFX("calendar-slide");
-                  requestWeekAdvance();
+                  confirmWeekAdvance();
                 }}
               >
                 Advance
@@ -1344,7 +1295,7 @@ export function CalendarScreen() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">Placement shortlist</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">Placement shortlist</p>
                   <h2 id="placement-shortlist-heading" className="mt-1 text-lg font-bold text-white">Choose the academy and shape the pitch</h2>
                   <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-300">
                     Compare pathway, competition coverage, mobility risk, squad room, and your access. The club receives the filed report; this choice decides how you open the conversation and what support you ask it to guarantee.
@@ -1398,7 +1349,7 @@ export function CalendarScreen() {
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <h3 className="text-sm font-bold text-white">{option.club.name}</h3>
-                        <p className="mt-0.5 text-[11px] text-zinc-400">
+                        <p className="mt-0.5 text-xs text-zinc-400">
                           {option.league?.name ?? "Competition"} · {option.coverageTier === "full" ? "Full match coverage" : option.coverageTier === "abstract" ? "Results and player records" : "Contact coverage only"}
                         </p>
                       </div>
@@ -1406,7 +1357,7 @@ export function CalendarScreen() {
                         {option.mobility ? `${option.mobility.riskBand} mobility risk` : "Route unclear"}
                       </Badge>
                     </div>
-                    <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
                       <div className="rounded-lg border border-white/10 bg-black/20 p-2">
                         <dt className="text-zinc-500">Development pathway</dt>
                         <dd className="mt-1 font-medium text-zinc-100">{option.developmentEnvironment.headline}</dd>
@@ -1425,7 +1376,7 @@ export function CalendarScreen() {
                       </div>
                     </dl>
                     {option.mobility?.visibleReasons[0] && (
-                      <p className="mt-3 text-[11px] leading-5 text-zinc-400">{option.mobility.visibleReasons[0]}</p>
+                      <p className="mt-3 text-xs leading-5 text-zinc-400">{option.mobility.visibleReasons[0]}</p>
                     )}
                     <Button
                       className="mt-4 min-h-11 w-full"

@@ -1,3 +1,4 @@
+import { revealGamePortraits, revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { create } from "zustand";
 import { createNavigationActions } from "./actions/navigationActions";
 import { createObservationActions } from "./actions/observationActions";
@@ -187,6 +188,8 @@ import {
   snapshotPersistedGameState,
 } from "@/stores/actions/persistGameplayAutosave";
 import { useTutorialStore } from "@/stores/tutorialStore";
+import { createSessionReflectionResult } from "@/stores/actions/createSessionReflectionResult";
+import { reconcileOpeningReportStage } from "@/engine/youth/openingFollowUp";
 import {
   applyScenarioSetup,
   getInvalidScenarioReason,
@@ -934,13 +937,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const openingCase = openingMode === "tutorial"
       ? createOpeningCase(openingInput)
       : veteranPrologue?.openingCase ?? null;
-    const finalGameState: GameState = openingCase
-      ? {
-          ...scenarioState,
-          openingCase,
-          ...(veteranPrologue ? { veteranPrologue } : {}),
-        }
-      : scenarioState;
+    let finalGameState: GameState = {
+      ...scenarioState,
+      // Guide choice belongs to this career, independently of another save's tutorial cache.
+      guidedSessionRequested: effectiveConfig.specialization === "youth"
+        ? shouldStartYouthGuidedHour({ openingMode, guideFirstHour: effectiveConfig.guideFirstHour }) && Boolean(openingCase)
+        : !scenario,
+      ...(openingCase ? { openingCase } : {}),
+      ...(veteranPrologue ? { veteranPrologue } : {}),
+    };
+    if (openingCase?.playerId) {
+      finalGameState = revealGamePortraits(finalGameState, [openingCase.playerId], "opening");
+    }
 
     set({
       gameState: finalGameState,
@@ -964,15 +972,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         {
           forceReplay:
             tutorialState.guidedSessionCompleted || tutorialState.dismissed,
+          careerId: finalGameState.scout.id,
         },
       );
-    } else if (openingMode === "tutorial" && openingCase) {
-      useTutorialStore.getState().skipGuidedSession();
     } else if (effectiveConfig.specialization !== "youth" && !scenario) {
       useTutorialStore.getState().startGuidedSession(
         !!effectiveConfig.startingClubId,
         "firstWeek",
+        { careerId: finalGameState.scout.id },
       );
+    } else {
+      useTutorialStore.getState().skipGuidedSession();
     }
     if (openingCase) {
       const openingPlayerIds = new Set(openingCase.playerPoolIds);
@@ -1014,13 +1024,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadGame: (rawState) => {
-    resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     // Every runtime entrypoint, including direct test/import loads, passes
     // through the same pure and idempotent migration used by save providers.
-    const scenarioSafeState = migrateSaveState(rawState);
+    const migratedState = reconcileOpeningReportStage(migrateSaveState(rawState));
+    const scenarioSafeState = revealKnownGamePortraits(migratedState);
+    const allocatedPortraitsOnLoad = scenarioSafeState !== migratedState;
     assertEarlyAccessSaveCompatibility(scenarioSafeState);
     const resumableSession = scenarioSafeState.activeObservationSession ?? null;
+    const resumedReflection = resumableSession?.state === "reflection"
+      ? createSessionReflectionResult(scenarioSafeState, resumableSession)
+      : null;
+    // Failed validation must leave the active career's queued save intact.
+    const hadPendingAutosave = resetGameplayAutosaveWatermark();
     const openingStage = scenarioSafeState.openingCase?.stage;
     const restoreScreen = resumableSession
       ? "observation"
@@ -1039,6 +1055,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       scenarioOutcomeScenarioId: null,
       pendingCelebration: null,
       activeSession: resumableSession,
+      lastReflectionResult: resumedReflection,
       sessionReturnScreen: resumableSession
         ? resolveGameScreenForBuild("dashboard", true)
         : null,
@@ -1053,11 +1070,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       weeklyTransactionError: null,
     });
 
-    const tutState = useTutorialStore.getState();
-    if (!tutState.dismissed && !tutState.guidedSessionCompleted) {
-      const hasIncomplete = Object.values(tutState.guidedMilestones).some((value) => !value);
-      if (hasIncomplete) useTutorialStore.setState({ guidedSessionActive: true });
+    if (hadPendingAutosave || allocatedPortraitsOnLoad) {
+      // Newly visible legacy/pack bindings must persist with the same live ledger.
+      // An already-started old write cannot be cancelled. Commit the loaded
+      // career behind it so that old I/O can never become the final autosave.
+      queueGameplayAutosave(
+        snapshotPersistedGameState(scenarioSafeState, resumableSession),
+        set,
+      );
     }
+
+    useTutorialStore.getState().resumeGuidedSession(scenarioSafeState);
   },
 
   saveGame: () => {
@@ -1098,12 +1121,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         saved,
         name,
       );
-      set({
-        gameState: {
-          ...saved,
-          lastSaved: commit?.record.state.lastSaved ?? Date.now(),
-        },
-      });
+      // Saving a snapshot does not authorize restoring it over newer play.
+      // Reference checks also protect a different career loaded during I/O.
+      set((current) => current.gameState === gameState && current.activeSession === activeSession
+        ? {
+            gameState: {
+              ...current.gameState,
+              lastSaved: commit?.record.state.lastSaved ?? saved.lastSaved,
+            },
+          }
+        : {});
       await get().refreshSaveSlots();
     } finally {
       set({ isSaving: false });

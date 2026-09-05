@@ -23,6 +23,7 @@ const {
   readBoundedUtf8Buffer,
 } = require("./file-io");
 const { createStaticFileResponse } = require("./static-response");
+const { createQuitSaveController } = require("./quit-save-controller");
 
 // ---------------------------------------------------------------------------
 // Dev mode detection
@@ -605,6 +606,9 @@ function createWindow() {
     }
   };
   mainWindow.webContents.on("render-process-gone", discardRendererTransfers);
+  mainWindow.webContents.on("render-process-gone", () => {
+    quitSaveController.rendererUnavailable();
+  });
   mainWindow.on("enter-full-screen", () => {
     mainWindow.webContents.send("window:fullscreen-changed", true);
   });
@@ -612,7 +616,7 @@ function createWindow() {
     mainWindow.webContents.send("window:fullscreen-changed", false);
   });
   mainWindow.on("close", (event) => {
-    if (quitFlushState === "done") return;
+    if (quitSaveController.getState() === "done") return;
     event.preventDefault();
     requestQuitFlush();
   });
@@ -634,53 +638,53 @@ handleTrustedIpc("window:setFullScreen", (_event, enabled) => {
 
 handleTrustedIpc("window:isFullScreen", () => Boolean(mainWindow?.isFullScreen()));
 
-let quitFlushState = "idle";
-let quitFlushTimer = null;
-
-function finishQuitFlush() {
-  if (quitFlushTimer) {
-    clearTimeout(quitFlushTimer);
-    quitFlushTimer = null;
-  }
-  if (quitFlushState === "done") return;
-  quitFlushState = "done";
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.destroy();
-  }
-  app.quit();
-}
+const quitSaveController = createQuitSaveController({
+  sendFlush: (requestId) => {
+    if (
+      !mainWindow || mainWindow.isDestroyed() ||
+      mainWindow.webContents.isDestroyed() || mainWindow.webContents.isCrashed()
+    ) {
+      throw new Error("Save renderer is unavailable");
+    }
+    mainWindow.webContents.send("game:flush-save", requestId);
+  },
+  showRecoveryPrompt: async (reason) => {
+    const details = {
+      slow: "Your career is taking longer than expected to save. Keep the game open to let it finish, or retry saving before quitting.",
+      failed: "Your latest progress could not be saved. Keep playing to preserve the open career, or retry saving before quitting.",
+      unavailable: "The game is not responding, so the latest progress cannot be confirmed as saved. Stay open to retry, or explicitly quit without saving.",
+    };
+    const options = {
+      type: "warning",
+      title: "Career save needs attention",
+      message: "TalentScout has not confirmed your latest save.",
+      detail: `${details[reason]} Quitting without saving may lose progress since your last successful save.`,
+      buttons: ["Retry Save", reason === "unavailable" ? "Stay Open" : "Keep Playing", "Quit Without Saving"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    };
+    const result = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showMessageBox(mainWindow, options)
+      : await dialog.showMessageBox(options);
+    return result.response === 0 ? "retry" : result.response === 2 ? "discard" : "cancel";
+  },
+  onPromptError: (error) => {
+    console.error("[Persist] Could not show quit recovery; keeping the game open:", error);
+  },
+  finishQuit: () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+    app.quit();
+  },
+});
 
 function requestQuitFlush() {
-  if (quitFlushState === "done") {
-    finishQuitFlush();
-    return;
-  }
-  if (quitFlushState === "waiting") return;
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    quitFlushState = "done";
-    app.quit();
-    return;
-  }
-  quitFlushState = "waiting";
-  try {
-    if (mainWindow.webContents.isDestroyed()) {
-      throw new Error("renderer gone");
-    }
-    mainWindow.webContents.send("game:flush-save");
-  } catch (error) {
-    console.warn("[Persist] Could not ask renderer to flush:", error);
-    finishQuitFlush();
-    return;
-  }
-  quitFlushTimer = setTimeout(() => {
-    finishQuitFlush();
-  }, 2500);
+  quitSaveController.request();
 }
 
-handleTrustedIpc("game:notifySaveFlushed", () => {
-  if (quitFlushState === "waiting") finishQuitFlush();
-  return { ok: true };
-});
+handleTrustedIpc("game:notifySaveFlushed", (_event, result) => ({
+  ok: quitSaveController.receive(result),
+}));
 
 handleTrustedIpc("steam:isAvailable", () => {
   return steamAvailable && Boolean(steamClient);
@@ -1037,8 +1041,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
-  clearInterval(saveTransferCleanupTimer);
-  if (quitFlushState === "done") return;
+  if (quitSaveController.getState() === "done" || !mainWindow || mainWindow.isDestroyed()) {
+    clearInterval(saveTransferCleanupTimer);
+    return;
+  }
   event.preventDefault();
   requestQuitFlush();
 });

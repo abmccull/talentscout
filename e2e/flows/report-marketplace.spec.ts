@@ -15,7 +15,7 @@ async function createSubmittedYouthReport(gamePage: GamePage) {
   await gamePage.scheduleActivityByLabel("School Match", "Mon");
   await gamePage.advanceCanonicalWeek({ launchLiveSession: true });
   await gamePage.openFirstYouthPlayerProfile();
-  await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+  await gamePage.page.getByRole("button", { name: "Write the report", exact: true }).click();
   await gamePage.waitForScreen("reportWriter");
   await gamePage.submitCurrentReportViaUI("strongRecommend");
   await gamePage.waitForScreen("reportHistory");

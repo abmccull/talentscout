@@ -28,7 +28,6 @@ import { OfficesTab } from "./agency/OfficesTab";
 import { deriveRegionalPresence } from "@/engine/world/regionalPresence";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { LegacyTab } from "./agency/LegacyTab";
-import { ScreenBackground } from "@/components/ui/screen-background";
 import { AgencyStrategyPanel } from "./agency/AgencyStrategyPanel";
 import { canChangeAgencyOperatingPolicy } from "@/engine/finance/agencyStrategy";
 
@@ -130,10 +129,10 @@ export function AgencyScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6">
-        <ScreenBackground src="/images/backgrounds/agency-office.png" opacity={0.80} />
+      <div className="game-workspace relative">
+
         <div className="relative z-10">
-        <h1 className="text-2xl font-bold mb-1">Agency</h1>
+        <h1 className="dossier-title mb-2">Agency</h1>
         <p className="text-sm text-zinc-400 mb-4">
           {isIndependent
             ? "Build a durable scouting practice without sacrificing the standard that made your name."
@@ -149,11 +148,11 @@ export function AgencyScreen() {
             >
               <div>
                 <p className="text-sm font-medium text-zinc-300">Agency Roadmap</p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-quiet">
                   Tier {independentTier}/5 — Unlock full agency management at Tier 3
                 </p>
               </div>
-              {roadmapOpen ? <ChevronUp size={16} className="text-zinc-500" /> : <ChevronDown size={16} className="text-zinc-500" />}
+              {roadmapOpen ? <ChevronUp size={16} className="text-quiet" /> : <ChevronDown size={16} className="text-quiet" />}
             </button>
             {roadmapOpen && (
               <Card className="mt-2">
@@ -164,18 +163,18 @@ export function AgencyScreen() {
                     return (
                       <div key={t} className={`rounded-lg border p-4 ${isCurrent ? "border-emerald-500/50 bg-emerald-500/5" : isComplete ? "border-zinc-700 bg-zinc-800/30" : "border-zinc-800 bg-zinc-900/50 opacity-60"}`}>
                         <div className="flex items-center gap-3">
-                          <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${isComplete ? "bg-emerald-500 text-black" : isCurrent ? "bg-emerald-500/20 text-emerald-400 ring-2 ring-emerald-500/50" : "bg-zinc-800 text-zinc-500"}`}>
+                          <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${isComplete ? "bg-emerald-500 text-black" : isCurrent ? "bg-emerald-500/20 text-emerald-400 ring-2 ring-emerald-500/50" : "bg-zinc-800 text-quiet"}`}>
                             {isComplete ? "✓" : t}
                           </div>
                           <div>
-                            <h4 className={`text-sm font-semibold ${isCurrent ? "text-emerald-400" : isComplete ? "text-zinc-300" : "text-zinc-500"}`}>Tier {t}: {name}</h4>
-                            <p className="text-xs text-zinc-500">{desc}</p>
+                            <h4 className={`text-sm font-semibold ${isCurrent ? "text-emerald-400" : isComplete ? "text-zinc-300" : "text-quiet"}`}>Tier {t}: {name}</h4>
+                            <p className="text-xs text-quiet">{desc}</p>
                           </div>
                         </div>
                         {(isCurrent || isComplete) && (
                           <div className="mt-2 flex flex-wrap gap-1.5 pl-11">
                             {unlocks.map((u) => (
-                              <span key={u} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${isComplete ? "bg-zinc-700 text-zinc-400" : "bg-emerald-500/10 text-emerald-400"}`}>{u}</span>
+                              <span key={u} className={`rounded-full px-2 py-0.5 text-xs font-medium ${isComplete ? "bg-zinc-700 text-zinc-400" : "bg-emerald-500/10 text-emerald-400"}`}>{u}</span>
                             ))}
                           </div>
                         )}
@@ -237,29 +236,11 @@ export function AgencyScreen() {
             />
           </div>
         ) : (
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3" data-tutorial-id="agency-overview">
-            <Card>
-              <CardContent className="p-3">
-                <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-400">Weekly Infrastructure Cost</p>
-                <p className="text-base font-bold text-red-400">£{infraEffects.weeklyCost.toLocaleString()}/wk</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-400">Report Quality Bonus</p>
-                <p className="text-base font-bold text-emerald-400">+{(infraEffects.reportQualityBonus * 100).toFixed(0)}%</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Assistant Scouts</p>
-                <p className="text-base font-bold">
-                  {assistantScouts.length}{" "}
-                  <span className="text-sm font-normal text-zinc-500">/ {MAX_ASSISTANT_SCOUTS}</span>
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <dl className="mb-6 flex flex-wrap gap-x-8 gap-y-4 border-y border-[var(--border)] py-4 text-sm" data-tutorial-id="agency-overview">
+            <div><dt className="text-quiet">Weekly costs</dt><dd className="mt-1 tabular-nums">£{infraEffects.weeklyCost.toLocaleString()}</dd></div>
+            <div><dt className="text-quiet">Report quality</dt><dd className="mt-1 tabular-nums">+{(infraEffects.reportQualityBonus * 100).toFixed(0)}%</dd></div>
+            <div><dt className="text-quiet">Assistant scouts</dt><dd className="mt-1 tabular-nums">{assistantScouts.length} / {MAX_ASSISTANT_SCOUTS}</dd></div>
+          </dl>
         )}
 
         {/* Tab bar */}
@@ -279,10 +260,10 @@ export function AgencyScreen() {
                 aria-controls={`tabpanel-${tab.id}`}
                 id={`tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition whitespace-nowrap border-b-2 -mb-px ${
+                className={`relative flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm font-medium transition whitespace-nowrap border-b-2 -mb-px ${
                   isActive
                     ? "border-emerald-500 text-emerald-400"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                    : "border-transparent text-quiet hover:text-zinc-300"
                 }`}
               >
                 <Icon size={13} aria-hidden="true" />

@@ -3,6 +3,7 @@
  * All randomness flows through the provided RNG instance.
  */
 
+import { withVisualIdentity } from "./portraits/identity";
 import type { RNG } from "@/engine/rng";
 import type {
   Player,
@@ -486,7 +487,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
   const bestRole = getBestRole(player);
   player.naturalRole = bestRole.role;
 
-  return player;
+  return withVisualIdentity(player);
 }
 
 // ---------------------------------------------------------------------------

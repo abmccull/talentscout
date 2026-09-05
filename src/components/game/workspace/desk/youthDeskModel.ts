@@ -36,6 +36,8 @@ export interface YouthActiveCaseModel {
   title: string;
   summary: string;
   subjectName?: string;
+  playerId?: string;
+  subjectAge?: number;
   stageId: "lead" | "liveLook" | "case" | "recommendation" | "tracked";
   stageLabel: string;
   stageSteps: Array<{
@@ -111,7 +113,7 @@ export function buildYouthActiveCaseModel(args: {
   if (!focusEntry) {
     return {
       title: "Find the lead worth your next week",
-      summary: "You do not have an active case yet. The desk should create one name, one context, and one reason to care before the calendar gets noisy again.",
+      summary: "Start with one player worth watching. Choose a local match or youth event to find your first lead.",
       stageId,
       stageLabel,
       stageSteps: STAGE_LABELS.map((label, index) => ({
@@ -119,10 +121,10 @@ export function buildYouthActiveCaseModel(args: {
         active: index === 0,
         complete: false,
       })),
-      evidenceLine: "No live evidence yet. Discovery work should create the first lead.",
+      evidenceLine: "No first-hand evidence yet. A live visit can give you a name to follow.",
       networkLine: "No active background context is attached to a case yet.",
       scheduleLine: openDayCount === 7
-        ? "The week is still blank. Planner should create the first live look."
+        ? "Your week is open. Plan a live look to find your first lead."
         : `${scheduledSlots}/7 days are committed, but none are anchored to a live case yet.`,
       recommendationLine: pendingPlacementCount > 0
         ? `${pendingPlacementCount} recommendation${pendingPlacementCount === 1 ? "" : "s"} still need outcome tracking.`
@@ -148,30 +150,32 @@ export function buildYouthActiveCaseModel(args: {
   };
 
   const summaries: Record<YouthActiveCaseModel["stageId"], string> = {
-    lead: "The name is interesting, but the evidence still belongs to rumor and first impressions. The week should buy context, not conviction.",
-    liveLook: "One impression is a clue. The desk should now test whether the player survives a new context, opponent, or emotional load.",
-    case: "The evidence is starting to stack. What matters now is whether the dossier can survive challenge, not just accumulate notes.",
-    recommendation: "You have enough repeat information to make a defensible call. The question is whether you are ready to attach your reputation to it.",
-    tracked: "The recommendation has left the desk. What remains is accountability: did the pathway, timing, and pitch hold up in the real world?",
+    lead: "The name is interesting. Watch the player in person before deciding how far to back the first impression.",
+    liveLook: "Test the first impression against a new opponent, setting or moment of pressure.",
+    case: "Your evidence is taking shape. Test the weakest part of the case before writing your recommendation.",
+    recommendation: "You have repeated evidence. Check the club fit and decide how strongly you are prepared to recommend this player.",
+    tracked: "Your recommendation is on file. Follow the club decision and watch how the player develops.",
   };
 
   return {
     title: titles[stageId],
     summary: summaries[stageId],
     subjectName,
+    playerId: focusEntry.youth.player.id,
+    subjectAge: focusEntry.youth.player.age,
     stageId,
     stageLabel,
     stageSteps,
     evidenceLine: `${focusEntry.observationCount} live look${focusEntry.observationCount === 1 ? "" : "s"} and ${focusEntry.intelCount} context note${focusEntry.intelCount === 1 ? "" : "s"} are on file.`,
     networkLine: focusEntry.intelCount > 0
-      ? `Private context is attached to the case. Make sure it sharpens the read instead of replacing it.`
-      : "No supporting context is attached yet. The next week can still add family, coach, or contact color.",
+      ? `You have background notes. Compare them with what you saw on the pitch.`
+      : "A coach, family or trusted contact could help you test the remaining question.",
     scheduleLine: openDayCount === 0
       ? "The week is fully committed. Every new call now requires displacing something else."
-      : `${openDayCount} open day${openDayCount === 1 ? "" : "s"} remain. Planner should be used to decide what this case is worth.`,
+      : `${openDayCount} open day${openDayCount === 1 ? "" : "s"} remain. Decide which question deserves your next day.`,
     recommendationLine: focusEntry.hasFirmRead
       ? "The evidence bar is high enough to support a recommendation if the fit and timing are believable."
-      : "The desk still needs another context before the recommendation can be trusted.",
+      : "Watch the player in another setting before making a firm recommendation.",
     briefLine: linkedBrief
       ? `This brief weights ${humanizeBriefPriority(linkedBrief.developmentPriority)} most heavily for the ${linkedBrief.requiredPositions.join("/")} pathway. It expires in S${linkedBrief.expiresSeason} W${linkedBrief.expiresWeek} with ${linkedBrief.competitionPressure} pressure.`
       : "No live academy brief currently sharpens this case.",

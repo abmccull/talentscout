@@ -1024,6 +1024,11 @@ export interface Contact {
   loyalty?: number;
   /** History of interactions for trust/loyalty calculations. */
   interactionHistory?: ContactInteraction[];
+  /** Current-week inquiry choices survive abandoned sessions without replaying consequences. */
+  inquiryDecisions?: {
+    occurredAt: GameDate;
+    resolutions: Record<string, import("../observation/types").DialogueChoiceResolution>;
+  };
   /** Pending gossip items this contact has to share. */
   gossipQueue?: GossipItem[];
   /** IDs of contacts this contact can introduce (referral network). */
@@ -1753,6 +1758,10 @@ export interface InvalidScenarioArchiveEntry {
 }
 
 export interface GameState {
+  /** First-assignment guide choice. Missing in legacy saves; false keeps navigation open. */
+  guidedSessionRequested?: boolean;
+  /** Durable observed-person photo reservations; retained after player history compaction. */
+  playerPortraits?: import("../players/portraits/types").PlayerPortraitState;
   /** The world seed used for deterministic world generation. */
   seed: string;
   /** Immutable, version-pinned identity for this career simulation. */

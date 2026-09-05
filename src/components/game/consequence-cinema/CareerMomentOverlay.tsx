@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   ArrowRight,
   Award,
@@ -34,42 +34,12 @@ const ICONS: Record<CareerMomentCategory, typeof Search> = {
   farewell: BookOpen,
 };
 
-const PALETTES: Record<CareerMoment["tone"], {
-  border: string;
-  glow: string;
-  ink: string;
-  wash: string;
-}> = {
-  positive: {
-    border: "border-emerald-300/35",
-    glow: "shadow-emerald-500/15",
-    ink: "text-emerald-200",
-    wash: "from-emerald-500/20 via-zinc-950/95 to-zinc-950",
-  },
-  mixed: {
-    border: "border-amber-300/35",
-    glow: "shadow-amber-500/15",
-    ink: "text-amber-200",
-    wash: "from-amber-500/20 via-zinc-950/95 to-zinc-950",
-  },
-  negative: {
-    border: "border-rose-300/35",
-    glow: "shadow-rose-500/15",
-    ink: "text-rose-200",
-    wash: "from-rose-500/20 via-zinc-950/95 to-zinc-950",
-  },
-  tense: {
-    border: "border-orange-300/35",
-    glow: "shadow-orange-500/15",
-    ink: "text-orange-200",
-    wash: "from-orange-500/20 via-zinc-950/95 to-zinc-950",
-  },
-  reflective: {
-    border: "border-sky-300/35",
-    glow: "shadow-sky-500/15",
-    ink: "text-sky-200",
-    wash: "from-sky-500/20 via-zinc-950/95 to-zinc-950",
-  },
+const TONE_INK: Record<CareerMoment["tone"], string> = {
+  positive: "text-[var(--primary)]",
+  mixed: "text-[var(--accent)]",
+  negative: "text-[var(--signal-danger)]",
+  tense: "text-[var(--accent)]",
+  reflective: "text-[var(--signal-focus)]",
 };
 
 function humanize(value: string): string {
@@ -85,19 +55,12 @@ export function CareerMomentOverlay({
   const dialogRef = useRef<HTMLDivElement>(null);
   const continueRef = useRef<HTMLButtonElement>(null);
   const { playSFX, volumes } = useAudio();
-  const reducedMotion = useSettingsStore((state) =>
-    state.reducedMotion || state.cinematicMoments === "reduced"
-  );
   const emotionalAudioCues = useSettingsStore((state) => state.emotionalAudioCues);
-  const palette = PALETTES[moment.tone];
+  const toneInk = TONE_INK[moment.tone];
   const Icon = ICONS[moment.category];
   const dateLabel = `Season ${moment.occurredAt.season}, Week ${moment.occurredAt.week}`;
   const magnitudeLabel = humanize(moment.magnitude);
   const categoryLabel = humanize(moment.category);
-  const atmosphericMarks = useMemo(
-    () => Array.from({ length: 7 }, (_, index) => `${moment.presentationSeed}:${index}`),
-    [moment.presentationSeed],
-  );
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement
@@ -143,7 +106,7 @@ export function CareerMomentOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 px-4 py-8 backdrop-blur-md"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 px-4 py-6"
       data-testid="career-moment-overlay"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onDismiss();
@@ -155,51 +118,34 @@ export function CareerMomentOverlay({
         aria-modal="true"
         aria-labelledby="career-moment-title"
         aria-describedby="career-moment-summary"
-        className={`relative w-full max-w-2xl overflow-hidden rounded-3xl border bg-gradient-to-br ${palette.border} ${palette.wash} shadow-2xl ${palette.glow}`}
+        className="relative max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-sm border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]"
       >
-        {!reducedMotion && (
-          <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-            {atmosphericMarks.map((key, index) => (
-              <span
-                key={key}
-                className="absolute h-px w-24 bg-white/10 motion-safe:animate-pulse"
-                style={{
-                  left: `${8 + index * 13}%`,
-                  top: `${12 + (index * 19) % 74}%`,
-                  transform: `rotate(${index % 2 === 0 ? -12 : 9}deg)`,
-                  animationDelay: `${index * 180}ms`,
-                }}
-              />
-            ))}
-          </div>
-        )}
-
         <div className="relative p-6 sm:p-9">
-          <div className="flex items-start justify-between gap-5">
-            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 ${palette.ink}`}>
-              <Icon size={28} aria-hidden="true" />
+          <div className="flex items-start gap-3 sm:gap-5">
+            <div className={`mt-1 shrink-0 ${toneInk}`}>
+              <Icon size={24} aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.17em] text-zinc-400">
-                <span className={palette.ink}>{categoryLabel}</span>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                <span className={toneInk}>{categoryLabel}</span>
                 <span aria-hidden="true">·</span>
                 <span>{magnitudeLabel}</span>
                 <span aria-hidden="true">·</span>
                 <span>{dateLabel}</span>
               </div>
-              <h2 id="career-moment-title" className="mt-3 text-2xl font-black tracking-tight text-white sm:text-4xl">
+              <h2 id="career-moment-title" className="font-editorial mt-3 text-2xl leading-tight sm:text-4xl">
                 {moment.title}
               </h2>
             </div>
           </div>
 
-          <div className="mt-7 rounded-2xl border border-white/10 bg-black/25 p-5 sm:p-6">
-            <p id="career-moment-summary" className="text-base leading-7 text-zinc-200 sm:text-lg">
+          <div className="mt-7 border-t border-[var(--border)] pt-6">
+            <p id="career-moment-summary" className="text-base leading-7 sm:text-lg">
               {moment.summary}
             </p>
             {moment.stakeholderIds.length > 0 && (
-              <p className="mt-4 text-xs leading-5 text-zinc-400">
-                {moment.stakeholderIds.length} persistent stakeholder{moment.stakeholderIds.length === 1 ? " is" : "s are"} connected to this outcome. Their future reactions may change.
+              <p className="mt-4 text-sm leading-6 text-[var(--muted-foreground)]">
+                {moment.stakeholderIds.length} professional relationship{moment.stakeholderIds.length === 1 ? " is" : "s are"} connected to this outcome. Future reactions may change.
               </p>
             )}
           </div>
@@ -212,7 +158,7 @@ export function CareerMomentOverlay({
             <button
               type="button"
               onClick={onOpenArchive}
-              className="min-h-11 rounded-xl border border-white/15 px-4 text-sm font-semibold text-zinc-200 transition hover:border-white/30 hover:bg-white/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+              className="min-h-11 rounded-sm border border-[var(--border)] px-4 text-sm font-semibold transition hover:bg-[var(--surface-interactive)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-focus)]"
             >
               Open career archive
             </button>
@@ -220,7 +166,7 @@ export function CareerMomentOverlay({
               ref={continueRef}
               type="button"
               onClick={onDismiss}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-zinc-950 transition hover:bg-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-focus)]"
             >
               Continue
               <ArrowRight size={16} aria-hidden="true" />

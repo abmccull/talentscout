@@ -8,7 +8,8 @@
 
 import { create } from "zustand";
 import { getSequenceById } from "@/components/game/tutorial/tutorialSteps";
-import type { Specialization } from "@/engine/core/types";
+import type { GameState, Specialization } from "@/engine/core/types";
+import { isOpeningDiscoverySession } from "@/engine/youth/openingCase";
 import type { GameScreen } from "@/stores/gameStoreTypes";
 import {
   mergePersistedPlayerExperience,
@@ -93,6 +94,8 @@ export type GuidedSessionKind = "firstWeek" | "discoveryHook";
 export interface GuidedSessionStartOptions {
   /** Replay onboarding for this session without clearing profile completion. */
   forceReplay?: boolean;
+  /** Bind resume permission to the career that requested the guide. */
+  careerId?: string;
 }
 
 export interface ContextualHint {
@@ -112,6 +115,9 @@ interface PersistedTutorialData {
   guidedMilestones: Record<string, boolean>;
   guidedSessionCompleted: boolean;
   guidedSessionKind: GuidedSessionKind;
+  /** Resume only an explicitly started guide, never merely incomplete milestones. */
+  guidedSessionActive: boolean;
+  guidedSessionCareerId: string | null;
   /** Features the player discovered organically (without a tutorial). */
   discoveredFeatures: string[];
 }
@@ -141,6 +147,8 @@ const PERSISTED_DEFAULTS: PersistedTutorialData = {
   guidedMilestones: {},
   guidedSessionCompleted: false,
   guidedSessionKind: "firstWeek",
+  guidedSessionActive: false,
+  guidedSessionCareerId: null,
   discoveredFeatures: [],
 };
 
@@ -180,6 +188,14 @@ function readPersisted(): PersistedTutorialData {
       guidedSessionKind: parsed.guidedSessionKind === "discoveryHook"
         ? "discoveryHook"
         : "firstWeek",
+      // Older records did not save resume intent. Completed milestones are
+      // positive evidence of a started guide; an untouched record is not.
+      guidedSessionActive: parsed.guidedSessionActive === true
+        || (parsed.guidedSessionActive === undefined
+          && Object.values(parsed.guidedMilestones ?? {}).some((value) => value === true)),
+      guidedSessionCareerId: typeof parsed.guidedSessionCareerId === "string"
+        ? parsed.guidedSessionCareerId
+        : null,
       discoveredFeatures: Array.isArray(parsed.discoveredFeatures)
         ? parsed.discoveredFeatures.filter((value): value is string => typeof value === "string")
         : [],
@@ -250,6 +266,9 @@ export interface TutorialState {
   /** Determines whether milestones teach planning first or begin inside a live discovery. */
   guidedSessionKind: GuidedSessionKind;
 
+  /** Career that explicitly requested this guide; null for legacy records. */
+  guidedSessionCareerId: string | null;
+
   /** Record of which milestones the player has reached. */
   guidedMilestones: Record<GuidedMilestoneId, boolean>;
 
@@ -307,11 +326,15 @@ export interface TutorialState {
     kind?: GuidedSessionKind,
     options?: GuidedSessionStartOptions,
   ) => void;
+  /** Restore guide UI only when saved resume intent matches the loaded career. */
+  resumeGuidedSession: (gameState: GameState) => void;
   completeMilestone: (id: GuidedMilestoneId) => void;
+  /** Reconcile an authored opening checkpoint; returns true when it owns resume. */
+  reconcileOpeningObservationProgress: (gameState: GameState) => boolean;
   skipGuidedSession: () => void;
 
   // Screen guides
-  recordScreenVisit: (screen: string) => void;
+  recordScreenVisit: (screen: string, autoOpen?: boolean) => void;
   openScreenGuide: (screen: string) => void;
   closeScreenGuide: () => void;
   advanceScreenGuide: () => void;
@@ -392,6 +415,8 @@ function persistAll(state: TutorialState): void {
     guidedMilestones: state.guidedMilestones,
     guidedSessionCompleted: state.guidedSessionCompleted,
     guidedSessionKind: state.guidedSessionKind,
+    guidedSessionActive: state.guidedSessionActive,
+    guidedSessionCareerId: state.guidedSessionCareerId,
     discoveredFeatures: Array.from(state.discoveredFeatures),
   });
 }
@@ -435,8 +460,11 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   guidedSessionForcedReplay: false,
   guidedSessionCompleted: persisted.guidedSessionCompleted,
   guidedSessionKind: persisted.guidedSessionKind,
+  guidedSessionCareerId: persisted.guidedSessionCareerId,
   guidedMilestones: restoredMilestones,
-  currentGuidedTask: persisted.guidedSessionCompleted
+  currentGuidedTask: !persisted.guidedSessionActive
+    || persisted.guidedSessionCompleted
+    || persisted.dismissed
     ? null
     : nextMilestone(restoredMilestones, persisted.guidedSessionKind),
 
@@ -582,12 +610,39 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
       guidedSessionActive: true,
       guidedSessionForcedReplay: forceReplay,
       guidedSessionKind: kind,
+      guidedSessionCareerId: options.careerId ?? null,
       guidedMilestones: { ...initialMilestones },
       currentGuidedTask: nextMilestone(initialMilestones, kind),
       mentorName: hasClub ? "Margaret Chen" : "Tommy Reyes",
       mentorTitle: hasClub ? "Director of Recruitment" : "Senior Scout",
     });
     persistAll(get());
+  },
+
+  resumeGuidedSession(gameState) {
+    const tutorial = get();
+    const expectedKind = gameState.scout.primarySpecialization === "youth"
+      ? "discoveryHook"
+      : "firstWeek";
+    const canResume = gameState.guidedSessionRequested !== false
+      && tutorial.currentGuidedTask !== null
+      && tutorial.guidedSessionKind === expectedKind
+      && !gameState.veteranPrologue
+      && (tutorial.guidedSessionCareerId === null
+        || tutorial.guidedSessionCareerId === gameState.scout.id)
+      && (tutorial.guidedSessionForcedReplay
+        || (!tutorial.dismissed && !tutorial.guidedSessionCompleted));
+
+    if (!canResume) {
+      set({
+        guidedSessionActive: false,
+        guidedSessionForcedReplay: false,
+        currentGuidedTask: null,
+      });
+      return;
+    }
+    if (get().reconcileOpeningObservationProgress(gameState)) return;
+    set({ guidedSessionActive: true });
   },
 
   completeMilestone(id) {
@@ -626,19 +681,77 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     }
   },
 
+  reconcileOpeningObservationProgress(gameState) {
+    const session = gameState.activeObservationSession;
+    const opening = gameState.openingCase;
+    const tutorial = get();
+    if (
+      gameState.scout.primarySpecialization !== "youth"
+      || gameState.veteranPrologue
+      || !opening
+      || opening.stage !== "observation"
+      || !session
+      || !isOpeningDiscoverySession(session)
+      || session.activityInstanceId !== opening.id
+      || tutorial.guidedSessionKind !== "discoveryHook"
+    ) return false;
+
+    // Profile completion and dismissal are monotonic. Replay is permitted only
+    // by the existing transient override, never inferred from a saved career.
+    if (
+      (!tutorial.guidedSessionForcedReplay
+        && (tutorial.dismissed || tutorial.guidedSessionCompleted))
+      || (!tutorial.guidedSessionActive && tutorial.currentGuidedTask === null)
+    ) return true;
+
+    // Tutorial localStorage can be newer than the career checkpoint. Rebuild
+    // this opening's progress from saved evidence before showing its next task.
+    const milestones = { ...tutorial.guidedMilestones };
+    for (const milestone of DISCOVERY_HOOK_MILESTONE_ORDER) {
+      milestones[milestone] = false;
+    }
+    const started = session.state !== "setup";
+    milestones.attendedMatch = started;
+    milestones.focusedPlayer = started && session.players.some((player) =>
+      player.isFocused
+      || (player.focusedPhases ?? []).some((phase) => phase <= session.currentPhaseIndex)
+      || (player.focusHistory ?? []).some((entry) => entry.phaseIndex <= session.currentPhaseIndex),
+    );
+    milestones.flaggedBreakthrough = started && session.flaggedMoments.some((flag) =>
+      flag.phaseIndex <= session.currentPhaseIndex
+      && flag.moment.isStandout
+      && flag.moment.playerId === opening.playerId,
+    );
+    // Reflection has not yet committed the completed match or discovery choice.
+    set({
+      guidedMilestones: milestones,
+      currentGuidedTask: nextMilestone(milestones, "discoveryHook"),
+      guidedSessionActive: true,
+    });
+    persistAll(get());
+    return true;
+  },
+
   skipGuidedSession() {
+    // Hide mentor UI for this career. Do not graduate the player to a
+    // veteran opening — skip guide is the same school assignment without a guide.
     set({
       guidedSessionActive: false,
       guidedSessionForcedReplay: false,
-      guidedSessionCompleted: true,
       currentGuidedTask: null,
+      tutorialActive: false,
+      currentSequence: null,
+      pendingSequence: null,
+      activeScreenGuide: null,
+      pendingScreenGuide: null,
+      activeHint: null,
     });
     persistAll(get());
   },
 
   // ── Screen guide actions ─────────────────────────────────────────────────
 
-  recordScreenVisit(screen) {
+  recordScreenVisit(screen, autoOpen = true) {
     const {
       visitedScreens,
       dismissed,
@@ -650,6 +763,12 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
 
     const updated = new Set(visitedScreens);
     updated.add(screen);
+
+    if (!autoOpen && !guidedSessionForcedReplay) {
+      set({ visitedScreens: updated });
+      persistAll(get());
+      return;
+    }
 
     if (guidedSessionActive) {
       // Queue the screen guide to show after the current milestone spotlight.

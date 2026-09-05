@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Sparkles, CheckCircle2, Star, Users, BarChart2, TrendingUp } from "lucide-react";
 import type { InsightActionResult } from "@/engine/insight/types";
+import { resolveInsightReadingRange } from "@/engine/insight/effects";
 
 // =============================================================================
 // KEYFRAMES
@@ -76,7 +77,7 @@ function ResultRow({
         {icon}
       </span>
       <span className="min-w-0 flex-1 text-sm text-zinc-300">{label}</span>
-      <span className="shrink-0 text-sm font-semibold text-amber-300">{value}</span>
+      <span className="max-w-[55%] text-right text-sm font-semibold text-amber-300">{value}</span>
     </div>
   );
 }
@@ -102,10 +103,17 @@ function ResultsSection({ result }: { result: InsightActionResult }) {
   // clarityOfVision / diamondInTheRough — observations
   if (result.observations && result.observations.length > 0) {
     result.observations.forEach((obs) => {
+      const reading = resolveInsightReadingRange(obs.trueValue, obs.confidence ?? 1);
+      const range = reading.rangeLow === reading.rangeHigh
+        ? String(reading.perceivedValue)
+        : `${reading.rangeLow}–${reading.rangeHigh}`;
+      const confidence = obs.confidence != null && Number.isFinite(obs.confidence)
+        ? `${Math.round(Math.max(0, Math.min(1, obs.confidence)) * 100)}% confidence`
+        : "Confidence not recorded";
       rows.push({
         icon: <CheckCircle2 size={14} />,
-        label: formatAttributeName(obs.attribute),
-        value: String(obs.trueValue),
+        label: `${formatAttributeName(obs.attribute)} estimate`,
+        value: `${range}/20 · ${confidence}`,
       });
     });
   }

@@ -5,12 +5,13 @@
  * quality scoring, club response generation, discovery recording,
  * prediction auto-generation, and retainer/client delivery tracking.
  */
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import type { GetState, SetState } from "./types";
 import {
   queueGameplayAutosave,
   snapshotPersistedGameState,
 } from "./persistGameplayAutosave";
-import { bookOpeningFollowUp } from "@/engine/youth/openingFollowUp";
+import { bookOpeningFollowUp, reconcileOpeningReportStage } from "@/engine/youth/openingFollowUp";
 import type {
   ConvictionLevel,
   FinancialRecord,
@@ -107,7 +108,14 @@ function recordRetainerReportDelivery(
 export function createReportActions(get: GetState, set: SetState) {
   return {
     startReport: (playerId: string) => {
-      set({ selectedPlayerId: playerId, currentScreen: "reportWriter" });
+      const current = get();
+      const nextState = current.gameState
+        ? revealGamePortraits(current.gameState, [playerId], "report")
+        : null;
+      set({ selectedPlayerId: playerId, currentScreen: "reportWriter", gameState: nextState });
+      if (nextState && nextState !== current.gameState) {
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+      }
       // Use the more detailed firstReportWriting tutorial for first-timers
       useTutorialStore.getState().startSequence("firstReportWriting");
     },
@@ -704,10 +712,10 @@ export function createReportActions(get: GetState, set: SetState) {
       }
 
       const isOpeningReport = Boolean(
-        gameState.openingCase
+        gameState.openingCase?.stage === "report"
         && gameState.openingCase.playerId === scoredReport.playerId,
       );
-      // Marketplace is optional after the first hour. Opening reports land on Desk.
+      // The first report returns to its booked follow-up in Planner; listing stays optional.
       const shouldOfferMarketplaceListing = isNewCase
         && gameState.scout.careerPath === "independent"
         && !isOpeningReport;
@@ -757,7 +765,7 @@ export function createReportActions(get: GetState, set: SetState) {
         ],
       });
       const nextState = isOpeningReport
-        ? bookOpeningFollowUp(committedState)
+        ? bookOpeningFollowUp(reconcileOpeningReportStage(committedState))
         : committedState;
       set({
         gameState: nextState,

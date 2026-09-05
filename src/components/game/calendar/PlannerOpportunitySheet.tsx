@@ -61,7 +61,7 @@ export function PlannerOpportunitySheet({
             {selectedLabel ? `Change ${selectedLabel}` : "Choose the next live call"}
           </span>
           <span className="mt-1 block text-xs text-zinc-400">
-            Mobile keeps the day strip visible and moves the full board into a bottom sheet.
+            Review the available work and choose what belongs in your week.
           </span>
         </span>
         <Badge variant="secondary" className="shrink-0 border-white/10 bg-white/5 text-zinc-200">

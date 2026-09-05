@@ -34,7 +34,6 @@ import { getSeasonLength } from "@/engine/core/gameDate";
 import { rankStaffWorkProducts } from "@/engine/finance/staffWorkReview";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { Tooltip } from "@/components/ui/tooltip";
-import { ScreenBackground } from "@/components/ui/screen-background";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { formatObservationActivityLabel } from "@/engine/observation/reflection";
 import {
@@ -48,6 +47,7 @@ import {
   type ReportOpportunityHistorySummary,
 } from "./reportHistoryOpportunityModel";
 import { ReportWorkspaceBridge } from "./reports/ReportWorkspaceBridge";
+import { PlayerAvatar } from "./PlayerAvatar";
 
 import {
   buildReportWorkspaceViewModel,
@@ -805,7 +805,7 @@ export function ReportHistory() {
   const reports = Object.values(gameState.reports)
     .filter((report) => report.scoutId === gameState.scout.id)
     .sort(
-    (a, b) => b.submittedWeek - a.submittedWeek || b.submittedSeason - a.submittedSeason
+    (a, b) => b.submittedSeason - a.submittedSeason || b.submittedWeek - a.submittedWeek
   );
   const seasonLength = getSeasonLength(gameState.fixtures, gameState.currentSeason);
   const staffWorkQueue = gameState.finances
@@ -863,7 +863,7 @@ export function ReportHistory() {
     const bPending = bListing?.bids.filter((bid) => bid.status === "pending").length ?? 0;
     if (aPending > 0 && bPending === 0) return -1;
     if (bPending > 0 && aPending === 0) return 1;
-    return b.submittedWeek - a.submittedWeek || b.submittedSeason - a.submittedSeason;
+    return b.submittedSeason - a.submittedSeason || b.submittedWeek - a.submittedWeek;
   });
   const normalizedReportQuery = reportQuery.trim().toLowerCase();
   const filteredReports = normalizedReportQuery.length === 0
@@ -1156,7 +1156,7 @@ export function ReportHistory() {
                   className={`min-h-11 text-xs ${
                     isUpgrade
                       ? "bg-amber-600 hover:bg-amber-500"
-                      : "bg-emerald-700 hover:bg-emerald-600"
+                      : "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                   }`}
                   onClick={() =>
                     isUpgrade
@@ -1252,16 +1252,16 @@ export function ReportHistory() {
 
   return (
     <GameLayout>
-      <div className="relative min-h-full p-6 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
-        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.74} />
+      <div className="game-workspace relative min-h-full [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         <div className="relative z-10">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">Reports</h1>
-          <p className="text-sm text-zinc-400">Filed judgments, accountability trails, and the archive behind your scouting record</p>
+          <h1 className="dossier-title">Reports</h1>
+          <p className="text-sm text-zinc-400">Your recommendations, club responses, and the players behind them.</p>
         </div>
 
         <ReportWorkspaceBridge
           viewModel={reportWorkspaceViewModel}
+          comparisonCount={comparisonReportIds.length}
           onAction={handleWorkspaceAction}
           onCompare={() => setScreen("reportComparison")}
           onClearComparison={clearComparison}
@@ -1308,14 +1308,13 @@ export function ReportHistory() {
         )}
 
         {reports.length > 0 && (
-          <WorkspaceDisclosure
-            className="mb-4"
-            tone="subtle"
-            title="Search and archive"
-            eyebrow="Reference"
-            description="Open this when you need to query the back catalog rather than act on the live artifact and accountability lanes."
-            summary={<span>{filteredReports.length} visible · {reports.length} filed</span>}
-          >
+          <section className="mb-4 mt-6" aria-labelledby="report-archive-title">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id="report-archive-title" className="text-lg font-semibold text-zinc-100">Report archive</h2>
+              {reports.length > 1 && comparisonReportIds.length === 0 && (
+                <p className="text-xs text-zinc-400">Select 2–3 reports to compare your judgments.</p>
+              )}
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <label className="block min-w-0 sm:max-w-sm sm:flex-1">
                 <span className="mb-1 block text-xs font-medium text-zinc-300">Search filed reports</span>
@@ -1334,7 +1333,7 @@ export function ReportHistory() {
                 {filteredReports.length} report{filteredReports.length === 1 ? "" : "s"}
               </p>
             </div>
-          </WorkspaceDisclosure>
+          </section>
         )}
 
         {/* Reports table */}
@@ -1369,7 +1368,7 @@ export function ReportHistory() {
               </div>
             ) : (
               <>
-                <div className="space-y-3 p-3 md:hidden">
+                <div className="divide-y divide-zinc-800 md:hidden">
                   {visibleReports.map((report) => {
                     const player = resolvePlayerEntity(gameState, report.playerId)?.player;
                     const playerName = player
@@ -1382,15 +1381,16 @@ export function ReportHistory() {
                     return (
                       <div
                         key={`${report.id}-mobile`}
-                        className={`rounded-lg border p-4 ${
+                        className={`border-l-2 px-3 py-4 ${
                           isInComparison
                             ? "border-emerald-700/60 bg-emerald-950/20"
                             : hasPendingBids
                               ? "border-amber-500/30 bg-amber-950/10"
-                              : "border-[#27272a] bg-[#101010]"
+                              : "border-transparent bg-transparent"
                         }`}
                       >
                         <div className="flex items-start gap-3">
+                          <label className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
                           <input
                             type="checkbox"
                             checked={isInComparison}
@@ -1402,9 +1402,10 @@ export function ReportHistory() {
                                 addToComparison(report.id);
                               }
                             }}
-                            className="mt-1 h-4 w-4 rounded border-[#27272a] bg-[#141414] accent-emerald-500 disabled:opacity-30"
+                            className="h-5 w-5 rounded border-[#27272a] bg-[#141414] accent-emerald-500 disabled:opacity-30"
                             aria-label={`${isInComparison ? "Remove from" : "Add to"} comparison for ${playerName}`}
                           />
+                          </label>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <button
@@ -1412,10 +1413,11 @@ export function ReportHistory() {
                                   selectPlayer(report.playerId);
                                   setScreen("playerProfile");
                                 }}
-                                className="text-left font-medium text-white transition hover:text-emerald-400"
+                                className="flex min-h-11 min-w-0 items-center gap-3 text-left font-medium text-white transition hover:text-emerald-400"
                                 aria-label={`View profile for ${playerName}`}
                               >
-                                {playerName}
+                                <PlayerAvatar playerId={report.playerId} size={44} alt={playerName} />
+                                <span className="min-w-0 break-words">{playerName}</span>
                               </button>
                               <span className="text-xs text-zinc-500">
                                 W{report.submittedWeek} S{report.submittedSeason}
@@ -1437,10 +1439,11 @@ export function ReportHistory() {
                           </div>
                         </div>
 
+                        <p className="mt-3 line-clamp-2 text-sm leading-6 text-zinc-300">{report.summary}</p>
                         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                           <div>
                             <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                              Delivery / Club Decision
+                              Club response
                             </dt>
                             <dd className="mt-1">
                               {renderDeliveryStatus(report)}
@@ -1448,16 +1451,13 @@ export function ReportHistory() {
                           </div>
                           <div>
                             <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                              Player Movement
+                              Career outcome
                             </dt>
                             <dd className="mt-1">{renderTransferOutcome(report)}</dd>
                           </div>
                         </dl>
 
                         <div className="mt-4">
-                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                            Actions
-                          </p>
                           {renderReportActions(report, playerName, listing)}
                         </div>
 
@@ -1529,7 +1529,10 @@ export function ReportHistory() {
                               className="font-medium text-white hover:text-emerald-400 transition text-left"
                               aria-label={`View profile for ${playerName}`}
                             >
-                              {playerName}
+                              <span className="flex items-center gap-3">
+                                <PlayerAvatar playerId={report.playerId} size={36} alt={playerName} />
+                                <span>{playerName}</span>
+                              </span>
                             </button>
                           </td>
                           <td className="px-4 py-3">
@@ -1717,7 +1720,7 @@ export function ReportHistory() {
                                             className={`min-h-11 text-xs ${
                                               isUpgrade
                                                 ? "bg-amber-600 hover:bg-amber-500"
-                                                : "bg-emerald-700 hover:bg-emerald-600"
+                                                : "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                                             }`}
                                             onClick={() =>
                                               isUpgrade
@@ -1896,7 +1899,7 @@ export function ReportHistory() {
           className="mt-6"
           tone="subtle"
           title="Archive and reference"
-          description="Metrics, journal, and background material stay available without pushing the live report trail below the fold."
+          description="Review your report record and the notes behind your calls."
           summary={<span>{totalReports} reports · {journalEntries.length} journal entries</span>}
           contentClassName="space-y-6"
         >
@@ -1948,7 +1951,7 @@ export function ReportHistory() {
                   Reflection journal
                 </h2>
                 <p className="mt-1 text-sm text-zinc-400">
-                  Saved post-session notes, hypotheses, and gut-feeling output from completed observations.
+                  Your notes, working theories, and instincts after each scouting visit.
                 </p>
               </div>
               <div className="space-y-3">

@@ -1,16 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Eye,
-  Gauge,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
 import type {
   EvidenceConfidenceBand,
   InitialAssessmentInput,
@@ -24,8 +15,6 @@ import {
   getEvidenceUnknownOptions,
   type InitialAssessmentBuildResult,
 } from "@/engine/scout/evidenceModel";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { cn } from "@/lib/utils";
 
@@ -44,10 +33,11 @@ interface InitialAssessmentBuilderProps {
   value: InitialAssessmentInput | null;
   onChange: (value: InitialAssessmentInput | null) => void;
   onResultChange?: (result: InitialAssessmentBuilderResult) => void;
+  onProgressChange?: (completedSteps: number) => void;
   disabled?: boolean;
 }
 
-const MOBILE_STEPS = [
+const ASSESSMENT_STEPS = [
   { id: "evidence", label: "Evidence" },
   { id: "suggests", label: "Suggests" },
   { id: "untested", label: "Untested" },
@@ -271,28 +261,16 @@ function FieldChoice({
       selected={checked}
       disabled={disabled}
       disabledReason={disabled ? "This judgment is locked." : undefined}
-      recommended={recommended}
       onSelect={onSelect}
+      className="rounded-none border-0 border-b border-[color:var(--border)] px-3 py-3"
     >
-      <span className="block text-sm font-semibold text-white">{title}</span>
-      <span className="mt-1 block text-xs leading-5 text-zinc-300">{description}</span>
-      {meta && <span className="mt-3 block text-xs text-quiet">{meta}</span>}
+      <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-sm font-semibold text-[color:var(--foreground)]">{title}</span>
+        {recommended && <span className="text-xs font-medium text-[color:var(--primary)]">Suggested</span>}
+      </span>
+      <span className="mt-1 block text-sm leading-6 text-[color:var(--muted-foreground)]">{description}</span>
+      {meta && <span className="mt-2 block text-xs leading-5 text-[color:var(--muted-foreground)]">{meta}</span>}
     </ChoiceCard>
-  );
-}
-
-function SelectionSummary({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-      <p className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-quiet">{label}</p>
-      <p className="mt-1 text-sm text-zinc-100">{value}</p>
-    </div>
   );
 }
 
@@ -302,11 +280,12 @@ export function InitialAssessmentBuilder({
   value,
   onChange,
   onResultChange,
+  onProgressChange,
   disabled = false,
 }: InitialAssessmentBuilderProps) {
   const baseId = useId();
   const [draft, setDraft] = useState<AssessmentDraft>(value ?? {});
-  const [mobileStep, setMobileStep] = useState(0);
+  const [editorStep, setEditorStep] = useState(value ? 4 : 0);
 
   useEffect(() => {
     if (value) setDraft(value);
@@ -367,9 +346,23 @@ export function InitialAssessmentBuilder({
     Boolean(draft.confidence),
   ];
   const completedSteps = stepCompletion.filter(Boolean).length;
-  const mobileProgressText = `Initial assessment step ${mobileStep + 1} of ${MOBILE_STEPS.length}. ${completedSteps} of ${MOBILE_STEPS.length} steps complete. Current step: ${MOBILE_STEPS[mobileStep]?.label ?? MOBILE_STEPS[0].label}.`;
+  useEffect(() => {
+    onProgressChange?.(completedSteps);
+  }, [completedSteps, onProgressChange]);
+  const firstIncompleteStep = stepCompletion.findIndex((complete) => !complete);
+  // An upstream edit must reopen any invalidated decision before later steps.
+  const activeStep = Math.min(editorStep, firstIncompleteStep < 0 ? 4 : firstIncompleteStep);
+  const progressText = `Initial assessment step ${activeStep + 1} of ${ASSESSMENT_STEPS.length}. ${completedSteps} of ${ASSESSMENT_STEPS.length} steps complete. Current step: ${ASSESSMENT_STEPS[activeStep].label}.`;
+  const previousStep = useRef(activeStep);
 
-  const canOpenMobileStep = (index: number): boolean => {
+  useEffect(() => {
+    if (previousStep.current !== activeStep) {
+      document.getElementById(`${baseId}-${ASSESSMENT_STEPS[activeStep].id}-heading`)?.focus({ preventScroll: true });
+      previousStep.current = activeStep;
+    }
+  }, [activeStep, baseId]);
+
+  const canOpenStep = (index: number): boolean => {
     if (index === 0) return true;
     return stepCompletion.slice(0, index).every(Boolean);
   };
@@ -377,7 +370,7 @@ export function InitialAssessmentBuilder({
   const applyDraft = (updater: (current: AssessmentDraft) => AssessmentDraft, nextStep?: number) => {
     setDraft((current) => updater(current));
     if (nextStep !== undefined) {
-      setMobileStep((current) => (current === nextStep - 1 ? nextStep : current));
+      setEditorStep((current) => (current === nextStep - 1 ? nextStep : current));
     }
   };
 
@@ -390,11 +383,11 @@ export function InitialAssessmentBuilder({
 
   const preview = evaluation.result.assessment;
   const renderEvidenceChoices = () => (
-    <fieldset className="space-y-3">
-      <legend className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-200">
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-semibold text-[color:var(--foreground)]">
         Saved evidence
       </legend>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {cards.map((card) => {
           const checked = draft.evidenceCardId === card.id;
           const recommended = evaluation.recommendedValue?.evidenceCardId === card.id;
@@ -410,7 +403,7 @@ export function InitialAssessmentBuilder({
               title={`${card.minute}' ${card.summary}`}
               description={card.detail}
               meta={(
-                <span className="flex flex-wrap gap-2">
+                <span className="flex flex-wrap gap-x-3 gap-y-1">
                   <span>{formatToken(card.classification)}</span>
                   <span>{formatToken(card.questionId)}</span>
                   <span>{formatToken(card.clarity)}</span>
@@ -432,12 +425,12 @@ export function InitialAssessmentBuilder({
   );
 
   const renderClaimChoices = () => (
-    <fieldset className="space-y-3">
-      <legend className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-200">
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-semibold text-[color:var(--foreground)]">
         What it suggests
       </legend>
       {selectedCard ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {claimOptions.map((option, index) => (
             <FieldChoice
               key={option.id}
@@ -449,7 +442,7 @@ export function InitialAssessmentBuilder({
               recommended={index === 0}
               title={option.label}
               description={option.statement}
-              meta={`Category: ${formatToken(option.category)} | Support: ${formatToken(option.support)}`}
+              meta={`${formatToken(option.category)} · ${formatToken(option.support)} support`}
               onSelect={() => applyDraft((current) => ({
                 ...current,
                 claimOptionId: option.id,
@@ -466,12 +459,12 @@ export function InitialAssessmentBuilder({
   );
 
   const renderUnknownChoices = () => (
-    <fieldset className="space-y-3">
-      <legend className="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-semibold text-[color:var(--foreground)]">
         What remains untested
       </legend>
       {selectedCard ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {unknownOptions.map((option, index) => (
             <FieldChoice
               key={option.id}
@@ -483,7 +476,7 @@ export function InitialAssessmentBuilder({
               recommended={index === 0}
               title={option.label}
               description={option.statement}
-              meta={`Next question: ${formatToken(option.recommendedQuestionId)} | Needed context: ${option.contextRequirement}`}
+              meta={`${formatToken(option.recommendedQuestionId)} · ${option.contextRequirement}`}
               onSelect={() => applyDraft((current) => {
                 const next: AssessmentDraft = {
                   ...current,
@@ -505,12 +498,12 @@ export function InitialAssessmentBuilder({
 
   const renderNextActionChoices = () => (
     <div className="space-y-5">
-      <fieldset className="space-y-3">
-        <legend className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-200">
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold text-[color:var(--foreground)]">
           Next test
         </legend>
         {selectedUnknown ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {nextTestOptions.map((option, index) => (
               <FieldChoice
                 key={option.id}
@@ -522,7 +515,7 @@ export function InitialAssessmentBuilder({
                 recommended={index === 0}
                 title={option.label}
                 description={option.description}
-                meta={`Activity: ${formatToken(option.activityType)} | Requirement: ${option.contextRequirement}`}
+                meta={`${formatToken(option.activityType)} · ${option.contextRequirement}`}
                 onSelect={() => applyDraft((current) => ({
                   ...current,
                   nextTestId: option.id,
@@ -537,11 +530,11 @@ export function InitialAssessmentBuilder({
         )}
       </fieldset>
 
-      <fieldset className="space-y-3">
-        <legend className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-200">
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold text-[color:var(--foreground)]">
           Recommended action
         </legend>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {RECOMMENDATION_OPTIONS.map((option) => (
             <FieldChoice
               key={option.value}
@@ -553,7 +546,6 @@ export function InitialAssessmentBuilder({
               recommended={evaluation.recommendedValue?.recommendation === option.value}
               title={option.label}
               description={option.description}
-              meta={`Current tone: ${option.value === "monitor" ? "Measured" : option.value === "inviteForTrial" ? "Testing" : "Immediate escalation"}`}
               onSelect={() => applyDraft((current) => ({
                 ...current,
                 recommendation: option.value,
@@ -566,11 +558,16 @@ export function InitialAssessmentBuilder({
   );
 
   const renderConfidenceChoices = () => (
-    <fieldset className="space-y-3">
-      <legend className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-200">
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-semibold text-[color:var(--foreground)]">
         Confidence
       </legend>
-      <div className="space-y-3">
+      {selectedCard && (
+        <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+          Saved cue: {formatToken(selectedCard.confidenceBand).toLowerCase()}. Choose the conviction you can defend.
+        </p>
+      )}
+      <div className="space-y-2">
         {CONFIDENCE_OPTIONS.map((option) => (
           <FieldChoice
             key={option.value}
@@ -582,7 +579,6 @@ export function InitialAssessmentBuilder({
             recommended={evaluation.recommendedValue?.confidence === option.value}
             title={option.label}
             description={option.description}
-            meta={selectedCard ? `Cue band on saved evidence: ${formatToken(selectedCard.confidenceBand)}` : "Pick evidence first to compare against the cue band."}
             onSelect={() => applyDraft((current) => ({
               ...current,
               confidence: option.value,
@@ -593,256 +589,128 @@ export function InitialAssessmentBuilder({
     </fieldset>
   );
 
-  const renderPreview = () => (
-    <div
-      className={cn(
-        "rounded-2xl border p-4",
-        preview
-          ? "border-emerald-400/25 bg-emerald-400/[0.05]"
-          : "border-amber-400/20 bg-amber-400/[0.05]",
-      )}
-      aria-live="polite"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">
-            Your draft
-          </p>
-          <h3 className="mt-1 text-base font-semibold text-white">
-            {preview ? "Initial assessment ready" : "Assessment incomplete"}
-          </h3>
-        </div>
-        <span
-          className={cn(
-            "rounded-full border px-2.5 py-1 text-eyebrow font-semibold uppercase tracking-[0.14em]",
-            preview
-              ? "border-emerald-300/35 bg-emerald-300/15 text-emerald-100"
-              : "border-amber-300/35 bg-amber-300/15 text-amber-100",
-          )}
-        >
-          {preview ? "Ready to file" : `${completedSteps}/${MOBILE_STEPS.length} chosen`}
-        </span>
-      </div>
+  const stepSummaries = [
+    selectedCard ? `${selectedCard.minute}' ${selectedCard.summary}` : "Choose a passage worth keeping",
+    selectedClaim?.label ?? "Make a claim the cue can support",
+    selectedUnknown?.label ?? "Name what you still need to learn",
+    [selectedNextTest?.label, selectedRecommendation?.label].filter(Boolean).join(" · ") || "Set the next test and recommendation",
+    selectedConfidence?.label ?? "Choose the conviction you can defend",
+  ];
+  const renderStep = [renderEvidenceChoices, renderClaimChoices, renderUnknownChoices, renderNextActionChoices, renderConfidenceChoices];
 
+  const renderPreview = () => (
+    <div className="border-t-2 border-[color:var(--primary)] bg-[color:var(--surface)] px-5 py-5 sm:px-6">
+      <p className="dossier-eyebrow">Scouting dossier · First assessment</p>
+      <h3 className="font-editorial mt-2 text-2xl leading-tight text-[color:var(--foreground)]">{playerName}</h3>
       {preview ? (
-        <div className="mt-4 space-y-4">
-          <p className="text-sm leading-6 text-zinc-100">{preview.generatedSummary}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SelectionSummary label="Recommendation" value={selectedRecommendation?.label ?? formatToken(preview.recommendation)} />
-            <SelectionSummary label="Confidence" value={selectedConfidence?.label ?? formatToken(preview.confidence)} />
-            <SelectionSummary label="Claims needing caution" value={preview.overclaimCount > 0 ? `${preview.overclaimCount} to revisit` : "None"} />
-            <SelectionSummary label="Evidence strength" value={preview.score.total >= 80 ? "Strong" : preview.score.total >= 60 ? "Credible" : "Developing"} />
-          </div>
+        <p className="mt-5 text-base leading-7 text-[color:var(--foreground)]">{preview.generatedSummary}</p>
+      ) : selectedCard ? (
+        <div className="mt-5 space-y-4 text-sm leading-6 text-[color:var(--foreground)]">
+          <p><span className="font-semibold text-[color:var(--primary)]">{selectedCard.minute}&prime; </span>{selectedCard.detail}</p>
+          {selectedClaim && <p>{selectedClaim.statement}</p>}
+          {selectedUnknown && <p><span className="font-semibold">Still untested. </span>{selectedUnknown.statement}</p>}
+          {selectedNextTest && <p><span className="font-semibold">Next look. </span>{selectedNextTest.description}</p>}
         </div>
       ) : (
-        <div className="mt-4 space-y-3">
-          {evaluation.result.errors.length > 0 && (
-            <div className="rounded-xl border border-amber-400/25 bg-black/20 px-4 py-3">
-              <p className="flex items-center gap-2 text-sm font-semibold text-amber-100">
-                <AlertTriangle size={16} aria-hidden="true" />
-                Remaining decisions
-              </p>
-              <ul className="mt-2 space-y-1 text-sm leading-5 text-zinc-200">
-                {evaluation.result.errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SelectionSummary label="Evidence" value={selectedCard ? `${selectedCard.minute}' ${selectedCard.summary}` : "Not selected"} />
-            <SelectionSummary label="Suggests" value={selectedClaim?.label ?? "Not selected"} />
-            <SelectionSummary label="Untested" value={selectedUnknown?.label ?? "Not selected"} />
-            <SelectionSummary label="Next action" value={selectedNextTest?.label ?? "Not selected"} />
-            <SelectionSummary label="Recommendation" value={selectedRecommendation?.label ?? "Not selected"} />
-            <SelectionSummary label="Confidence" value={selectedConfidence?.label ?? "Not selected"} />
-          </div>
-        </div>
+        <p className="mt-5 text-sm leading-6 text-[color:var(--muted-foreground)]">
+          Start with the passage you kept. Your evidence and judgment will form the first entry in this player&apos;s case.
+        </p>
+      )}
+      {(selectedRecommendation || selectedConfidence) && (
+        <dl className="dossier-section mt-5 grid gap-4 pb-0 sm:grid-cols-2">
+          {selectedRecommendation && <div><dt className="dossier-eyebrow">Recommendation</dt><dd className="mt-1 text-sm font-semibold">{selectedRecommendation.label}</dd></div>}
+          {selectedConfidence && <div><dt className="dossier-eyebrow">Confidence</dt><dd className="mt-1 text-sm font-semibold">{selectedConfidence.label}</dd></div>}
+        </dl>
+      )}
+      {preview && preview.overclaimCount > 0 && (
+        <p className="mt-5 flex items-start gap-2 text-sm leading-6 text-[color:var(--signal-warn)]">
+          <AlertTriangle size={17} className="mt-1 shrink-0" aria-hidden="true" />
+          {preview.overclaimCount} {preview.overclaimCount === 1 ? "claim needs" : "claims need"} cautious wording. Review the weight you have put on this cue.
+        </p>
+      )}
+      {evaluation.complete && !evaluation.result.valid && (
+        <ul className="mt-5 space-y-2 text-sm leading-6 text-[color:var(--signal-warn)]">
+          {evaluation.result.errors.map((error) => <li key={error}>{error}</li>)}
+        </ul>
       )}
     </div>
   );
 
   if (cards.length === 0) {
     return (
-      <Card className="border-cyan-400/20 bg-[#0f1519]/95">
-        <CardHeader>
-          <CardTitle className="text-white">Initial assessment</CardTitle>
-          <CardDescription className="text-zinc-300">
-            Save at least one observation cue before building the first read on {playerName}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[0.04] px-5 py-6 text-sm leading-6 text-zinc-300">
-            No evidence cards are available yet. Save a first-hand note before sketching your first read.
-          </div>
-        </CardContent>
-      </Card>
+      <div className="dossier-section">
+        <h2 className="font-editorial text-2xl">A first-hand cue comes first</h2>
+        <p className="mt-3 max-w-prose text-sm leading-6 text-[color:var(--muted-foreground)]">
+          Save at least one observation cue before building the first read on {playerName}.
+        </p>
+      </div>
     );
   }
 
   return (
-    <Card className="border-emerald-400/20 bg-[#0f1519]/95 shadow-[0_24px_80px_-48px_rgba(16,185,129,0.45)]">
-      <CardHeader className="gap-4 border-b border-white/10 pb-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="flex items-center gap-2 text-emerald-200">
-              <Sparkles size={16} aria-hidden="true" />
-              <span className="text-xs font-bold uppercase tracking-[0.16em]">Initial assessment</span>
-            </div>
-            <CardTitle className="mt-2 text-2xl text-white">
-              Shape the first football read on {playerName}
-            </CardTitle>
-            <CardDescription className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
-              Keep this first read anchored to one saved cue, one explicit claim, one named uncertainty, one next test, and one confidence level. Nothing fills itself in until you choose it.
-            </CardDescription>
-          </div>
-          <div className="flex flex-col gap-3 lg:max-w-xs">
-            <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.05] px-4 py-3 text-sm text-zinc-200">
-              <p className="font-semibold text-cyan-100">Progress</p>
-              <p className="mt-1">{completedSteps} of {MOBILE_STEPS.length} decisions chosen</p>
-            </div>
-            <p className="text-xs leading-5 text-zinc-400">
-              Suggested choices are coaching, not an answer key. Every decision still has to be made and can carry a calibration cost.
-            </p>
-          </div>
+    <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-9">
+      <div className="min-w-0">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <h2 className="font-editorial text-2xl text-[color:var(--foreground)]">Your judgment</h2>
+          <p className="shrink-0 text-xs text-[color:var(--muted-foreground)]">{completedSteps} / {ASSESSMENT_STEPS.length} decisions</p>
         </div>
-      </CardHeader>
-
-      <CardContent className="p-4 sm:p-6">
-        <p className="sr-only" aria-live="polite">
-          {mobileProgressText}
-        </p>
-
-        <div className="lg:hidden">
-          <div className="mb-4 flex flex-wrap gap-2">
-            {MOBILE_STEPS.map((step, index) => {
-              const active = index === mobileStep;
-              const complete = stepCompletion[index];
-              const reachable = canOpenMobileStep(index);
-              return (
-                <button
-                  key={step.id}
-                  type="button"
-                  disabled={!reachable}
-                  onClick={() => setMobileStep(index)}
-                  className={cn(
-                    "min-h-11 rounded-full border px-3 py-2 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300",
-                    active
-                      ? "border-emerald-400/45 bg-emerald-400/[0.12] text-emerald-50"
-                      : complete
-                        ? "border-cyan-400/35 bg-cyan-400/[0.08] text-cyan-100"
-                        : "border-white/10 bg-black/20 text-zinc-400",
-                    !reachable && "cursor-not-allowed opacity-50",
-                  )}
+        <p className="sr-only" aria-live="polite">{progressText}</p>
+        <div className="border-t border-[color:var(--border)]">
+          {ASSESSMENT_STEPS.map((step, index) => {
+            const active = index === activeStep;
+            const complete = stepCompletion[index];
+            return (
+              <section key={step.id} className="border-b border-[color:var(--border)]">
+                <h3>
+                  <button
+                    id={`${baseId}-${step.id}-heading`}
+                    type="button"
+                    aria-expanded={active}
+                    aria-controls={`${baseId}-${step.id}-panel`}
+                    disabled={!canOpenStep(index)}
+                    onClick={() => setEditorStep(index)}
+                    className={cn(
+                      "flex min-h-16 w-full items-start gap-3 py-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ring)] disabled:cursor-not-allowed",
+                      active ? "text-[color:var(--foreground)]" : "text-[color:var(--muted-foreground)]",
+                    )}
+                  >
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-xs tabular-nums text-[color:var(--primary)]" aria-hidden="true">
+                      {complete ? <CheckCircle2 size={18} /> : String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">{step.label}</span>
+                      {!active && <span className="mt-1 block text-sm leading-5">{stepSummaries[index]}</span>}
+                    </span>
+                    <ChevronDown size={17} className={cn("mt-1 shrink-0 transition-transform", active && "rotate-180")} aria-hidden="true" />
+                  </button>
+                </h3>
+                <div
+                  id={`${baseId}-${step.id}-panel`}
+                  role="region"
+                  aria-labelledby={`${baseId}-${step.id}-heading`}
+                  hidden={!active}
+                  className="pb-5 sm:pl-8"
                 >
-                  {complete ? <CheckCircle2 size={12} className="mr-1 inline" aria-hidden="true" /> : null}
-                  {step.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-quiet">
-                  Step {mobileStep + 1} of {MOBILE_STEPS.length}
-                </p>
-                <h3 className="mt-1 text-lg font-semibold text-white">{MOBILE_STEPS[mobileStep].label}</h3>
-              </div>
-              <div className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-1 text-xs font-semibold text-emerald-100">
-                {completedSteps}/{MOBILE_STEPS.length} complete
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              {mobileStep === 0 && renderEvidenceChoices()}
-              {mobileStep === 1 && renderClaimChoices()}
-              {mobileStep === 2 && renderUnknownChoices()}
-              {mobileStep === 3 && renderNextActionChoices()}
-              {mobileStep === 4 && (
-                <div className="space-y-5">
-                  {renderConfidenceChoices()}
-                  {renderPreview()}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-5 flex items-center justify-between gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={mobileStep === 0}
-                onClick={() => setMobileStep((current) => Math.max(0, current - 1))}
-                className="min-h-11 border-white/10 bg-black/20 text-zinc-100 hover:bg-white/[0.05]"
-              >
-                <ArrowLeft size={16} className="mr-2" aria-hidden="true" />
-                Back
-              </Button>
-              {mobileStep < MOBILE_STEPS.length - 1 ? (
-                <Button
-                  type="button"
-                  disabled={!stepCompletion[mobileStep]}
-                  onClick={() => setMobileStep((current) => Math.min(MOBILE_STEPS.length - 1, current + 1))}
-                  className="min-h-11 bg-emerald-600 text-white hover:bg-emerald-500"
-                >
-                  Next
-                  <ArrowRight size={16} className="ml-2" aria-hidden="true" />
-                </Button>
-              ) : (
-                <div className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-4 py-2 text-sm text-emerald-100">
-                  Review complete
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="hidden lg:grid lg:grid-cols-[minmax(0,0.92fr)_minmax(340px,1.08fr)] lg:gap-6">
-          <div className="space-y-6">
-            <section className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.04] p-4">
-              <div className="mb-4 flex items-center gap-2">
-                <Eye size={16} className="text-cyan-200" aria-hidden="true" />
-                <h3 className="text-lg font-semibold text-white">Evidence lane</h3>
-              </div>
-              {renderEvidenceChoices()}
-            </section>
-
-            {selectedCard && (
-              <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-emerald-200" aria-hidden="true" />
-                  <h3 className="text-lg font-semibold text-white">Selected cue</h3>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-zinc-100">{selectedCard.detail}</p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <SelectionSummary label="Minute" value={`${selectedCard.minute}'`} />
-                  <SelectionSummary label="Question" value={formatToken(selectedCard.questionId)} />
-                  <SelectionSummary label="Clarity" value={formatToken(selectedCard.clarity)} />
-                  <SelectionSummary label="Cue confidence" value={`${Math.round(selectedCard.confidence * 100)}%`} />
+                  {renderStep[index]()}
                 </div>
               </section>
-            )}
-          </div>
-
-          <div className="space-y-6">
-            <section className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-4">
-              <div className="mb-4 flex items-center gap-2">
-                <Gauge size={16} className="text-emerald-200" aria-hidden="true" />
-                <h3 className="text-lg font-semibold text-white">Decision lane</h3>
-              </div>
-              <div className="space-y-6">
-                {renderClaimChoices()}
-                {renderUnknownChoices()}
-                {renderNextActionChoices()}
-                {renderConfidenceChoices()}
-              </div>
-            </section>
-
-            {renderPreview()}
-          </div>
+            );
+          })}
         </div>
-      </CardContent>
-    </Card>
+        <p className="mt-4 text-xs leading-5 text-[color:var(--muted-foreground)]">
+          Suggestions guide the read. The final judgment is yours.
+        </p>
+      </div>
+      <aside className="hidden min-w-0 lg:sticky lg:top-28 lg:block" aria-label="Dossier preview">
+        {renderPreview()}
+      </aside>
+      <details className="group min-w-0 border-t border-[color:var(--border)] lg:hidden" open={Boolean(preview) || undefined}>
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--ring)]">
+          Read your dossier
+          <ChevronDown size={17} className="group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        {renderPreview()}
+      </details>
+    </div>
   );
 }

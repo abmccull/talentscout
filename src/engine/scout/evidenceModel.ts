@@ -23,6 +23,7 @@ import type {
   ObservationSession,
   PlayerMoment,
 } from "@/engine/observation/types";
+import { getCountryDisplayName } from "@/lib/country";
 
 export interface ScoutingQuestionDefinition {
   id: ScoutingQuestionId;
@@ -220,7 +221,7 @@ function halftimeAdjustment(
 }
 
 function regionalContextLabel(knowledgeLevel: number, countryId?: string): string {
-  const place = countryId ? ` in ${countryId}` : " in this football environment";
+  const place = countryId ? ` in ${getCountryDisplayName(countryId)}` : " in this football environment";
   if (knowledgeLevel >= 75) {
     return `Your strong local reference base${place} helps you compare the context, not predict the player's future.`;
   }

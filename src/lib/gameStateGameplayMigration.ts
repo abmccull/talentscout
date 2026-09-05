@@ -1,3 +1,4 @@
+import { migrateVisualIdentities } from "@/engine/players/portraits/state";
 import type {
   ActionableGossipItem,
   Contact,
@@ -1015,8 +1016,10 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
     && !(compacted.completedInteractiveSessions ?? []).includes(completionId ?? "")
       ? serializedSession
       : null;
-  return {
+  // Persistence validates identities and keeps bindings; only live domain
+  // boundaries allocate photographs, so a detached save cannot own new faces.
+  return migrateVisualIdentities({
     ...compacted,
     activeObservationSession: resumableSession,
-  };
+  });
 }

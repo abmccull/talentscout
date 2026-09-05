@@ -33,7 +33,7 @@ import type {
   RivalOrganizationOpportunity,
 } from "@/engine/rivals";
 import type { ConsequenceEngineState } from "@/engine/consequences/types";
-import { ScreenBackground } from "@/components/ui/screen-background";
+import { Button } from "@/components/ui/button";
 import { RivalOperationsNetwork } from "./rivals/RivalOperationsNetwork";
 import { buildStakeholderEcologyProfile } from "@/engine/consequences";
 import { StakeholderEcologyPanel } from "./StakeholderEcologyPanel";
@@ -105,7 +105,7 @@ function ScoutingProgressBar({ progress, max = 5 }: { progress: number; max?: nu
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="w-8 text-right text-[10px] tabular-nums text-zinc-400">
+      <span className="w-8 text-right text-xs tabular-nums text-zinc-400">
         {progress}/{max}
       </span>
     </div>
@@ -164,18 +164,18 @@ function RivalCard({
   });
 
   return (
-    <Card className="bg-zinc-900 border-zinc-800">
+    <Card className="rounded-md border-0 border-t border-[var(--border)] bg-[var(--card)]">
       <CardContent className="pt-4">
         <div className="flex items-start justify-between mb-2">
           <div>
-            <h3 className="text-sm font-medium text-white">{rival.name}</h3>
+            <h3 className="font-editorial text-xl text-[var(--foreground)]">{rival.name}</h3>
             <p className="text-xs text-zinc-400">
               {getClubName(rival.clubId)} &middot;{" "}
               <span className="capitalize">{rival.specialization}</span>
             </p>
           </div>
           <span
-            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${THREAT_STYLES[threat]}`}
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${THREAT_STYLES[threat]}`}
           >
             {THREAT_LABELS[threat]}
           </span>
@@ -187,11 +187,11 @@ function RivalCard({
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <Badge variant="secondary" className="text-[10px]">
+          <Badge variant="secondary" className="text-xs">
             {PERSONALITY_LABELS[rival.personality] ?? rival.personality}
           </Badge>
           {rival.budgetTier && (
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge variant="secondary" className="text-xs">
               {BUDGET_LABELS[rival.budgetTier] ?? rival.budgetTier}
             </Badge>
           )}
@@ -202,7 +202,7 @@ function RivalCard({
           <div className="border-t border-zinc-800 pt-2 mt-2">
             <div className="flex items-center gap-1.5 mb-1">
               <Target size={10} className="text-amber-400" aria-hidden="true" />
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">
                 Active Target
               </p>
             </div>
@@ -214,7 +214,7 @@ function RivalCard({
             </button>
             <ScoutingProgressBar progress={currentTargetProgress} />
             {rival.reportDeadline !== undefined && (
-              <p className="mt-0.5 text-[10px] text-zinc-400">
+              <p className="mt-0.5 text-xs text-zinc-400">
                 Report due: week {rival.reportDeadline}
               </p>
             )}
@@ -224,7 +224,7 @@ function RivalCard({
         {/* Scouting progress on other targets */}
         {rival.scoutingProgress && Object.keys(rival.scoutingProgress).length > 0 && (
           <div className="border-t border-zinc-800 pt-2 mt-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">
               Scouting Progress
             </p>
             <div className="space-y-1">
@@ -233,7 +233,7 @@ function RivalCard({
                 .slice(0, 4)
                 .map(([pid, prog]) => (
                   <div key={pid} className="flex items-center gap-2">
-                    <span className="text-[10px] text-zinc-400 truncate flex-1">
+                    <span className="text-xs text-zinc-400 truncate flex-1">
                       {getPlayerName(pid)}
                     </span>
                     <ScoutingProgressBar progress={prog} />
@@ -245,7 +245,7 @@ function RivalCard({
 
         {sharedTargetIds.length > 0 && (
           <div className="border-t border-zinc-800 pt-2 mt-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">
               Shared Targets ({sharedTargetIds.length})
             </p>
             <div className="space-y-1">
@@ -266,14 +266,14 @@ function RivalCard({
         {/* Recent activity feed */}
         {recentActivities.length > 0 && (
           <div className="border-t border-zinc-800 pt-2 mt-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">
               Recent Activity
             </p>
             <div className="space-y-1">
               {recentActivities.slice(0, 3).map((act, i) => {
                 const Icon = ACTIVITY_ICONS[act.type] ?? Eye;
                 return (
-                  <div key={i} className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                  <div key={i} className="flex items-center gap-1.5 text-xs text-zinc-400">
                     <Icon size={10} aria-hidden="true" />
                     <span>{ACTIVITY_LABELS[act.type] ?? act.type}</span>
                     {act.playerId && (
@@ -290,7 +290,7 @@ function RivalCard({
         )}
 
         <div className="mt-3 border-t border-zinc-800 pt-3">
-          <StakeholderEcologyPanel profile={ecology} title="Competitive history" />
+          <StakeholderEcologyPanel profile={ecology} title={`Competitive history · ${rival.name}`} />
         </div>
       </CardContent>
     </Card>
@@ -335,7 +335,7 @@ function OrganizationMeter({
   }[tone];
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] text-zinc-400">
+      <div className="mb-1 flex items-center justify-between gap-2 text-xs text-zinc-400">
         <span>{label}</span>
         <span className="font-mono text-zinc-200">{Math.round(value)}</span>
       </div>
@@ -360,15 +360,15 @@ function OrganizationCard({ organization }: { organization: RivalOrganization })
   const definition = getRivalOrganizationDefinition(organization.archetypeId);
   const threat = getRivalOrganizationThreat(organization);
   return (
-    <article className="rounded-xl border border-fuchsia-400/15 bg-zinc-950/80 p-4 shadow-lg shadow-black/10">
+    <article className="border-t border-[var(--border)] bg-[var(--card)] p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-300">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
             {definition.name}
           </p>
           <h3 className="mt-1 truncate text-base font-semibold text-white">{organization.name}</h3>
         </div>
-        <Badge variant="outline" className="shrink-0 border-fuchsia-400/25 text-fuchsia-200">
+        <Badge variant="outline" className="shrink-0 border-[var(--border)] text-[var(--muted-foreground)]">
           Threat {threat}
         </Badge>
       </div>
@@ -377,11 +377,11 @@ function OrganizationCard({ organization }: { organization: RivalOrganization })
       <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold text-zinc-200">{definition.agendaName}</p>
-          <span className="text-[10px] font-medium text-fuchsia-300">
+          <span className="text-xs font-medium text-[var(--muted-foreground)]">
             Agenda level {organization.agendaLevel}/10
           </span>
         </div>
-        <p className="mt-1 text-[11px] leading-4 text-zinc-400">{definition.agendaDescription}</p>
+        <p className="mt-1 text-xs leading-4 text-zinc-400">{definition.agendaDescription}</p>
         <div className="mt-3">
           <OrganizationMeter label="Agenda progress" value={organization.agendaProgress} tone="emerald" />
         </div>
@@ -393,7 +393,7 @@ function OrganizationCard({ organization }: { organization: RivalOrganization })
         <OrganizationMeter label="Heat" value={organization.heat} tone="red" />
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-800 pt-3 text-[10px] text-zinc-400">
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
         <span>{organization.memberRivalIds.length} affiliated scout{organization.memberRivalIds.length === 1 ? "" : "s"}</span>
         {organization.lastAction && (
           <span>
@@ -420,63 +420,31 @@ function OpportunityCard({
   opportunityRef?: (node: HTMLElement | null) => void;
 }) {
   return (
-    <article
-      ref={opportunityRef}
-      tabIndex={-1}
-      className={`rounded-xl border bg-amber-400/[0.04] p-4 ${
-        highlighted
-          ? "border-amber-300/60 ring-2 ring-amber-300/35"
-          : "border-amber-400/25"
-      }`}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article ref={opportunityRef} tabIndex={-1}
+      className={`border-l-2 bg-[var(--card)] px-5 py-6 sm:px-6 ${highlighted ? "border-[var(--primary)] outline outline-2 outline-offset-2 outline-[var(--primary)]" : "border-[var(--accent)]"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
-            Competitive opening
-          </p>
-          <h3 className="mt-1 text-base font-semibold text-white">{opportunity.title}</h3>
-          {organization && <p className="mt-0.5 text-xs text-zinc-400">Against {organization.name}</p>}
+          <p className="text-xs uppercase tracking-[0.14em] text-[var(--accent)]">Competitive opening</p>
+          <h3 className="mt-2 font-editorial text-2xl text-[var(--foreground)]">{opportunity.title}</h3>
+          {organization && <p className="mt-1 text-sm text-[var(--muted-foreground)]">Against {organization.name}</p>}
         </div>
-        <Badge variant="warning" className="shrink-0">
-          Closes S{opportunity.expiresSeason} W{opportunity.expiresWeek}
-        </Badge>
+        <p className="text-xs font-semibold text-[var(--accent)]">Closes Season {opportunity.expiresSeason}, Week {opportunity.expiresWeek}</p>
       </div>
-      <p className="mt-3 text-sm leading-6 text-zinc-300">{opportunity.description}</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-[auto_1fr]">
-        <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/5 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-400">Scout&apos;s read</p>
-          <p className="mt-0.5 font-mono text-lg font-bold text-emerald-300">
-            {opportunity.successChance >= 0.7
-              ? "Strong opening"
-              : opportunity.successChance >= 0.5
-                ? "Live opening"
-                : "Long shot"}
+      <p className="mt-4 max-w-3xl text-sm leading-6 text-[var(--foreground)]">{opportunity.description}</p>
+      <div className="mt-5 grid gap-5 sm:grid-cols-[minmax(9rem,0.4fr)_1fr]">
+        <div>
+          <p className="text-xs text-[var(--muted-foreground)]">Scout&apos;s read</p>
+          <p className="mt-1 text-base font-semibold text-[var(--primary)]">
+            {opportunity.successChance >= 0.7 ? "Strong opening" : opportunity.successChance >= 0.5 ? "Live opening" : "Long shot"}
           </p>
         </div>
-        <ul className="space-y-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-zinc-400">
-          {opportunity.knownTradeoffs.map((tradeoff) => (
-            <li key={tradeoff} className="flex gap-2">
-              <span className="text-amber-300" aria-hidden="true">&bull;</span>
-              <span>{tradeoff}</span>
-            </li>
-          ))}
+        <ul className="space-y-2 border-l border-[var(--border)] pl-5 text-sm leading-6 text-[var(--muted-foreground)]">
+          {opportunity.knownTradeoffs.map((tradeoff) => <li key={tradeoff}>{tradeoff}</li>)}
         </ul>
       </div>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <button
-          type="button"
-          onClick={() => onResolve("exploit")}
-          className="min-h-11 flex-1 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-        >
-          Exploit the opening
-        </button>
-        <button
-          type="button"
-          onClick={() => onResolve("decline")}
-          className="min-h-11 rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-        >
-          Decline
-        </button>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Button onClick={() => onResolve("exploit")}>Exploit the opening</Button>
+        <Button variant="outline" onClick={() => onResolve("decline")}>Decline</Button>
       </div>
     </article>
   );
@@ -532,7 +500,7 @@ function CampaignCard({
     <article className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-red-300">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-300">
             {CAMPAIGN_PHASE_LABELS[campaign.phase]}
           </p>
           <h3 className="mt-1 text-base font-semibold text-white">
@@ -543,11 +511,11 @@ function CampaignCard({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline" className="border-red-500/30 text-[10px] text-red-200">
+          <Badge variant="outline" className="border-red-500/30 text-xs text-red-200">
             {CAMPAIGN_TARGET_LABELS[campaign.targetKind]}
           </Badge>
           {deadline && (
-            <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-200">
+            <Badge variant="outline" className="border-amber-500/30 text-xs text-amber-200">
               Due {deadline}
             </Badge>
           )}
@@ -562,11 +530,11 @@ function CampaignCard({
             <li key={`${campaign.id}:${signal.headline}`} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-white">{signal.headline}</p>
-                <span className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                <span className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
                   {signal.urgency}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] leading-5 text-zinc-400">{signal.detail}</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">{signal.detail}</p>
             </li>
           ))}
         </ul>
@@ -574,7 +542,7 @@ function CampaignCard({
       {campaign.responseOptions.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {campaign.responseOptions.map((option) => (
-            <Badge key={option.id} variant="secondary" className="text-[10px]">
+            <Badge key={option.id} variant="secondary" className="text-xs">
               {option.label}
             </Badge>
           ))}
@@ -623,14 +591,14 @@ function CampaignHistoryPanel({
                 <p className="text-xs font-medium text-white">
                   {CAMPAIGN_KIND_LABELS[record.kind]}
                 </p>
-                <span className="text-[10px] text-zinc-500">
+                <span className="text-xs text-[var(--muted-foreground)]">
                   S{record.createdAt.season} W{record.createdAt.week}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] leading-5 text-zinc-400">
+              <p className="mt-1 text-xs leading-5 text-zinc-400">
                 {record.targetLabel}
               </p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+              <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
                 {record.resolution ?? record.status}
               </p>
             </div>
@@ -823,7 +791,7 @@ export function RivalsScreen() {
     return (
       <GameLayout>
         <div className="p-6">
-          <h1 className="text-2xl font-bold text-white mb-2">Rival Scouts</h1>
+          <h1 className="mb-2 font-editorial text-3xl text-[var(--foreground)]">Rival Scouts</h1>
           <p className="text-sm text-zinc-400">
             No rival scouts active yet. Rivals appear as you advance in your career.
           </p>
@@ -842,32 +810,32 @@ export function RivalsScreen() {
 
   return (
     <GameLayout>
-      <div className="relative space-y-6 p-4 sm:p-6">
-        <ScreenBackground src="/images/backgrounds/rivals-binoculars.png" opacity={0.80} />
-        <div className="relative z-10">
+      <div className="relative px-4 py-6 sm:px-8 sm:py-8">
+        <div className="relative z-10 mx-auto max-w-7xl space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Rival Scouts</h1>
+          <p className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--primary)]">Competing for the same names</p>
+          <h1 className="font-editorial text-3xl text-[var(--foreground)] sm:text-4xl">Rival Scouts</h1>
           <p className="text-sm text-zinc-400">
-            Persistent organizations and individual scouts competing for the same talent
+            Read the pressure, choose your moment, and protect the work you have done.
           </p>
         </div>
 
         {/* Summary stats */}
-        <div className="flex flex-wrap gap-3" data-tutorial-id="rivals-intel">
-          <div className="flex items-center gap-2 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-2">
-            <Building2 size={14} className="text-fuchsia-300" aria-hidden="true" />
+        <div className="flex flex-wrap gap-x-6 gap-y-3 border-y border-[var(--border)] py-4" data-tutorial-id="rivals-intel">
+          <div className="flex items-center gap-2">
+            <Building2 size={14} className="text-[var(--muted-foreground)]" aria-hidden="true" />
             <span className="text-xs text-zinc-400">
               {organizations.length} active organization{organizations.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="flex items-center gap-2 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-2">
+          <div className="flex items-center gap-2">
             <Target size={14} className="text-amber-400" aria-hidden="true" />
             <span className="text-xs text-zinc-400">
               {activeTargets} actively scouting
             </span>
           </div>
           {activeCampaigns.length > 0 && (
-            <div className="flex items-center gap-2 rounded-md border border-red-400/25 bg-red-400/5 px-3 py-2">
+            <div className="flex items-center gap-2 text-[var(--signal-danger)]">
               <Swords size={14} className="text-red-300" aria-hidden="true" />
               <span className="text-xs text-red-100">
                 {activeCampaigns.length} live contest{activeCampaigns.length === 1 ? "" : "s"}
@@ -875,7 +843,7 @@ export function RivalsScreen() {
             </div>
           )}
           {openOpportunities.length > 0 && (
-            <div className="flex items-center gap-2 rounded-md border border-amber-400/25 bg-amber-400/5 px-3 py-2">
+            <div className="flex items-center gap-2 text-[var(--accent)]">
               <Zap size={14} className="text-amber-300" aria-hidden="true" />
               <span className="text-xs text-amber-200">
                 {openOpportunities.length} opening{openOpportunities.length === 1 ? "" : "s"} available
@@ -883,7 +851,7 @@ export function RivalsScreen() {
             </div>
           )}
           {signedByRivals > 0 && (
-            <div className="flex items-center gap-2 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-2">
+            <div className="flex items-center gap-2">
               <AlertTriangle size={14} className="text-red-400" />
               <span className="text-xs text-zinc-400">
                 {signedByRivals} player{signedByRivals !== 1 ? "s" : ""} lost to rivals
@@ -896,12 +864,12 @@ export function RivalsScreen() {
           <section aria-labelledby="rival-campaigns-heading" className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 id="rival-campaigns-heading" className="flex items-center gap-2 text-lg font-semibold text-white">
+                <h2 id="rival-campaigns-heading" className="flex items-center gap-2 font-editorial text-2xl text-[var(--foreground)]">
                   <Swords size={17} className="text-red-300" aria-hidden="true" />
                   Live contests
                 </h2>
                 <p className="mt-1 text-sm text-zinc-400">
-                  Rival organizations are now contesting people, territory, and access channels rather than only chasing players.
+                  People, territory, and access are at stake. Review the contest before you answer.
                 </p>
               </div>
               {campaignsAwaitingResponse > 0 && (
@@ -931,7 +899,7 @@ export function RivalsScreen() {
                   <Card className="border-white/10 bg-black/20">
                     <CardContent className="pt-4">
                       <p className="text-sm text-zinc-300">No active rival campaigns this week.</p>
-                      <p className="mt-1 text-xs leading-5 text-zinc-500">
+                      <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
                         Rival pressure still exists through target overlap and organization agendas, but there is no direct contest currently escalated against you.
                       </p>
                     </CardContent>
@@ -946,16 +914,15 @@ export function RivalsScreen() {
         {rivalOrganizationState && openOpportunities.length > 0 && (
           <section aria-labelledby="rival-openings-heading" className="space-y-3">
             <div>
-              <h2 id="rival-openings-heading" className="flex items-center gap-2 text-lg font-semibold text-white">
+              <h2 id="rival-openings-heading" className="flex items-center gap-2 font-editorial text-2xl text-[var(--foreground)]">
                 <Zap size={17} className="text-amber-300" aria-hidden="true" />
                 Openings you can exploit
               </h2>
               <p className="mt-1 text-sm text-zinc-400">
-                These windows exist because a competitor has overreached, moved too early, or left a relationship exposed.
-                Acting can win ground, but it also makes your intentions visible.
+                A rival has left an opening. Acting may win ground, but it will make your intentions visible.
               </p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="divide-y divide-[var(--border)]">
               {openOpportunities.map((opportunity) => (
                 <OpportunityCard
                   key={opportunity.id}
@@ -978,8 +945,8 @@ export function RivalsScreen() {
           <section aria-labelledby="rival-organizations-heading" className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 id="rival-organizations-heading" className="flex items-center gap-2 text-lg font-semibold text-white">
-                  <Building2 size={17} className="text-fuchsia-300" aria-hidden="true" />
+                <h2 id="rival-organizations-heading" className="flex items-center gap-2 font-editorial text-2xl text-[var(--foreground)]">
+                  <Building2 size={17} className="text-[var(--muted-foreground)]" aria-hidden="true" />
                   Recruitment organizations
                 </h2>
                 <p className="mt-1 text-sm text-zinc-400">
@@ -1003,13 +970,13 @@ export function RivalsScreen() {
               pressure={rivalOrganizationState.currentPressure}
               formatAction={(action) => ORGANIZATION_ACTION_LABELS[action] ?? action}
             />
-            <details className="group rounded-xl border border-white/10 bg-black/20">
+            <details className="group border-y border-[var(--border)]">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300 [&::-webkit-details-marker]:hidden">
                 Detailed organization files
                 <span className="text-xs font-normal text-zinc-400 group-open:hidden">Show all</span>
                 <span className="hidden text-xs font-normal text-zinc-400 group-open:inline">Hide files</span>
               </summary>
-              <div className="grid gap-4 border-t border-white/10 p-4 lg:grid-cols-3">
+              <div className="grid gap-6 border-t border-[var(--border)] py-5 lg:grid-cols-3">
                 {organizations.map((organization) => (
                   <OrganizationCard key={organization.id} organization={organization} />
                 ))}

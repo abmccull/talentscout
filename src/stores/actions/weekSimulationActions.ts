@@ -13,6 +13,7 @@ import type {
 } from "@/engine/core/types";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import type { ScoutQualityData } from "@/engine/youth/venues";
+import { collectYouthCasePlayerIds } from "@/engine/youth/youthCaseFocus";
 import type { ActivityChoiceId } from "@/engine/core/activityInteractions";
 import { createRNG } from "@/engine/rng";
 import { expireJobOffersAtWeekEnd } from "@/engine/career/progression";
@@ -595,13 +596,20 @@ export function createWeekSimulationActions(
       }
     }
 
+    const workingCaseId = gameState.openingCase?.playerId
+      ?? Object.values(gameState.unsignedYouth ?? {}).find((youth) =>
+        !youth.placed
+        && !youth.retired
+        && collectYouthCasePlayerIds(gameState).has(youth.player.id),
+      )?.player.id;
+
     set({
       weekSimulation: {
         dayResults,
         currentDay: 0,
         pendingWorldTick: false,
-        focusedYouthPlayerId: undefined,
-        focusedYouthPlayerIds: undefined,
+        focusedYouthPlayerId: workingCaseId,
+        focusedYouthPlayerIds: workingCaseId ? [workingCaseId] : undefined,
         youthVenueResults,
       },
       currentScreen: "weekSimulation",

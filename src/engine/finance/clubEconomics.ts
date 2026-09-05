@@ -275,8 +275,7 @@ function normalizeClubEconomicsFromRoster(
     ? Math.round(club.weeklyWageBudget ?? 0)
     : deriveClubWeeklyWageBudgetFromRoster(club, roster);
   const scoutingBudget = Number.isFinite(club.scoutingBudget)
-    && (club.scoutingBudget ?? 0) > 0
-    ? Math.round(club.scoutingBudget ?? 0)
+    ? Math.max(0, Math.round(club.scoutingBudget ?? 0))
     : deriveClubScoutingBudgetFromRoster(club, roster);
   const financialObligations = (club.financialObligations ?? []).map((obligation, index) =>
     normalizeObligation(club.id, obligation, index, currentWeek, currentSeason),

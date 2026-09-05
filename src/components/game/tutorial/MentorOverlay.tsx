@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
 import { getSequenceById } from "./tutorialSteps";
 import type { TutorialStep } from "./tutorialSteps";
 import { getGuidedMilestone } from "./guidedSession";
@@ -13,6 +13,7 @@ import type { GuidedMilestoneId } from "@/stores/tutorialStore";
 import { parseConceptText } from "@/components/ui/GameTerm";
 import { isHalfTimePhase } from "@/engine/observation/session";
 import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
+import { placeCompactMentor, placeMentorWithoutCoveringTarget } from "./mentorPlacement";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,108 +39,6 @@ type ActiveMode =
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Compute the (top, left) position for the popup card relative to the
- * viewport, given the target element's bounding rect and the desired
- * preferred side. Clamps to keep the card within the viewport.
- */
-function computePopupPosition(
-  rect: TargetRect,
-  preferredSide: TutorialStep["position"],
-  cardWidth: number,
-  cardHeight: number,
-): PopupPosition {
-  const GAP = 12;
-  const MARGIN = 8;
-
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-
-  // On narrow screens the sidebar and primary actions live near the viewport
-  // edges. Keep the mentor card on the opposite edge so it never covers the
-  // hamburger or the highlighted control the player must press.
-  if (vw < 640) {
-    const targetIsInTopHalf = rect.top + rect.height / 2 < vh / 2;
-    return {
-      left: MARGIN,
-      top: targetIsInTopHalf
-        ? Math.max(MARGIN, vh - cardHeight - MARGIN)
-        : MARGIN,
-    };
-  }
-
-  let top = 0;
-  let left = 0;
-
-  switch (preferredSide) {
-    case "top":
-      top = rect.top - cardHeight - GAP;
-      left = rect.left + rect.width / 2 - cardWidth / 2;
-      break;
-    case "bottom":
-      top = rect.top + rect.height + GAP;
-      left = rect.left + rect.width / 2 - cardWidth / 2;
-      break;
-    case "left":
-      top = rect.top + rect.height / 2 - cardHeight / 2;
-      left = rect.left - cardWidth - GAP;
-      break;
-    case "right":
-      top = rect.top + rect.height / 2 - cardHeight / 2;
-      left = rect.left + rect.width + GAP;
-      break;
-  }
-
-  left = Math.max(MARGIN, Math.min(left, vw - cardWidth - MARGIN));
-  top = Math.max(MARGIN, Math.min(top, vh - cardHeight - MARGIN));
-
-  return { top, left };
-}
-
-function rectsOverlap(
-  card: { top: number; left: number; width: number; height: number },
-  target: TargetRect,
-  pad = 8,
-): boolean {
-  return !(
-    card.left + card.width + pad <= target.left
-    || target.left + target.width + pad <= card.left
-    || card.top + card.height + pad <= target.top
-    || target.top + target.height + pad <= card.top
-  );
-}
-
-function placeWithoutCoveringTarget(
-  rect: TargetRect,
-  preferredSide: TutorialStep["position"],
-  cardWidth: number,
-  cardHeight: number,
-): PopupPosition {
-  const order: TutorialStep["position"][] = [
-    preferredSide,
-    "bottom",
-    "top",
-    "right",
-    "left",
-  ];
-  const seen = new Set<string>();
-  for (const side of order) {
-    if (seen.has(side)) continue;
-    seen.add(side);
-    const pos = computePopupPosition(rect, side, cardWidth, cardHeight);
-    if (!rectsOverlap({ ...pos, width: cardWidth, height: cardHeight }, rect)) {
-      return pos;
-    }
-  }
-  const targetIsTop = rect.top + rect.height / 2 < window.innerHeight / 2;
-  return {
-    left: 8,
-    top: targetIsTop
-      ? Math.max(8, window.innerHeight - cardHeight - 8)
-      : 8,
-  };
-}
 
 /** Derive two-letter initials from a full name. */
 function getInitials(name: string): string {
@@ -210,8 +109,25 @@ export function MentorOverlay() {
 
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
   const [popupPos, setPopupPos] = useState<PopupPosition>({ top: 0, left: 0 });
+  const [compactPos, setCompactPos] = useState<PopupPosition>({ top: 8, left: 8 });
+  const [needsCompact, setNeedsCompact] = useState(false);
+  const [manuallyCollapsed, setManuallyCollapsed] = useState(false);
+  const [forceExpanded, setForceExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const continueRef = useRef<HTMLButtonElement>(null);
+  const compactButtonRef = useRef<HTMLButtonElement>(null);
+  const hideButtonRef = useRef<HTMLButtonElement>(null);
+
+  const hideMentorHelp = useCallback(() => {
+    setManuallyCollapsed(true);
+    setForceExpanded(false);
+    window.requestAnimationFrame(() => compactButtonRef.current?.focus());
+  }, []);
+  const showMentorHelp = useCallback(() => {
+    setManuallyCollapsed(false);
+    setForceExpanded(true);
+    window.requestAnimationFrame(() => hideButtonRef.current?.focus());
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Derive active mode (priority order)
@@ -241,7 +157,19 @@ export function MentorOverlay() {
     return { kind: "none" };
   })();
 
-  useDialogFocusTrap(cardRef, activeMode.kind !== "none", {
+  const trapFocus = activeMode.kind === "tutorial"
+    || (activeMode.kind === "guided" && !activeMode.milestone.interactive);
+  const canCollapse = activeMode.kind === "guided" && activeMode.milestone.interactive;
+  const isOffGuidedScreen = activeMode.kind === "guided"
+    && currentGameScreen !== activeMode.milestone.screen;
+  const isCompact = canCollapse && (manuallyCollapsed || (needsCompact && !forceExpanded));
+
+  useEffect(() => {
+    setManuallyCollapsed(false);
+    setForceExpanded(false);
+  }, [currentGuidedTask, currentSequence, currentStep]);
+
+  useDialogFocusTrap(cardRef, trapFocus, {
     initialFocusRef: continueRef,
   });
 
@@ -280,37 +208,30 @@ export function MentorOverlay() {
   // ---------------------------------------------------------------------------
 
   const measure = useCallback(() => {
-    if (!targetSelectorKey) {
-      setTargetRect(null);
-      return;
-    }
-
     const el = findVisibleTutorialTarget(targetSelectorKey);
-    if (!el) {
-      setTargetRect(null);
-      const cardWidth = cardRef.current?.offsetWidth ?? 360;
-      const cardHeight = cardRef.current?.offsetHeight ?? 220;
-      setPopupPos({
-        top: Math.max(8, (window.innerHeight - cardHeight) / 2),
-        left: Math.max(8, (window.innerWidth - cardWidth) / 2),
-      });
-      return;
-    }
-
-    const domRect = el.getBoundingClientRect();
-    const rect: TargetRect = {
+    const domRect = el?.getBoundingClientRect();
+    const rect: TargetRect | null = domRect ? {
       top: domRect.top,
       left: domRect.left,
       width: domRect.width,
       height: domRect.height,
-    };
-
+    } : null;
     setTargetRect(rect);
-
     const cardWidth = cardRef.current?.offsetWidth ?? 360;
     const cardHeight = cardRef.current?.offsetHeight ?? 220;
-    setPopupPos(placeWithoutCoveringTarget(rect, preferredSide, cardWidth, cardHeight));
-  }, [targetSelectorKey, preferredSide]);
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const safePosition = rect && placeMentorWithoutCoveringTarget(
+      rect, preferredSide, { width: cardWidth, height: cardHeight }, viewport,
+    );
+    // Off-screen guidance is the route back to the task, so keep its return
+    // action visible. In-task guidance must never obstruct the required input.
+    setNeedsCompact(canCollapse && !isOffGuidedScreen && (viewport.width < 768 || !safePosition));
+    setCompactPos(placeCompactMentor(rect, viewport));
+    setPopupPos(safePosition || {
+      top: Math.max(8, (viewport.height - cardHeight) / 2),
+      left: Math.max(8, (viewport.width - cardWidth) / 2),
+    });
+  }, [targetSelectorKey, preferredSide, canCollapse, isOffGuidedScreen]);
 
   useEffect(() => {
     if (activeMode.kind === "none") return;
@@ -350,7 +271,7 @@ export function MentorOverlay() {
   }, [activeMode.kind, measure]);
 
   useEffect(() => {
-    if (activeMode.kind === "none" || !targetSelectorKey) return;
+    if (activeMode.kind === "none" || !targetSelectorKey || (canCollapse && !isOffGuidedScreen)) return;
 
     let settleId: number | null = null;
     const id = window.setTimeout(() => {
@@ -377,6 +298,8 @@ export function MentorOverlay() {
     };
   }, [
     activeMode.kind,
+    canCollapse,
+    isOffGuidedScreen,
     currentGameScreen,
     measure,
     observationPhaseIndex,
@@ -384,28 +307,30 @@ export function MentorOverlay() {
     targetSelectorKey,
   ]);
 
-  // Recompute popup position after card renders with real dimensions.
-  useEffect(() => {
-    if (activeMode.kind === "none" || !targetRect) return;
-    const cardWidth = cardRef.current?.offsetWidth ?? 360;
-    const cardHeight = cardRef.current?.offsetHeight ?? 220;
-    setPopupPos(computePopupPosition(targetRect, preferredSide, cardWidth, cardHeight));
-  }, [activeMode.kind, targetRect, preferredSide]);
-
-  // Keyboard: Escape closes/skips.
+  // Interactive guidance can be tucked away without disabling tutorials.
   useEffect(() => {
     if (activeMode.kind === "none") return;
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : null;
+      const targetDialog = target?.closest('dialog, [role="dialog"], [role="alertdialog"]');
+      if (targetDialog && targetDialog !== cardRef.current) return;
+
+      if (activeMode.kind === "tutorial") {
         e.preventDefault();
-        if (activeMode.kind === "tutorial") skipTutorial();
+        skipTutorial();
+      } else if (canCollapse && !isCompact && target && cardRef.current?.contains(target)) {
+        // The game's other dialogs own Escape and restore their own focus.
+        // Only a focused, expanded mentor card may move focus to compact help.
+        e.preventDefault();
+        hideMentorHelp();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeMode.kind, skipTutorial]);
+  }, [activeMode.kind, canCollapse, hideMentorHelp, isCompact, skipTutorial]);
 
   // ---------------------------------------------------------------------------
   // Early exit
@@ -419,7 +344,11 @@ export function MentorOverlay() {
       : [activeMode.milestone.target];
     // The setup card already carries the hook. A covering mentor card
     // hides Watch the match — the first-hour conversion control.
-    if (targets.includes("observation-begin-session")) return null;
+    if (
+      currentGameScreen === "observation"
+      && observationState === "setup"
+      && targets.includes("observation-begin-session")
+    ) return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -427,8 +356,6 @@ export function MentorOverlay() {
   // ---------------------------------------------------------------------------
 
   const isAha = activeMode.kind === "tutorial" && activeMode.isAha;
-  const isOffGuidedScreen = activeMode.kind === "guided"
-    && currentGameScreen !== activeMode.milestone.screen;
   const isWaitingForStandout = activeMode.kind === "guided"
     && activeMode.milestone.id === "flaggedBreakthrough"
     && currentGameScreen === "observation"
@@ -519,8 +446,8 @@ export function MentorOverlay() {
   const spotlightStyle: React.CSSProperties = targetRect
     ? {
         boxShadow: [
-          "0 0 0 9999px rgba(0,0,0,0.65)",
-          `inset 0 0 0 2px ${isAha ? "rgba(245,158,11,0.6)" : "rgba(16,185,129,0.6)"}`,
+          trapFocus ? "0 0 0 9999px rgba(0,0,0,0.45)" : "0 0 0 1px var(--primary)",
+          "inset 0 0 0 1px var(--primary)",
         ].join(", "),
         position: "fixed",
         top: targetRect.top - 4,
@@ -536,19 +463,17 @@ export function MentorOverlay() {
         // Ambient mode — no target found, just a subtle full-screen dim.
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.35)",
+        background: trapFocus ? "rgba(0,0,0,0.35)" : "transparent",
         pointerEvents: "none",
         zIndex: 9998,
       };
 
   const borderClass = isAha ? "border-amber-700/50" : "border-zinc-700";
-  const accentTextClass = isAha ? "text-amber-400" : "text-emerald-500";
-  const dotActiveClass = isAha ? "bg-amber-400" : "bg-emerald-500";
-  const dotPastClass = isAha ? "bg-amber-700" : "bg-emerald-700";
-  const btnClass = isAha
-    ? "bg-amber-600 hover:bg-amber-500 focus-visible:outline-amber-400"
-    : "bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-emerald-400";
-  const interactiveTextClass = isAha ? "text-amber-400/70" : "text-emerald-400/70";
+  const accentTextClass = "text-[color:var(--primary)]";
+  const dotActiveClass = "bg-[color:var(--primary)]";
+  const dotPastClass = "bg-[color:var(--primary)]/50";
+  const btnClass = "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 focus-visible:outline-[color:var(--ring)]";
+  const interactiveTextClass = "text-[color:var(--primary)]";
 
   // ---------------------------------------------------------------------------
   // Render
@@ -557,35 +482,63 @@ export function MentorOverlay() {
   return (
     <>
       {/* Spotlight — pointerEvents none so the game remains fully interactive */}
-      <div aria-hidden="true" style={spotlightStyle} />
+      {!isCompact && <div aria-hidden="true" style={spotlightStyle} />}
+
+      {isCompact && (
+        <div
+          role="complementary"
+          aria-label={`Mentor: ${title}`}
+          style={{ position: "fixed", ...compactPos, width: "min(184px, calc(100vw - 16px))", zIndex: 9999 }}
+        >
+          <button
+            ref={compactButtonRef}
+            type="button"
+            aria-label="Show mentor help"
+            aria-expanded={false}
+            aria-controls="mentor-help-panel"
+            onClick={showMentorHelp}
+            className="flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-zinc-600 bg-zinc-900 px-3 text-sm font-semibold text-white shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--ring)]"
+          >
+            Mentor help
+            <ChevronUp size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* Mentor panel */}
       <div
+        id="mentor-help-panel"
         ref={cardRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Mentor: ${title}`}
+        role={trapFocus ? "dialog" : "complementary"}
+        aria-modal={trapFocus || undefined}
+        aria-label={isCompact ? undefined : `Mentor: ${title}`}
+        aria-hidden={isCompact || undefined}
+        inert={isCompact || undefined}
         style={{
           position: "fixed",
           top: popupPos.top,
           left: popupPos.left,
           width: "min(360px, calc(100vw - 16px))",
+          maxHeight: "calc(100dvh - 16px)",
+          overflowY: "auto",
+          visibility: isCompact ? "hidden" : "visible",
+          pointerEvents: isCompact ? "none" : "auto",
           zIndex: 9999,
           transition: "top 150ms ease, left 150ms ease",
         }}
-        className={`rounded-xl border ${borderClass} bg-zinc-900 p-5 shadow-2xl`}
+        className={`rounded-md border ${borderClass} bg-[var(--surface-overlay)] p-4 shadow-xl`}
       >
         {/* Mentor identity row */}
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-2 flex items-center gap-2">
           <div
             aria-hidden="true"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-sm font-bold text-white"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[color:var(--surface-selected)] text-xs font-bold text-[color:var(--primary)]"
           >
             {getInitials(mentorName)}
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white">{mentorName}</p>
-            <p className="truncate text-xs text-zinc-400">{mentorTitle}</p>
+            {!canCollapse && <p className="truncate text-xs text-zinc-400">{mentorTitle}</p>}
           </div>
           <span className={`ml-auto shrink-0 text-xs font-semibold uppercase tracking-wider ${accentTextClass}`}>
             {activeMode.kind === "guided"
@@ -594,12 +547,31 @@ export function MentorOverlay() {
                 ? "Milestone"
                 : "Tutorial"}
           </span>
+          {canCollapse && (
+            <button
+              ref={hideButtonRef}
+              type="button"
+              aria-label="Hide mentor help"
+              aria-expanded={true}
+              aria-controls="mentor-help-panel"
+              onClick={hideMentorHelp}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--ring)]"
+            >
+              <ChevronDown size={18} aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         {/* Speech bubble */}
-        <div className="mb-4 rounded-lg bg-zinc-800/60 px-4 py-3">
-          <h2 className="mb-1 text-sm font-bold text-white">{title}</h2>
-          <p className="text-sm leading-relaxed text-zinc-400">{parseConceptText(description)}</p>
+        <div className="mb-2">
+          <h2 className="mb-1 text-sm font-semibold text-white">{title}</h2>
+          <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">{parseConceptText(canCollapse ? actionInstruction : description)}</p>
+          {canCollapse && (
+            <details className="mt-2 text-xs text-[var(--muted-foreground)]">
+              <summary className="cursor-pointer py-2">More from {mentorName.split(" ")[0]}</summary>
+              <p className="pb-2 leading-5">{parseConceptText(description)}</p>
+            </details>
+          )}
         </div>
 
         {isOffGuidedScreen && (
@@ -670,7 +642,7 @@ export function MentorOverlay() {
               <ArrowLeft size={14} aria-hidden="true" />
               Return to guided step
             </button>
-          ) : isInteractive || activeMode.kind === "guided" ? (
+          ) : canCollapse ? null : isInteractive || activeMode.kind === "guided" ? (
             <span className={`text-xs italic ${interactiveTextClass}`}>
               {activeMode.kind === "guided" ? actionInstruction : "Complete the action to continue"}
             </span>

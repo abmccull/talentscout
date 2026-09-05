@@ -1,6 +1,15 @@
 import { addActivity, canScheduleActivity } from "@/engine/core/calendar";
 import type { Activity, GameState } from "@/engine/core/types";
 
+/** Repair older checkpoints only when an actual authored opening report exists. */
+export function reconcileOpeningReportStage(state: GameState): GameState {
+  const opening = state.openingCase;
+  if (opening?.stage !== "report" || !Object.values(state.reports).some((report) =>
+    report.playerId === opening.playerId && report.scoutId === state.scout.id,
+  )) return state;
+  return { ...state, openingCase: { ...opening, stage: "complete" } };
+}
+
 export function bookOpeningFollowUp(state: GameState): GameState {
   const opening = state.openingCase;
   if (!opening?.playerId || !state.schedule) return state;

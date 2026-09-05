@@ -17,17 +17,17 @@ import type {
 } from "@/engine/core/types";
 import { calculatePositionFit } from "@/engine/reports/comparison";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
-import { ScreenBackground } from "@/components/ui/screen-background";
-import { buildReportComparisonViewModel } from "./reportComparisonModel";
+import { YouthPortrait } from "./YouthPortrait";
+import { buildReportComparisonViewModel, resolveReportComparisonPlayers } from "./reportComparisonModel";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const PLAYER_COLORS = [
-  { text: "text-emerald-400", bg: "bg-emerald-500", border: "border-emerald-500", fill: "#34d399" },
-  { text: "text-sky-400", bg: "bg-sky-500", border: "border-sky-500", fill: "#38bdf8" },
-  { text: "text-amber-400", bg: "bg-amber-500", border: "border-amber-500", fill: "#fbbf24" },
+  { text: "text-[var(--primary)]", bg: "bg-emerald-500", border: "border-emerald-500", fill: "#b7d6a0" },
+  { text: "text-[var(--signal-focus)]", bg: "bg-sky-500", border: "border-sky-500", fill: "#9bbccc" },
+  { text: "text-[var(--signal-moment)]", bg: "bg-amber-500", border: "border-amber-500", fill: "#ddb777" },
 ];
 
 const CONVICTION_LABELS: Record<ConvictionLevel, string> = {
@@ -131,7 +131,7 @@ function RadarChart({ attributes, playerCount }: RadarChartProps) {
         y={y}
         textAnchor="middle"
         dominantBaseline="middle"
-        className="fill-zinc-500 text-[9px]"
+        className="fill-[var(--muted-foreground)] text-xs"
       >
         {shortName}
       </text>
@@ -190,7 +190,7 @@ function PositionBars({ reports, playerNames }: PositionBarsProps) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-quiet mb-3">
         Position Suitability
       </h3>
       {positions.map((pos) => (
@@ -240,7 +240,7 @@ function StrengthWeaknessMatrix({ reports, playerNames }: StrengthWeaknessMatrix
     <div className="space-y-4">
       {allStrengths.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-quiet mb-2">
             Strengths Comparison
           </h3>
           <div className="space-y-1">
@@ -252,10 +252,10 @@ function StrengthWeaknessMatrix({ reports, playerNames }: StrengthWeaknessMatrix
                   {reports.map((r, idx) => (
                     <span
                       key={r.id}
-                      className={`w-5 h-5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                      className={`w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold ${
                         r.strengths.includes(s)
                           ? `${PLAYER_COLORS[idx].bg} text-black`
-                          : "bg-[#1a1a1a] text-zinc-600"
+                          : "bg-[#1a1a1a] text-quiet"
                       }`}
                       title={playerNames[idx]}
                     >
@@ -271,7 +271,7 @@ function StrengthWeaknessMatrix({ reports, playerNames }: StrengthWeaknessMatrix
 
       {allWeaknesses.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-quiet mb-2">
             Weaknesses Comparison
           </h3>
           <div className="space-y-1">
@@ -283,10 +283,10 @@ function StrengthWeaknessMatrix({ reports, playerNames }: StrengthWeaknessMatrix
                   {reports.map((r, idx) => (
                     <span
                       key={r.id}
-                      className={`w-5 h-5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                      className={`w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold ${
                         r.weaknesses.includes(w)
                           ? "bg-red-500 text-black"
-                          : "bg-[#1a1a1a] text-zinc-600"
+                          : "bg-[#1a1a1a] text-quiet"
                       }`}
                       title={playerNames[idx]}
                     >
@@ -321,6 +321,8 @@ export function ReportComparison() {
   const {
     reportsById,
     playersById,
+    unsignedYouthById,
+    retiredPlayersById,
     clubsById,
     comparisonReportIds,
     clearComparison,
@@ -330,6 +332,8 @@ export function ReportComparison() {
     useShallow((state) => ({
       reportsById: state.gameState?.reports,
       playersById: state.gameState?.players,
+      unsignedYouthById: state.gameState?.unsignedYouth,
+      retiredPlayersById: state.gameState?.retiredPlayers,
       clubsById: state.gameState?.clubs,
       comparisonReportIds: state.comparisonReportIds,
       clearComparison: state.clearComparison,
@@ -352,7 +356,11 @@ export function ReportComparison() {
       .map((id) => reportsById[id])
       .filter((r): r is ScoutReport => r != null);
 
-    const plrs = rpts.map((r) => playersById[r.playerId]);
+    const plrs = resolveReportComparisonPlayers(rpts, {
+      players: playersById,
+      unsignedYouth: unsignedYouthById ?? {},
+      retiredPlayers: retiredPlayersById,
+    });
     const names = plrs.map((p) => (p ? `${p.firstName} ${p.lastName}` : "Unknown"));
     const comp = rpts.length >= 2
       ? buildReportComparisonViewModel({
@@ -363,15 +371,14 @@ export function ReportComparison() {
       : null;
 
     return { reports: rpts, players: plrs, comparisonView: comp, playerNames: names };
-  }, [reportsById, playersById, clubsById, comparisonReportIds]);
+  }, [reportsById, playersById, unsignedYouthById, retiredPlayersById, clubsById, comparisonReportIds]);
 
   if (!reportsById || !playersById || reports.length < 2 || !comparisonView) {
     return (
       <GameLayout>
-        <div className="relative min-h-full p-6">
-          <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
-          <div className="relative z-10 flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-sm text-zinc-500 mb-4">
+        <div className="game-workspace relative min-h-full max-w-[1280px]">
+            <div className="relative z-10 flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-sm text-quiet mb-4">
               Select at least 2 reports from Report History to compare.
             </p>
             <Button size="sm" onClick={() => setScreen("reportHistory")}>
@@ -385,15 +392,14 @@ export function ReportComparison() {
 
   return (
     <GameLayout>
-      <div className="relative min-h-full p-6">
-        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
+      <div className="game-workspace relative min-h-full max-w-[1280px]">
         <div className="relative z-10">
           {/* Header */}
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-7 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold">Report Comparison</h1>
+              <h1 className="dossier-title">Report Comparison</h1>
               <p className="text-sm text-zinc-400">
-                Comparing {reports.length} scouted players side-by-side
+                {reports.length} players. Your judgments, evidence and open questions.
               </p>
             </div>
             <div className="flex gap-2">
@@ -410,146 +416,51 @@ export function ReportComparison() {
             </div>
           </div>
 
-          {/* Player cards — side-by-side */}
-          <div className={`mb-6 grid gap-4 ${reports.length === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"}`}>
+          <div className={`mb-8 grid gap-5 ${reports.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
             {reports.map((report, idx) => {
               const player = players[idx];
               const card = comparisonView.cards[idx];
-              const legacyMetrics = comparisonView.legacyComparison?.metrics[idx] ?? null;
-              const color = PLAYER_COLORS[idx];
-
               return (
-                <Card key={report.id} className={`border-l-2 ${color.border}`}>
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`w-5 h-5 rounded-full ${color.bg} text-black text-[10px] font-bold flex items-center justify-center`}>
-                            {idx + 1}
-                          </span>
-                          <h3 className={`font-bold ${color.text}`}>
-                            {playerNames[idx]}
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
-                          {player && (
-                            <>
-                              <span>{player.position}</span>
-                              <span>Age {player.age}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeFromComparison(report.id)}
-                        className="rounded-md p-1 text-zinc-600 hover:text-red-400 hover:bg-[#27272a] transition"
-                        aria-label={`Remove ${playerNames[idx]} from comparison`}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-
-                    {/* Key metrics */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-zinc-500">Conviction</span>
-                        <div className="mt-0.5">
-                          <Badge variant={CONVICTION_VARIANT[card.conviction]} className="text-[10px]">
-                            {CONVICTION_LABELS[card.conviction]}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500">Est. Value</span>
-                        <p className="font-bold text-white mt-0.5">{formatValue(card.estimatedValue)}</p>
-                      </div>
-                      {card.perceivedCAStars != null && (
-                        <div>
-                          <span className="text-zinc-500">CA</span>
-                          <div className="mt-0.5">
-                            <StarRating rating={card.perceivedCAStars} size="sm" />
-                          </div>
-                        </div>
-                      )}
-                      {card.perceivedPARange != null && (
-                        <div>
-                          <span className="text-zinc-500">PA</span>
-                          <div className="mt-0.5">
-                            <StarRatingRange
-                              low={card.perceivedPARange[0]}
-                              high={card.perceivedPARange[1]}
-                              size="sm"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <span className="text-zinc-500">Report Style</span>
-                        <p className="font-medium text-white mt-0.5">{card.reportStyleLabel}</p>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500">Evidence / Unknowns</span>
-                        <p className="mt-0.5">
-                          <span className="text-emerald-400 font-bold">{card.evidenceCount}</span>
-                          <span className="text-zinc-600 mx-1">/</span>
-                          <span className="text-amber-300 font-bold">{card.unknownCount}</span>
-                        </p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-zinc-500">Target Club</span>
-                        <p className="mt-0.5 text-zinc-200">{card.targetClubName}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-zinc-500">Role / Action</span>
-                        <p className="mt-0.5 text-zinc-200">
-                          {card.projectedRoleLabel} · {card.recommendedActionLabel}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500">Confidence</span>
-                        <p className="mt-0.5 text-zinc-200">{card.confidenceSummary}</p>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500">Primary Risk</span>
-                        <p className="mt-0.5 text-zinc-200">{card.primaryRiskLabel}</p>
-                      </div>
-                      {legacyMetrics && (
-                        <div>
-                          <span className="text-zinc-500">Legacy Avg Attr</span>
-                          <p className="font-bold text-white mt-0.5">{legacyMetrics.avgAttribute.toFixed(1)}</p>
-                        </div>
-                      )}
-                      <div>
-                        <span className="text-zinc-500">S / W</span>
-                        <p className="mt-0.5">
-                          <span className="text-emerald-400 font-bold">{card.strengthCount}</span>
-                          <span className="text-zinc-600 mx-1">/</span>
-                          <span className="text-red-400 font-bold">{card.weaknessCount}</span>
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <article key={report.id} className="relative min-w-0 border-t-2 border-[var(--border)] pt-5">
+                  <button onClick={() => removeFromComparison(report.id)} className="absolute right-0 top-2 flex h-11 w-11 items-center justify-center rounded text-quiet hover:bg-[var(--surface-interactive)]" aria-label={`Remove ${playerNames[idx]} from comparison`}><X size={15} /></button>
+                  {player && <YouthPortrait playerId={player.id} age={player.age} size={96} alt={playerNames[idx]} className="mb-4 !rounded-sm !ring-0 sm:!h-36 sm:!w-36" />}
+                  <p className="dossier-eyebrow">File {idx + 1}</p>
+                  <h2 className="font-editorial mt-1 text-2xl leading-tight sm:text-3xl">{playerNames[idx]}</h2>
+                  {player && <p className="mt-2 text-sm text-quiet">{player.position} · {player.age}</p>}
+                  <p className="mt-5 text-base font-semibold text-[var(--primary)]">{card.recommendedActionLabel}</p>
+                  <p className="mt-1 text-sm leading-6 text-quiet">{card.projectedRoleLabel}</p>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div><dt className="dossier-eyebrow">Confidence</dt><dd className="mt-1">{card.confidenceSummary}</dd></div>
+                    <div><dt className="dossier-eyebrow">Evidence</dt><dd className="mt-1">{card.evidenceCount} cues · {card.unknownCount} unknowns</dd></div>
+                    <div><dt className="dossier-eyebrow">Main concern</dt><dd className="mt-1 leading-6 text-[var(--signal-moment)]">{card.primaryRiskLabel}</dd></div>
+                  </dl>
+                  <details className="mt-4 text-sm text-quiet">
+                    <summary className="min-h-11 cursor-pointer py-3">Assessment context</summary>
+                    <dl className="space-y-3 pb-3">
+                      <div><dt>Conviction</dt><dd className="text-[var(--foreground)]">{CONVICTION_LABELS[card.conviction]}</dd></div>
+                      <div><dt>Estimated value</dt><dd className="text-[var(--foreground)]">{formatValue(card.estimatedValue)}</dd></div>
+                      <div><dt>Target club</dt><dd className="text-[var(--foreground)]">{card.targetClubName}</dd></div>
+                      {card.perceivedCAStars != null && <div><dt>Estimated current ability</dt><dd><StarRating rating={card.perceivedCAStars} size="sm" /></dd></div>}
+                      {card.perceivedPARange != null && <div><dt>Estimated potential</dt><dd><StarRatingRange low={card.perceivedPARange[0]} high={card.perceivedPARange[1]} size="sm" /></dd></div>}
+                    </dl>
+                  </details>
+                </article>
               );
             })}
           </div>
 
           {/* Summary text */}
-          <Card className="mb-6">
-            <CardContent className="p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
-                Comparison Summary
-              </h3>
+          <Card className="mb-6 rounded-none border-t border-[var(--border)] bg-transparent">
+            <CardContent className="px-0 py-5">
+              <h2 className="font-editorial mb-3 text-2xl">The decision</h2>
               <p className="text-sm text-zinc-200 leading-relaxed">{comparisonView.headline}</p>
               <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{comparisonView.explanation}</p>
             </CardContent>
           </Card>
 
-          <Card className="mb-6">
-            <CardContent className="p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">
-                Professional Judgment
-              </h3>
+          <Card className="mb-6 rounded-none border-t border-[var(--border)] bg-transparent">
+            <CardContent className="px-0 py-5">
+              <h2 className="font-editorial mb-4 text-2xl">Professional judgment</h2>
               {comparisonView.mode === "legacy" ? (
                 <p className="text-sm text-zinc-400 leading-relaxed">
                   These selections predate structured verdicts, so there is no authored judgment matrix to compare here.
@@ -558,18 +469,18 @@ export function ReportComparison() {
               ) : (
                 <div className="space-y-3">
                   {comparisonView.structuredRows.map((row) => (
-                    <div key={row.category} className="rounded-xl border border-white/8 bg-black/20">
-                      <div className="border-b border-white/8 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                    <div key={row.category} className="border-t border-[var(--border)] pt-3">
+                      <div className="border-b border-white/8 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-quiet">
                         {row.label}
                       </div>
                       <div className={`grid gap-3 p-3 ${reports.length === 2 ? "md:grid-cols-2" : "lg:grid-cols-3"}`}>
                         {row.cells.map((cell, idx) => (
-                          <div key={cell.reportId} className="rounded-lg border border-white/8 bg-white/[0.03] p-3">
+                          <div key={cell.reportId} className="min-w-0 py-2">
                             <div className="mb-2 flex items-center gap-2">
                               <span className={`w-4 h-4 rounded-full ${PLAYER_COLORS[idx].bg}`} aria-hidden="true" />
                               <span className={`text-xs font-semibold ${PLAYER_COLORS[idx].text}`}>{playerNames[idx]}</span>
                               {cell.confidenceLabel && (
-                                <Badge variant="outline" className="ml-auto text-[10px]">
+                                <Badge variant="outline" className="ml-auto text-xs">
                                   {cell.confidenceLabel}
                                 </Badge>
                               )}
@@ -577,13 +488,13 @@ export function ReportComparison() {
                             {cell.available ? (
                               <div className="space-y-2 text-xs">
                                 <p className="text-zinc-200">{cell.verdict}</p>
-                                <p className="text-zinc-500">Evidence points: {cell.evidenceCount}</p>
+                                <p className="text-quiet">Evidence points: {cell.evidenceCount}</p>
                                 <p className="text-zinc-400">
                                   {cell.uncertainty ?? "No explicit uncertainty recorded."}
                                 </p>
                               </div>
                             ) : (
-                              <p className="text-xs text-zinc-500">
+                              <p className="text-xs text-quiet">
                                 No structured judgment filed for this category.
                               </p>
                             )}
@@ -601,11 +512,11 @@ export function ReportComparison() {
             <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Radar Chart */}
               <Card>
-                <CardContent className="p-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                <CardContent className="px-0 py-5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-quiet mb-1">
                     {comparisonView.legacyHeading}
                   </h3>
-                  <p className="mb-3 text-xs text-zinc-500 leading-relaxed">
+                  <p className="mb-3 text-xs text-quiet leading-relaxed">
                     {comparisonView.legacyExplanation}
                   </p>
                   {/* Legend */}
@@ -626,8 +537,8 @@ export function ReportComparison() {
 
               {/* Attribute comparison table */}
               <Card>
-              <CardContent className="p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+              <CardContent className="px-0 py-5">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-quiet mb-3">
                   Legacy Attribute Comparison
                 </h3>
                 <div className="overflow-y-auto max-h-[400px] space-y-0.5">
@@ -637,7 +548,7 @@ export function ReportComparison() {
                     if (domainAttrs.length === 0) return null;
                     return (
                       <div key={domain} className="mb-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-quiet mb-1">
                           {DOMAIN_LABELS[domain]}
                         </div>
                         {domainAttrs.map((attr) => (
@@ -660,8 +571,8 @@ export function ReportComparison() {
                                     />
                                   </div>
                                   <span
-                                    className={`w-5 text-right text-[10px] font-mono font-bold ${
-                                      idx === attr.bestIndex ? PLAYER_COLORS[idx].text : "text-zinc-500"
+                                    className={`w-5 text-right text-xs font-mono font-bold ${
+                                      idx === attr.bestIndex ? PLAYER_COLORS[idx].text : "text-quiet"
                                     }`}
                                   >
                                     {val || "-"}
@@ -684,8 +595,8 @@ export function ReportComparison() {
           <div className={`mb-6 grid grid-cols-1 gap-6 ${comparisonView.legacyComparison ? "lg:grid-cols-2" : ""}`}>
             {comparisonView.legacyComparison && (
               <Card>
-                <CardContent className="p-4">
-                  <div className="mb-2 text-xs text-zinc-500">
+                <CardContent className="px-0 py-5">
+                  <div className="mb-2 text-xs text-quiet">
                     Legacy position-fit estimates remain available because every selected report includes attribute-era assessments.
                   </div>
                   <PositionBars reports={reports} playerNames={playerNames} />
@@ -693,19 +604,19 @@ export function ReportComparison() {
               </Card>
             )}
             <Card>
-              <CardContent className="p-4">
+              <CardContent className="px-0 py-5">
                 <StrengthWeaknessMatrix reports={reports} playerNames={playerNames} />
               </CardContent>
             </Card>
           </div>
 
           {/* Key Metrics Summary Table */}
-          <Card className="mb-6">
+          <Card className="mb-6 rounded-none border-t border-[var(--border)] bg-transparent">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-[#27272a] text-left text-xs text-zinc-500">
+                    <tr className="border-b border-[#27272a] text-left text-xs text-quiet">
                       <th className="px-4 py-3 font-medium">Metric</th>
                       {playerNames.map((name, idx) => (
                         <th key={idx} className={`px-4 py-3 font-medium ${PLAYER_COLORS[idx].text}`}>

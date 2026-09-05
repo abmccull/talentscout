@@ -84,7 +84,7 @@ describe("youth day-to-day guided loop", () => {
       milestoneId: "focusedPlayer",
       currentScreen: "observation",
       isYouthDiscoveryHook: true,
-    })).toBe("Select Focus on your prospect, then choose a lens.");
+    })).toBe("Choose your prospect in Players in view, then choose a lens under Your attention.");
     expect(getGuidedMilestoneInstruction({
       milestoneId: "flaggedBreakthrough",
       currentScreen: "observation",

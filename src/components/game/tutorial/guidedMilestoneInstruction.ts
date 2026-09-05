@@ -54,7 +54,7 @@ export function getGuidedMilestoneInstruction(
       return "Start the live session and begin watching.";
     case "focusedPlayer":
       return input.isYouthDiscoveryHook
-        ? "Select Focus on your prospect, then choose a lens."
+        ? "Choose your prospect in Players in view, then choose a lens under Your attention."
         : "Choose a player and apply a focus lens.";
     case "viewedDashboard":
       return "Take a quick read of the dashboard, then move on.";

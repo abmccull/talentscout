@@ -53,7 +53,98 @@ async function resolveCurrentDecisionThroughUI(page: Page) {
   await expect(page.getByText(new RegExp(`Approach locked: ${choice.label}`, "i"))).toBeVisible();
 }
 
+async function expectWeekActionsContained(page: Page, phone: boolean) {
+  const geometry = await page.getByTestId("week-journey-screen").locator("footer").evaluate((footer) => {
+    const box = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, height: rect.height };
+    };
+    const nav = document.querySelector('nav[aria-label="Youth Scout workspace"]');
+    return {
+      footer: box(footer),
+      actions: [...footer.querySelectorAll("button")].map(box),
+      nav: nav ? box(nav) : null,
+      width: innerWidth,
+      height: innerHeight,
+    };
+  });
+  const floor = phone ? geometry.nav!.top : geometry.height;
+  if (phone) {
+    expect(geometry.nav).not.toBeNull();
+    expect(geometry.nav!.height).toBeGreaterThanOrEqual(64);
+  }
+  for (const rect of [geometry.footer, ...geometry.actions]) {
+    expect(rect.top).toBeGreaterThanOrEqual(-1);
+    expect(rect.bottom).toBeLessThanOrEqual(floor + 1);
+    expect(rect.left).toBeGreaterThanOrEqual(-1);
+    expect(rect.right).toBeLessThanOrEqual(geometry.width + 1);
+  }
+  expect(geometry.actions).toHaveLength(2);
+  for (const action of geometry.actions) expect(action.height).toBeGreaterThanOrEqual(44);
+}
+
 test.describe("Week Simulation journey", () => {
+
+  for (const viewport of [
+    { width: 768, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`${viewport.width}px normal-motion week actions remain reachable through scrolling`, async ({ gamePage }) => {
+      const page = gamePage.page;
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await page.setViewportSize(viewport);
+      await page.addInitScript(() => {
+        localStorage.setItem("talentscout_settings", JSON.stringify({
+          reducedMotion: false,
+          autoPlayWeekSimulation: false,
+        }));
+      });
+      await openWeekJourney(gamePage);
+      const screen = page.getByTestId("week-journey-screen");
+      const footer = screen.locator("footer");
+      const advance = footer.getByRole("button", { name: "Advance to next day", exact: true });
+      await expect(screen).toHaveAttribute("data-reduced-motion", "false");
+      await expect(page.locator("html")).not.toHaveClass(/\breduced-motion\b/);
+      await expect(advance).toBeDisabled();
+      // Measure the initial viewport before any control is scrolled into view.
+      await expectWeekActionsContained(page, viewport.width < 768);
+
+      const maxScroll = await page.evaluate(() =>
+        Math.max(0, document.scrollingElement!.scrollHeight - innerHeight),
+      );
+      if (maxScroll > 2) {
+        await page.mouse.move(viewport.width - 24, Math.floor(viewport.height / 2));
+        await page.mouse.wheel(0, Math.ceil(maxScroll / 2));
+        await expect.poll(() => page.evaluate(() => document.scrollingElement!.scrollTop))
+          .toBeGreaterThan(0);
+        await expectWeekActionsContained(page, viewport.width < 768);
+        await page.mouse.wheel(0, maxScroll + viewport.height);
+        await expect.poll(() => page.evaluate(() =>
+          document.scrollingElement!.scrollHeight - innerHeight - document.scrollingElement!.scrollTop,
+        )).toBeLessThanOrEqual(2);
+        await expectWeekActionsContained(page, viewport.width < 768);
+      }
+
+      const rapport = page.getByTestId("current-day-journey")
+        .getByRole("region", { name: "Your call", exact: true })
+        .getByRole("button", { name: /^Build Rapport\b/ });
+      await rapport.scrollIntoViewIfNeeded();
+      await rapport.click();
+      await expect(page.getByText("Approach locked: Build Rapport", { exact: true })).toBeVisible();
+      await expect(advance).toBeEnabled();
+      await expectWeekActionsContained(page, viewport.width < 768);
+      expect(await advance.evaluate((button) => {
+        const rect = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return hit !== null && button.contains(hit);
+      })).toBe(true);
+      await advance.click();
+      await expect(page.getByRole("progressbar", { name: "Weekly journey progress" }))
+        .toHaveAttribute("aria-valuetext", "Viewing day 2 of 7");
+      gamePage.expectNoConsoleErrors();
+    });
+  }
+
   test("390px layout stacks the timeline, journey, and actions without horizontal clipping", async ({ gamePage }) => {
     await gamePage.page.setViewportSize({ width: 390, height: 844 });
     await openWeekJourney(gamePage);
@@ -66,9 +157,13 @@ test.describe("Week Simulation journey", () => {
     await expect(journey.locator("main")).toHaveCount(0);
     await expect(journey).not.toHaveAttribute("aria-live", /.+/);
     await expect(gamePage.page.getByTestId("week-journey-status")).toContainText("Decision required");
-    await expect(gamePage.page.getByRole("heading", { name: "What you set out to do" })).toBeVisible();
-    await expect(gamePage.page.getByRole("heading", { name: "What unfolded" })).toBeVisible();
-    await expect(gamePage.page.getByRole("heading", { name: "Outcome waiting on your call" })).toBeVisible();
+    const commitment = journey.getByTestId("week-journey-beat-1");
+    await expect(commitment.getByRole("heading", { name: "Network Meeting", exact: true })).toBeVisible();
+    await expect(commitment).toContainText("Monday");
+    const story = journey.getByRole("region", { name: "Today’s story and decision", exact: true });
+    await expect(story).toBeVisible();
+    await expect(story.getByRole("heading", { name: "Your call", exact: true })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "Decision pending", exact: true })).toBeVisible();
     await expect(gamePage.page.getByTestId("unresolved-day-consequence")).toBeVisible();
     await expect(gamePage.page.getByRole("group", { name: "Day outcome summary" })).toHaveCount(0);
 
@@ -96,7 +191,7 @@ test.describe("Week Simulation journey", () => {
     expect(Math.abs(geometry.timeline!.width - geometry.journey!.width)).toBeLessThanOrEqual(2);
 
     await resolveCurrentDecisionThroughUI(gamePage.page);
-    await expect(gamePage.page.getByRole("heading", { name: "What changed" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "Today’s result", exact: true })).toBeVisible();
     await expect(gamePage.page.getByTestId("unresolved-day-consequence")).toHaveCount(0);
     const outcomeSummary = gamePage.page.getByRole("group", { name: "Day outcome summary" });
     await expect(outcomeSummary).toBeVisible();
@@ -175,7 +270,7 @@ test.describe("Week Simulation journey", () => {
     });
 
     expect(completionKey, "the opening day should have a completable activity").not.toBeNull();
-    await expect(gamePage.page.getByRole("heading", { name: "What changed" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "Today’s result", exact: true })).toBeVisible();
     await expect(gamePage.page.getByTestId("unresolved-day-consequence")).toHaveCount(0);
     await expect(gamePage.page.getByText("Session completed")).toBeVisible();
     await expect(gamePage.page.getByRole("button", { name: "Advance to next day" })).toBeEnabled();

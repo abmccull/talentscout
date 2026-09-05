@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Lock, Trophy } from "lucide-react";
+import { Lock, Trophy, Flag, Briefcase, Eye, BookOpen, Globe, Users, Wallet, type LucideIcon } from "lucide-react";
 import { GameLayout } from "./GameLayout";
 import { useAchievementStore, TOTAL_ACHIEVEMENT_COUNT } from "@/stores/achievementStore";
 import {
@@ -13,9 +13,8 @@ import {
   getAchievementRarity,
   RARITY_CONFIG,
   type AchievementProgress,
-  type AchievementRarity,
 } from "@/engine/core/achievementEngine";
-import { ScreenBackground } from "@/components/ui/screen-background";
+import { achievementPresentation } from "@/lib/achievementPresentation";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { isAchievementAvailableForBuild } from "@/stores/gameScreenScope";
 
@@ -53,31 +52,15 @@ const CATEGORY_LABEL: Record<AchievementCategory, string> = {
   hidden: "Hidden",
 };
 
-const CATEGORY_COLOR: Record<AchievementCategory, string> = {
-  gettingStarted: "bg-blue-500/20 text-blue-400",
-  careerMilestones: "bg-amber-500/20 text-amber-400",
-  scoutingExcellence: "bg-emerald-500/20 text-emerald-400",
-  specializationMastery: "bg-purple-500/20 text-purple-400",
-  worldExplorer: "bg-cyan-500/20 text-cyan-400",
-  matchAnalysis: "bg-rose-500/20 text-rose-400",
-  financial: "bg-yellow-500/20 text-yellow-400",
-  hidden: "bg-zinc-500/20 text-zinc-400",
-};
-
-const RARITY_BORDER: Record<AchievementRarity, string> = {
-  common: "border-zinc-700",
-  uncommon: "border-green-800",
-  rare: "border-blue-800",
-  epic: "border-purple-800",
-  legendary: "border-amber-700",
-};
-
-const RARITY_GLOW: Record<AchievementRarity, string> = {
-  common: "",
-  uncommon: "",
-  rare: "",
-  epic: "shadow-purple-500/10",
-  legendary: "shadow-amber-500/20 shadow-lg",
+const CATEGORY_ICON: Record<AchievementCategory, LucideIcon> = {
+  gettingStarted: Flag,
+  careerMilestones: Briefcase,
+  scoutingExcellence: Eye,
+  specializationMastery: BookOpen,
+  worldExplorer: Globe,
+  matchAnalysis: Users,
+  financial: Wallet,
+  hidden: Lock,
 };
 
 // =============================================================================
@@ -91,28 +74,26 @@ interface AchievementCardProps {
 }
 
 function AchievementCard({ achievement, isUnlocked, progress }: AchievementCardProps) {
+  const presentation = achievementPresentation(achievement);
   const isHiddenAndLocked = achievement.hidden === true && !isUnlocked;
   const rarity = getAchievementRarity(achievement.id);
   const rarityConfig = RARITY_CONFIG[rarity];
+  const CategoryIcon = isHiddenAndLocked ? Lock : CATEGORY_ICON[achievement.category];
 
   return (
     <article
       aria-label={
         isHiddenAndLocked
           ? "Hidden Achievement"
-          : `${achievement.name}${isUnlocked ? " — Unlocked" : " — Locked"}`
+          : `${presentation.name}${isUnlocked ? " — Unlocked" : " — Locked"}`
       }
-      className={`relative flex flex-col gap-3 rounded-xl border p-4 transition ${
-        isUnlocked
-          ? `${RARITY_BORDER[rarity]} bg-zinc-800/60 ${RARITY_GLOW[rarity]}`
-          : "border-zinc-800 bg-zinc-900/40 opacity-60"
-      }`}
+      className={`relative flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--surface)] p-5 ${isUnlocked ? "border-l-2 border-l-[var(--accent)]" : ""}`}
     >
       {/* Lock / Trophy badge — top-right corner */}
       {!isUnlocked && (
         <span
           aria-hidden="true"
-          className="absolute right-3 top-3 text-zinc-600"
+          className="absolute right-3 top-3 text-zinc-400"
         >
           <Lock size={14} />
         </span>
@@ -120,7 +101,7 @@ function AchievementCard({ achievement, isUnlocked, progress }: AchievementCardP
       {isUnlocked && (
         <span
           aria-hidden="true"
-          className="absolute right-3 top-3 text-emerald-500"
+          className="absolute right-3 top-3 text-[var(--accent)]"
         >
           <Trophy size={14} />
         </span>
@@ -129,19 +110,15 @@ function AchievementCard({ achievement, isUnlocked, progress }: AchievementCardP
       {/* Icon */}
       <span
         aria-hidden="true"
-        className={`flex h-10 w-10 items-center justify-center rounded-lg text-xl ${
-          isUnlocked
-            ? "bg-emerald-500/20"
-            : "bg-zinc-800"
-        }`}
+        className={`flex h-8 w-8 items-center justify-center ${isUnlocked ? "text-[var(--accent)]" : "text-zinc-400"}`}
       >
-        {isHiddenAndLocked ? "?" : achievement.icon}
+        <CategoryIcon size={22} strokeWidth={1.5} />
       </span>
 
       {/* Name */}
       <div>
         <p className="text-sm font-semibold text-white">
-          {isHiddenAndLocked ? "???" : achievement.name}
+          {isHiddenAndLocked ? "A story still to unfold" : presentation.name}
         </p>
 
         {/* Description or hint */}
@@ -149,22 +126,23 @@ function AchievementCard({ achievement, isUnlocked, progress }: AchievementCardP
           {isHiddenAndLocked
             ? "Hidden Achievement"
             : isUnlocked
-              ? achievement.description
-              : achievement.hint}
+              ? presentation.description
+              : presentation.hint}
         </p>
       </div>
 
       {/* Progress bar (only for locked achievements with trackable progress) */}
-      {!isUnlocked && progress && progress.percentage < 100 && (
+      {!isUnlocked && presentation.showProgress && progress && progress.percentage < 100 && (
         <div className="mt-auto">
-          <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-[var(--muted-foreground)]">
               {progress.current} / {progress.target}
             </span>
-            <span className="text-zinc-500">{progress.percentage}%</span>
+            <span className="text-[var(--muted-foreground)]">{progress.percentage}%</span>
           </div>
           <div
             role="progressbar"
+            aria-label={`${presentation.name} progress`}
             aria-valuenow={progress.current}
             aria-valuemin={0}
             aria-valuemax={progress.target}
@@ -180,15 +158,15 @@ function AchievementCard({ achievement, isUnlocked, progress }: AchievementCardP
       )}
 
       {/* Category + Rarity badges */}
-      <div className="mt-auto flex items-center gap-2">
+      <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1">
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${CATEGORY_COLOR[achievement.category]}`}
+          className="text-xs text-zinc-400"
         >
           {isHiddenAndLocked ? "Hidden" : CATEGORY_LABEL[achievement.category]}
         </span>
         {!isHiddenAndLocked && (
           <span
-            className={`text-[10px] font-semibold uppercase tracking-wide ${rarityConfig.colorClass}`}
+            className="text-xs text-zinc-400"
           >
             {rarityConfig.label}
           </span>
@@ -228,8 +206,8 @@ export function AchievementScreen() {
     const bUnlocked = unlockedAchievements.has(b.id) ? 1 : 0;
     if (aUnlocked !== bUnlocked) return bUnlocked - aUnlocked;
     // Among locked, sort by progress descending
-    const aProgress = progressCache[a.id]?.percentage ?? 0;
-    const bProgress = progressCache[b.id]?.percentage ?? 0;
+    const aProgress = achievementPresentation(a).showProgress ? progressCache[a.id]?.percentage ?? 0 : 0;
+    const bProgress = achievementPresentation(b).showProgress ? progressCache[b.id]?.percentage ?? 0 : 0;
     return bProgress - aProgress;
   });
 
@@ -245,24 +223,24 @@ export function AchievementScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6">
-        <ScreenBackground src="/images/backgrounds/discoveries-trophy.png" opacity={0.80} />
+      <div className="relative min-h-full p-4 sm:p-6">
+
         <div className="relative z-10">
         {/* Page header */}
         <header className="mb-6">
           <div className="flex items-center gap-3">
-            <Trophy size={24} className="text-emerald-400" aria-hidden="true" />
-            <h1 className="text-xl font-bold text-white">Achievements</h1>
+            <Trophy size={24} className="text-[var(--accent)]" aria-hidden="true" />
+            <h1 className="font-editorial text-3xl text-white">Achievements</h1>
           </div>
           <p className="mt-1 text-sm text-zinc-400">
-            Track your milestones and hidden accomplishments.
+            A collection of the moments that shaped your scouting career.
           </p>
         </header>
 
         {/* Progress bar */}
         <section
           aria-label="Achievement progress"
-          className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
+          className="dossier-section mb-6 p-4"
         >
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="font-medium text-white">
@@ -279,17 +257,24 @@ export function AchievementScreen() {
             className="h-2 overflow-hidden rounded-full bg-zinc-800"
           >
             <div
-              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+              className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
               style={{ width: `${progressPct}%` }}
               aria-hidden="true"
             />
           </div>
         </section>
 
+        <label className="mb-5 block text-sm text-zinc-300 sm:hidden">
+          Category
+          <select value={activeTab} onChange={(event) => setActiveTab(event.target.value as FilterTab)} className="mt-2 min-h-11 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-white">
+            {FILTER_TABS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+          </select>
+        </label>
+
         {/* Category filter tabs */}
         <nav
           aria-label="Achievement category filter"
-          className="mb-6 flex flex-wrap gap-2"
+          className="mb-6 hidden flex-wrap gap-2 sm:flex"
         >
           {FILTER_TABS.map(({ id, label }) => {
             const catCount = id === "all" ? TOTAL_ACHIEVEMENT_COUNT : (categoryCounts[id as AchievementCategory] ?? 0);
@@ -299,14 +284,14 @@ export function AchievementScreen() {
                 key={id}
                 onClick={() => setActiveTab(id)}
                 aria-pressed={activeTab === id}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                className={`flex min-h-10 items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition ${
                   activeTab === id
-                    ? "bg-emerald-500 text-black"
+                    ? "bg-[var(--accent)] text-[#15120c]"
                     : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
                 }`}
               >
                 {label}
-                <span className={`text-[10px] ${activeTab === id ? "text-black/60" : "text-zinc-500"}`}>
+                <span className={`text-xs ${activeTab === id ? "text-black/60" : "text-[var(--muted-foreground)]"}`}>
                   {catUnlocked}/{catCount}
                 </span>
               </button>
@@ -321,7 +306,7 @@ export function AchievementScreen() {
               No achievements in this category.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-x-5 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
               {sortedAchievements.map((achievement) => (
                 <AchievementCard
                   key={achievement.id}

@@ -27,6 +27,10 @@ import {
 } from "@/engine/career/progression";
 import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
 import {
+  deriveYouthSeasonCaseReview,
+  formatYouthSeasonReviewBody,
+} from "@/engine/youth/youthSeasonReview";
+import {
   attemptCareerTierAdvancement,
   generateBoardDirectives,
   projectDevelopmentPressureForState,
@@ -584,13 +588,25 @@ export function processWeeklySeasonRollover(
             : effectiveReview.outcome === "warning"
               ? "You have received a formal warning. Improve your performance next season."
               : "Your contract has been terminated.";
+      const youthCaseReview = newState.scout.primarySpecialization === "youth"
+        ? deriveYouthSeasonCaseReview(newState, completedSeason)
+        : null;
       seasonEndMessages.push({
         id: `review-s${completedSeason}`,
         week: newState.currentWeek,
         season: newState.currentSeason,
         type: "feedback" as const,
         title: `Season ${completedSeason} Performance Review`,
-        body: `Reports submitted: ${review.reportsSubmitted} | Avg craft: ${review.averageQuality}/100\nSuccessful recommendations: ${review.successfulRecommendations}\n${reportAccountability.validatedCases > 0 ? `Validated cases: ${reportAccountability.validatedCases} | Accuracy: ${reportAccountability.averageAccuracy}/100 | Decision value: ${reportAccountability.averageDecisionValue}/100` : "Validated cases: awaiting mature outcomes"}\nReputation change: ${effectiveReview.reputationChange >= 0 ? "+" : ""}${effectiveReview.reputationChange}\n\n${reviewOutcomeText}`,
+        body: [
+          youthCaseReview ? formatYouthSeasonReviewBody(youthCaseReview) : null,
+          `Reports submitted: ${review.reportsSubmitted} | Avg craft: ${review.averageQuality}/100`,
+          `Successful recommendations: ${review.successfulRecommendations}`,
+          reportAccountability.validatedCases > 0
+            ? `Validated cases: ${reportAccountability.validatedCases} | Accuracy: ${reportAccountability.averageAccuracy}/100 | Decision value: ${reportAccountability.averageDecisionValue}/100`
+            : "Validated cases: awaiting mature outcomes",
+          `Reputation change: ${effectiveReview.reputationChange >= 0 ? "+" : ""}${effectiveReview.reputationChange}`,
+          reviewOutcomeText,
+        ].filter(Boolean).join("\n\n"),
         read: false,
         actionRequired: false,
       });

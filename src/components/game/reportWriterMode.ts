@@ -1,3 +1,18 @@
+import type { OpeningCaseState } from "@/engine/youth/openingCaseTypes";
+
+/** The guided first read stays an initial assessment even if a restored world has open briefs. */
+export function shouldUseInitialAssessment(input: {
+  isYouthCase: boolean;
+  hasOpenBrief: boolean;
+  playerId: string | null | undefined;
+  openingCase?: Pick<OpeningCaseState, "playerId" | "stage">;
+}): boolean {
+  return input.isYouthCase && (
+    !input.hasOpenBrief
+    || (input.openingCase?.stage === "report" && input.openingCase.playerId === input.playerId)
+  );
+}
+
 export interface ReportWorkflowStep {
   id: string;
   complete: boolean;

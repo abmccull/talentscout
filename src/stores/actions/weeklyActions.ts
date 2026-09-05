@@ -309,6 +309,9 @@ export function createWeeklyActions(
     const tutorial = runtime.getTutorialState();
     tutorial.checkAutoAdvance("activityScheduled");
     tutorial.completeMilestone("scheduledActivity");
+    // Scheduling records progress, but opting out must not reopen onboarding.
+    const automaticGuidance = gameState.guidedSessionRequested !== false
+      || tutorial.guidedSessionForcedReplay;
 
     const YOUTH_ACTIVITIES = new Set([
       "schoolMatch", "grassrootsTournament", "streetFootball",
@@ -318,7 +321,7 @@ export function createWeeklyActions(
       tutorial.checkAutoAdvance("youthActivityScheduled");
       // Contextual trigger: first youth activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("youth", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("youth", hasClub));
     }
 
     const DATA_ACTIVITIES = new Set([
@@ -329,7 +332,7 @@ export function createWeeklyActions(
       tutorial.checkAutoAdvance("dataActivityScheduled");
       // Contextual trigger: first data activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("data", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("data", hasClub));
     }
 
     // Contextual trigger: first opposition analysis → first team onboarding
@@ -338,7 +341,7 @@ export function createWeeklyActions(
     ]);
     if (FT_ACTIVITIES.has(effectiveActivity.type)) {
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
     }
   },
 

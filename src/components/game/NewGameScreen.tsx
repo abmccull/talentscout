@@ -758,22 +758,22 @@ export function NewGameScreen() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="relative h-screen bg-[var(--background)] flex flex-col overflow-hidden">
-      <ScreenBackground src="/images/backgrounds/menu-bg-2.png" opacity={0.8} />
+    <div className="relative h-dvh bg-[var(--background)] flex flex-col overflow-hidden">
+      <ScreenBackground src="/images/backgrounds/menu-bg-2.png" opacity={0.9} />
       <main
         aria-labelledby="new-game-heading"
         className="relative z-10 flex min-h-0 flex-1 flex-col"
       >
       {/* Top bar */}
-      <div className="px-8 pt-6">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
+      <div className="px-4 pt-4 sm:px-8 sm:pt-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <button
             onClick={() => setScreen("mainMenu")}
             className="flex min-h-11 items-center rounded-md px-2 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
           >
             &larr; Back to Menu
           </button>
-          <h1 id="new-game-heading" className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+          <h1 id="new-game-heading" className="font-editorial text-2xl tracking-tight text-[color:var(--foreground)] sm:text-3xl">
             {IS_YOUTH_EARLY_ACCESS && step === 1 ? "Take the call" : "Create Your Scout"}
           </h1>
         </div>
@@ -802,8 +802,8 @@ export function NewGameScreen() {
                     className={`
                       relative flex items-center justify-center rounded-full transition-all shrink-0
                       h-11 w-11
-                      ${isCurrent ? "bg-emerald-700 text-white" : ""}
-                      ${isCompleted ? "border-2 border-emerald-500 text-emerald-300 cursor-pointer hover:bg-emerald-500/10" : ""}
+                      ${isCurrent ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]" : ""}
+                      ${isCompleted ? "border-2 border-[color:var(--success)] text-[color:var(--success)] cursor-pointer hover:bg-[color:var(--success)]/10" : ""}
                       ${isFuture ? "border-2 border-zinc-600 text-zinc-400 cursor-default" : ""}
                     `}
                   >
@@ -818,7 +818,7 @@ export function NewGameScreen() {
 
                   {/* Connecting line */}
                   {i < steps.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-2 ${i < currentStepIndex ? "bg-emerald-500" : "bg-zinc-800"}`} />
+                    <div className={`flex-1 h-0.5 mx-2 ${i < currentStepIndex ? "bg-[color:var(--success)]" : "bg-zinc-800"}`} />
                   )}
                 </div>
               );
@@ -827,7 +827,7 @@ export function NewGameScreen() {
           {/* Step labels */}
           <div className="hidden sm:flex items-center justify-between mt-2">
             {steps.map((s, i) => (
-              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${i === currentStepIndex ? "text-emerald-300 font-medium" : "text-zinc-400"}`}>
+              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${i === currentStepIndex ? "text-[color:var(--primary)] font-medium" : "text-zinc-400"}`}>
                 {i < steps.length - 1 ? (
                   <span className="inline-block" style={{ width: "calc(100% - 1rem)" }}>{s.label}</span>
                 ) : (
@@ -841,8 +841,8 @@ export function NewGameScreen() {
       )}
 
       {/* Step content */}
-      <div className="min-h-0 flex-1 px-8 py-6 overflow-y-auto">
-        <div className="mx-auto max-w-4xl">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
+        <div className={IS_YOUTH_EARLY_ACCESS && step === 1 ? "mx-auto max-w-6xl" : "mx-auto max-w-4xl"}>
           <div
             key={step}
             className={direction === "forward" ? "animate-[slideInRight_300ms_ease-out]" : "animate-[slideInLeft_300ms_ease-out]"}
@@ -996,7 +996,7 @@ export function NewGameScreen() {
                         </svg>
                       </div>
                       <div>
-                        <h2 className="font-semibold text-emerald-300 mb-1">Your scouting career starts here</h2>
+                        <h2 className="font-semibold text-[color:var(--primary)] mb-1">Your scouting career starts here</h2>
                         <p className="text-sm text-zinc-300 leading-relaxed">
                           You are a football scout building your career from the ground up. Scout matches,
                           observe players, write reports, and build your reputation — until the biggest
@@ -1007,13 +1007,23 @@ export function NewGameScreen() {
                   </CardContent>
                 </Card>}
 
-                {/* Identity form */}
-                <Card>
-                  <CardHeader>
-                    <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
-                    <CardDescription>Who are you in the scouting world?</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className={IS_YOUTH_EARLY_ACCESS ? "grid items-start gap-8 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] lg:gap-12" : ""}>
+                <section className="min-w-0 border-t border-[color:var(--border)] pt-5" aria-labelledby="scout-identity-heading">
+                  <div className="mb-5 flex items-center gap-4">
+                    <Image
+                      src={`/images/avatars/scout-${avatarId}.png`}
+                      alt="Your selected scout portrait"
+                      width={72}
+                      height={72}
+                      unoptimized
+                      className="h-18 w-18 shrink-0 rounded object-cover"
+                    />
+                    <div>
+                      <p className="dossier-eyebrow">Scout registration</p>
+                      <h2 id="scout-identity-heading" className="font-editorial mt-1 text-2xl text-[color:var(--foreground)]">Your Identity</h2>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="scout-first-name" className="mb-1 block text-sm text-zinc-400">First Name</label>
                       <input
@@ -1039,13 +1049,13 @@ export function NewGameScreen() {
                         autoComplete="family-name"
                       />
                     </div>
-                    <details className="group col-span-2 rounded-lg border border-zinc-700/70 bg-zinc-950/35 sm:col-span-4" open={!IS_YOUTH_EARLY_ACCESS}>
-                      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-4 py-2 text-sm font-medium text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                    <details className="group col-span-2 border-y border-[color:var(--border)]" open={!IS_YOUTH_EARLY_ACCESS}>
+                      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-2 text-sm font-medium text-[color:var(--muted-foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
                         <span>{IS_YOUTH_EARLY_ACCESS ? "Customize age, nationality, and portrait" : "Scout details"}</span>
                         <span className="text-xs text-emerald-300 group-open:hidden">Optional</span>
                         <span className="hidden text-xs text-zinc-500 group-open:inline">Hide</span>
                       </summary>
-                      <div className="grid gap-4 border-t border-zinc-800 p-4 sm:grid-cols-2">
+                      <div className="grid gap-4 border-t border-[color:var(--border)] py-4 sm:grid-cols-2 lg:grid-cols-1">
                         <div>
                           <label htmlFor="scout-age" className="mb-1 block text-sm text-zinc-400">Age</label>
                           <input
@@ -1074,9 +1084,9 @@ export function NewGameScreen() {
                             ))}
                           </select>
                         </div>
-                        <div className="sm:col-span-2">
+                        <div className="sm:col-span-2 lg:col-span-1">
                           <span className="mb-2 block text-sm text-zinc-400">Your Portrait</span>
-                          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-3">
                             {[1, 2, 3, 4, 5, 6].map((id) => (
                               <button
                                 key={id}
@@ -1105,20 +1115,20 @@ export function NewGameScreen() {
                         </div>
                       </div>
                     </details>
-                  </CardContent>
-                </Card>
+                  </div>
+                </section>
 
                 {IS_YOUTH_EARLY_ACCESS && (
-                  <Card className="mt-6 overflow-hidden border-[color:var(--primary)]/35 bg-zinc-950/80 shadow-2xl shadow-black/40">
-                    <div className="border-b border-[color:var(--primary)]/20 bg-gradient-to-r from-[#14110c] via-zinc-950 to-zinc-950 px-6 py-5">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <section className="min-w-0 border-t border-[color:var(--border)] pt-5">
+                    <div className="mb-6">
+                      <div>
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--primary)]">
                             {isExperiencedYouthPlayer
                               ? "Start your next scouting career"
                               : "Your first scouting assignment"}
                           </p>
-                          <h2 className="mt-2 text-xl font-semibold text-white">
+                          <h2 className="font-editorial mt-2 text-3xl leading-tight text-[color:var(--foreground)]">
                             {isExperiencedYouthPlayer
                               ? "Choose how this career begins."
                               : "A trusted contact has spotted someone."}
@@ -1126,17 +1136,13 @@ export function NewGameScreen() {
                           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-300">
                             {isExperiencedYouthPlayer
                               ? "Follow a fresh lead, plan your first week yourself, or replay the guided school-match assignment."
-                              : "A school match is already underway, and one player may be worth your attention. Choose how you read the game, watch the key moments, and decide whether the prospect deserves a second look."}
+                              : "A school match is underway. Watch the player your contact noticed, then decide whether to return."}
                           </p>
                         </div>
-                        <span className="w-fit rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-200">
-                          {isExperiencedYouthPlayer
-                            ? "Choose your first assignment"
-                            : "School match underway · Live lead"}
-                        </span>
+
                       </div>
                     </div>
-                    <CardContent className="space-y-4 pt-5">
+                    <div className="space-y-6">
                       {isExperiencedYouthPlayer && effectiveOpeningMode !== "auto" && (
                         <OpeningModeSelector
                           value={effectiveOpeningMode}
@@ -1154,10 +1160,9 @@ export function NewGameScreen() {
                       <fieldset>
                         <legend className="text-sm font-semibold text-white">Choose your scouting style</legend>
                         <p className="mt-1 text-xs text-zinc-400">
-                          Your choice shapes what you notice, how you judge young players, and the strengths you develop throughout your career.
-                          Want full control? Use Advanced setup below.
+                          Choose the strengths you bring to the touchline. You can customize them before starting.
                         </p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           {YOUTH_SKILL_PRESETS.map((preset) => {
                             const isSelected = selectedSkillPreset === preset.id;
                             return (
@@ -1166,10 +1171,10 @@ export function NewGameScreen() {
                                 type="button"
                                 aria-pressed={isSelected}
                                 onClick={() => applyYouthPersona(preset)}
-                                className={`min-h-24 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ring)] ${
+                                className={`min-h-24 rounded border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ring)] ${
                                   isSelected
-                                    ? "border-[color:var(--primary)] bg-[color:var(--primary)]/12 shadow-lg shadow-black/40"
-                                    : "border-zinc-700 bg-zinc-900/70 hover:border-zinc-500 hover:bg-zinc-900"
+                                    ? "border-[color:var(--primary)] bg-[color:var(--surface-selected)]"
+                                    : "border-[color:var(--border)] bg-[color:var(--surface)] hover:bg-[color:var(--surface-interactive)]"
                                 }`}
                               >
                                 <span className="flex items-center justify-between gap-3">
@@ -1179,8 +1184,8 @@ export function NewGameScreen() {
                                     className={`h-3 w-3 rounded-full border ${isSelected ? "border-[color:var(--primary)] bg-[color:var(--primary)]" : "border-zinc-500"}`}
                                   />
                                 </span>
-                                <span className="mt-1 block text-xs leading-relaxed text-zinc-300">{preset.description}</span>
-                                <span className="mt-2 block border-l-2 border-amber-400/50 pl-2 text-xs leading-relaxed text-amber-100/90">
+                                <span className="mt-1 block text-sm leading-6 text-[color:var(--muted-foreground)]">{preset.description}</span>
+                                <span className="mt-2 block text-xs leading-5 text-[color:var(--primary)]">
                                   Your edge: {preset.scoutingEdge}
                                 </span>
                               </button>
@@ -1189,11 +1194,9 @@ export function NewGameScreen() {
                         </div>
                       </fieldset>
 
-                      <div className="rounded-xl border border-zinc-700/70 bg-black/25 p-4">
-                        <p className="text-sm font-medium text-white">
-                          {selectedYouthPreset
-                            ? `${selectedYouthPreset.name} selected`
-                            : "Choose a scouting instinct"}
+                      <div className="border-t border-[color:var(--border)] pt-4">
+                        <p className="sr-only">
+                          {selectedYouthPreset ? `${selectedYouthPreset.name} selected` : "Choose a scouting instinct"}
                         </p>
                         <p className="mt-1 text-xs leading-relaxed text-zinc-400">
                           {effectiveOpeningMode === "desk"
@@ -1205,8 +1208,8 @@ export function NewGameScreen() {
                                   ? "Replay the school-match assignment with the mentor highlighting each click."
                                   : "Replay the school-match assignment without the mentor lock."
                                 : guideFirstHour
-                                  ? "The mentor will highlight Watch, focus, the discovery call, the first report, and Advance Week."
-                                  : "Same first assignment. No spotlight and no locked navigation."}
+                                  ? "Your mentor will guide the first assignment through the end of the week."
+                                  : "The first assignment is yours to explore. Navigation stays open."}
                         </p>
                         <p id="quick-start-requirements" className="mt-2 text-xs text-zinc-400" role="status" aria-live="polite">
                           {startError ?? (isStarting
@@ -1218,9 +1221,10 @@ export function NewGameScreen() {
                               : "Ready. Take the call below, or customize your scout first.")}
                         </p>
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </section>
                 )}
+                </div>
               </>
             )}
 
@@ -2116,8 +2120,8 @@ export function NewGameScreen() {
       </div>
 
       {/* Bottom navigation */}
-      <div className="border-t border-zinc-800 bg-[var(--background)] px-8 py-4">
-        <div className="mx-auto max-w-4xl flex items-center justify-between">
+      <div className="border-t border-[color:var(--border)] bg-[var(--background)] px-4 py-3 sm:px-8">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           {currentStepIndex > 0 ? (
             <Button variant="outline" onClick={goBack} className="min-h-11 cursor-pointer">
               Back
@@ -2126,14 +2130,14 @@ export function NewGameScreen() {
             <div />
           )}
 
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2">
             {IS_YOUTH_EARLY_ACCESS && step === 1 && canQuickStart ? (
               <>
                 <Button
                   onClick={handleStart}
                   disabled={isStarting}
                   aria-describedby="quick-start-requirements"
-                  className="min-h-11 cursor-pointer"
+                  className="order-2 min-h-11 cursor-pointer"
                 >
                   {isStarting
                     ? "Creating your football world…"
@@ -2148,7 +2152,7 @@ export function NewGameScreen() {
                 <button
                   type="button"
                   onClick={goNext}
-                  className="min-h-11 text-xs text-zinc-400 underline-offset-4 transition hover:text-zinc-200 hover:underline"
+                  className="order-1 min-h-11 text-sm text-[color:var(--muted-foreground)] underline-offset-4 transition hover:text-[color:var(--foreground)] hover:underline"
                 >
                   Customize scout first
                 </button>
@@ -2163,10 +2167,10 @@ export function NewGameScreen() {
                 onClick={handleStart}
                 disabled={!canStart || isStarting}
                 aria-describedby="start-requirements"
-                className={`min-h-11 cursor-pointer rounded-md px-8 py-2 text-sm font-semibold shadow transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`min-h-11 cursor-pointer rounded-md px-8 py-2 text-sm font-semibold shadow transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--ring)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
                   isNewGamePlusMode
                     ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 hover:from-amber-400 hover:to-yellow-300"
-                    : "bg-emerald-700 text-white hover:bg-emerald-800"
+                    : "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                 }`}
               >
                 {isStarting
