@@ -356,17 +356,11 @@ export function MentorOverlay() {
   // ---------------------------------------------------------------------------
 
   const isAha = activeMode.kind === "tutorial" && activeMode.isAha;
-  const isWaitingForStandout = activeMode.kind === "guided"
-    && activeMode.milestone.id === "flaggedBreakthrough"
-    && currentGameScreen === "observation"
-    && (observationPhaseIndex ?? 0) < 1;
 
   const title = ((): string => {
     switch (activeMode.kind) {
       case "tutorial":    return activeMode.step.title;
-      case "guided":      return isWaitingForStandout
-        ? "Keep watching"
-        : activeMode.milestone.title;
+      case "guided":      return activeMode.milestone.title;
       default:            return "";
     }
   })();
@@ -375,11 +369,6 @@ export function MentorOverlay() {
     if (activeMode.kind === "tutorial") return activeMode.step.description;
     if (activeMode.kind === "guided") {
       const isFreelance = mentorName === "Tommy Reyes";
-      if (isWaitingForStandout) {
-        return isFreelance
-          ? "You have chosen who to watch. Select Next phase and stay with the play—the key moment is still ahead."
-          : "Your focus is set. Select Next phase and keep watching—the action that tests your first read is still ahead.";
-      }
       return isFreelance
         ? activeMode.milestone.mentorTextFreelance
         : activeMode.milestone.mentorText;

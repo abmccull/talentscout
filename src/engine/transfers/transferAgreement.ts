@@ -296,7 +296,7 @@ export function proposeTransferTerms(
     * roleWeight(role)
     * (player.age <= 22 ? 1.04 : player.age >= 33 ? 0.9 : 1)
     * clamp(1 + (buyingClub.reputation - (sellingClub?.reputation ?? buyingClub.reputation)) / 180, 0.94, 1.1)
-    * (player.personalityProfile?.transferWillingness ?? 0.5 >= 0.75 ? 1.06 : 1)
+    * ((player.personalityProfile?.transferWillingness ?? 0.5) >= 0.75 ? 1.06 : 1)
     * (contractLength >= 4 ? 0.98 : contractLength === 1 ? 1.04 : 1),
   );
 

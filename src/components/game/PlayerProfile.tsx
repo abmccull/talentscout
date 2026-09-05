@@ -1,6 +1,7 @@
 "use client";
 
 import { useGameStore } from "@/stores/gameStore";
+import { getFreshReportObservationIds } from "@/engine/reports/reportAccountability";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,6 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { YouthPortrait } from "@/components/game/YouthPortrait";
 import { PlayerAgeTimeline } from "./PlayerAgeTimeline";
 import { ClubCrest } from "@/components/game/ClubCrest";
-import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { ACTIVITY_SLOT_COSTS } from "@/engine/core/calendar";
 import { canAddActivity } from "@/engine/core/calendar";
@@ -429,8 +429,12 @@ export function PlayerProfile() {
     if ((right.submittedSeason ?? 0) !== (left.submittedSeason ?? 0)) {
       return (right.submittedSeason ?? 0) - (left.submittedSeason ?? 0);
     }
-    return (right.submittedWeek ?? 0) - (left.submittedWeek ?? 0);
+    return (right.submittedWeek ?? 0) - (left.submittedWeek ?? 0)
+      || (right.revision ?? 1) - (left.revision ?? 1);
   })[0];
+  const latestIsPass = String(latestReport?.recommendedAction) === "pass";
+  const passHasFreshEvidence = latestIsPass
+    && getFreshReportObservationIds(observations, latestReport).length > 0;
   const relevantBriefs = unsignedYouthRecord
     ? Object.values(gameState.youthRecruitmentBriefs)
         .filter((brief) =>
@@ -533,7 +537,9 @@ export function PlayerProfile() {
   const evidenceSignals =
     observations.length + dossierEntries.length + dossierInboxIntel.length + contactIntel.length;
   const nextDecision =
-    observations.length === 0
+    latestIsPass
+      ? passHasFreshEvidence ? "Review the new evidence before revising your pass." : "Your pass is recorded."
+      : observations.length === 0
       ? "Get a live view before you commit."
       : reports.length === 0 && needsReportableYouthEvidence
       ? "Return with one question to answer."
@@ -545,7 +551,11 @@ export function PlayerProfile() {
       ? activeCaseQuestion?.prompt ?? "Test your report before recommending a placement."
       : "Choose the most useful follow-up.";
   const nextDecisionReason =
-    observations.length === 0
+    latestIsPass
+      ? passHasFreshEvidence
+        ? "A new observation can change the question. Revise the report before pitching a placement."
+        : "Reopen this case when fresh evidence changes the question; no placement is being recommended."
+      : observations.length === 0
       ? "You still need first-hand evidence."
       : reports.length === 0 && needsReportableYouthEvidence
       ? "The existing view did not leave a classified cue you can defend. Plan a focused observation and save the moment that answers your question."
@@ -1326,7 +1336,7 @@ export function PlayerProfile() {
                   {foreignYouthCountry ? " — you will need to travel there to scout in person." : "."}
                 </p>
 
-                {!unsignedYouthRecord.placed && latestReport && (
+                {!unsignedYouthRecord.placed && latestReport && !latestIsPass && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -1540,106 +1550,35 @@ export function PlayerProfile() {
               </div>
             )}
 
-            {/* Personality Profile */}
-            {player.personalityProfile && (
-              <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
-                  Character Profile
-                </h2>
-                <Card>
-                  <CardContent className="px-4 pb-4 pt-4">
-                    {player.personalityProfile.hiddenUntilRevealed ? (
-                      <div className="text-center py-2">
-                        <p className="text-xs text-zinc-500">
-                          Character type not yet identified. Continue observing to uncover their personality.
-                        </p>
-                        {player.personalityProfile.revealedTraits.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2 justify-center">
-                            {player.personalityProfile.revealedTraits.map((trait) => (
-                              <span
-                                key={trait}
-                                className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
-                              >
-                                {trait.replace(/([A-Z])/g, " $1").trim()}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
-                          <div className="mt-2 flex justify-center gap-1">
-                            {Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
-                              <span
-                                key={`q-${i}`}
-                                className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
-                              >
-                                ?
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <Tooltip content={ARCHETYPE_DESCRIPTIONS[player.personalityProfile.archetype]} side="top">
-                            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 cursor-help underline decoration-dotted underline-offset-2">
-                              {ARCHETYPE_LABELS[player.personalityProfile.archetype]}
-                            </span>
-                          </Tooltip>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {player.personalityProfile.revealedTraits.map((trait) => (
-                            <span
-                              key={trait}
-                              className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
-                            >
-                              {trait.replace(/([A-Z])/g, " $1").trim()}
-                            </span>
-                          ))}
-                          {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
-                            Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
-                              <span
-                                key={`h-${i}`}
-                                className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
-                              >
-                                ?
-                              </span>
-                            ))
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Transfer Willingness</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : player.personalityProfile.transferWillingness >= 0.4 ? "text-amber-400" : "text-emerald-400"}`}>
-                              {player.personalityProfile.transferWillingness >= 0.7 ? "High" : player.personalityProfile.transferWillingness >= 0.4 ? "Medium" : "Low"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Dressing Room</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : player.personalityProfile.dressingRoomImpact >= 0 ? "text-zinc-300" : "text-red-400"}`}>
-                              {player.personalityProfile.dressingRoomImpact >= 2 ? "Positive" : player.personalityProfile.dressingRoomImpact >= 0 ? "Neutral" : "Negative"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Consistency</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : player.personalityProfile.formVolatility <= 0.6 ? "text-amber-400" : "text-red-400"}`}>
-                              {player.personalityProfile.formVolatility <= 0.3 ? "Very Consistent" : player.personalityProfile.formVolatility <= 0.6 ? "Moderate" : "Volatile"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Big Match</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : player.personalityProfile.bigMatchModifier >= 0 ? "text-zinc-300" : "text-red-400"}`}>
-                              {player.personalityProfile.bigMatchModifier >= 2 ? "Thrives" : player.personalityProfile.bigMatchModifier >= 1 ? "Rises" : player.personalityProfile.bigMatchModifier >= 0 ? "Neutral" : "Struggles"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
+            {/* Character knowledge comes from retained evidence, never profile modifiers. */}
+            <div>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                Character Evidence
+              </h2>
+              <Card>
+                <CardContent className="space-y-3 px-4 pb-4 pt-4">
+                  {player.personalityRevealed.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {player.personalityRevealed.map((trait) => (
+                        <span key={trait} className="rounded bg-amber-500/15 px-2 py-1 text-xs text-amber-300">
+                          {trait.replace(/([A-Z])/g, " $1").trim()} · observed impression
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs leading-5 text-zinc-400">
+                    Character remains a working judgment. Revisit reactions to pressure and setbacks, and seek an independent view of training habits.
+                  </p>
+                  {observations.flatMap((observation) => observation.flaggedMoments)
+                    .filter((moment) => ["composure", "workRate", "teamwork", "decisionMaking"].includes(moment.attribute))
+                    .slice(-3).map((moment, index) => (
+                      <p key={`${moment.phase}-${index}`} className="border-l-2 border-zinc-700 pl-3 text-xs leading-5 text-zinc-300">
+                        {moment.description}
+                      </p>
+                    ))}
+                </CardContent>
+              </Card>
+            </div>
             {/* Behavioral Traits */}
             {(player.playerTraitsRevealed?.length ?? 0) > 0 && (
               <div>

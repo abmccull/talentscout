@@ -451,6 +451,15 @@ function deriveAccountability(
   const latestReview = reviews.filter((review) => review.status === "complete").at(-1);
   const reviewScore = latestReview?.overallScore;
 
+  if (latestReport?.recommendedAction === "pass") {
+    return {
+      status: "closed",
+      latestReviewId: latestReview?.id,
+      summary: latestReview?.origin === "decision" && latestReview.findings?.length
+        ? latestReview.findings.slice(-2).join(" ")
+        : "Passed for now. The evidence stays on record; a fresh observation can reopen the judgment.",
+    };
+  }
   if (reviewScore !== undefined) {
     const status = reviewScore >= 70 ? "vindicated" : reviewScore < 50 ? "challenged" : "mixed";
     return {
@@ -623,7 +632,7 @@ export function ensureScoutingCaseForReport(
   const scoutingCase: ScoutingCase = {
     ...base,
     legacyUnlinked: false,
-    status: base.status === "placed" ? "placed" : "reported",
+    status: base.status === "placed" ? "placed" : report.recommendedAction === "pass" ? "closed" : "reported",
     briefId: report.briefId ?? base.briefId,
     activeReportId: report.id,
     hypothesisIds: [...new Set([...(base.hypothesisIds ?? []), ...reportHypothesisIds])],

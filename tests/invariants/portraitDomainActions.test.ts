@@ -13,6 +13,7 @@ vi.mock("@/stores/tutorialStore", () => ({
 
 import { createMatchActions } from "@/stores/actions/matchActions";
 import { createFinanceActions } from "@/stores/actions/financeActions";
+import { createDurableGameplaySetter } from "@/stores/actions/durableGameplayCommit";
 import { queueGameplayAutosave } from "@/stores/actions/persistGameplayAutosave";
 import { createVisualIdentity } from "@/engine/players/portraits/identity";
 
@@ -93,7 +94,7 @@ describe("live portrait ownership in domain actions", () => {
       office: { tier: "home", monthlyCost: 0, qualityBonus: 0, maxEmployees: 0 },
     } as unknown as FinancialRecord;
     const store = harness(state);
-    const actions = createFinanceActions(store.get, store.set);
+    const actions = createFinanceActions(store.get, createDurableGameplaySetter(store.get, store.set));
     actions.approveStaffWorkProduct(product.id);
 
     const live = store.get().gameState!;

@@ -135,7 +135,7 @@ test.describe("guided opening discovery hook", () => {
       const target = Array.from(document.querySelectorAll<HTMLElement>(
         '[data-tutorial-id="observation-advance-to-standout"]',
       )).find((element) => element.getBoundingClientRect().width > 0);
-      const mentor = document.querySelector<HTMLElement>('[aria-label="Mentor: Keep watching"]');
+      const mentor = document.querySelector<HTMLElement>('[aria-label="Mentor: Record a useful moment"]');
       const targetRect = target?.getBoundingClientRect();
       const mentorRect = mentor?.getBoundingClientRect();
       return {
@@ -156,7 +156,7 @@ test.describe("guided opening discovery hook", () => {
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('[data-tutorial-id="mobile-nav-calendar"]')).toHaveCount(0);
-    const watchingMentor = page.getByLabel("Mentor: Keep watching", { exact: true });
+    const watchingMentor = page.getByLabel("Mentor: Record a useful moment", { exact: true });
     await expect(watchingMentor).toBeVisible();
     await expect(watchingMentor).not.toHaveAttribute("aria-modal", "true");
     const mobileAxe = await new AxeBuilder({ page }).analyze();
@@ -178,7 +178,7 @@ test.describe("guided opening discovery hook", () => {
     await page.setViewportSize({ width: 1280, height: 720 });
 
     const evidence = page.locator('[data-tutorial-id="observation-evidence-feed"]');
-    await expect(evidence.getByText("Standout moment", { exact: true })).toBeVisible();
+    await expect(evidence.getByRole("heading", { name: "What you noticed" })).toBeVisible();
     const flagMoment = page.locator('[data-tutorial-id="observation-flag-moment"]:visible');
     await expect(flagMoment).toContainText("Flag moment");
     await page.waitForTimeout(150);
@@ -198,7 +198,6 @@ test.describe("guided opening discovery hook", () => {
       const state = (window as any).__GAME_STORE__.getState();
       return state.activeSession.flaggedMoments.filter((flagged: any) =>
         flagged.moment.playerId === state.gameState.openingCase.playerId
-        && flagged.moment.isStandout
         && flagged.reaction === "promising",
       ).length;
     })).toBe(1);
@@ -253,7 +252,7 @@ test.describe("guided opening discovery hook", () => {
     const openingDecision = page.getByTestId("opening-discovery");
     await expect(openingDecision).toBeVisible();
     await expect(page.getByText("Write the name down", { exact: true })).toBeVisible();
-    await expect(page.getByText(/One exceptional action is a lead, not proof/i)).toBeVisible();
+    await expect(page.getByText(/The watch is evidence, not a verdict/i)).toBeVisible();
     await expect(page.getByText("Your next move", { exact: true })).toBeVisible();
     await expect(page.getByText(/Your choice affects access, discretion, and trust\./i)).toBeVisible();
     await expect(page.getByRole("heading", { name: "The open question", exact: true })).toBeVisible();
@@ -534,7 +533,7 @@ test('assessment selection survives desktop and phone layouts through a real fir
   await expect(page.getByRole('button', { name: /^Remove focus from / }).first()).toBeVisible();
   const controls = page.getByTestId('mobile-observation-controls');
   await controls.getByRole('button', { name: 'Next phase', exact: true }).click();
-  await page.getByRole('button', { name: 'Flag standout moment', exact: true }).click();
+  await page.locator('[data-tutorial-id="observation-flag-moment"]:visible').first().click();
   await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').click();
   await page.getByRole('button', { name: /^Try to prove yourself wrong/ }).click();
   await controls.getByRole('button', { name: 'Next phase', exact: true }).click();

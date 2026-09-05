@@ -59,7 +59,7 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { getSeasonLength } from "@/engine/core/gameDate";
-import { buildYouthActiveCaseModel } from "./workspace/desk/youthDeskModel";
+import { buildYouthActiveCaseModel, buildYouthDeskDecisionIndex } from "./workspace/desk/youthDeskModel";
 import { buildYouthDeskStakes, shouldShowYouthDeskStakes } from "@/engine/youth/youthDeskStakes";
 import { DashboardSupplementalSections } from "./dashboard/DashboardSupplementalSections";
 import type { DashboardActionTarget } from "./dashboard/dashboardPriorityModel";
@@ -237,6 +237,7 @@ export function Dashboard() {
     : new Set<string>();
   const youthReportedCount = youthReportedIds.size;
   const observations = Object.values(gameState.observations);
+  const youthDecisionIndex = buildYouthDeskDecisionIndex(Object.values(gameState.reports), observations, scout.id);
   const observationCountByPlayer = new Map<string, number>();
   for (const observation of observations) {
     observationCountByPlayer.set(
@@ -253,7 +254,8 @@ export function Dashboard() {
             youth: y,
             observationCount: observationCountByPlayer.get(y.player.id) ?? 0,
             intelCount: gameState.contactIntel[y.player.id]?.length ?? 0,
-            reported: youthReportedIds.has(y.id),
+            reported: youthReportedIds.has(y.id) || youthDecisionIndex.has(y.player.id),
+            ...youthDecisionIndex.get(y.player.id),
             buzzLevel: y.buzzLevel,
             visibility: y.visibility,
             hasFirmRead:
@@ -331,10 +333,10 @@ export function Dashboard() {
   const needsPlannerBeforeAdvance = openDayCount > 0;
 
   const decisionReadyYouth = observedYouthEvidence
-    .filter((entry) => entry.hasFirmRead && !entry.reported && !entry.youth.placed)
+    .filter((entry) => entry.hasFirmRead && !entry.reported && !entry.passedForNow && !entry.youth.placed)
     .sort(sortYouthByEvidence);
   const evidenceQueue = observedYouthEvidence
-    .filter((entry) => !entry.reported && !entry.youth.placed)
+    .filter((entry) => ((!entry.reported && !entry.passedForNow) || entry.canReconsider) && !entry.youth.placed)
     .sort(sortYouthByEvidence);
   const nextProspect = decisionReadyYouth[0] ?? evidenceQueue[0];
   const placedYouthCount = Object.values(gameState.placementReports ?? {}).filter(
@@ -358,7 +360,15 @@ export function Dashboard() {
         label: "Write the report",
         kind: "report" as const,
       }
-    : scheduledSlots === 0
+    : nextProspect?.canReconsider
+      ? {
+          eyebrow: "New evidence",
+          title: `Reconsider ${nextProspect.youth.player.firstName} ${nextProspect.youth.player.lastName}`,
+          description: "Compare the fresh evidence with the reasons you passed before changing the call.",
+          label: "Review the judgment",
+          kind: "report" as const,
+        }
+      : scheduledSlots === 0
       ? {
           eyebrow: "Week not planned",
           title: "Build a week that can change a career",
@@ -389,8 +399,8 @@ export function Dashboard() {
       setScreen("calendar");
       return;
     }
-    if (youthDeskAction.kind === "report" && decisionReadyYouth[0]) {
-      selectPlayer(decisionReadyYouth[0].youth.player.id);
+    if (youthDeskAction.kind === "report" && nextProspect) {
+      selectPlayer(nextProspect.youth.player.id);
       setScreen("reportWriter");
       return;
     }

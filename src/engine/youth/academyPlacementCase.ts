@@ -365,7 +365,7 @@ export function scoreAcademyClubDecision(input: {
   const ageMatch = player.age <= brief.maxAge;
   const actionFit = brief.developmentPriority === "earlyReadiness"
     ? report.recommendedAction === "offerAcademyPlace"
-    : report.recommendedAction !== "monitor";
+    : report.recommendedAction !== "monitor" && report.recommendedAction !== "pass";
   let briefFit = clamp(
     (positionMatch ? 45 : 0)
     + (roleMatch ? 25 : 8)
@@ -586,7 +586,10 @@ export function scoreAcademyClubDecision(input: {
   ];
 
   let outcome: ClubDecisionOutcome;
-  if (input.mobilityAssessment?.status === "blocked") {
+  if (report.recommendedAction === "pass") {
+    outcome = "rejected";
+    reasons.unshift("The scout passed for now; this judgment does not authorize recruitment.");
+  } else if (input.mobilityAssessment?.status === "blocked") {
     outcome = "followUpRequested";
   } else if (report.recommendedAction === "monitor") {
     outcome = total >= 44 ? "followUpRequested" : "rejected";

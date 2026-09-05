@@ -1,3 +1,4 @@
+import { processScoutingDecisionReviews } from "@/engine/youth/decisionReviews";
 /**
  * Weekly cycle, calendar scheduling, match, day simulation, and season
  * transition actions extracted from gameStore.
@@ -922,6 +923,7 @@ export function createWeeklyActions(
 
     // Complete due one- and two-season reviews from canonical movement,
     // appearance/rating, and injury history. Hidden ability is never read.
+    stateWithScheduleApplied = processScoutingDecisionReviews(stateWithScheduleApplied);
     let recommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
     let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
@@ -930,7 +932,7 @@ export function createWeeklyActions(
       player: Player;
     }> = [];
     const dueRecommendationReviews = Object.values(recommendationReviews).filter((review) => {
-      if (review.status !== "scheduled") return false;
+      if (review.status !== "scheduled" || review.origin === "decision") return false;
       return stateWithScheduleApplied.currentSeason > review.dueSeason
         || (
           stateWithScheduleApplied.currentSeason === review.dueSeason

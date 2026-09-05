@@ -16,6 +16,7 @@ import { isBatchAdvanceInProgress } from "./weeklyQuickScoutActions";
 import type { WeeklyWorkerInput } from "./weeklyWorkerTypes";
 
 export type WeeklyAsyncActions = Pick<GameStoreState, "advanceWeekAsync">;
+let weeklyTransactionSequence = 0;
 
 /**
  * Coordinates the worker without granting it authority over the live store.
@@ -31,6 +32,29 @@ export function createWeeklyAsyncActions(
       const sourceState = get().gameState;
       const sourceSimulation = get().weekSimulation;
       if (!sourceState || !sourceSimulation || get().isAdvancingWeek) return;
+      const transactionId = ++weeklyTransactionSequence;
+      const ownsOperation = () => get().activeWeeklyTransactionId === transactionId;
+      const sourceIsCurrent = () => {
+        const current = get();
+        // Saving while a worker runs changes only delivery metadata. It must
+        // not abort football progress or overwrite a concurrent gameplay edit.
+        return current.gameState !== null
+          && current.weekSimulation === sourceSimulation
+          && isPortraitOnlyStateChange(
+            { ...sourceState, lastSaved: current.gameState.lastSaved },
+            current.gameState,
+          );
+      };
+      const rejectStaleResult = () => {
+        if (!ownsOperation()) return;
+        set({
+          isAdvancingWeek: false,
+          activeWeeklyTransactionId: null,
+          ...(get().weekSimulation === sourceSimulation ? {
+            weeklyTransactionError: "Your career changed while this week was simulating. Your decisions were preserved. Retry the week to continue.",
+          } : {}),
+        });
+      };
 
       if (!isBatchAdvanceInProgress()) {
         void flushGameplayAutosave(snapshotPersistedGameState(sourceState), set).catch((error) => {
@@ -54,15 +78,18 @@ export function createWeeklyAsyncActions(
 
       set({
         isAdvancingWeek: true,
+        activeWeeklyTransactionId: transactionId,
         weeklyTransactionError: null,
       });
 
       try {
         const execution = await runWeeklyWorkerTransaction(input);
+        if (!ownsOperation()) return;
         const current = get();
-        const sourceIsStillActive = isPortraitOnlyStateChange(sourceState, current.gameState)
-          && current.weekSimulation === sourceSimulation;
-        if (!sourceIsStillActive) return;
+        if (!sourceIsCurrent()) {
+          rejectStaleResult();
+          return;
+        }
 
         const commit = execution.materializedCommit
           ?? materializeWeeklyWorkerCommit(sourceState, execution.commit);
@@ -74,6 +101,7 @@ export function createWeeklyAsyncActions(
           ...commit.patch,
           ...(Object.prototype.hasOwnProperty.call(commit.patch, "gameState") ? { gameState: committedState } : {}),
           isAdvancingWeek: false,
+          activeWeeklyTransactionId: null,
           lastWeeklyExecutionRoute: execution.route,
           lastWeeklyWorkerTelemetry: execution.telemetry,
           weeklyTransactionError: null,
@@ -84,24 +112,23 @@ export function createWeeklyAsyncActions(
           queueWeeklyAutosave(committedState, set);
         }
       } catch (error) {
-        const current = get();
-        const sourceIsStillActive = isPortraitOnlyStateChange(sourceState, current.gameState)
-          && current.weekSimulation === sourceSimulation;
-        if (!sourceIsStillActive) return;
+        if (!ownsOperation()) return;
+        if (!sourceIsCurrent()) {
+          rejectStaleResult();
+          return;
+        }
         const message = error instanceof Error ? error.message : String(error);
         set({
           isAdvancingWeek: false,
+          activeWeeklyTransactionId: null,
           weeklyTransactionError: message,
         });
         console.error("Weekly simulation failed:", error);
       } finally {
-        const current = get();
-        if (
-          current.isAdvancingWeek
-          && isPortraitOnlyStateChange(sourceState, current.gameState)
-          && current.weekSimulation === sourceSimulation
-        ) {
-          set({ isAdvancingWeek: false });
+        // Lock ownership is independent of whether the source snapshot is valid.
+        // An obsolete invocation must never release a newer invocation's lock.
+        if (ownsOperation()) {
+          set({ isAdvancingWeek: false, activeWeeklyTransactionId: null });
         }
       }
     },

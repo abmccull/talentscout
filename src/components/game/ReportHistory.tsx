@@ -343,7 +343,7 @@ function ReportDetailModal({
                 <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Audience</dt><dd className="mt-1 font-semibold capitalize text-white">{report.intendedAudience?.replace(/([A-Z])/g, " $1")}</dd></div>
                 <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Presentation</dt><dd className="mt-1 font-semibold capitalize text-white">{report.presentationApproach?.replace(/([A-Z])/g, " $1") ?? "Legacy neutral"}</dd></div>
                 <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Projected role</dt><dd className="mt-1 font-semibold capitalize text-white">{report.projectedRole?.replace(/([A-Z])/g, " $1")}</dd></div>
-                <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Next step</dt><dd className="mt-1 font-semibold capitalize text-white">{report.recommendedAction?.replace(/([A-Z])/g, " $1")}</dd></div>
+                <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Next step</dt><dd className="mt-1 font-semibold capitalize text-white">{report.recommendedAction === "pass" ? "Pass for now" : report.recommendedAction?.replace(/([A-Z])/g, " $1")}</dd></div>
                 <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Price context</dt><dd className="mt-1 font-semibold text-white">£{report.estimatedWeeklyWage?.toLocaleString() ?? "—"}/wk</dd></div>
               </dl>
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -408,7 +408,11 @@ function ReportDetailModal({
                     </div>
                     {review.status === "complete" ? (
                       <>
-                        <p className="mt-3 text-2xl font-bold text-violet-200">{review.overallScore ?? "—"}<span className="text-sm text-zinc-500">/100</span></p>
+                        {review.origin === "decision" ? (
+                          <p className="mt-3 text-sm font-semibold text-violet-200">{review.decisionOutcome === "progressed" ? "A career taking shape" : review.decisionOutcome === "setback" ? "A pathway setback" : review.decisionOutcome === "mixed" ? "Progress and setbacks" : "Outcome still unresolved"}</p>
+                        ) : (
+                          <p className="mt-3 text-2xl font-bold text-violet-200">{review.overallScore ?? "—"}<span className="text-sm text-zinc-500">/100</span></p>
+                        )}
                         <ul className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-300">{(review.findings ?? []).slice(0, 4).map((finding) => <li key={finding}>{finding}</li>)}</ul>
                       </>
                     ) : (
@@ -455,6 +459,12 @@ function ReportDetailModal({
                 </ul>
               )}
             </div>
+          )}
+
+          {report.recommendedAction === "pass" && (
+            <p className="rounded-lg border border-zinc-600/50 bg-zinc-900/50 p-3 text-sm leading-6 text-zinc-300">
+              Passed for now. This private judgment preserves your evidence without pursuing recruitment. Observe again before changing the call.
+            </p>
           )}
 
           {/* Summary */}
@@ -1009,7 +1019,7 @@ export function ReportHistory() {
         return;
       case "listReport": {
         const report = currentGameState.reports[action.reportId];
-        if (report) setListingReport(report);
+        if (report && report.recommendedAction !== "pass") setListingReport(report);
         return;
       }
       case "openCareer":
@@ -1214,7 +1224,7 @@ export function ReportHistory() {
               Sold
             </Badge>
           )}
-          {listing == null && (
+          {listing == null && report.recommendedAction !== "pass" && (
             <Button
               size="sm"
               variant="ghost"
@@ -1619,7 +1629,7 @@ export function ReportHistory() {
                                       Sold
                                     </Badge>
                                   )}
-                                  {listing == null && (
+                                  {listing == null && report.recommendedAction !== "pass" && (
                                     <Button
                                       size="sm"
                                       variant="ghost"

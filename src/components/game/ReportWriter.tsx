@@ -486,7 +486,9 @@ export function ReportWriter() {
     : isYouthCase
       ? formalAssessmentResult?.assessment?.generatedSummary ?? ""
       : summary;
-  const effectiveConviction = initialAssessmentMode
+  const effectiveConviction = (initialAssessmentMode ? initialAssessmentInput?.recommendation : recommendedAction) === "pass"
+    ? "note"
+    : initialAssessmentMode
     ? initialAssessmentConviction(initialAssessmentInput?.confidence)
     : conviction;
   const totalReportQualityBonus =
@@ -665,7 +667,7 @@ export function ReportWriter() {
     );
   }
 
-  if (isYouthCase && initialAssessmentCards.length === 0) {
+  if (isYouthCase && (initialAssessmentCards.length === 0 || observations.length === 0)) {
     return (
       <GameLayout>
         <div className="relative flex min-h-[70vh] items-center justify-center p-4 sm:p-6">
@@ -675,7 +677,7 @@ export function ReportWriter() {
               <p className="mt-4 text-eyebrow font-semibold uppercase tracking-[0.18em] text-amber-300">Evidence needed</p>
               <h1 className="mt-2 text-2xl font-bold text-white">Return with one question to answer</h1>
               <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-zinc-300">
-                Your existing view of {player.firstName} {player.lastName} did not leave a classified moment you can defend in a report. Plan a focused observation, choose what you are testing, and save the cue that changes your read.
+                Your existing view of {player.firstName} {player.lastName} did not leave first-hand evidence you can use in a report. Plan a focused observation, choose what you are testing, and save a cue to assess.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <Button variant="outline" className="min-h-11" onClick={() => setScreen("playerProfile")}>
@@ -1078,8 +1080,9 @@ export function ReportWriter() {
 
                 <fieldset>
                   <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Recommended next step</legend>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {([
+                      ["pass", "Pass for now", "Keep the judgment on record without pursuing recruitment. Reconsider after new evidence."],
                       ["monitor", "Monitor", "Preserve optionality and seek more evidence."],
                       ["inviteForTrial", "Invite for trial", "Ask the club to test the weakest part of the case."],
                       ["offerAcademyPlace", "Offer academy place", "Stand behind a signing recommendation now."],
@@ -1566,7 +1569,7 @@ export function ReportWriter() {
               displayQualityScore={displayQualityScore}
               craftReadLabel={craftRead.label}
               activeBriefClubName={activeBriefClub?.name}
-              recommendedActionLabel={attrLabel(recommendedAction)}
+              recommendedActionLabel={recommendedAction === "pass" ? "Pass for now" : attrLabel(recommendedAction)}
               completedJudgmentCount={completedJudgmentCount}
               riskSignalCount={riskSignalCount}
               selectedNoMaterialSignal={selectedRiskAssessments.some((risk) => risk.id === "noMaterialSignal")}

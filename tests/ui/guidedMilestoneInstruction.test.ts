@@ -3,22 +3,22 @@ import { describe, expect, it } from "vitest";
 import { getGuidedMilestoneInstruction } from "@/components/game/tutorial/guidedMilestoneInstruction";
 
 describe("guided milestone blocker copy", () => {
-  it("names the phase advance required before the standout control exists", () => {
+  it("invites an honest flag from the first phase", () => {
     expect(getGuidedMilestoneInstruction({
       milestoneId: "flaggedBreakthrough",
       currentScreen: "observation",
       observationState: "active",
       observationPhaseIndex: 0,
-    })).toBe("Select Next phase to keep watching for the key moment.");
+    })).toBe("Flag a moment from your lead, then choose the reaction the evidence deserves.");
   });
 
-  it("names the exact standout classification action once it is available", () => {
+  it("keeps classification neutral in later phases", () => {
     expect(getGuidedMilestoneInstruction({
       milestoneId: "flaggedBreakthrough",
       currentScreen: "observation",
       observationState: "active",
       observationPhaseIndex: 1,
-    })).toBe("Select Flag moment on the Standout card, then choose Promising.");
+    })).toBe("Flag a moment from your lead, then choose the reaction the evidence deserves.");
   });
 
   it("names the exact reflection action when the session is blocked there", () => {
@@ -36,7 +36,7 @@ describe("guided milestone blocker copy", () => {
       observationState: "active",
       observationIsHalfTime: true,
       observationHalftimeApproach: null,
-    })).toBe("Choose how to watch the second half: confirm, challenge, or broaden the first read.");
+    })).toBe("Choose how to watch the second half: confirm, challenge, or broaden. Focus resets at halftime, so reapply a lens before the next phase.");
 
     expect(getGuidedMilestoneInstruction({
       milestoneId: "completedMatch",
@@ -44,7 +44,7 @@ describe("guided milestone blocker copy", () => {
       observationState: "active",
       observationIsHalfTime: true,
       observationHalftimeApproach: "challenge",
-    })).toBe("Select Next phase to apply your second-half plan.");
+    })).toBe("Focus resets at halftime. Reapply a lens to the player you want to watch, then select Next phase.");
   });
 
   it("names the discovery call between Watch complete and the first report", () => {

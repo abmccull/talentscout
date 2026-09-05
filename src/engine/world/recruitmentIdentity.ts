@@ -919,7 +919,7 @@ export function migrateHistoricalRecruitmentSnapshots(state: GameState): void {
       review.recruitmentSnapshot = decision.recruitmentSnapshot;
       continue;
     }
-    const club = state.clubs[review.clubId];
+    const club = review.clubId ? state.clubs[review.clubId] : undefined;
     if (!club) continue;
     const sourceReport = state.reports?.[review.reportId];
     const sourceCase = state.scoutingCases?.[review.caseId];

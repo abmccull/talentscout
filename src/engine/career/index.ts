@@ -51,7 +51,6 @@ export {
 export {
   recordDiscovery,
   addSeasonSnapshot,
-  calculatePredictionAccuracy,
   processSeasonDiscoveries,
   getWonderkidDiscoveries,
   getDiscoveryStats,

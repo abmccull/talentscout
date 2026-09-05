@@ -5,6 +5,7 @@
 
 import { withVisualIdentity } from "./portraits/identity";
 import type { RNG } from "@/engine/rng";
+import { getSeasonBirthYear } from "@/engine/core/seasonDate";
 import type {
   Player,
   Position,
@@ -437,7 +438,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     secondaryPositions.push(rng.pick(opts));
   }
 
-  const birthYear = 2024 - age;
+  const birthYear = getSeasonBirthYear(age, currentSeason);
   const month = rng.nextInt(1, 12);
   const maxDay = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 28;
   const day = rng.nextInt(1, maxDay);

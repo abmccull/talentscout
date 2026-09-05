@@ -719,7 +719,6 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     );
     milestones.flaggedBreakthrough = started && session.flaggedMoments.some((flag) =>
       flag.phaseIndex <= session.currentPhaseIndex
-      && flag.moment.isStandout
       && flag.moment.playerId === opening.playerId,
     );
     // Reflection has not yet committed the completed match or discovery choice.

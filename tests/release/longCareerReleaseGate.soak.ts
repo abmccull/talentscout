@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { createCareerBalanceDiagnostics } from "./careerBalanceDiagnostics";
+import { collectGameSystemsHealth, GAME_SYSTEMS_CHECKPOINTS, type GameSystemsHealthSnapshot } from "./gameSystemsHealth";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -66,6 +67,11 @@ vi.mock("@/lib/db", () => ({
 const RELEASE_SEED_COUNT = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
 const RELEASE_SEED_START = Number.parseInt(process.env.SOAK_SEED_START ?? "1", 10);
 const RELEASE_SEASON_COUNT = Number.parseInt(process.env.SOAK_SEASONS ?? "30", 10);
+const GAME_SYSTEMS_REQUESTED_CHECKPOINTS = (process.env.SOAK_GAME_SYSTEMS_CHECKPOINTS
+  ?? GAME_SYSTEMS_CHECKPOINTS.join(",")).split(",").map(Number);
+if (GAME_SYSTEMS_REQUESTED_CHECKPOINTS.some((season) => !Number.isInteger(season) || season < 1)) {
+  throw new Error("SOAK_GAME_SYSTEMS_CHECKPOINTS must contain positive integer seasons");
+}
 const OUTPUT_PATH = resolve(
   process.env.SOAK_OUTPUT
     ?? "artifacts/release/generated/long-career-release-summary.json",
@@ -186,6 +192,7 @@ interface RunEvidence {
     mean: number;
   };
   worldHealth: AutonomousWorldHealthSnapshot[];
+  gameSystemsHealth: GameSystemsHealthSnapshot[];
   careerTelemetry: AutonomousCareerTelemetry;
   digest: string;
 }
@@ -768,6 +775,25 @@ async function simulateCareer(
     season: initial.currentSeason, ...portraitRetentionDiagnostic(initial),
   }];
   const worldHealth: RunEvidence["worldHealth"] = [];
+  const gameSystemsHealth: GameSystemsHealthSnapshot[] = [collectGameSystemsHealth(initial, 0)];
+  const captureGameSystemsHealth = async (state: GameState) => {
+    const completedSeasons = state.currentSeason - initial.currentSeason;
+    const snapshot = collectGameSystemsHealth(state, completedSeasons);
+    if (GAME_SYSTEMS_REQUESTED_CHECKPOINTS.includes(completedSeasons)
+      || completedSeasons === seasonCount || snapshot.invariants.violationCount > 0) {
+      gameSystemsHealth.push(snapshot);
+      const directory = process.env.SOAK_GAME_SYSTEMS_DIAGNOSTICS_DIRECTORY;
+      if (directory) {
+        await mkdir(directory, { recursive: true });
+        await writeFile(resolve(directory, `${seed.replace(/[^a-zA-Z0-9_-]/g, "_")}-${chooserProfile}.json`),
+          JSON.stringify({ schemaVersion: 1, seed, chooserProfile, canonicalTicks, gameSystemsHealth }, null, 2), "utf8");
+      }
+    }
+    // Record failures before asserting, so a failed canonical run retains its
+    // football distributions. Balance shapes themselves never become gates.
+    if (!DIAGNOSTIC_ONLY) expect(snapshot.invariants.violationCount,
+      `football state invariants: ${JSON.stringify(snapshot.invariants)}`).toBe(0);
+  };
   const careerTelemetry = createAutonomousCareerTelemetry(chooserProfile);
   observeBalance?.(initial, careerTelemetry, 0);
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
@@ -852,6 +878,7 @@ async function simulateCareer(
       stabilizeAutonomousCareerState(careerTelemetry);
       const stabilized = useGameStore.getState().gameState;
       if (!stabilized) throw new Error(`Seed ${seed} lost stabilized state at season boundary`);
+      await captureGameSystemsHealth(stabilized);
       const footprint = assertReleaseInvariants(stabilized, initialBytes);
       const portraits = portraitRetentionDiagnostic(stabilized);
       expect(portraits.violations, `seed ${seed} has invalid face ownership`).toEqual([]);
@@ -1016,6 +1043,7 @@ async function simulateCareer(
       mean: round(weeklyLatency.reduce((sum, value) => sum + value, 0) / weeklyLatency.length),
     },
     worldHealth,
+    gameSystemsHealth,
     careerTelemetry,
     digest: finalDigest,
   };
@@ -1092,6 +1120,7 @@ describe("full canonical-week release soak", () => {
         seedCount: RELEASE_SEED_COUNT,
         seasonCount: RELEASE_SEASON_COUNT,
         chooserProfilesExercised: ["commercial"],
+        gameSystemsCheckpoints: GAME_SYSTEMS_REQUESTED_CHECKPOINTS,
         deterministicReplaySeed: seeds[0],
         maxSerializedBytes: MAX_SERIALIZED_BYTES,
         maxGrowthMultiplier: MAX_GROWTH_MULTIPLIER,

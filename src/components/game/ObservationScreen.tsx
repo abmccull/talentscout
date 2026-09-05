@@ -148,13 +148,13 @@ const MomentCard = memo(function MomentCard({
         {canFlag && !alreadyFlagged && (
           <button
             type="button" onClick={() => setShowReactions((open) => !open)}
-            data-tutorial-id={moment.isStandout ? "observation-flag-moment" : undefined}
+            data-tutorial-id="observation-flag-moment"
             className="mt-3 flex min-h-11 items-center gap-2 rounded-sm px-2 text-sm font-medium text-[var(--signal-moment)] hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-moment)]"
             aria-label={moment.isStandout ? "Flag standout moment" : "Flag this moment"} aria-expanded={showReactions}
           ><Flag size={14} aria-hidden="true" />Flag moment</button>
         )}
         {showReactions && !alreadyFlagged && (
-          <div className="mt-2 grid grid-cols-2 gap-1 border-t border-white/10 pt-2" role="group" aria-label={`Your first read of ${playerName}`}>
+          <div className="mt-2 grid grid-cols-2 gap-1 border-t border-white/10 pt-2" role="group" data-tutorial-id="observation-reactions" aria-label={`Your first read of ${playerName}`}>
             {(Object.entries(REACTION_CONFIG) as [SessionFlaggedMoment["reaction"], typeof REACTION_CONFIG[keyof typeof REACTION_CONFIG]][]).map(([reaction, config]) => {
               const Icon = config.icon;
               return <button key={reaction} type="button" onClick={() => { onFlag(moment.id, reaction); setShowReactions(false); }}
@@ -180,7 +180,7 @@ interface PhaseContentProps {
   session: ObservationSession;
   flaggedMomentIds: Set<string>;
   hasPhaseFlag: boolean;
-  requiresStandoutFlag: boolean;
+  requiredLeadId?: string;
   onFlagMoment: (momentId: string, reaction: SessionFlaggedMoment["reaction"]) => void;
   onDialogueChoice: (nodeId: string, optionId: string) => void;
   onDataPointSelect: (pointId: string) => void;
@@ -192,7 +192,7 @@ const PhaseContent = memo(function PhaseContent({
   session,
   flaggedMomentIds,
   hasPhaseFlag,
-  requiresStandoutFlag,
+  requiredLeadId,
   onFlagMoment,
   onDialogueChoice,
   onDataPointSelect,
@@ -218,7 +218,7 @@ const PhaseContent = memo(function PhaseContent({
                 cue={cue}
                 isFocused={sessionPlayer?.isFocused ?? false}
                 playerName={sessionPlayer?.name ?? moment.playerId}
-                canFlag={requiresStandoutFlag ? moment.isStandout : !hasPhaseFlag}
+                canFlag={requiredLeadId ? moment.playerId === requiredLeadId : !hasPhaseFlag}
                 alreadyFlagged={flaggedMomentIds.has(moment.id)}
                 onFlag={onFlagMoment}
               />
@@ -981,11 +981,10 @@ export function ObservationScreen() {
     ),
     [activeSession?.flaggedMoments],
   );
-  const openingBreakthroughFlagged = Boolean(
+  const openingEvidenceFlagged = Boolean(
     gameState?.openingCase
     && activeSession?.flaggedMoments.some(
-      (flagged) => flagged.moment.playerId === gameState.openingCase?.playerId
-        && flagged.moment.isStandout,
+      (flagged) => flagged.moment.playerId === gameState.openingCase?.playerId,
     ),
   );
   const openingPhaseRequiresFlag = Boolean(
@@ -993,7 +992,7 @@ export function ObservationScreen() {
     && activeSession?.mode === "fullObservation"
     && gameState?.veteranPrologue?.activityInstanceId !== activeSession?.activityInstanceId
     && activeSession?.currentPhaseIndex === 1
-    && !openingBreakthroughFlagged,
+    && !openingEvidenceFlagged,
   );
 
   const hasPhaseFlag = (activeSession?.flaggedMoments ?? []).some(
@@ -1258,7 +1257,7 @@ export function ObservationScreen() {
                       <span className="mt-1 text-sm tabular-nums text-zinc-400">{currentPhase.minute}′</span>
                     </div>
                     <p className="mt-2 hidden text-xs leading-5 text-zinc-400 sm:block">A first impression. Test it before you make a claim.</p>
-                    <PhaseContent phase={currentPhase} session={activeSession} flaggedMomentIds={flaggedMomentIds} hasPhaseFlag={hasPhaseFlag} requiresStandoutFlag={openingPhaseRequiresFlag} onFlagMoment={handleFlagMoment} onDialogueChoice={handleDialogueChoice} onDataPointSelect={handleDataPointSelect} onStrategicChoice={handleStrategicChoice} />
+                    <PhaseContent phase={currentPhase} session={activeSession} flaggedMomentIds={flaggedMomentIds} hasPhaseFlag={hasPhaseFlag} requiredLeadId={openingPhaseRequiresFlag ? gameState?.openingCase?.playerId : undefined} onFlagMoment={handleFlagMoment} onDialogueChoice={handleDialogueChoice} onDataPointSelect={handleDataPointSelect} onStrategicChoice={handleStrategicChoice} />
                   </section>
                   {activeSession.flaggedMoments.length > 0 && (
                     <details className="border-t border-white/10 px-4 py-4 sm:px-6">
@@ -1284,7 +1283,7 @@ export function ObservationScreen() {
                       {!isOpeningWatch && <Button variant="ghost" className="min-h-11 shrink-0 text-zinc-300" onClick={handleEndSession}>End early</Button>}
                       {insightActions.length > 0 && <Button variant="outline" className="min-h-11 shrink-0 gap-2 text-zinc-300" onClick={openInsightOverlay} aria-label="Use Insight action"><Zap size={14} aria-hidden="true" /><span className="hidden min-[430px]:inline">Insight</span><span className="tabular-nums">{insightState.points}</span></Button>}
                       <Button className="min-h-11 min-w-0 flex-1 gap-2 sm:min-w-56 sm:flex-none" onClick={handleAdvancePhase} disabled={!isLastPhase && (openingPhaseRequiresFlag || requiresHalftimeChoice)} data-tutorial-id={isOpeningWatch && activeSession.currentPhaseIndex === 0 ? "observation-advance-to-standout" : undefined}>
-                        {isLastPhase ? "Reflect on the watch" : openingPhaseRequiresFlag ? "Flag the standout moment" : requiresHalftimeChoice ? "Choose how to watch" : "Next phase"}<ChevronRight size={16} className="shrink-0" aria-hidden="true" />
+                        {isLastPhase ? "Reflect on the watch" : openingPhaseRequiresFlag ? "Record a moment before moving on" : requiresHalftimeChoice ? "Choose how to watch" : "Next phase"}<ChevronRight size={16} className="shrink-0" aria-hidden="true" />
                       </Button>
                     </div>
                   </div>
@@ -1295,7 +1294,7 @@ export function ObservationScreen() {
                 <div className="flex min-w-0 flex-1 flex-col lg:overflow-y-auto">
                   <div className="border-b border-white/10 px-4 py-4 sm:px-6"><p className="text-sm leading-6 text-zinc-300">{currentPhase.description || "Observing…"}</p></div>
                   <div className="px-4 py-5 sm:px-6">
-                    <PhaseContent phase={currentPhase} session={activeSession} flaggedMomentIds={flaggedMomentIds} hasPhaseFlag={hasPhaseFlag} requiresStandoutFlag={openingPhaseRequiresFlag} onFlagMoment={handleFlagMoment} onDialogueChoice={handleDialogueChoice} onDataPointSelect={handleDataPointSelect} onStrategicChoice={handleStrategicChoice} />
+                    <PhaseContent phase={currentPhase} session={activeSession} flaggedMomentIds={flaggedMomentIds} hasPhaseFlag={hasPhaseFlag} requiredLeadId={openingPhaseRequiresFlag ? gameState?.openingCase?.playerId : undefined} onFlagMoment={handleFlagMoment} onDialogueChoice={handleDialogueChoice} onDataPointSelect={handleDataPointSelect} onStrategicChoice={handleStrategicChoice} />
                   </div>
                   <details className="border-t border-white/10 px-4 py-4 lg:hidden"><summary className="min-h-11 cursor-pointer text-sm font-medium text-zinc-300">Session context</summary>{mode === "investigation" ? <InvestigationSidebar session={activeSession} /> : <MinimalInfoSidebar session={activeSession} />}</details>
                 </div>

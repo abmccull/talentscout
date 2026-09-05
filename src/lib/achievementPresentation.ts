@@ -1,10 +1,10 @@
 import type { AchievementDef } from "./achievements";
 
 const DISCOVERY_MILESTONE_NAMES: Record<string, string> = {
-  "wonderkid-found": "A Name to Follow",
-  "discoveries-5": "A Growing Notebook",
-  "discoveries-15": "A Broader Record",
-  "generational-talent": "An Unexpected Lead",
+  "wonderkid-found": "A Judgment Rewarded",
+  "discoveries-5": "A Growing Track Record",
+  "discoveries-15": "An Established Eye",
+  "generational-talent": "Career Maker",
 };
 
 /** Celebrate earned milestones without presenting hidden potential as scout knowledge. */
@@ -12,9 +12,9 @@ export function achievementPresentation(achievement: AchievementDef) {
   const name = DISCOVERY_MILESTONE_NAMES[achievement.id];
   return name ? {
     name,
-    description: "A discovery milestone is recorded. Keep testing your assessments as these careers unfold.",
-    hint: "Keep scouting young players and revisiting your early judgments.",
-    showProgress: false,
+    description: achievement.description,
+    hint: achievement.hint,
+    showProgress: true,
   } : {
     name: achievement.name, description: achievement.description,
     hint: achievement.hint, showProgress: true,

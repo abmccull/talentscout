@@ -60,6 +60,12 @@ const RECOMMENDATION_OPTIONS: Array<{
   tone: string;
 }> = [
   {
+    value: "pass",
+    label: "Pass for now",
+    description: "Keep this judgment on record and spend your next look elsewhere. New evidence can change your mind.",
+    tone: "border-zinc-400/30 bg-zinc-400/[0.06] text-zinc-100",
+  },
+  {
     value: "monitor",
     label: "Keep private",
     description: "Retain the name and set up another look before escalating the case.",
@@ -500,7 +506,7 @@ export function InitialAssessmentBuilder({
     <div className="space-y-5">
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold text-[color:var(--foreground)]">
-          Next test
+          {draft.recommendation === "pass" ? "Evidence that could change this pass" : "Next test"}
         </legend>
         {selectedUnknown ? (
           <div className="space-y-2">

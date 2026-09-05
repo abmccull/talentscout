@@ -716,7 +716,7 @@ export function processMarketplaceBids(
 
   for (const listing of activeListings) {
     const report = reports[listing.reportId];
-    if (!report) continue;
+    if (!report || report.recommendedAction === "pass") continue;
     if (isGameDateAtOrAfter(
       { week, season },
       { week: listing.biddingEndsWeek, season: listing.biddingEndsSeason },

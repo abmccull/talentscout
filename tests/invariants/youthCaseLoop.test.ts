@@ -79,6 +79,53 @@ function inbox(partial: Partial<InboxMessage>): InboxMessage {
 }
 
 describe("youth case loop", () => {
+  it("keeps a private pass on the case list without reviving its earlier next-test prompt", () => {
+    const pass = {
+      id: "pass-p1", playerId: "p-1", scoutId: "scout-1", submittedWeek: 3, submittedSeason: 1,
+      recommendedAction: "pass", summary: "The first look did not justify another allocation of attention.",
+      evidenceObservationIds: ["obs-p-1"],
+      evidenceAssessment: { recommendation: "pass", unknowns: [{ statement: "Pressure response remains uncertain." }], nextTest: { label: "Book another look" } },
+    };
+    const state = {
+      scout: scout(), unsignedYouth: { "y-1": youth("y-1", "p-1") },
+      observations: { old: observation("p-1") }, reports: { pass },
+      reflectionJournal: {}, rivalActivities: [], currentWeek: 3, currentSeason: 1,
+      placementReports: {}, alumniRecords: [], discoveryRecords: [],
+    } as unknown as Parameters<typeof listYouthCases>[0];
+    const item = listYouthCases(state)[0];
+    expect(item.playerId).toBe("p-1");
+    expect(item.questionLabel).toBe("Passed for now");
+    expect(item.openQuestion).toContain(pass.summary);
+    expect(item.nextTest).toBe("No next look planned; spend attention elsewhere.");
+    const seasonReview = deriveYouthSeasonCaseReview({ ...state, players: {}, finances: undefined }, 1);
+    expect(seasonReview.caseLines[0].line).toContain("Passed for now.");
+    expect(seasonReview.caseLines[0].line).toContain(pass.summary);
+    expect(state.reports.pass).toBe(pass);
+    // Reopening the journal later is not new first-hand evidence.
+    expect(buildYouthCaseListItem(youth("y-1", "p-1"), { ...state, currentWeek: 5 }).nextTest).toBe(item.nextTest);
+    const fresh = { ...observation("p-1"), id: "new-same-week-evidence" };
+    const changed = buildYouthCaseListItem(youth("y-1", "p-1"), { ...state, observations: { ...state.observations, fresh } });
+    expect(changed.questionLabel).toBe("Reconsideration available");
+    expect(changed.nextTest).toBe("Optional: reconsider this pass against the new first-hand evidence.");
+    expect(changed.openQuestion).toContain(pass.summary);
+    const otherScout = { ...fresh, scoutId: "scout-2" };
+    expect(buildYouthCaseListItem(youth("y-1", "p-1"), { ...state, observations: { ...state.observations, otherScout } }).nextTest).toBe(item.nextTest);
+  });
+
+  it("honors a latest pass without structured assessment and restores normal prompts after a fresh-evidence revision", () => {
+    const pass = { id: "pass", playerId: "p-1", scoutId: "scout-1", submittedWeek: 3, submittedSeason: 1,
+      recommendedAction: "pass", revision: 1, evidenceObservationIds: ["obs-p-1"] };
+    const state = { observations: { old: observation("p-1") }, reflectionJournal: {}, rivalActivities: [], currentWeek: 3, currentSeason: 1,
+      reports: { pass } } as unknown as Parameters<typeof buildYouthCaseListItem>[1];
+    expect(buildYouthCaseListItem(youth("y-1", "p-1"), state).questionLabel).toBe("Passed for now");
+    const revision = { ...pass, id: "reconsidered", revision: 2, recommendedAction: "monitor",
+      evidenceAssessment: { unknowns: [{ statement: "Does the improvement persist?" }], nextTest: { label: "Watch against stronger opponents" } } };
+    const revisedState = { ...state, reports: { ...state.reports, revision } } as unknown as Parameters<typeof buildYouthCaseListItem>[1];
+    const item = buildYouthCaseListItem(youth("y-1", "p-1"), revisedState);
+    expect(item.questionLabel).toBe("Still to test");
+    expect(item.nextTest).toBe("Watch against stronger opponents");
+  });
+
   it("uses the person's latest saved unknown and next test rather than another case or hidden ability", () => {
     const state = {
       observations: { o1: observation("p-1") }, reflectionJournal: {}, rivalActivities: [], currentWeek: 4, currentSeason: 2,

@@ -90,7 +90,7 @@ describe("youth day-to-day guided loop", () => {
       currentScreen: "observation",
       observationPhaseIndex: 1,
       isYouthDiscoveryHook: true,
-    })).toBe("Select Flag moment on the Standout card, then choose Promising.");
+    })).toBe("Flag a moment from your lead, then choose the reaction the evidence deserves.");
     expect(getGuidedMilestoneInstruction({
       milestoneId: "completedMatch",
       currentScreen: "observation",

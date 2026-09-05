@@ -137,6 +137,8 @@ export function selectLatestReportsByCase(
 ): ScoutReport[] {
   const latest = new Map<string, ScoutReport>();
   for (const report of reports) {
+    // A private pass earns no credit and cannot erase an earlier public stake.
+    if (report.recommendedAction === "pass") continue;
     const key = getReportCaseKey(report);
     const current = latest.get(key);
     if (!current || compareReportDate(report, current) > 0) latest.set(key, report);
@@ -157,6 +159,7 @@ export function selectLatestReportsByCaseOpenedInRange(
   const allReports = [...reports];
   const openingByCase = new Map<string, ScoutReport>();
   for (const report of allReports) {
+    if (report.recommendedAction === "pass") continue;
     const key = getReportCaseKey(report);
     const current = openingByCase.get(key);
     if (!current || compareReportDate(report, current) < 0) {
@@ -213,7 +216,7 @@ export function groupReportRevisionsByCase(
  * cases: a transfer is an outcome, not a prerequisite for accountability.
  */
 export function isReportOutcomeValidatable(report: ScoutReport): boolean {
-  return report.attributeAssessments.length > 0;
+  return report.recommendedAction !== "pass" && report.attributeAssessments.length > 0;
 }
 
 /**
@@ -226,7 +229,9 @@ export function selectMatureReportCasesForValidation(
   completedSeason: number,
   scoutId?: string,
 ): ReportRevisionCase[] {
-  return groupReportRevisionsByCase(reports).filter((reportCase) => {
+  return groupReportRevisionsByCase(
+    [...reports].filter((report) => report.recommendedAction !== "pass"),
+  ).filter((reportCase) => {
     const report = reportCase.latestReport;
     return report.postTransferRating === undefined
       && (scoutId === undefined || report.scoutId === scoutId)

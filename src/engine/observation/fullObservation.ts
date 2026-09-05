@@ -13,7 +13,7 @@
 import type { RNG } from "@/engine/rng";
 import type { Player } from "@/engine/core/types";
 import type { ObservationSession, SessionPhase } from "@/engine/observation/types";
-import { generateMoments } from "@/engine/observation/moments";
+import { generateMoments, sampleSessionPerformance } from "@/engine/observation/moments";
 import {
   createVenueAtmosphere,
   generateAtmosphereEvent,
@@ -469,6 +469,7 @@ export function populateFullObservationPhases(
     ...player,
     naturalRole: player.naturalRole ?? playerProfiles?.[player.playerId]?.naturalRole,
   }));
+  const performanceOffsets = sampleSessionPerformance(rng, contextualPlayers, playerProfiles);
 
   const populatedPhases: SessionPhase[] = session.phases.map((phase) => {
     // 1. Generate player moments for this phase.
@@ -482,6 +483,7 @@ export function populateFullObservationPhases(
       playerProfiles,
       session.situation,
       session.opponentContext,
+      performanceOffsets,
     );
 
     // 2. Generate a narrative description for this phase.
@@ -524,6 +526,7 @@ export function populateFullObservationPhases(
     ...session,
     phases: populatedPhases,
     players: contextualPlayers,
+    performanceOffsets,
     venueAtmosphere: atmosphere,
     situation,
     questionOptions: targetPlayer

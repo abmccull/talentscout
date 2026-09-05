@@ -4,7 +4,6 @@ import type {
   GameState,
   InboxMessage,
   Player,
-  PlayerAttribute,
   Scout,
   UnsignedYouth,
   YouthVenueType,
@@ -25,9 +24,8 @@ import type {
 } from "@/engine/consequences";
 import type {
   ObservationSession,
-  PlayerMoment,
-  SessionPhase,
 } from "@/engine/observation/types";
+import { generateMoments, sampleSessionPerformance } from "@/engine/observation/moments";
 import { createRNG } from "@/engine/rng";
 import { composeOpeningCaseDirectorOptions } from "./openingCaseDirector";
 import type {
@@ -83,19 +81,17 @@ function activeYouth(unsignedYouth: Record<string, UnsignedYouth>): UnsignedYout
 
 function chooseOpeningLead(candidates: UnsignedYouth[], seed: string): UnsignedYouth | undefined {
   if (candidates.length === 0) return undefined;
-  const ranked = [...candidates].sort((left, right) =>
-    right.player.potentialAbility - left.player.potentialAbility
-    || left.visibility - right.visibility
-    || left.player.id.localeCompare(right.player.id)
-  );
-  const eliteWindow = ranked.slice(0, Math.max(1, Math.min(5, Math.ceil(ranked.length * 0.08))));
-  return createRNG(`${seed}-opening-lead`).pick(eliteWindow);
+  // Source tips follow public exposure, not the simulation's hidden ceiling.
+  const pool = [...candidates].sort((a, b) => a.player.id.localeCompare(b.player.id));
+  return createRNG(seed + "-opening-lead").pickWeighted(pool.map((candidate) => ({
+    item: candidate,
+    weight: 1 + Math.max(0, Math.min(100, candidate.buzzLevel)) / 25,
+  })));
 }
 
 /**
  * Create the first career case from the real generated youth pool. Hidden
- * potential is used only to ensure the tutorial contains a genuinely valuable
- * lead; no player-safe projection includes that value.
+ * ability and potential never select the source tip. A first lead can disappoint.
  */
 export function createOpeningCase(input: {
   seed: string;
@@ -156,119 +152,41 @@ export function isOpeningDiscoverySession(
   return Boolean(session?.activityInstanceId?.startsWith(OPENING_CASE_ACTIVITY_PREFIX));
 }
 
-function openingMoment(input: {
-  id: string;
-  player: Player;
-  type: PlayerMoment["momentType"];
-  quality: number;
-  attributes: PlayerAttribute[];
-  description: string;
-  vagueDescription: string;
-  pressure?: boolean;
-}): PlayerMoment {
-  return {
-    id: input.id,
-    playerId: input.player.id,
-    momentType: input.type,
-    quality: input.quality,
-    attributesHinted: input.attributes,
-    description: input.description,
-    vagueDescription: input.vagueDescription,
-    pressureContext: input.pressure ?? false,
-    isStandout: input.quality >= 8,
-  };
-}
-
-function reindexPhase(phase: SessionPhase, index: number): SessionPhase {
-  return { ...phase, index };
-}
-
 /**
- * Opening Watch teaches the real session: three phases, focus, flag, and
- * reflection. It is the first use of the match engine, not a toy substitute.
+ * Teach three passages from the same generated football used by later watches.
+ * Ensure the named lead has an observable action, never an exceptional outcome.
  */
 export function shapeOpeningObservationSession(
   session: ObservationSession,
   lead: Player,
 ): ObservationSession {
   if (!isOpeningDiscoverySession(session) || session.mode !== "fullObservation") return session;
-  const source = session.phases.length > 0 ? session.phases : [{
-    index: 0,
-    minute: 8,
-    description: "The school match settles into an uncertain opening rhythm.",
-    moments: [],
-  }];
-  const phases = [0, 1, 2].map((index) => reindexPhase(source[index] ?? source[source.length - 1], index));
-
-  phases[0] = {
-    ...phases[0],
-    minute: 9,
-    description: "A loose opening gives you only fragments. Choose where to spend your attention.",
-    moments: [
-      openingMoment({
-        id: `${session.id}-opening-ambiguous`,
-        player: lead,
-        type: "technicalAction",
-        quality: 6,
-        attributes: ["firstTouch", "passing"],
-        description: `${lead.firstName} ${lead.lastName} receives under pressure, cushions the ball cleanly, then chooses the safe pass. The technique is interesting; the ambition is still unclear.`,
-        vagueDescription: "The player from the tip controls one awkward ball cleanly, but the next action is conservative.",
-      }),
-      ...(phases[0].moments ?? []).filter((moment) => moment.playerId !== lead.id).slice(0, 1),
-    ],
-  };
-  phases[1] = {
-    ...phases[1],
-    minute: 31,
-    description: "The shape breaks. For a few seconds, instinct matters more than instruction.",
-    moments: [
-      openingMoment({
-        id: `${session.id}-opening-breakthrough`,
-        player: lead,
-        type: "tacticalDecision",
-        quality: 9,
-        attributes: ["vision", "anticipation", "passing"],
-        pressure: true,
-        description: `${lead.firstName} ${lead.lastName} scans before the ball arrives, lets a defender commit, and splits two lines with a pass nobody else had seen. The move changes the match in one touch.`,
-        vagueDescription: "One player appears to see a passing lane before everyone around him.",
-      }),
-      ...(phases[1].moments ?? []).filter((moment) => moment.playerId !== lead.id).slice(0, 1),
-    ],
-    atmosphereEvent: {
-      id: `${session.id}-opening-crowd-shift`,
-      description: "The small touchline crowd reacts before the receiver even reaches the pass.",
-      effect: "reveal",
-      affectedAttributes: ["vision", "anticipation"],
-      noiseDelta: -0.1,
-    },
-  };
-  phases[2] = {
-    ...phases[2],
-    minute: 57,
-    description: "Now the match asks a different question: can the early impression survive pressure?",
-    moments: [
-      openingMoment({
-        id: `${session.id}-opening-contradiction`,
-        player: lead,
-        type: "mentalResponse",
-        quality: 4,
-        attributes: ["composure", "decisionMaking"],
-        pressure: true,
-        description: `${lead.firstName} ${lead.lastName} is closed down quickly and forces the next pass. It is the first reminder that one exceptional action is not a finished assessment.`,
-        vagueDescription: "The earlier standout is rushed into a poor decision when the pressure arrives faster.",
-      }),
-      ...(phases[2].moments ?? []).filter((moment) => moment.playerId !== lead.id).slice(0, 1),
-    ],
-  };
-
+  const target = session.players.find((player) => player.playerId === lead.id);
+  if (!target || session.phases.length === 0) return session;
+  const rng = createRNG(session.id + "-opening-football");
+  const profiles = lead.attributes ? { [lead.id]: lead } : undefined;
+  const performances = session.performanceOffsets ?? sampleSessionPerformance(rng, [target], profiles);
+  const indices = [...new Set([0, Math.floor(session.phases.length / 2), session.phases.length - 1])];
+  const phases = indices.map((sourceIndex, index) => {
+    const source = session.phases[sourceIndex];
+    const leadMoment = source.moments.find((moment) => moment.playerId === lead.id)
+      ?? generateMoments(rng, [target], session.activityType ?? "schoolMatch", index, 3,
+        session.venueAtmosphere, profiles, session.situation, session.opponentContext, performances)[0];
+    return {
+      ...source,
+      index,
+      isHalfTime: index === 1,
+      // Source and fallback events use different phase indices. Bind every
+      // retained passage to this watch so compressed phases cannot alias IDs.
+      moments: [leadMoment, ...source.moments.filter((moment) => moment.playerId !== lead.id).slice(0, 1)]
+        .map((moment, slot) => ({ ...moment, id: session.id + ":opening:" + index + ":" + slot + ":" + moment.playerId })),
+    };
+  });
   return {
     ...session,
     phases,
     currentPhaseIndex: 0,
-    players: [
-      ...session.players.filter((player) => player.playerId === lead.id),
-      ...session.players.filter((player) => player.playerId !== lead.id),
-    ],
+    players: [target, ...session.players.filter((player) => player.playerId !== lead.id)],
   };
 }
 
@@ -294,9 +212,9 @@ export function buildOpeningCaseProjection(
     selectedChoiceId: openingCase.selectedChoiceId,
     eyebrow: prologue?.presentation.eyebrow ?? "Your first live lead",
     venueLabel: prologue?.presentation.venue ?? "School ground",
-    headline: prologue?.presentation.headline ?? "You saw the moment before anyone knew the name",
+    headline: prologue?.presentation.headline ?? "A name worth making a decision about",
     uncertainty: prologue?.presentation.uncertainty
-      ?? "One exceptional action is a lead, not proof. What you do next determines who hears the name and how much evidence you can gather first.",
+      ?? "The watch is evidence, not a verdict. Decide whether this lead deserves more time, an independent view, or recruitment attention.",
     signalLabel: prologue?.presentation.signalLabel ?? "The signal",
     questionLabel: prologue?.presentation.questionLabel ?? "Who hears the name next?",
     premise: prologue?.premise,

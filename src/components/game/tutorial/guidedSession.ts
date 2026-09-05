@@ -214,17 +214,17 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   {
     id: "flaggedBreakthrough",
     target: [
-      "observation-promising-reaction",
+      "observation-reactions",
       "observation-flag-moment",
       "observation-advance-to-standout",
     ],
-    title: "Record the standout moment",
+    title: "Record a useful moment",
     mentorText:
-      "There it is—the action that changes the question. Select Flag moment, then mark it Promising. " +
-      "You have not proved the player is special; you have earned a reason to keep watching.",
+      "Flag an action from your lead and choose an honest reaction: promising, concerning, or interesting. " +
+      "One moment can give you a question to test. It does not settle the player's future.",
     mentorTextFreelance:
-      "That is why we came. Select Flag moment, then mark it Promising while it is fresh. " +
-      "You found a signal, not an answer. The next context decides whether you were early or merely impressed.",
+      "Keep a moment from your lead while it is fresh. Choose the reaction the evidence deserves. " +
+      "A concern can be as useful as a promising action when deciding whether to watch again.",
     position: "left",
     interactive: true,
     screen: "observation",

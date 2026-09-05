@@ -18,7 +18,7 @@ import type {
 } from "@/engine/core/types";
 
 export const RUN_MANIFEST_VERSION = 3 as const;
-export const RUN_RULES_VERSION = "youth-ea.4" as const;
+export const RUN_RULES_VERSION = "youth-ea.5" as const;
 export const RUN_CONTENT_VERSION = "run-content.3" as const;
 export const NAMED_RNG_VERSION = "named-rng.1" as const;
 

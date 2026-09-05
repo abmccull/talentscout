@@ -38,7 +38,7 @@ export function OpeningDiscoveryScreen() {
         .sort((left, right) => right.createdAt - left.createdAt)[0]
     : undefined;
   const breakthrough = latestJournal?.flaggedMoments
-    ?.find((moment) => moment.playerId === projection?.playerId && moment.reaction === "promising");
+    ?.find((moment) => moment.playerId === projection?.playerId);
   const hypothesis = latestJournal?.hypotheses
     ?.find((entry) => entry.playerId === projection?.playerId);
 
@@ -129,7 +129,7 @@ export function OpeningDiscoveryScreen() {
                 <p className="mt-2 text-sm leading-6">
                   {breakthrough?.description
                     ?? veteranPrologue?.evidenceBeats[1].focused
-                    ?? "A pressured action showed vision and anticipation beyond the rhythm of the match."}
+                    ?? "No clear passage was retained. Keep the uncertainty in your report instead of inventing a strength."}
                 </p>
               </div>
               <div>
@@ -137,7 +137,7 @@ export function OpeningDiscoveryScreen() {
                 <p className="mt-2 text-sm leading-6">
                   {hypothesis?.text
                     ?? veteranPrologue?.contradiction
-                    ?? "Was that natural composure—or one exceptional moment in an otherwise uneven performance?"}
+                    ?? "Would another context support this first impression, or overturn it?"}
                 </p>
               </div>
             </div>

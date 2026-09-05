@@ -27,17 +27,15 @@ import {
   calculateRevenueBreakdown,
   calculateNetWorth,
   getLoanEligibility,
-  getEquipmentItem,
-  ALL_EQUIPMENT_SLOTS,
 } from "@/engine/finance";
 import { calculateAgencyHealth } from "@/engine/finance/dashboard";
+import { getEquipmentLiquidationQuote } from "@/engine/finance/distress";
 import {
   canAcceptConsultingWork,
   canAcceptRetainerWork,
 } from "@/engine/finance/agencyCapacity";
 import { canCompleteConsulting } from "@/engine/finance/consulting";
 import type { ExpenseType, LoanType } from "@/engine/core/types";
-import type { EquipmentSlot } from "@/engine/finance";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -191,6 +189,7 @@ export function FinancialDashboard() {
   const netWorth = calculateNetWorth(finances);
   const forecast = forecastCashFlow(finances, scout, 12);
   const agencyHealth = calculateAgencyHealth(finances, scout);
+  const liquidationQuote = getEquipmentLiquidationQuote(finances, currentWeek, currentSeason);
 
   const activeRetainers = finances.retainerContracts.filter((r) => r.status === "active");
   const suspendedRetainers = finances.retainerContracts.filter((r) => r.status === "suspended");
@@ -303,26 +302,17 @@ export function FinancialDashboard() {
                     : "Balance has been negative for over 2 weeks. Take action to avoid escalation."}
             </p>
             {/* Emergency: Sell Equipment for Cash */}
-            {finances.distressLevel !== "bankruptcy" && finances.equipment && (() => {
-              const totalValue = ALL_EQUIPMENT_SLOTS.reduce((sum, slot) => {
-                const itemId = finances.equipment?.loadout[slot as EquipmentSlot];
-                const item = itemId ? getEquipmentItem(itemId) : null;
-                return sum + (item?.purchaseCost ?? 0);
-              }, 0);
-              if (totalValue <= 0) return null;
-              const saleValue = Math.floor(totalValue * 0.4);
-              return (
+            {finances.distressLevel !== "bankruptcy" && liquidationQuote.cashReceived > 0 && (
                 <Button
                   size="sm"
                   variant="destructive"
                   className="mt-3"
-                  onClick={() => sellEquipmentForCashAction(totalValue)}
+                  onClick={() => sellEquipmentForCashAction(liquidationQuote.portfolioValue)}
                 >
                   <AlertCircle size={12} className="mr-1.5" />
-                  Emergency: Sell Equipment for £{saleValue.toLocaleString()}
+                  Emergency: Sell Equipment for £{liquidationQuote.cashReceived.toLocaleString()}
                 </Button>
-              );
-            })()}
+            )}
           </div>
         )}
 

@@ -137,6 +137,17 @@ const visiblePlayer = {
 };
 
 describe("academy placement decisions", () => {
+  it("never treats a private pass as an acquisition request even when its evidence scores highly", () => {
+    const result = scoreAcademyClubDecision({
+      rng: new RNG("fixed-academy-decision"),
+      report: report({ ...structuredInput(), recommendedAction: "pass", conviction: "tablePound" }),
+      brief: brief(), player: visiblePlayer, observations: observations(),
+      scout: decisionScout, club: club(), relationshipScore: 100,
+    });
+    expect(result.outcome).toBe("rejected");
+    expect(result.requestedEvidenceCategory).toBeUndefined();
+    expect(result.reasons[0]).toContain("does not authorize recruitment");
+  });
   it("lets authored report fields materially change score and outcome under a fixed seed", () => {
     const strongReport = report({
       conviction: "tablePound",

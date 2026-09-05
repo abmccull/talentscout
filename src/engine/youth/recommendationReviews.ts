@@ -79,6 +79,7 @@ export interface AcademyRecommendationOutcomeEvidence {
 
 /** Structural subtype of the canonical GameState recommendation review. */
 export interface AcademyRecommendationReview extends RecommendationReview {
+  clubId: string;
   placementReportId: string;
   placementMovementId: string;
   horizonSeasons: 1 | 2;

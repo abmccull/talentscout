@@ -267,7 +267,6 @@ export function createSession(
       available: tokensPerHalf,
       total: tokensPerHalf,
       allocations: [],
-      warmupPhases: {},
     },
     flaggedMoments: [],
     hypotheses: (config.initialHypotheses ?? []).map((hypothesis) => ({
@@ -389,17 +388,9 @@ export function advanceSessionPhase(
     (alloc) => ({ ...alloc, phasesActive: alloc.phasesActive + 1 }),
   );
 
-  // Increment warmupPhases counters for all active lens+player keys.
-  const updatedWarmup: Record<string, number> = { ...session.focusTokens.warmupPhases };
-  for (const alloc of updatedAllocations) {
-    const key = `${alloc.playerId}:${alloc.lens}`;
-    updatedWarmup[key] = (updatedWarmup[key] ?? 0) + 1;
-  }
-
   let updatedFocusTokens = {
     ...session.focusTokens,
     allocations: updatedAllocations,
-    warmupPhases: updatedWarmup,
   };
 
   // Refresh tokens when the upcoming phase is a halftime phase.
@@ -410,7 +401,6 @@ export function advanceSessionPhase(
       ...updatedFocusTokens,
       available: session.focusTokens.total,
       allocations: [],
-      warmupPhases: {},
     };
   }
 
@@ -577,18 +567,10 @@ export function allocateFocus(
     phasesActive: 0,
   };
 
-  // Initialise warmup for this player+lens combination (0 = first phase of use).
-  const warmupKey = `${playerId}:${lens}`;
-  const updatedWarmup: Record<string, number> = {
-    ...session.focusTokens.warmupPhases,
-    [warmupKey]: 0,
-  };
-
   const updatedFocusTokens = {
     ...session.focusTokens,
     available: session.focusTokens.available - 1,
     allocations: [...session.focusTokens.allocations, newAllocation],
-    warmupPhases: updatedWarmup,
   };
 
   const updatedPlayers = session.players.map((p) =>
@@ -632,11 +614,6 @@ export function removeFocus(
       : p,
   );
 
-  const updatedWarmup = { ...session.focusTokens.warmupPhases };
-  for (const key of Object.keys(updatedWarmup)) {
-    if (key.startsWith(`${playerId}:`)) delete updatedWarmup[key];
-  }
-
   return {
     ...session,
     focusTokens: {
@@ -644,7 +621,6 @@ export function removeFocus(
       allocations: session.focusTokens.allocations.filter(
         (allocation) => allocation.playerId !== playerId,
       ),
-      warmupPhases: updatedWarmup,
     },
     players: updatedPlayers,
   };

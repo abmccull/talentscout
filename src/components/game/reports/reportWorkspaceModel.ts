@@ -184,6 +184,9 @@ function getFollowUpLabel(
   input: BuildReportWorkspaceViewModelInput,
   report: ScoutReport,
 ): string {
+  if (report.recommendedAction === "pass") {
+    return "Passed for now. New evidence can reopen the judgment; its later outcome stays on record.";
+  }
   if (input.pendingListingReportId === report.id) {
     return "Set the price and exclusivity before this lead goes cold.";
   }
@@ -234,7 +237,7 @@ function buildFeaturedArtifact(
 
   const playerName = getPlayerName(input.gameState, priorityReport.playerId);
   const isPendingListing = input.pendingListingReportId === priorityReport.id;
-  const action = isPendingListing && input.gameState.scout.careerPath === "independent"
+  const action = isPendingListing && priorityReport.recommendedAction !== "pass" && input.gameState.scout.careerPath === "independent"
     ? { kind: "listReport", label: "Price the report", reportId: priorityReport.id } as const
     : { kind: "openReport", label: "Open full artifact", reportId: priorityReport.id } as const;
 
@@ -253,7 +256,7 @@ function buildFeaturedArtifact(
     followUp: getFollowUpLabel(input, priorityReport),
     targetClub: getTargetClubName(input.gameState, priorityReport),
     conviction: formatLabel(priorityReport.conviction),
-    recommendedAction: priorityReport.recommendedAction
+    recommendedAction: priorityReport.recommendedAction === "pass" ? "Pass for now" : priorityReport.recommendedAction
       ? formatLabel(priorityReport.recommendedAction)
       : "No recommended action recorded",
     evidenceCount: countEvidence(priorityReport),
@@ -268,7 +271,7 @@ function buildActionRequiredItems(input: BuildReportWorkspaceViewModelInput): Re
 
   if (input.pendingListingReportId) {
     const report = input.gameState.reports[input.pendingListingReportId];
-    if (report) {
+    if (report && report.recommendedAction !== "pass") {
       items.push({
         id: `pending-listing-${report.id}`,
         eyebrow: "Pricing decision",
@@ -283,7 +286,7 @@ function buildActionRequiredItems(input: BuildReportWorkspaceViewModelInput): Re
 
   for (const scoutingCase of input.casesNeedingDelivery.slice(0, 2)) {
     const report = getCaseReport(input.gameState, scoutingCase);
-    if (!report) continue;
+    if (!report || report.recommendedAction === "pass") continue;
     items.push({
       id: `delivery-${scoutingCase.id}`,
       eyebrow: "Action required",

@@ -199,13 +199,28 @@ function serializeFlaggedMoments(
     playerId: flagged.moment.playerId,
     phaseIndex: flagged.phaseIndex,
     minute: flagged.minute,
-    description: describeFlaggedMoment(session, flagged),
+    description: retainedMomentDescription(session, flagged),
     reaction: flagged.reaction,
     momentType: flagged.moment.momentType,
-    attributesHinted: [...flagged.moment.attributesHinted],
+    attributesHinted: session.mode === "fullObservation"
+      ? [...(retainedMomentCue(session, flagged)?.attributesHinted ?? [])]
+      : [...flagged.moment.attributesHinted],
     pressureContext: flagged.moment.pressureContext,
     note: flagged.note,
   }));
+}
+
+function retainedMomentCue(session: ObservationSession, flagged: SessionFlaggedMoment) {
+  const focused = session.players.some((player) => player.playerId === flagged.moment.playerId
+    && player.focusedPhases.includes(flagged.phaseIndex));
+  return focused ? session.cueReadings?.find((cue) => cue.momentId === flagged.moment.id
+    && cue.playerId === flagged.moment.playerId) : undefined;
+}
+
+function retainedMomentDescription(session: ObservationSession, flagged: SessionFlaggedMoment): string {
+  return session.mode === "fullObservation"
+    ? retainedMomentCue(session, flagged)?.detail ?? flagged.moment.vagueDescription
+    : describeFlaggedMoment(session, flagged);
 }
 
 function getInteractiveObservationContext(
@@ -253,33 +268,11 @@ function toObservationFlaggedMoments(
     .filter((flagged) => flagged.moment.playerId === playerId)
     .map((flagged) => ({
       phase: flagged.phaseIndex,
-      description: describeFlaggedMoment(session, flagged),
+      description: retainedMomentDescription(session, flagged),
       attribute: flagged.moment.attributesHinted[0] ?? "composure",
       positive: flagged.reaction === "promising"
         || (flagged.reaction === "interesting" && flagged.moment.quality >= 6),
     }));
-}
-
-function collectMomentAttributes(
-  session: ObservationSession,
-  playerId: string,
-  focusedPhases: Set<number>,
-): PlayerAttribute[] {
-  const ordered = new Set<PlayerAttribute>();
-  const flagged = session.flaggedMoments.filter(
-    (item) => item.moment.playerId === playerId,
-  );
-  for (const item of flagged) {
-    for (const attribute of item.moment.attributesHinted) ordered.add(attribute);
-  }
-  for (const phase of session.phases) {
-    if (!focusedPhases.has(phase.index)) continue;
-    for (const moment of phase.moments) {
-      if (moment.playerId !== playerId) continue;
-      for (const attribute of moment.attributesHinted) ordered.add(attribute);
-    }
-  }
-  return [...ordered];
 }
 
 function resolveSessionPlayerProfile(
@@ -351,11 +344,18 @@ function buildInteractiveObservationBatch(
 
     const focusedPhases = new Set(sessionPlayer.focusedPhases);
     const flaggedMoments = toObservationFlaggedMoments(session, sessionPlayer.playerId);
-    const evidenceAttributes = collectMomentAttributes(
-      session,
-      sessionPlayer.playerId,
-      focusedPhases,
-    );
+    const observedCues = (session.cueReadings ?? []).flatMap((cue) => {
+      if (cue.playerId !== player.id || !focusedPhases.has(cue.phaseIndex)
+        || cue.clarity === "missed") return [];
+      const moment = session.phases.find((phase) => phase.index === cue.phaseIndex)
+        ?.moments.find((candidate) => candidate.id === cue.momentId && candidate.playerId === player.id);
+      return moment ? [{ cue, moment }] : [];
+    });
+    // A focused glimpse records a real visit, even when it cannot support a
+    // numeric reading. The perception boundary keeps its readings and ability
+    // empty; missed or peripheral passages cannot create this first-hand record.
+    if (observedCues.length === 0) continue;
+    const evidenceAttributes = [...new Set(observedCues.flatMap(({ cue }) => cue.attributesHinted))];
     const focusLens = getDominantFocusLens(sessionPlayer);
     const focusDepth = focusedPhases.size;
     const extraAttributes = Math.min(
@@ -378,6 +378,7 @@ function buildInteractiveObservationBatch(
       existingObservations,
       extraAttributes > 0 ? extraAttributes : undefined,
       {
+        observedCues,
         evidenceAttributes,
         focusLens,
         confidenceBonus,
@@ -1008,10 +1009,9 @@ export function createObservationActions(get: GetState, set: SetState) {
       const replacesWrongOpeningFlag = Boolean(
         gameState?.openingCase
         && isOpeningDiscoverySession(activeSession)
-        && requestedMoment?.isStandout
-        && requestedMoment.playerId === gameState.openingCase.playerId
+        && requestedMoment?.playerId === gameState.openingCase.playerId
         && existingPhaseFlag
-        && !existingPhaseFlag.moment.isStandout,
+        && existingPhaseFlag.moment.playerId !== gameState.openingCase.playerId,
       );
       const sessionForFlagging = replacesWrongOpeningFlag
         ? {
@@ -1034,7 +1034,7 @@ export function createObservationActions(get: GetState, set: SetState) {
       if (
         gameState?.scout.primarySpecialization === "youth"
         && isOpeningDiscoverySession(updatedSession)
-        && flaggedMoment?.moment.isStandout
+        && flaggedMoment !== undefined
         && flaggedMoment.moment.playerId === gameState.openingCase?.playerId
       ) {
         useTutorialStore.getState().completeMilestone("flaggedBreakthrough");

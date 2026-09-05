@@ -115,7 +115,7 @@ describe("opening discovery case", () => {
     const first = setup();
     const second = setup();
 
-    expect(first.openingCase.playerId).toBe("lead");
+    expect(first.unsignedYouth[first.openingCase.youthId].player.id).toBe(first.openingCase.playerId);
     expect(second.openingCase).toEqual(first.openingCase);
 
     const projection = buildOpeningCaseProjection({
@@ -163,7 +163,7 @@ describe("opening discovery case", () => {
     expect(unsignedYouth[localCase!.youthId].country).toBe("england");
   });
 
-  it("turns the opening watch into three authored beats of the real session", () => {
+  it("keeps actual lead performances when shortening the opening watch", () => {
     const { openingCase, unsignedYouth } = setup();
     const session = {
       id: "session-1",
@@ -173,7 +173,7 @@ describe("opening discovery case", () => {
         index,
         minute: index * 15,
         description: `Phase ${index}`,
-        moments: [],
+        moments: [{ id: `real-${index}`, playerId: openingCase.playerId, quality: index + 1, isStandout: false }],
       })),
       currentPhaseIndex: 0,
       players: openingCase.playerPoolIds.map((playerId) => ({ playerId })),
@@ -181,9 +181,12 @@ describe("opening discovery case", () => {
 
     const shaped = shapeOpeningObservationSession(session, unsignedYouth[openingCase.youthId].player);
     expect(shaped.phases).toHaveLength(3);
-    expect(shaped.phases[0].moments[0]).toMatchObject({ quality: 6 });
-    expect(shaped.phases[1].moments[0]).toMatchObject({ quality: 9, isStandout: true });
-    expect(shaped.phases[2].moments[0]).toMatchObject({ quality: 4, pressureContext: true });
+    expect(shaped.phases.map((phase) => phase.moments[0].quality)).toEqual([0, 2, 4].map((index) => session.phases[index].moments[0].quality));
+    expect(shaped.phases.every((phase) => !phase.moments[0].isStandout)).toBe(true);
+    const ids = shaped.phases.flatMap((phase) => phase.moments.map((moment) => moment.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(shaped).toEqual(shapeOpeningObservationSession(session, unsignedYouth[openingCase.youthId].player));
+    expect(session.phases[0].moments[0].id).toBe("real-0");
   });
 
   it("claims and resolves the first career decision exactly once", () => {

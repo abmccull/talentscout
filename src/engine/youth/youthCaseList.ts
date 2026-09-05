@@ -4,6 +4,7 @@ import type {
   ReflectionJournalEntry,
   UnsignedYouth,
 } from "@/engine/core/types";
+import { getFreshReportObservationIds } from "@/engine/reports/reportAccountability";
 import { collectYouthCasePlayerIds } from "./youthCaseFocus";
 
 export type YouthRivalHeat = "quiet" | "watching" | "contested" | "imminent";
@@ -69,17 +70,26 @@ const HEAT_LABEL: Record<YouthRivalHeat, string> = {
 
 export function buildYouthCaseListItem(
   youth: UnsignedYouth,
-  state: Pick<GameState, "observations" | "reflectionJournal" | "rivalActivities" | "currentWeek" | "currentSeason"> & Partial<Pick<GameState, "reports">>,
+  state: Pick<GameState, "observations" | "reflectionJournal" | "rivalActivities" | "currentWeek" | "currentSeason"> & Partial<Pick<GameState, "reports" | "scout">>,
 ): YouthCaseListItem {
-  const observations = Object.values(state.observations ?? {});
+  const observations = Object.values(state.observations ?? {})
+    .filter((observation) => !state.scout || observation.scoutId === state.scout.id);
   const last = latestObservation(observations, youth.player.id);
   const journal = latestJournal(state.reflectionJournal, youth.player.id);
   const hypothesis = journal?.hypotheses?.find((entry) => entry.playerId === youth.player.id);
   const report = Object.values(state.reports ?? {})
-    .filter((entry) => entry.playerId === youth.player.id && entry.evidenceAssessment)
+    .filter((entry) => entry.playerId === youth.player.id
+      && (!state.scout || entry.scoutId === state.scout.id))
     .sort((left, right) => right.submittedSeason - left.submittedSeason
       || right.submittedWeek - left.submittedWeek || (right.revision ?? 0) - (left.revision ?? 0))[0];
   const assessment = report?.evidenceAssessment;
+  const passedForNow = (report?.recommendedAction ?? assessment?.recommendation) === "pass";
+  // Report evidence IDs distinguish a genuinely new same-week observation
+  // from simply reopening the existing journal or another scout's evidence.
+  const canReconsider = Boolean(passedForNow && report
+    && getFreshReportObservationIds(observations, report).length > 0);
+  const preservedPass = report?.summary?.trim() || assessment?.generatedSummary?.trim()
+    || "The original judgment and evidence remain on record.";
   const reportIsLatest = report && (!journal || report.submittedSeason > journal.season
     || (report.submittedSeason === journal.season && report.submittedWeek >= journal.week));
   const unknown = reportIsLatest ? assessment?.unknowns[0]?.statement : undefined;
@@ -97,11 +107,16 @@ export function buildYouthCaseListItem(
     lastLookLabel: last
       ? `Week ${last.week}, S${last.season}`
       : "No look yet",
-    questionLabel: unknown ? "Still to test" : hypothesis ? "Working hypothesis"
+    questionLabel: passedForNow ? canReconsider ? "Reconsideration available" : "Passed for now"
+      : unknown ? "Still to test" : hypothesis ? "Working hypothesis"
       : reflectionNote ? "Last reflection" : lastCue ? "Latest evidence" : "The open question",
-    openQuestion: unknown ?? hypothesis?.text ?? reflectionNote ?? lastCue
-      ?? (observationCount ? "Which part of this read needs another context?" : "What will a first look reveal?"),
-    nextTest: reportIsLatest && assessment ? assessment.nextTest.label
+    openQuestion: passedForNow ? `Passed for now. ${preservedPass}`
+      : unknown ?? hypothesis?.text ?? reflectionNote ?? lastCue
+        ?? (observationCount ? "Which part of this read needs another context?" : "What will a first look reveal?"),
+    nextTest: passedForNow
+      ? canReconsider ? "Optional: reconsider this pass against the new first-hand evidence."
+        : "No next look planned; spend attention elsewhere."
+      : reportIsLatest && assessment ? assessment.nextTest.label
       : hypothesis ? "Test that hypothesis in a new context."
       : observationCount > 1 ? "Revisit the evidence and choose the next test."
       : observationCount === 1 ? "Book a second look in a different context."

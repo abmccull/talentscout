@@ -57,6 +57,15 @@ export function buildRecommendationReviewTimelineDescription(
   if (review.status !== "complete") {
     return "Your original judgment remains open until enough career evidence exists.";
   }
+  if (review.origin === "decision") {
+    return review.decisionOutcome === "progressed"
+      ? "Recorded appearances show the player building a career. Revisit the original judgment and its uncertainty."
+      : review.decisionOutcome === "setback"
+        ? "The player encountered a recorded pathway setback; the original uncertainty remains part of the judgment."
+        : review.decisionOutcome === "mixed"
+          ? "The player has shown progress and encountered setbacks. The original decision remains a qualified lesson."
+          : "The checkpoint remains unresolved. Missing career evidence is not failure.";
+  }
   if (review.overallScore !== undefined) {
     return `Observable review completed at ${review.overallScore}/100.`;
   }

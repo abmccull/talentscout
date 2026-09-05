@@ -131,7 +131,8 @@ const CONFIDENCE_VALUE: Record<EvidenceConfidenceBand, number> = {
   robust: 0.85,
 };
 
-const RECOMMENDATION_LABEL: Record<ReportRecommendedAction, string> = {
+const RECOMMENDATION_LABEL: Record<ReportRecommendedAction | "pass", string> = {
+  pass: "Pass for now; reconsider when new evidence changes the question",
   monitor: "Keep the name private and arrange another look",
   inviteForTrial: "Test the read in a more demanding context",
   offerAcademyPlace: "Escalate the player to the recruitment team now",
@@ -285,9 +286,11 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
       const aligned = definition.momentTypes.includes(moment.momentType);
       const domainSkill = ((input.scout.skills?.[definition.primarySkill] ?? 1) / 20) * 0.23;
       const judgment = ((input.scout.skills?.[definition.secondarySkill] ?? 1) / 20) * 0.12;
-      const focus = focused ? 0.15 + (lens === definition.lens || lens === "general" ? 0.06 : 0) : -0.12;
+      const focus = focused ? 0.15 + (lens === definition.lens ? 0.08 : lens === "general" ? 0.01 : 0) : -0.12;
       const questionAlignment = aligned ? 0.15 : -0.03;
-      const eventSignal = (moment.quality / 10) * 0.15 + (moment.isStandout ? 0.08 : 0);
+      // Visibility is not success: a conspicuous error is as readable as a
+      // conspicuous success. The event's direction remains a separate fact.
+      const eventSignal = 0.12 + (moment.pressureContext ? 0.03 : 0);
       const regionalContext = (regionalKnowledge - 30) / 700;
       const fatigue = -(clamp(input.scout.fatigue ?? 0, 0, 100) / 100) * 0.18;
       const conditions = -(input.session.venueAtmosphere?.chaosLevel ?? 0) * 0.1;
@@ -300,9 +303,8 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
         direction,
       );
       const uncertainty = (hashUnit(`${input.session.id}:${moment.id}:${input.questionId}`) - 0.5) * 0.16;
-      const intuitionSpark = moment.isStandout
-        ? ((input.scout.attributes?.intuition ?? 1) / 20) * hashUnit(`${moment.id}:spark`) * 0.05
-        : 0;
+      const intuitionSpark = ((input.scout.attributes?.intuition ?? 1) / 20)
+        * hashUnit(`${moment.id}:spark`) * 0.05;
       const score = clamp(
         0.05
         + domainSkill
@@ -316,6 +318,8 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
         + halftime
         + uncertainty
         + intuitionSpark,
+        0,
+        focused ? 1 : 0.43,
       );
       const clarity = cueClarity(score);
       const confidence = clamp(score * 0.86 + Math.min(0.04, regionalKnowledge / 2500), 0.12, 0.88);
@@ -374,8 +378,16 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
 export function buildSessionEvidenceCards(session: ObservationSession): ScoutingEvidenceCard[] {
   const cueByMoment = new Map((session.cueReadings ?? []).map((cue) => [cue.momentId, cue]));
   return session.flaggedMoments.flatMap((flagged) => {
-    const cue = cueByMoment.get(flagged.moment.id);
-    if (!cue) return [];
+    const savedCue = cueByMoment.get(flagged.moment.id);
+    if (!savedCue || savedCue.playerId !== flagged.moment.playerId) return [];
+    const focused = session.players.some((player) => player.playerId === savedCue.playerId
+      && player.focusedPhases.includes(flagged.phaseIndex));
+    const cue: ScoutCueReading = session.mode === "fullObservation" && !focused
+      ? { ...savedCue, clarity: "glimpse", confidence: Math.min(0.3, savedCue.confidence),
+          confidenceBand: "tentative", score: Math.min(0.43, savedCue.score),
+          detail: flagged.moment.vagueDescription, summary: "Peripheral glimpse",
+          direction: "mixed", attributesHinted: [], suggestedClassifications: ["noConclusion"] }
+      : savedCue;
     const decision = session.evidenceDecisions?.[cue.id];
     const classification = decision?.classification
       ?? (cue.clarity === "missed" ? "noConclusion" : cue.suggestedClassifications[0]);
@@ -404,7 +416,21 @@ function categoryForClassification(classification: EvidenceClassificationId): Ju
   return "potential";
 }
 
-function measuredClaim(classification: EvidenceClassificationId): string {
+function measuredClaim(classification: EvidenceClassificationId, direction: ScoutCueReading["direction"]): string {
+  if (classification !== "noConclusion" && direction === "negative") {
+    const concerns: Record<Exclude<EvidenceClassificationId, "noConclusion">, string> = {
+      technicalExecution: "The execution broke down in this passage; the same action needs another test before calling it a stable weakness.",
+      preReceiveDecision: "The player appeared late to recognise the available option in this passage.",
+      offBallMovement: "The movement did not create a useful option in this passage; role and instruction remain relevant unknowns.",
+      pressureResponse: "The response to pressure broke down in this passage; this alone does not establish a character trait.",
+      physicalRepeatability: "The physical action broke down in this passage; fatigue and repeatability remain untested.",
+      anomaly: "The unusual breakdown warrants another look before treating it as a repeatable weakness.",
+    };
+    return concerns[classification];
+  }
+  if (classification !== "noConclusion" && direction === "mixed") {
+    return `This passage gave a mixed read of ${CLASSIFICATION_LABELS[classification]}; it does not yet establish a repeatable strength or weakness.`;
+  }
   switch (classification) {
     case "technicalExecution": return "The action supports a working read of clean technical execution at this level.";
     case "preReceiveDecision": return "The player appeared to prepare the decision before receiving the ball.";
@@ -416,7 +442,13 @@ function measuredClaim(classification: EvidenceClassificationId): string {
   }
 }
 
-function stretchClaim(classification: EvidenceClassificationId): string {
+function stretchClaim(classification: EvidenceClassificationId, direction: ScoutCueReading["direction"]): string {
+  if (classification !== "noConclusion" && direction === "negative") {
+    return `The breakdown may signal a recurring limitation in ${CLASSIFICATION_LABELS[classification]} that could restrict progress at a higher level.`;
+  }
+  if (classification !== "noConclusion" && direction === "mixed") {
+    return `The mixed evidence may indicate unreliable ${CLASSIFICATION_LABELS[classification]} across different situations.`;
+  }
   switch (classification) {
     case "technicalExecution": return "The player may possess a repeatable technical advantage over this level.";
     case "preReceiveDecision": return "The player may process the game earlier than peers in the same age group.";
@@ -430,19 +462,21 @@ function stretchClaim(classification: EvidenceClassificationId): string {
 
 export function getEvidenceClaimOptions(card: ScoutingEvidenceCard): EvidenceClaimOption[] {
   const category = categoryForClassification(card.classification);
+  const readable = card.clarity !== "missed" && card.clarity !== "glimpse";
+  const measuredClassification = readable ? card.classification : "noConclusion";
   return [
     {
       id: `claim:${card.id}:measured`,
       label: "Make the measured read",
-      statement: measuredClaim(card.classification),
+      statement: measuredClaim(measuredClassification, card.direction),
       category,
-      support: card.classification === "noConclusion" ? "withheld" : "supported",
-      classification: card.classification,
+      support: measuredClassification === "noConclusion" ? "withheld" : "supported",
+      classification: measuredClassification,
     },
     {
       id: `claim:${card.id}:stretch`,
       label: "Back the stronger interpretation",
-      statement: stretchClaim(card.classification),
+      statement: stretchClaim(card.classification, card.direction),
       category,
       support: "stretch",
       classification: card.classification,
@@ -456,6 +490,31 @@ export function getEvidenceClaimOptions(card: ScoutingEvidenceCard): EvidenceCla
       classification: "noConclusion",
     },
   ];
+}
+
+/** Score the actual claim against its cited passages, including contrary cues. */
+function claimEvidenceFit(
+  cards: ScoutingEvidenceCard[],
+  claim: Pick<EvidenceClaimOption, "statement" | "support" | "classification">,
+): number {
+  if (claim.support === "withheld") return 18;
+  if (cards.length === 0) return 0;
+  const relevant = cards.filter((card) => card.classification === claim.classification);
+  const matching = relevant.filter((card) => getEvidenceClaimOptions(card).some((option) =>
+    option.statement === claim.statement && option.support === claim.support
+  ));
+  if (matching.length === 0) return 0;
+  const readable = matching.filter((card) => card.clarity !== "missed" && card.clarity !== "glimpse");
+  const fit = readable.length / cards.length;
+  return Math.round((claim.support === "stretch" ? 9 : 20) * fit);
+}
+
+function recommendationTarget(
+  recommendation: ReportRecommendedAction | "pass",
+  evidenceConfidence: number,
+): number {
+  if (recommendation === "pass") return evidenceConfidence;
+  return recommendation === "monitor" ? 0.3 : recommendation === "inviteForTrial" ? 0.55 : 0.8;
 }
 
 export interface EvidenceUnknownOption {
@@ -626,18 +685,17 @@ function scoreAssessment(
     exceptional: 25,
   };
   const evidenceSufficiency = Math.min(25, Math.max(...cards.map((card) => clarityScore[card.clarity])) + Math.min(4, cards.length - 1));
-  const claimEvidenceFit = claim.support === "supported" ? 20 : claim.support === "withheld" ? 18 : 9;
+  const evidenceFit = claimEvidenceFit(cards, claim);
   const contextDiversity = Math.min(15, new Set(cards.map((card) => card.contextKey)).size * 5);
   const evidenceConfidence = cards.reduce((sum, card) => sum + card.confidence, 0) / Math.max(1, cards.length);
   const confidenceGap = Math.max(0, CONFIDENCE_VALUE[confidence] - evidenceConfidence);
   const calibration = Math.max(0, Math.round(15 - confidenceGap * 35 - (claim.support === "stretch" ? 3 : 0)));
   const unknownHandling = 10;
   const briefFit = 6;
-  const recommendationTarget = recommendation === "monitor" ? 0.3 : recommendation === "inviteForTrial" ? 0.55 : 0.8;
-  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget - evidenceConfidence) * 10));
+  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget(recommendation, evidenceConfidence) - evidenceConfidence) * 10));
   return {
     evidenceSufficiency,
-    claimEvidenceFit,
+    claimEvidenceFit: evidenceFit,
     contextDiversity,
     calibration,
     unknownHandling,
@@ -645,7 +703,7 @@ function scoreAssessment(
     deliveryFit,
     total: Math.round(
       evidenceSufficiency
-      + claimEvidenceFit
+      + evidenceFit
       + contextDiversity
       + calibration
       + unknownHandling
@@ -769,14 +827,12 @@ function scoreFormalAssessment(
     cards.reduce((sum, card) => sum + clarityValue[card.clarity], 0) / Math.max(1, cards.length)
       + Math.min(5, cards.length - 1),
   );
-  const supportScore = claims.reduce((sum, claim) => {
-    if (claim.support === "supported") return sum + 20;
-    if (claim.support === "withheld") return sum + 17;
-    return sum + 9;
-  }, 0) / Math.max(1, claims.length);
+  const supportScore = claims.reduce((sum, claim) => sum + claimEvidenceFit(
+    cards.filter((card) => claim.evidenceIds.includes(card.id)), claim,
+  ), 0) / Math.max(1, claims.length);
   const contextDiversity = Math.min(
     15,
-    new Set(cards.map((card) => `${card.contextKey}:${card.independenceKey}`)).size * 5,
+    new Set(cards.map((card) => card.contextKey)).size * 5,
   );
   const calibrationValues = claims.map((claim) => {
     const supportCards = cards.filter((card) => claim.evidenceIds.includes(card.id));
@@ -792,8 +848,7 @@ function scoreFormalAssessment(
   const unknownHandling = Math.min(10, unknowns.length * 3 + (unknowns.length >= 3 ? 1 : 0));
   const briefFit = 10;
   const averageConfidence = cards.reduce((sum, card) => sum + card.confidence, 0) / Math.max(1, cards.length);
-  const recommendationTarget = recommendation === "monitor" ? 0.3 : recommendation === "inviteForTrial" ? 0.55 : 0.8;
-  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget - averageConfidence) * 10));
+  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget(recommendation, averageConfidence) - averageConfidence) * 10));
   return {
     evidenceSufficiency: Math.round(evidenceSufficiency),
     claimEvidenceFit: Math.round(supportScore),

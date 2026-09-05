@@ -119,6 +119,53 @@ function firstCue(
 }
 
 describe("structured scouting evidence model", () => {
+  it("gives equally visible success and failure equal clarity without changing their direction", () => {
+    const success = firstCue(liveSession({ quality: 9, isStandout: true }), scout(15));
+    const failure = firstCue(liveSession({ quality: 2, isStandout: false }), scout(15));
+    expect(success.score).toBe(failure.score);
+    expect(success.confidence).toBe(failure.confidence);
+    expect(success.direction).toBe("positive");
+    expect(failure.direction).toBe("negative");
+  });
+
+  it("makes a specialist lens a better answer to its question than general focus", () => {
+    const specialist = liveSession();
+    const general = structuredClone(specialist);
+    general.players[0].currentLens = "general";
+    general.players[0].focusHistory = [{ phaseIndex: 0, lens: "general" }];
+    expect(firstCue(specialist, scout(12)).score).toBeGreaterThan(firstCue(general, scout(12)).score);
+    expect(specialist.phases).toEqual(general.phases);
+  });
+
+  it("turns a negative action into a contextual concern rather than a supported strength", () => {
+    const cue = firstCue(liveSession({ quality: 2 }), scout(20), "execution", 100);
+    const card: ScoutingEvidenceCard = {
+      ...cue, version: 1, sourceType: "liveObservation", classification: "technicalExecution",
+      independenceKey: `session:${cue.sessionId}:negative`,
+    };
+    const [measured, stretch] = getEvidenceClaimOptions(card);
+    expect(measured.statement).toContain("broke down");
+    expect(measured.statement).not.toContain("clean technical execution");
+    expect(stretch.statement).toContain("recurring limitation");
+    const unknown = getEvidenceUnknownOptions(card)[0];
+    const result = buildInitialAssessment({
+      evidenceCardId: card.id, claimOptionId: measured.id,
+      unknownOptionId: unknown.id, nextTestId: getEvidenceNextTestOptions(unknown)[0].id,
+      confidence: "working", recommendation: "monitor",
+    }, [card]);
+    expect(result.valid).toBe(true);
+    expect(result.assessment?.score.claimEvidenceFit).toBe(20);
+    expect(result.assessment?.generatedSummary).toContain("broke down");
+  });
+
+  it("does not call an unreadable glimpse a supported trait claim", () => {
+    const cue = firstCue(liveSession({ quality: 2 }), scout(1, 100), "movement", 0);
+    const card: ScoutingEvidenceCard = {
+      ...cue, version: 1, sourceType: "liveObservation", classification: "technicalExecution",
+      independenceKey: `session:${cue.sessionId}:glimpse`,
+    };
+    expect(getEvidenceClaimOptions(card)[0]).toMatchObject({ support: "withheld", classification: "noConclusion" });
+  });
   it("keeps a flagged missed read vague through reflection and serialization", () => {
     const session = liveSession({ quality: 1, isStandout: false });
     session.players = session.players.map((player) => ({
@@ -342,6 +389,10 @@ describe("structured scouting evidence model", () => {
     expect(first.assessment?.unknowns).toHaveLength(3);
     expect(first.assessment?.generatedSummary).toContain("Northbridge Academy");
     expect(first.assessment?.generatedSummary).not.toMatch(/\bthe game\b/i);
+
+    const contradictory = buildFormalAssessment(input, [{ ...card, direction: "negative" }]);
+    expect(contradictory.assessment?.score.claimEvidenceFit).toBe(0);
+    expect(contradictory.assessment!.score.total).toBeLessThan(first.assessment!.score.total);
 
     const repeatedUnknown = "The same pressure question remains unanswered.";
     const repeatedUnknownInput: StructuredReportInput = {

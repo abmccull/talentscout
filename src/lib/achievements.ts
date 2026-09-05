@@ -11,6 +11,7 @@
  */
 
 import type { GameState, Position } from "@/engine/core/types";
+import { getEarnedDiscoveryOutcomes } from "@/engine/career/earnedDiscoveryOutcomes";
 import {
   countCareerWeeksPlayed,
   countCountriesScouted,
@@ -348,8 +349,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "wonderkid-found",
     name: "Diamond in the Rough",
-    description: "Discover a wonderkid.",
-    hint: "Be the first to identify a standout talent.",
+    description: "Back a discovery before a successful run of performances.",
+    hint: "Recommend a discovery before 10 rated appearances averaging 7.0 in one season.",
     category: "scoutingExcellence",
     icon: "💎",
     check: (state) => countWonderkidDiscoveries(state) >= 1,
@@ -357,8 +358,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "discoveries-5",
     name: "Eye for Talent",
-    description: "Discover 5 wonderkids.",
-    hint: "Identify 5 outstanding young talents before anyone else.",
+    description: "Back 5 discoveries who later produce successful performances.",
+    hint: "Each needs 10 rated appearances averaging 7.0 in a season after your recommendation.",
     category: "scoutingExcellence",
     icon: "👁️‍🗨️",
     check: (state) => countWonderkidDiscoveries(state) >= 5,
@@ -366,8 +367,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "discoveries-15",
     name: "Talent Factory",
-    description: "Discover 15 wonderkids.",
-    hint: "Build a legendary track record of 15 discoveries.",
+    description: "Back 15 discoveries who later produce successful performances.",
+    hint: "Each needs 10 rated appearances averaging 7.0 in a season after your recommendation.",
     category: "scoutingExcellence",
     icon: "🏭",
     check: (state) => countWonderkidDiscoveries(state) >= 15,
@@ -384,16 +385,13 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "generational-talent",
-    name: "Once in a Generation",
-    description: "Discover a generational talent.",
-    hint: "Find a player with once-in-a-generation potential.",
+    name: "Career Maker",
+    description: "Back a discovery before two standout seasons.",
+    hint: "Recommend a discovery before two seasons of 20 rated appearances averaging 7.5 each.",
     category: "scoutingExcellence",
     icon: "🌠",
     check: (state) =>
-      state.discoveryRecords.some((record) => {
-        const player = resolvePlayerEntity(state, record.playerId)?.player;
-        return player?.wonderkidTier === "generational";
-      }),
+      getEarnedDiscoveryOutcomes(state).some((outcome) => outcome.standoutSeasons.length >= 2),
   },
   {
     id: "full-house",

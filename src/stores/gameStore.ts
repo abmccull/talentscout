@@ -6,6 +6,8 @@ import { createObservationActions } from "./actions/observationActions";
 import { createReportActions } from "./actions/reportActions";
 import { createProgressionActions } from "./actions/progressionActions";
 import { createFinanceActions } from "./actions/financeActions";
+import { createDurableGameplaySetter } from "./actions/durableGameplayCommit";
+import { runOwnedSaveLoad } from "./actions/saveLoadOwnership";
 import { createWeeklyActions } from "./actions/weeklyActions";
 import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
 import { createDashboardActions } from "./actions/dashboardActions";
@@ -352,6 +354,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastWeekSummary: null,
   batchSummary: null,
   isAdvancingWeek: false,
+  activeWeeklyTransactionId: null,
   lastWeeklyExecutionRoute: null,
   lastWeeklyWorkerTelemetry: null,
   weeklyTransactionError: null,
@@ -368,6 +371,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   isSaving: false,
   isLoadingSave: false,
+  activeSaveLoadId: null,
   saveConflict: null,
   isResolvingSaveConflict: false,
   autosaveError: null,
@@ -413,6 +417,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     terminateWeeklySimulationWorker();
     set({
       isAdvancingWeek: false,
+      activeWeeklyTransactionId: null,
+      activeSaveLoadId: null,
+      isLoadingSave: false,
+      isResolvingSaveConflict: false,
       lastWeeklyExecutionRoute: null,
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
@@ -1064,8 +1072,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastWeekSummary: null,
       batchSummary: null,
       saveConflict: null,
+      activeSaveLoadId: null,
+      isLoadingSave: false,
       isResolvingSaveConflict: false,
       isAdvancingWeek: false,
+      activeWeeklyTransactionId: null,
       lastWeeklyExecutionRoute: null,
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
@@ -1139,11 +1150,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadFromSlot: async (slot) => {
-    set({ isLoadingSave: true });
-    try {
+    if (newGameStartInFlight) return;
+    await runOwnedSaveLoad(get, set, "load", async (isCurrent) => {
       const provider = await getActiveSaveProvider();
+      if (!isCurrent()) return;
       const slotName = slotNumberToSaveName(slot);
       const conflict = await provider.checkConflict(slotName);
+      if (!isCurrent()) return;
       if (conflict) {
         set({
           saveConflict: {
@@ -1156,12 +1169,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       set({ saveConflict: null });
       const loaded = await provider.load(slotName);
-      if (!loaded) return;
+      if (!isCurrent() || !loaded) return;
 
       get().loadGame(loadResultGameState(loaded));
-    } finally {
-      set({ isLoadingSave: false });
-    }
+    });
   },
 
   deleteSlot: async (slot) => {
@@ -1212,15 +1223,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   restoreSaveRecoveryCopy: async (archiveId) => {
-    set({ isLoadingSave: true });
-    try {
+    if (newGameStartInFlight) return;
+    await runOwnedSaveLoad(get, set, "load", async (isCurrent) => {
       const provider = await getActiveSaveProvider();
+      if (!isCurrent()) return;
       const restored = await provider.restoreRecoveryCopy(archiveId);
+      if (!isCurrent()) return;
       get().loadGame(loadResultGameState(restored));
       await get().refreshSaveSlots();
-    } finally {
-      set({ isLoadingSave: false });
-    }
+    });
   },
 
   refreshSaveSyncStatus: async () => {
@@ -1240,18 +1251,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resolveSaveConflict: async (slot, preferredSource) => {
-    set({ isResolvingSaveConflict: true });
-    try {
+    if (newGameStartInFlight) return;
+    await runOwnedSaveLoad(get, set, "conflict", async (isCurrent) => {
       const provider = await getActiveSaveProvider();
+      if (!isCurrent()) return;
       const slotName = slotNumberToSaveName(slot);
       const resolved = await provider.resolveConflict(slotName, preferredSource);
-
+      if (!isCurrent()) return;
       get().loadGame(loadResultGameState(resolved));
       set({ saveConflict: null });
       await get().refreshSaveSlots();
-    } finally {
-      set({ isResolvingSaveConflict: false });
-    }
+    });
   },
 
   // Weekly cycle actions (extracted to actions/weeklyActions.ts)
@@ -1264,10 +1274,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ...createReportActions(get, set),
 
   // Progression actions (extracted to actions/progressionActions.ts)
-  ...createProgressionActions(get, set),
+  ...createProgressionActions(get, createDurableGameplaySetter(get, set)),
 
   // Finance actions (extracted to actions/financeActions.ts)
-  ...createFinanceActions(get, set),
+  ...createFinanceActions(get, createDurableGameplaySetter(get, set)),
 
   // Helpers
 

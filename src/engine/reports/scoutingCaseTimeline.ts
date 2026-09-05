@@ -384,7 +384,7 @@ export function buildScoutingCaseTimeline(
   for (const review of Object.values(state.recommendationReviews ?? {})) {
     if (review.caseId !== caseId && !caseReviewIds.has(review.id)) continue;
     const completed = review.status === "complete";
-    const accountability = completed
+    const accountability = completed && review.origin !== "decision"
       ? deriveProfessionalCaseAccountability(state, scoutingCase.id)
       : null;
     entries.push({

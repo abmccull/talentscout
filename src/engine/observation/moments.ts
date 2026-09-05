@@ -511,10 +511,8 @@ function getRoleAttributePriorities(player: SessionPlayer): Set<PlayerAttribute>
  *
  * Selection rules:
  *   - 3–6 moments per phase.
- *   - Focused players: 50% chance of appearing in each moment slot.
- *   - Unfocused players: 20% chance.
- *   - If no players are selected by chance for a slot, the generator picks
- *     any player at random to guarantee the phase always has content.
+ *   - Player rotation and random slots are independent of scout focus.
+ *     Attention changes the evidence noticed, never the football that happens.
  *   - Moment quality is biased by the player's relevant attribute pool
  *     (simulated here via a gaussian draw — the actual attribute values are
  *     not exposed to the scout, this is just internal quality generation).
@@ -532,6 +530,7 @@ export function generateMoments(
   playerProfiles?: Readonly<Record<string, Player>>,
   situation?: ObservationSituationSnapshot,
   opponent?: ObservationOpponentContext,
+  performanceOffsets?: Readonly<Record<string, number>>,
 ): PlayerMoment[] {
   const [minMoments, maxMoments] = getMomentCountRange(venueType);
   const momentCount = rng.nextInt(minMoments, maxMoments);
@@ -570,6 +569,7 @@ export function generateMoments(
       playerProfiles?.[player.playerId],
       attributesHinted,
       pressureContext,
+      { phaseProgress, opponent, situation, performanceOffset: performanceOffsets?.[player.playerId] ?? 0 },
     );
 
     // --- Generate descriptions ---
@@ -635,11 +635,32 @@ function selectMomentPlayer(
   return rng.pick(players);
 }
 
-function calculateMomentQuality(
+export interface MomentPerformanceContext {
+  phaseProgress?: number;
+  opponent?: ObservationOpponentContext;
+  situation?: ObservationSituationSnapshot;
+  performanceOffset?: number;
+}
+
+/** One performance draw per player/session; attention never enters this model. */
+export function sampleSessionPerformance(
+  rng: RNG,
+  players: readonly SessionPlayer[],
+  profiles?: Readonly<Record<string, Player>>,
+): Record<string, number> {
+  return Object.fromEntries([...players].sort((a, b) => a.playerId.localeCompare(b.playerId)).map((entry) => {
+    const consistency = Math.max(1, Math.min(20, profiles?.[entry.playerId]?.attributes.consistency ?? 10));
+    const spread = 0.2 + (20 - consistency) / 19 * 1.15;
+    return [entry.playerId, Math.max(-2.5, Math.min(2.5, rng.gaussian(0, spread)))];
+  }));
+}
+
+export function calculateMomentQuality(
   rng: RNG,
   player: Player | undefined,
   attributesHinted: PlayerAttribute[],
   pressureContext: boolean,
+  context: MomentPerformanceContext = {},
 ): number {
   if (!player || attributesHinted.length === 0) {
     return Math.round(Math.min(10, Math.max(1, rng.gaussian(5.5, 2))));
@@ -655,6 +676,19 @@ function calculateMomentQuality(
   // performance around it.
   expectedQuality += player.form * 0.3;
   expectedQuality += (player.morale - 5.5) * 0.12;
+  expectedQuality += context.performanceOffset ?? 0;
+  expectedQuality += context.opponent?.relativeStrength === "stronger" ? -0.7
+    : context.opponent?.relativeStrength === "weaker" ? 0.45 : 0;
+  const progress = Math.max(0, Math.min(1, context.phaseProgress ?? 0));
+  const stamina = Math.max(1, Math.min(20, player.attributes.stamina));
+  expectedQuality -= Math.max(0, progress - 0.4) * (21 - stamina) / 20 * 2;
+
+  // A familiar role supports execution, but never overrides football ability.
+  const rolePriorities = getRoleAttributePriorities({
+    position: player.position, naturalRole: player.naturalRole,
+  } as SessionPlayer);
+  const roleFit = attributesHinted.filter((attribute) => rolePriorities.has(attribute)).length / attributesHinted.length;
+  expectedQuality += (roleFit - 0.5) * 0.4;
 
   if (pressureContext) {
     const pressureAverage = (
@@ -665,7 +699,7 @@ function calculateMomentQuality(
   }
 
   return Math.round(
-    Math.min(10, Math.max(1, rng.gaussian(expectedQuality, 1.35))),
+    Math.min(10, Math.max(1, rng.gaussian(expectedQuality, 1.0))),
   );
 }
 

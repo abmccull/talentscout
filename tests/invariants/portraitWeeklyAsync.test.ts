@@ -32,7 +32,7 @@ describe("live portrait allocation during actual async weekly commit", () => {
     mocks.run.mockReturnValue(new Promise((done) => { resolve = done; }));
     const pending = createWeeklyAsyncActions(() => store, set).advanceWeekAsync();
     const latest = revealGamePortraits(source, ["a"], "selected");
-    store = { ...store, gameState: latest };
+    store = { ...store, gameState: { ...latest, lastSaved: 1_000 } };
     resolve({ route: "worker", materializedCommit: {
       patch: { gameState: { ...source, currentWeek: 2 } }, tutorialCommands: [],
     }, telemetry: {} });

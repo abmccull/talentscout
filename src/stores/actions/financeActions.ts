@@ -9,10 +9,6 @@ import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration"
  * transfer negotiations, free agent negotiations, and player loan management.
  */
 import type { GetState, SetState } from "./types";
-import {
-  queueGameplayAutosave,
-  snapshotPersistedGameState,
-} from "./persistGameplayAutosave";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
   InboxMessage,
@@ -416,7 +412,6 @@ export function createFinanceActions(get: GetState, set: SetState) {
           }],
       }, [product.playerId], "tracked");
       set({ gameState: nextState });
-      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession), set);
     },
 
     rejectStaffWorkProduct: (workProductId: string) => {
@@ -479,6 +474,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!gameState || !gameState.finances) return;
       const report = gameState.reports[reportId];
       if (!report || report.scoutId !== gameState.scout.id) return;
+      if ((report.recommendedAction as string | undefined) === "pass") return;
       const linked = ensureScoutingCaseForReport(gameState.scoutingCases ?? {}, report);
       const existingListingIds = new Set(
         gameState.finances.reportListings.map((listing) => listing.id),
@@ -527,6 +523,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const listedReport = gameState.reports[listing.reportId];
+      if (!listedReport || (listedReport.recommendedAction as string | undefined) === "pass") return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending") return;
       const buyer = gameState.clubs[bid.clubId];
@@ -628,6 +626,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const listedReport = gameState.reports[listing.reportId];
+      if (!listedReport || (listedReport.recommendedAction as string | undefined) === "pass") return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return;
       const buyer = gameState.clubs[bid.clubId];
@@ -736,7 +736,6 @@ export function createFinanceActions(get: GetState, set: SetState) {
           finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
         };
         set({ gameState: nextState });
-        queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
       }
     },
 
