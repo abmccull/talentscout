@@ -19,6 +19,7 @@ import type {
 import type { DecisionOption, DecisionRecord } from "@/engine/consequences/types";
 import {
   getFreshReportObservationIds,
+  indexLatestPlayerReports,
   selectLatestReportsByCase,
 } from "@/engine/reports/reportAccountability";
 import type { DelegationPolicyId, WeeklyIntentId } from "@/engine/core/weeklyStrategy";
@@ -453,9 +454,7 @@ export function chooseAutonomousPlacementDestination(state: GameState, playerId:
   const youth = Object.values(state.unsignedYouth ?? {}).find((entry) =>
     (entry.player.id === playerId || entry.id === playerId) && !entry.placed && !entry.retired);
   if (!youth) return undefined;
-  const report = Object.values(state.reports).filter((entry) =>
-    entry.scoutId === state.scout.id && entry.playerId === youth.player.id)
-    .sort((a, b) => compareReportRecency(b, a))[0];
+  const report = indexLatestPlayerReports(Object.values(state.reports), state.scout.id).get(youth.player.id);
   if (!report || report.recommendedAction === "pass") return undefined;
   const eligible = getEligibleClubsForPlacement(youth, Object.values(state.clubs), state.scout, state.leagues,
     { preferredClubId: report.intendedClubId });
@@ -681,6 +680,26 @@ function authorReports(telemetry: AutonomousCareerTelemetry): void {
       telemetry.authoredReports += 1;
     }
   }
+}
+
+/** A dedicated case policy can file its chosen target using the same evidence gates and prose. */
+export function authorAutonomousReportForPlayer(
+  playerId: string,
+  telemetry: AutonomousCareerTelemetry,
+): ScoutReport | undefined {
+  const store = useGameStore.getState();
+  const state = store.gameState;
+  if (!state) return undefined;
+  const candidate = getReportCandidates(state).find((entry) => entry.playerId === playerId);
+  if (!candidate) return undefined;
+  const beforeIds = new Set(Object.keys(state.reports));
+  const submission = buildReportSubmission(candidate);
+  store.startReport(candidate.playerId);
+  store.submitReport(submission.conviction, submission.summary, submission.strengths, submission.weaknesses);
+  const filed = Object.values(useGameStore.getState().gameState?.reports ?? {}).find((report) =>
+    report.playerId === playerId && report.scoutId === state.scout.id && !beforeIds.has(report.id));
+  if (filed) telemetry.authoredReports += 1;
+  return filed;
 }
 
 function listingPriceForReport(report: ScoutReport): number {

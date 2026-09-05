@@ -28,6 +28,7 @@ The baseline contains functioning world, report, career and persistence foundati
 - Approved club wage capacity survives vacancies. Promotion/relegation changes funding through its existing atomic transition. A shared wage curve aligns generation and contract negotiations with club level while keeping affordability, player demands and real cash costs.
 - Mature loans settle into an actual purchase or return; expired legacy loans retry normally. Loan messages and scouting rewards follow committed movement and history, with duplicate settlement and retirement precedence protected.
 - Inconclusive reflection cannot infer a positive or negative judgment from hidden execution. Static phase/venue prose no longer promises talent discovery or weather/lighting unsupported by its inputs.
+- Question and focus controls explain the actual skill/lens connection. The searchable planner includes all known active unsigned prospects, and uses the same latest authored judgment as pitch delivery so private passes cannot consume a pitching day.
 - The mocked soak provider uses the existing structured-save interface. This eliminates discarded full-state serialization while preserving all persistence-helper calls, deterministic outcomes and explicit save checks; real-provider verification remains separate.
 
 ## Validation ledger
@@ -52,6 +53,11 @@ The baseline contains functioning world, report, career and persistence foundati
 | Intermediate Morgan Reed/Jesse Rowe playthrough | Three inconclusive cues supported a tentative private report, which booked a real two-day tournament and carried the authored question into the next watch | Reflection prompt defect found and fixed after this preview build; final render remains required |
 | Leave-watch and focus selection | Desktop/mobile dialog geometry, cancel-first focus, keyboard wrapping, Escape restoration and explicit discard to unresolved day verified; pending picker shows identity only; no page errors | Intermediate preview, before final combined export |
 | Main-thread transport optimization | Rejected: faster probe changed ordered state and failed exact digest | No product integration or relaxed determinism gate |
+| Clean `32ed579` export and browser checks | Export passed at 1,047,410 gzip bytes; initial 8/9 journeys passed, unchanged-source traced first-week rerun passed | One startup chunk-loading error is preserved; its underlying transient cause is not established |
+| `32ed579` bounded consequence scenario | 122 ticks, unchanged source, both private-pass reviews completed on their due dates | Failed placement coverage: zero eligible pitch attempts; targeted diagnostics/coverage repair required |
+| Opening clarity diagnostic | 16 generated careers across four styles; 47/48 focused passages readable with matching questions/lenses; every case filed a tentative private report | Does not guarantee good performances or human comprehension; prompted clearer question/lens guidance |
+| Planner reachability regressions | Both hidden-prospect and invalid-pass pitch defects reproduced; corrected focused suite passed | New combined export and final source identity required before decades acceptance |
+| Planner and lens integration | 1,904 tests in 336 files passed; the targeted consequence coverage repair additionally passed 30 tests across three files | Scenario execution on the next frozen source remains required; fixture completeness found by integrated typechecking was corrected |
 | Further actual-play information boundaries | Pending focus picker no longer exposes future attribute readings; regression passes | Action/category and leave-watch corrections integrated; final export pending |
 | Actual save-provider endurance/recovery | Pending | Required |
 | Human comprehension, attachment, repeat play | Pending | Cannot infer from simulation diversity |

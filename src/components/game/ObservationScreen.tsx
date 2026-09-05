@@ -62,6 +62,7 @@ import {
 import { YouthPortraitWithFallback } from "./YouthPortrait";
 import { ObservationPitch } from "./observation/ObservationPitch";
 import { LeaveObservationButton } from "./observation/LeaveObservationButton";
+import { QuestionFocusGuide, QuestionLensMatch } from "./observation/QuestionFocusGuide";
 import {
   LENS_KEYS,
   LENS_VISUAL,
@@ -330,11 +331,15 @@ const FocusPanel = memo(function FocusPanel({
                 data-tutorial-id={index === 0 ? "observation-focus-lens" : undefined}
                 className="flex min-h-11 shrink-0 items-center gap-2 rounded-sm bg-white/[0.045] px-3 text-xs font-medium text-zinc-200 transition-colors hover:bg-[var(--primary)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] motion-reduce:transition-none">
                 <LensMark lens={lens} />{LENS_VISUAL[lens].label}
+                {session.mode === "fullObservation" && <QuestionLensMatch questionId={session.scoutingQuestionId} lens={lens} />}
               </button>
             ))}
           </div>
         </>
       ) : <p className="mt-3 text-sm leading-6 text-zinc-400">No focus remaining this half. Keep watching for a peripheral signal.</p>}
+      {session.mode === "fullObservation" && (
+        <QuestionFocusGuide questionId={session.scoutingQuestionId} placement="attention" currentLens={selected?.isFocused ? selected.currentLens : undefined} />
+      )}
       {otherFocused.length > 0 && <div className="mt-3 border-t border-white/10 pt-2">
         {otherFocused.map((player) => <div key={player.playerId} className="flex items-center justify-between gap-2 text-xs text-zinc-400"><span>{player.name} · {LENS_VISUAL[player.currentLens ?? "general"].label}</span><button type="button" aria-label={`Remove focus from ${player.name}`} onClick={() => onRemoveFocus(player.playerId)} className="min-h-11 shrink-0 px-2 text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">Release</button></div>)}
       </div>}
@@ -560,6 +565,7 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
           )}
         </p>
       )}
+      <QuestionFocusGuide questionId={selected} placement="setup" />
     </fieldset>
   );
 });

@@ -4,18 +4,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { expect } from "vitest";
-import type { GameState, RecommendationReview, ScoutReport } from "@/engine/core/types";
+import type { Activity, GameState, RecommendationReview, ScoutReport } from "@/engine/core/types";
 import { getAvailableActivities, getScheduledActivityInstances } from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import {
   SCOUTING_QUESTIONS, buildSessionEvidenceCards, getEvidenceClaimOptions,
   getEvidenceNextTestOptions, getEvidenceUnknownOptions,
 } from "@/engine/scout/evidenceModel";
-import { getLatestReportInScope } from "@/engine/reports/reportAccountability";
+import { indexLatestPlayerReports } from "@/engine/reports/reportAccountability";
+import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
 import { useGameStore } from "@/stores/gameStore";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import {
-  chooseAutonomousPlacementDestination, createAutonomousCareerTelemetry,
+  authorAutonomousReportForPlayer, chooseAutonomousPlacementDestination, createAutonomousCareerTelemetry,
   driveAutonomousYouthCareerWeek,
 } from "./autonomousYouthCareerDriver";
 
@@ -73,6 +74,37 @@ function assertPreserved(state: GameState, report: ReturnType<typeof filedJudgme
   expect(state.reports[report.id], "The original filed judgment disappeared").toBeDefined();
   expect(filedJudgment(state.reports[report.id])).toEqual(report);
   for (const [id, hash] of Object.entries(hashes)) expect(digest(state.observations[id]), `Evidence ${id} changed`).toBe(hash);
+}
+
+function offeredActivities(state: GameState): Activity[] {
+  return getAvailableActivities(state.scout, state.currentWeek, Object.values(state.fixtures), Object.values(state.contacts),
+    state.subRegions, state.observations, state.unsignedYouth, state.players, undefined, state.youthTournaments,
+    state.reports, { currentSeason: state.currentSeason, consequenceState: state.consequenceState });
+}
+
+/** Spend real calendar time, preserving entire multi-day instances when replacing work. */
+function scheduleCaseWork(activity: Activity): { type: Activity["type"]; targetId?: string; destinationClubId?: string; dayIndex: number; reused: boolean } {
+  const store = useGameStore.getState();
+  const schedule = stateNow().schedule;
+  const existing = getScheduledActivityInstances(schedule).find((entry) => entry.activity.type === activity.type
+    && entry.activity.targetId === activity.targetId && entry.activity.destinationClubId === activity.destinationClubId);
+  if (existing) return { type: activity.type, targetId: activity.targetId, destinationClubId: activity.destinationClubId,
+    dayIndex: existing.dayIndex, reused: true };
+  let dayIndex = schedule.activities.findIndex((_, index) => index + activity.slots <= 7
+    && schedule.activities.slice(index, index + activity.slots).every((entry) => entry === null));
+  if (dayIndex < 0) {
+    dayIndex = 7 - activity.slots;
+    for (let index = dayIndex; index < 7; index += 1) {
+      if (stateNow().schedule.activities[index]) store.unscheduleActivity(index);
+    }
+  }
+  store.scheduleActivity({ ...activity, targetPool: undefined }, dayIndex);
+  const booked = stateNow().schedule.activities[dayIndex];
+  expect(booked?.type).toBe(activity.type);
+  expect(booked?.slots).toBe(activity.slots);
+  expect(booked?.targetId).toBe(activity.targetId);
+  expect(booked?.destinationClubId).toBe(activity.destinationClubId);
+  return { type: activity.type, targetId: activity.targetId, destinationClubId: activity.destinationClubId, dayIndex, reused: false };
 }
 
 function finishOpeningAndPass() {
@@ -143,6 +175,7 @@ export async function runYouthConsequenceScenario(seed: string, outputPath: stri
   const source = sourceIdentity();
   const attempts: Attempt[] = [];
   const snapshots: unknown[] = [];
+  const preparationTrace: Array<Record<string, unknown>> = [];
   const completed = new Map<string, RecommendationReview>();
   const reviewMessageReceipts = new Map<string, { receivedAt: Clock; message: GameState["inbox"][number] }>();
   const archivedReviewMessages = new Set<string>();
@@ -152,6 +185,7 @@ export async function runYouthConsequenceScenario(seed: string, outputPath: stri
   let sourceAfter: ReturnType<typeof sourceIdentity> | undefined;
   let replayChecked = false;
   let ticks = 0;
+  let preparationTargetId: string | undefined;
   const checkReviews = () => {
     const state = stateNow();
     const relevant = Object.values(state.recommendationReviews).filter((review) => pass?.reviewIds.includes(review.id)
@@ -271,29 +305,85 @@ export async function runYouthConsequenceScenario(seed: string, outputPath: stri
         }
         if (attempts.length >= 3 || ticks >= maxPreparationWeeks || attempts.some((entry) => entry.canonicalSigning)) return;
         const state = stateNow();
-        const offered = getAvailableActivities(state.scout, state.currentWeek, Object.values(state.fixtures), Object.values(state.contacts),
-          state.subRegions, state.observations, state.unsignedYouth, state.players, undefined, state.youthTournaments,
-          state.reports, { currentSeason: state.currentSeason, consequenceState: state.consequenceState })
-          .find((activity) => activity.type === "writePlacementReport");
-        const target = offered?.targetPool?.find((candidate) => candidate.id !== pass!.report.playerId
-          && !attempts.some((attempt) => attempt.playerId === candidate.id)
-          && (candidate.observations ?? 0) >= 3 && chooseAutonomousPlacementDestination(state, candidate.id));
-        if (!offered || !target) return;
-        const destinationClubId = chooseAutonomousPlacementDestination(state, target.id)!;
-        const report = getLatestReportInScope(Object.values(state.reports), state.scout.id, target.id)!;
-        let dayIndex = state.schedule.activities.findIndex((entry) => entry === null);
-        if (dayIndex < 0) {
-          // Choosing a pitch costs the final scheduled activity; use the public
-          // unschedule action so a multi-day instance cannot be split.
-          dayIndex = getScheduledActivityInstances(state.schedule).at(-1)!.dayIndex;
-          store.unscheduleActivity(dayIndex);
+        const available = offeredActivities(state);
+        const followUp = available.find((activity) => activity.type === "followUpSession");
+        const pitch = available.find((activity) => activity.type === "writePlacementReport");
+        const latestReports = indexLatestPlayerReports(Object.values(state.reports), state.scout.id);
+        const counts = new Map<string, number>();
+        for (const observation of Object.values(state.observations)) {
+          if (observation.scoutId === state.scout.id) counts.set(observation.playerId, (counts.get(observation.playerId) ?? 0) + 1);
         }
-        store.scheduleActivity({ ...offered, targetPool: undefined, targetId: target.id, destinationClubId }, dayIndex);
-        const booked = stateNow().schedule.activities[dayIndex];
-        expect(booked).toMatchObject({ type: "writePlacementReport", targetId: target.id, destinationClubId });
+        const candidates = Object.values(state.unsignedYouth).filter((youth) => (counts.get(youth.player.id) ?? 0) > 0).map((youth) => {
+          const latest = latestReports.get(youth.player.id);
+          const eligibleClubs = getEligibleClubsForPlacement(youth, Object.values(state.clubs), state.scout, state.leagues,
+            { preferredClubId: latest?.intendedClubId });
+          const candidate = { playerId: youth.player.id, youthId: youth.id, name: `${youth.player.firstName} ${youth.player.lastName}`,
+            age: youth.player.age, position: youth.player.position, observations: counts.get(youth.player.id)!,
+            placed: youth.placed, retired: !!youth.retired, isPassSubject: youth.player.id === pass!.report.playerId,
+            attempted: attempts.some((attempt) => attempt.playerId === youth.player.id),
+            reportId: latest?.id, latestAction: latest?.recommendedAction, intendedClubId: latest?.intendedClubId,
+            offeredFollowUp: followUp?.targetPool?.some((entry) => entry.id === youth.player.id) ?? false,
+            offeredPitch: pitch?.targetPool?.some((entry) => entry.id === youth.player.id) ?? false,
+            eligibleClubIds: eligibleClubs.map((club) => club.id),
+            matchingAudience: !latest?.intendedClubId || eligibleClubs.some((club) => club.id === latest.intendedClubId) };
+          return { ...candidate, pitchExclusions: [
+            ...(candidate.isPassSubject ? ["private-pass-subject-reserved-for-independent-review"] : []),
+            ...(candidate.attempted ? ["already-attempted"] : []),
+            ...(candidate.placed || candidate.retired ? ["inactive-unsigned-player"] : []),
+            ...(candidate.latestAction === "pass" ? ["latest-judgment-is-private-pass"] : []),
+            ...(candidate.observations < 3 ? ["fewer-than-three-observations"] : []),
+            ...(!candidate.reportId ? ["no-own-filed-report"] : []),
+            ...(!candidate.offeredPitch ? ["not-in-offered-pitch-pool"] : []),
+            ...(candidate.eligibleClubIds.length === 0 ? ["no-eligible-academy"] : []),
+            ...(!candidate.matchingAudience ? ["authored-audience-is-ineligible"] : []),
+          ] };
+        });
+        const retainedEntity = preparationTargetId ? resolvePlayerEntity(state, preparationTargetId) : null;
+        const trace: Record<string, unknown> = { at: clock(state), ticks, fatigue: state.scout.fatigue,
+          offeredActivities: available.map((activity) => ({ type: activity.type, slots: activity.slots,
+            targetId: activity.targetId, targets: activity.targetPool?.map((entry) => ({ id: entry.id, observations: entry.observations })) })),
+          candidates, retainedTargetId: preparationTargetId,
+          retainedTargetStatus: preparationTargetId ? { resolved: !!retainedEntity, unsigned: retainedEntity?.isUnsignedYouth,
+            retired: retainedEntity?.isRetired, clubId: retainedEntity?.player.clubId } : undefined };
+        preparationTrace.push(trace);
+        const eligible = candidates.filter((candidate) => !candidate.isPassSubject && !candidate.attempted
+          && !candidate.placed && !candidate.retired && candidate.latestAction !== "pass"
+          && candidate.eligibleClubIds.length > 0 && candidate.matchingAudience);
+        const target = eligible.find((candidate) => candidate.playerId === preparationTargetId)
+          ?? eligible.filter((candidate) => candidate.offeredFollowUp || candidate.offeredPitch)
+            .sort((a, b) => b.observations - a.observations || a.name.localeCompare(b.name) || a.playerId.localeCompare(b.playerId))[0];
+        if (!target) {
+          preparationTargetId = undefined;
+          const discovery = available.find((activity) => activity.type === "schoolMatch");
+          trace.reason = discovery ? "discover-another-unsigned-player" : "no-discovery-activity-currently-available";
+          if (discovery) trace.action = scheduleCaseWork(discovery);
+          return;
+        }
+        preparationTargetId = target.playerId;
+        trace.selectedTargetId = target.playerId;
+        if (target.observations < 3) {
+          trace.reason = target.offeredFollowUp ? "buy-another-targeted-observation" : "target-missing-from-follow-up-picker";
+          if (target.offeredFollowUp) trace.action = scheduleCaseWork({ ...followUp!, targetId: target.playerId });
+          return;
+        }
+        if (!target.reportId) {
+          const authored = authorAutonomousReportForPlayer(target.playerId, telemetry);
+          trace.authoredReportId = authored?.id;
+          if (!authored) { trace.reason = "selected-target-report-submission-did-not-file"; return; }
+        }
+        const current = stateNow();
+        const offeredPitch = offeredActivities(current).find((activity) => activity.type === "writePlacementReport"
+          && activity.targetPool?.some((entry) => entry.id === target.playerId));
+        if (!offeredPitch) { trace.reason = "filed-target-missing-from-pitch-picker"; return; }
+        const destinationClubId = chooseAutonomousPlacementDestination(current, target.playerId);
+        if (!destinationClubId) { trace.reason = "filed-target-has-no-eligible-destination"; return; }
+        const report = indexLatestPlayerReports(Object.values(current.reports), current.scout.id).get(target.playerId)!;
+        trace.reason = "pitch-selected-evidence-backed-case";
+        trace.action = scheduleCaseWork({ ...offeredPitch, targetId: target.playerId, destinationClubId });
         expect(report.decisionReceipt).toBeDefined();
-        attempts.push({ playerId: target.id, destinationClubId, scheduledAt: clock(state),
-          report: filedJudgment(report), evidenceHashes: reportEvidenceHashes(state, report), placementIds: [], history: [] });
+        attempts.push({ playerId: target.playerId, destinationClubId, scheduledAt: clock(current),
+          report: filedJudgment(report), evidenceHashes: reportEvidenceHashes(current, report), placementIds: [], history: [] });
+        preparationTargetId = undefined;
       } });
       ticks += 1;
       const reviews = collect();
@@ -332,7 +422,7 @@ export async function runYouthConsequenceScenario(seed: string, outputPath: stri
       source, sourceAfter, sourceStable, status: error ? "failed" : sourceStable && replayChecked ? "passed" : "partial",
       limits: { attempts: 3, preparationWeeks: 26, profiles: ["cautious"], durableProvider: false,
         coverage: "One deterministic ordinary career; does not establish balance or all normal-soak branch coverage" },
-      ticks, pass, attempts, snapshots, completedReviews: [...completed.values()], observableOutcomes,
+      ticks, pass, attempts, snapshots, preparationTrace, completedReviews: [...completed.values()], observableOutcomes,
       reviewMessageReceipts: [...reviewMessageReceipts.entries()], archivedReviewMessageIds: [...archivedReviewMessages],
       telemetry, replayChecked, error,
     }, null, 2));

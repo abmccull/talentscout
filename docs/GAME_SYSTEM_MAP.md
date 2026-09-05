@@ -14,6 +14,8 @@ The default build is Youth Scout Early Access: `src/lib/demo.ts:15` enables it u
 
 Integrated repair authority: `world/loanClosureSettlement.ts` consumes applied lifecycle events, closed loan history and preallocated message IDs once per committed week. It updates recommendation completion, inbox feedback and scout rewards without another RNG draw. `freeAgents/contractSettlement.ts` settles expired ownership after movement arbitration at the season boundary. These are stages of the existing weekly pipeline, not separate clocks or persistence stores.
 
+Planner target availability is owned by `core/calendar.ts`; its searchable youth picker receives the complete observed active unsigned pool. `reports/reportAccountability.ts:indexLatestPlayerReports` supplies the same current judgment to planner pitch availability and `stores/actions/weeklyPlacementResolution.ts`. It includes private passes, unlike career-credit selection, which preserves earlier public stakes. These deterministic projections own no extra saved state. `observation/QuestionFocusGuide.tsx` reads the canonical question definitions to explain skill and lens fit without changing perception.
+
 The root Zustand store composes action modules. `src/engine/core/gameStatePartitions.ts` explicitly partitions shared world, shared career and mode-owned state while preserving the saved shape. The canonical model is `src/engine/core/types.ts:1760`; split types under `core/types/` are part of the same contract, not independent databases.
 
 The source-backed Youth loop is:

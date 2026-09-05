@@ -41,6 +41,7 @@ import {
 import { scheduleAcademyRecommendationReviews } from "@/engine/youth/recommendationReviews";
 import { resolveUnsignedYouth } from "@/lib/playerResolution";
 import { normalizeCountryKey } from "@/lib/country";
+import { indexLatestPlayerReports } from "@/engine/reports/reportAccountability";
 import {
   ensureScoutingCaseForReport,
   isGameDateDue,
@@ -105,29 +106,9 @@ export function processWeeklyPlacementResolution(
         .filter((report) => report.clubResponse === "pending")
         .map((report) => report.unsignedYouthId),
     );
-    const latestReportByPlayerId = new Map<
-      string,
-      GameState["reports"][string]
-    >();
-    for (const report of Object.values(preparedReports)) {
-      if (report.scoutId !== stateWithScheduleApplied.scout.id) continue;
-      const current = latestReportByPlayerId.get(report.playerId);
-      if (
-        !current
-        || report.submittedSeason > current.submittedSeason
-        || (
-          report.submittedSeason === current.submittedSeason
-          && report.submittedWeek > current.submittedWeek
-        )
-        || (
-          report.submittedSeason === current.submittedSeason
-          && report.submittedWeek === current.submittedWeek
-          && report.id.localeCompare(current.id) > 0
-        )
-      ) {
-        latestReportByPlayerId.set(report.playerId, report);
-      }
-    }
+    const latestReportByPlayerId = indexLatestPlayerReports(
+      Object.values(preparedReports), stateWithScheduleApplied.scout.id,
+    );
     const placementClubs = Object.values(stateWithScheduleApplied.clubs);
     const submissionMessages: InboxMessage[] = [];
     const scheduledPlacementActivities = weekResult.writePlacementReportsExecuted > 0

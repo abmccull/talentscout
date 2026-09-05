@@ -4,6 +4,7 @@ import type { GameState } from "@/engine/core/types";
 import type { DecisionRecord } from "@/engine/consequences/types";
 import { useGameStore } from "@/stores/gameStore";
 import {
+  authorAutonomousReportForPlayer,
   chooseAutonomousOptionIndex,
   chooseAutonomousPlacementDestination,
   completeScheduledPlacementDestinations,
@@ -62,6 +63,9 @@ describe("autonomous placement audience", () => {
     delete state.reports.report.intendedClubId;
     state.reports.report.recommendedAction = "pass";
     expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
+    state.reports.older = { ...state.reports.report, id: "older", submittedWeek: 1, recommendedAction: "inviteForTrial" };
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
+    delete state.reports.older;
     delete state.reports.report.recommendedAction;
     state.unsignedYouth.youth.retired = true;
     expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
@@ -84,6 +88,55 @@ describe("autonomous placement audience", () => {
     expect(gameState.schedule.activities.filter(Boolean)).toHaveLength(1);
     expect(store.unscheduleActivity).toHaveBeenCalledTimes(1);
     expect(store.scheduleActivity).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("explicit autonomous case authoring", () => {
+  it("files the chosen observable case despite a higher-ranked alternative, and cannot reuse the same evidence", () => {
+    const gameState = placementState();
+    gameState.players = {};
+    gameState.reports = {};
+    gameState.unsignedYouth.youth.player.firstName = "Selected";
+    gameState.unsignedYouth.youth.player.lastName = "Prospect";
+    gameState.unsignedYouth.other = { ...gameState.unsignedYouth.youth, id: "other-youth",
+      player: { ...gameState.unsignedYouth.youth.player, id: "other-player" } };
+    gameState.observations = Object.fromEntries(["player", "other-player"].flatMap((playerId) =>
+      Array.from({ length: playerId === "player" ? 3 : 8 }, (_, index) => {
+        const id = `${playerId}-observation-${index}`;
+        return [id, { id, playerId, scoutId: "scout", week: index + 1, season: 1,
+          context: "liveMatch", attributeReadings: [], notes: [], flaggedMoments: [] }];
+      }))) as GameState["observations"];
+    let selectedPlayerId = "";
+    const store = { gameState,
+      startReport: vi.fn((id: string) => { selectedPlayerId = id; }),
+      submitReport: vi.fn((conviction: string, summary: string) => {
+        gameState.reports["filed-selected"] = { id: "filed-selected", scoutId: "scout", playerId: selectedPlayerId,
+          submittedWeek: 3, submittedSeason: 1, conviction, summary,
+          evidenceObservationIds: Object.values(gameState.observations).filter((observation) => observation.playerId === selectedPlayerId).map((observation) => observation.id),
+        } as GameState["reports"][string];
+      }),
+    };
+    vi.spyOn(useGameStore, "getState").mockImplementation(() => store as never);
+    const telemetry = createAutonomousCareerTelemetry("cautious");
+    expect(authorAutonomousReportForPlayer("player", telemetry)?.playerId).toBe("player");
+    expect(store.startReport).toHaveBeenCalledWith("player");
+    expect(store.submitReport.mock.calls[0][0]).toBe("recommend");
+    expect(store.submitReport.mock.calls[0][1]).toContain("3 direct observations");
+    expect(authorAutonomousReportForPlayer("player", telemetry)).toBeUndefined();
+    expect(store.submitReport).toHaveBeenCalledTimes(1);
+    expect(telemetry.authoredReports).toBe(1);
+  });
+
+  it("does not manufacture a report when the selected case lacks three earned samples", () => {
+    const gameState = placementState();
+    gameState.players = {};
+    gameState.reports = {};
+    gameState.observations = {};
+    const store = { gameState, startReport: vi.fn(), submitReport: vi.fn() };
+    vi.spyOn(useGameStore, "getState").mockImplementation(() => store as never);
+    expect(authorAutonomousReportForPlayer("player", createAutonomousCareerTelemetry("cautious"))).toBeUndefined();
+    expect(store.startReport).not.toHaveBeenCalled();
+    expect(store.submitReport).not.toHaveBeenCalled();
   });
 });
 

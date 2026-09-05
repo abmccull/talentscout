@@ -20,6 +20,32 @@ function compareReportDate(left: ScoutReport, right: ScoutReport): number {
     || left.id.localeCompare(right.id);
 }
 
+/** The current authored judgment used when a player-targeted pitch is selected. */
+export function indexLatestPlayerReports(
+  reports: Iterable<ScoutReport>,
+  scoutId: string,
+): Map<string, ScoutReport> {
+  const latest = new Map<string, ScoutReport>();
+  // Revision numbers belong to a case; revision 3 of one brief must not
+  // outrank a newly authored, separate brief merely because it is revision 1.
+  const cases = new Map<string, ScoutReport>();
+  for (const report of reports) {
+    if (report.scoutId !== scoutId) continue;
+    const key = getReportCaseKey(report);
+    const current = cases.get(key);
+    // Include passes here: the separate career-credit selector intentionally
+    // excludes them, but a current pitch must honor a withdrawn judgment.
+    if (!current || compareReportDate(report, current) > 0) cases.set(key, report);
+  }
+  for (const report of cases.values()) {
+    const current = latest.get(report.playerId);
+    if (!current || (compareReportCalendarDate(report, current) || report.id.localeCompare(current.id)) > 0) {
+      latest.set(report.playerId, report);
+    }
+  }
+  return latest;
+}
+
 type ReportDate = Pick<ScoutReport, "submittedSeason" | "submittedWeek">;
 
 function compareReportCalendarDate(left: ReportDate, right: ReportDate): number {
