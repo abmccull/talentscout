@@ -372,7 +372,7 @@ test.describe("observation choice and insight integrity", () => {
 });
 
 test.describe("normal-motion mobile workspace anchoring", () => {
-  test.use({ hasTouch: true, reducedMotion: "no-preference" });
+  test.use({ hasTouch: true, contextOptions: { reducedMotion: "no-preference" } });
 
   test.beforeEach(async ({ gamePage }) => {
     const page = gamePage.page;

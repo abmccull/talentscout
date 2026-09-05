@@ -611,8 +611,8 @@ export function GameLayout({
       `}>
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold tracking-tight">
-              Talent<span className="text-amber-400">Scout</span>
+            <h1 className="font-editorial text-2xl tracking-tight">
+              Talent<span className="text-[var(--primary)]">Scout</span>
             </h1>
             {/* Close button visible only on mobile */}
             <button

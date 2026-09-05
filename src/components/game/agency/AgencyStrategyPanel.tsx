@@ -61,7 +61,7 @@ function PressureMeter({
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800" role="progressbar" aria-label={`${label}: ${Math.round(value)} of 100`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value)}>
         <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
       </div>
-      <p className="mt-2 text-[11px] leading-4 text-zinc-500">{detail}</p>
+      <p className="mt-2 text-meta leading-5 text-quiet">{detail}</p>
     </div>
   );
 }
@@ -92,7 +92,7 @@ export function AgencyStrategyPanel({
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+          <p className="flex items-center gap-2 text-eyebrow font-semibold uppercase tracking-[0.18em] text-emerald-300">
             <Compass size={14} aria-hidden="true" />
             Agency position
           </p>
@@ -116,25 +116,25 @@ export function AgencyStrategyPanel({
 
       <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">Cash runway</p>
+          <p className="text-eyebrow uppercase tracking-wide text-quiet">Cash runway</p>
           <p className="mt-1 text-base font-bold text-white">{formatRunway(health.runwayMonths)}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">Client book</p>
+          <p className="text-eyebrow uppercase tracking-wide text-quiet">Client book</p>
           <p className="mt-1 text-base font-bold text-white">{health.activeClientCount} active</p>
-          <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+          <p className="mt-0.5 text-eyebrow text-quiet">
             {dominantClient
               ? `${dominantClient} is ${Math.round(health.clientConcentration * 100)}% of committed value`
               : "No dominant client"}
           </p>
         </div>
         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">Delivery load</p>
+          <p className="text-eyebrow uppercase tracking-wide text-quiet">Delivery load</p>
           <p className="mt-1 text-base font-bold text-white">{health.committedWork}/{health.effectiveMonthlyCapacity}</p>
-          <p className="mt-0.5 text-[10px] text-zinc-500">reports committed / sustainable capacity</p>
+          <p className="mt-0.5 text-eyebrow text-quiet">reports committed / sustainable capacity</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">Next mandate</p>
+          <p className="text-eyebrow uppercase tracking-wide text-quiet">Next mandate</p>
           <p className={`mt-1 text-base font-bold ${health.seniorAgencyReady ? "text-emerald-200" : "text-amber-200"}`}>
             {health.seniorAgencyReady ? "Ready to scale" : "Build the foundations"}
           </p>
@@ -214,15 +214,15 @@ export function AgencyStrategyPanel({
                       ? <span className="text-[8px] font-semibold uppercase tracking-wide text-amber-200">Recommended</span>
                       : null}
                 </span>
-                <span className="mt-2 block text-[11px] leading-4 text-zinc-400">{rule.purpose}</span>
-                <span className="mt-3 block text-[11px] leading-4 text-zinc-300">{rule.benefits[0]}</span>
-                <span className="mt-1 block text-[11px] leading-4 text-zinc-500">Tradeoff: {rule.tradeoffs[0]}</span>
+                <span className="mt-2 block text-meta leading-5 text-zinc-400">{rule.purpose}</span>
+                <span className="mt-3 block text-meta leading-5 text-zinc-300">{rule.benefits[0]}</span>
+                <span className="mt-1 block text-meta leading-5 text-quiet">Tradeoff: {rule.tradeoffs[0]}</span>
               </button>
             );
           })}
         </div>
         {policyChangeLocked && (
-          <p className="border-t border-white/10 px-4 py-3 text-xs text-zinc-500">
+          <p className="border-t border-white/10 px-4 py-3 text-xs text-quiet">
             This four-week operating commitment is locked. Review the consequences before choosing again.
           </p>
         )}

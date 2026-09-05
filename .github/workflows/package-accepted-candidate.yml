@@ -881,18 +881,21 @@ jobs:
           mkdir -p candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
           gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
           gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > source-artifacts.json
-          node -e 'const fs=require("node:fs"); const data=JSON.parse(fs.readFileSync("source-artifacts.json","utf8")); const matches=(data.artifacts||[]).filter((artifact)=>/^release-soak-shard-\d+$/.test(String(artifact.name||""))); if (matches.length===0) process.exit(1); for (const artifact of matches) console.log(`${artifact.id}\t${artifact.name}`);' > source-artifacts.tsv || {
-            echo "::error::No release-soak shard artifacts were found for the accepted source run"
-            exit 1
-          }
+          gh api --paginate --slurp "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-artifacts.json
+          node scripts/stage-accepted-source-soak.mjs select candidate-bundle > source-artifacts.tsv
           while IFS=$'\t' read -r artifact_id artifact_name; do
             [ -n "$artifact_id" ] || continue
+            mkdir -p "source-soak-downloads/$artifact_name"
             gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > source-artifact.zip
-            unzip -jo source-artifact.zip -d candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
+            # Validate archive paths before extraction; keep artifact directories
+            # separate so equal filenames can never silently overwrite evidence.
+            unzip -Z1 source-artifact.zip > source-archive-paths.txt
+            node -e 'const fs=require("node:fs"); for(const p of fs.readFileSync("source-archive-paths.txt","utf8").split(/\r?\n/).filter(Boolean)){if(p.startsWith("/")||p.includes("\\")||p.split("/").includes("..")||p.includes(":"))throw Error("Unsafe source archive path");}'
+            unzip -q source-artifact.zip -d "source-soak-downloads/$artifact_name"
             rm -f source-artifact.zip
           done < source-artifacts.tsv
-          rm -f source-artifacts.json source-artifacts.tsv
+          node scripts/stage-accepted-source-soak.mjs stage candidate-bundle candidate source-soak-downloads
+          node scripts/stage-accepted-source-soak.mjs verify candidate-bundle candidate
 
       - name: Upload accepted candidate bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

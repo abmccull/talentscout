@@ -103,6 +103,37 @@ Evidence paths are written for their final location under
 tampered, non-passing, wrong-gate, wrong-tag, wrong-candidate, wrong-package,
 or wrong-manifest attestations.
 
+## Validate locally without external changes
+
+Use a clean checkout of the release-control commit recorded in the accepted
+bundle. Prepare a separate clean checkout of the exact candidate with its
+original packages, source-soak transport, completed package workflow read-backs,
+and independent certification files already installed. Then run from the control
+checkout:
+
+```text
+npm run release:validate-candidate -- --candidate-root="<prepared candidate checkout>"
+```
+
+The wrapper re-proves the candidate commit/tree and control revision, fixes the
+strict policy and package-manifest paths, and validates the intended label without
+creating a Git tag. It launches only the strict evidence checker. The checker may
+write local reports and a temporary soak reduction under `artifacts/release/`;
+it performs no downloads, uploads, workflow dispatch, tag binding, or publication.
+Missing human, provider, package, or source evidence still fails. Successful local
+validation is a review result, not an external certification or promotion receipt.
+
+The `Certify and Promote Existing Candidate` workflow is **not** this local path:
+it uploads the certification decision and, after success, creates or verifies a
+tag even when both publication flags are false. Its GitHub publication option
+creates/updates a draft release and its Steam option uploads depots. Those are
+separate authorized operations with the read-backs described below.
+
+Sentry now has a mandatory [provider receipt protocol](sentry-provider-receipt.md).
+Its machine-readable receipt binds a real installed-package probe, the sanitized
+sent event, and the actual provider event/attachment read-backs to the exact
+candidate and manifest bytes. A DSN or local sanitizer test cannot satisfy it.
+
 ## Certify and promote
 
 Run `Certify and Promote Existing Candidate` manually with:
@@ -162,6 +193,7 @@ exact candidate artifacts:
 - packaged macOS protocol checks
 - packaged Linux protocol checks
 - minimum-hardware validation
+- real candidate/package-bound Sentry event and attachment read-backs
 - store page, pricing, and content-survey completion
 - final operator or reviewer approval
 

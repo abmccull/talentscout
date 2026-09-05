@@ -27,7 +27,7 @@ export function ScoutAvatar({ avatarId, size = 48, className = "" }: ScoutAvatar
       width={size}
       height={size}
       unoptimized
-      className={`rounded-full object-cover ${sizeClasses[size] ?? sizeClasses[48]} ${className}`}
+      className={`rounded-sm border border-[var(--border)] bg-[var(--surface-overlay)] object-cover ${sizeClasses[size] ?? sizeClasses[48]} ${className}`}
       draggable={false}
     />
   );

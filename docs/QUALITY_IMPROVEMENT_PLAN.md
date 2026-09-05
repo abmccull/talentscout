@@ -1,6 +1,6 @@
 # Talent Scout quality improvement plan
 
-Prepared September 4, 2026 (America/Denver). **Planning complete; implementation and final certification remain open.**
+Prepared September 4, 2026 (America/Denver). **Implementation active in the integrated quality checkout; final certification remains open.**
 
 ## Outcome and honest scoring
 
@@ -25,11 +25,11 @@ The design review's first improvement scenario is 94.375/100 design, with naviga
 
 ## Work order and ownership
 
-The [18 detailed work cards](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout-visual-overhaul/docs/QUALITY_IMPROVEMENT_WORK_ITEMS.md) contain actions, acceptance criteria, evidence, owners, dependencies and effort for every item. The [structured backlog](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout-visual-overhaul/docs/quality-improvement-backlog.json) preserves the same content for future tasks.
+The [18 detailed work cards](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout-quality/docs/QUALITY_IMPROVEMENT_WORK_ITEMS.md) contain actions, acceptance criteria, evidence, owners, dependencies and effort for every item. The [structured backlog](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout-quality/docs/quality-improvement-backlog.json) preserves the same content for future tasks.
 
 | Phase | Work | Exit condition |
 | --- | --- | --- |
-| 0. Establish the baseline | **W00 completed:** focused Week 1/guide repair. **W01 next:** preserve both checkouts and integrate accepted work into one reviewed development commit. | W00 phone/desktop booking and persistence pass. W01 still requires recoverable checkpoints and a passing clean development baseline. |
+| 0. Establish the baseline | **W00 completed:** focused Week 1/guide repair. **W01 completed:** both checkouts preserved and integrated at a246a48. | W00 phone/desktop booking and persistence pass. W01 checkpoints, both builds, 59 core browser checks and the organic career journey passed. See QUALITY_IMPLEMENTATION.md for current changes and scoped evidence. |
 | 1. Finish the visible experience | **W02** shared visual system; **W03** one clear Desk objective; **W04** simpler comparison and World detail. | Consistent main/secondary routes; correct next actions; all useful detail remains available. |
 | 2. Strengthen the systems | **W06** accessibility/responsive states; **W07** balance and consequences; **W08** real-save/endurance instrumentation; **W09** measured performance; **W10** release/security evidence. **W05** portrait expansion follows measured demand from W08. | Scoped regression checks pass, failures are explained, and no serious known issue remains in the covered scope. |
 | 3. Learn from people | **W11** formative pilot and targeted refinements. | Repeated serious comprehension or gameplay issues are repaired and retested before candidate freeze. |

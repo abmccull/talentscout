@@ -43,6 +43,7 @@
     "release:preflight": "node scripts/check-release-preflight.mjs",
     "release:create-timing-exception": "node scripts/create-long-career-timing-exception.mjs",
     "release:package-manifest": "node scripts/create-release-package-manifest.mjs",
+    "release:validate-candidate": "node scripts/validate-release-candidate.mjs",
     "test:release-evidence": "node scripts/check-release-evidence.mjs",
     "audit:release-evidence": "node scripts/check-release-evidence.mjs --report-only",
     "audit:architecture": "node scripts/analyze-architecture.mjs",

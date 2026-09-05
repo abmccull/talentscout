@@ -4,6 +4,8 @@ import { createReadStream } from "node:fs";
 import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { verifyAcceptedSourceSoak } from "./stage-accepted-source-soak.mjs";
+import { validateSentryProviderReceipt } from "./validate-sentry-provider-receipt.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(process.cwd());
@@ -295,6 +297,7 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     "candidate-core-suites",
     "windows-packaged-runtime",
     "release-gate-attestation",
+    "sentry-provider-receipt",
   ]);
   if (!supportedKinds.has(result.kind)) {
     result.failures.push(`unsupported generated evidence kind ${result.kind || "<missing>"}`);
@@ -349,6 +352,15 @@ async function validateGeneratedGateEvidence(gateId, policy) {
         );
       }
     }
+  }
+
+  if (result.kind === "sentry-provider-receipt") {
+    result.failures.push(...await validateSentryProviderReceipt({
+      root, evidence, candidateSha, candidateTreeSha: currentTreeSha,
+      candidateTag: configuredTag, packageManifest, packageManifestPath,
+    }));
+    if (result.failures.length === 0) result.status = "Passed";
+    return result;
   }
 
   if (result.kind === "candidate-core-suites") {
@@ -573,6 +585,13 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     return result;
   }
 
+  if (policy.requireAcceptedSourceTransport === true) {
+    try {
+      await verifyAcceptedSourceSoak({ root, candidateRoot: root, controlWorkflowSha: process.env.GITHUB_SHA });
+    } catch (error) {
+      result.failures.push(`accepted source soak transport: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   if (evidence.schemaVersion !== 3) result.failures.push("soak evidence schemaVersion must be 3");
   if (evidence.evidenceKind !== result.kind) result.failures.push("soak evidence kind does not match policy");
   if (String(evidence.candidateCommitSha ?? "").toLowerCase() !== candidateSha) {

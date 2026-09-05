@@ -20,7 +20,7 @@ import {
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { APP_VERSION } from "@/config/version";
 import { AuthModal } from "./AuthModal";
-import { supabase } from "@/lib/supabase";
+import { SUPABASE_CONFIGURED } from "@/lib/supabaseConfiguration";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import {
   BETA_CLOUD_SAVES_ENABLED,
@@ -153,7 +153,7 @@ export function MainMenu() {
 
   const hasSaveEntries = compatibleSaveSlots.length > 0;
   const hasLoadableSave = Boolean(continueSave);
-  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
+  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && SUPABASE_CONFIGURED;
   const pendingScenario = selectedScenarioId
     ? getScenarioById(selectedScenarioId)
     : undefined;

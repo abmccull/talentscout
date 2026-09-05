@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { dismissCareerMomentOverlays, expect, test, type GamePage } from "../fixtures";
+import { firstLoopTelemetry } from "../helpers/firstLoopTelemetry";
 
 test.describe("guided opening discovery hook", () => {
   test.setTimeout(120_000);
@@ -12,6 +13,7 @@ test.describe("guided opening discovery hook", () => {
   });
 
   test("quick start reaches an uncertain discovery and persistent consequence through real UI", async ({ page, gamePage }, testInfo) => {
+    const telemetry = firstLoopTelemetry(page, "guided-opening");
     const missingResources: string[] = [];
     page.on("response", (response) => {
       if (response.status() === 404) missingResources.push(response.url());
@@ -30,6 +32,7 @@ test.describe("guided opening discovery hook", () => {
     await expect(page.getByText(/Youth Scout Career .+ Early Access/)).toBeVisible();
     await expect(page.getByText(/Discover young players\. Build the evidence\. Back your judgement\./i)).toBeVisible();
     await expect(page.getByRole("button", { name: "Start Youth Scout Career" })).toBeVisible();
+    await telemetry.mark("cold-menu");
     // An empty menu offers a new career; save actions appear only for real saves.
     const emptyContinue = page.getByRole("button", { name: "Continue Career", exact: true, includeHidden: true });
     const emptyLoad = page.getByRole("button", { name: "Load Career", exact: true, includeHidden: true });
@@ -88,6 +91,7 @@ test.describe("guided opening discovery hook", () => {
     await beginAssignment.click();
 
     await gamePage.waitForScreen("observation", 60_000);
+    await telemetry.mark("first-watch");
     await expect(page.getByRole("heading", { name: "The match started early." })).toBeVisible();
     await expect(page.getByText(/No academy scout is here yet\./i)).toBeVisible();
     await expect(page.getByRole("button", { name: /End (Session )?Early/i })).toHaveCount(0);
@@ -322,6 +326,7 @@ test.describe("guided opening discovery hook", () => {
 
     await page.getByRole("button", { name: /Keep the name private/ }).click();
     await gamePage.waitForScreen("reportWriter");
+    await telemetry.mark("first-report");
     await expect(page.getByRole("heading", { name: "Write Scouting Report" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Saved evidence" })).toBeVisible();
     await expect(page.getByText("Answer a real club need")).toHaveCount(0);
@@ -359,6 +364,7 @@ test.describe("guided opening discovery hook", () => {
     ).toEqual([]);
     await gamePage.submitCurrentReportViaUI("note");
     await gamePage.waitForScreen("calendar");
+    await telemetry.mark("first-filing");
     await expect(page.locator('[data-tutorial-id="report-marketplace-prompt"]')).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /Planner/i })).toBeVisible();
 
@@ -375,6 +381,7 @@ test.describe("guided opening discovery hook", () => {
     expect(latestReport.summary).not.toMatch(/\bthe game\b/i);
     expect(latestReport.briefId ?? null).toBeNull();
     expect(missingResources, "The opening flow requested missing production assets").toEqual([]);
+    await telemetry.finish();
     gamePage.expectNoConsoleErrors();
   });
 });
@@ -516,6 +523,7 @@ async function expectAssessmentProgress(page: GamePage['page'], completed: numbe
 }
 
 test('assessment selection survives desktop and phone layouts through a real first week', async ({ page, gamePage }, testInfo) => {
+  const telemetry = firstLoopTelemetry(page, "unguided-week-and-restart");
   test.setTimeout(180_000);
   const missingAssets: string[] = [];
   page.on('response', (response) => { if (response.status() === 404) missingAssets.push(response.url()); });
@@ -778,5 +786,7 @@ test('assessment selection survives desktop and phone layouts through a real fir
     }), null, 2), contentType: 'application/json',
   });
   expect(missingAssets).toEqual([]);
+  await telemetry.mark("week-two-after-persisted-restarts");
+  await telemetry.finish();
   gamePage.expectNoConsoleErrors();
 });

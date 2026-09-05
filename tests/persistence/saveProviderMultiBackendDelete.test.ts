@@ -41,6 +41,10 @@ vi.mock("@/lib/steam/steamInterface", () => ({
   isSteamRuntimeConfigured: () => true,
 }));
 
+vi.mock("@/lib/supabaseConfiguration", () => ({
+  SUPABASE_CONFIGURED: true,
+}));
+
 vi.mock("@/lib/supabase", () => ({
   supabase: {},
 }));

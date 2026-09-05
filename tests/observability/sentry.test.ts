@@ -28,6 +28,7 @@ vi.mock("@sentry/nextjs", async () => {
 
 import * as Sentry from "@sentry/nextjs";
 import { captureException, initializeClientErrorReporting } from "../../src/lib/sentry";
+import { reportRendererError } from "../../src/lib/reportRendererError";
 
 describe("renderer error reporting", () => {
   beforeEach(() => {
@@ -58,6 +59,16 @@ describe("renderer error reporting", () => {
     vi.stubGlobal("window", undefined);
     expect(initializeClientErrorReporting()).toBe(false);
     expect(transport.envelopes).toHaveLength(0);
+  });
+
+  it("delivers the first configured error through the deferred SDK path", async () => {
+    const error = new Error("private-first-error");
+    await reportRendererError(error);
+    await Sentry.flush(1000);
+    expect(Sentry.init).toHaveBeenCalledTimes(1);
+    expect(transport.envelopes.flatMap(([, items]) => items
+      .filter(([header]) => header.type === "event"))).toHaveLength(1);
+    expect(JSON.stringify(transport.envelopes)).not.toContain("private-first-error");
   });
 
   it("initializes once and delivers a scrubbed exception through the SDK transport", async () => {

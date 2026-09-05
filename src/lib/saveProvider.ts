@@ -32,8 +32,7 @@ import {
   getSteam,
   isSteamRuntimeConfigured,
 } from "@/lib/steam/steamInterface";
-import { supabase } from "@/lib/supabase";
-import { SupabaseCloudSaveProvider } from "@/lib/supabaseCloudSave";
+import { SUPABASE_CONFIGURED } from "@/lib/supabaseConfiguration";
 import {
   saveGameWithResult,
   loadGameWithRecovery,
@@ -57,7 +56,7 @@ import {
   type SaveUnavailableNotice,
 } from "@/lib/db";
 import type { GameState } from "@/engine/core/types";
-import { captureException } from "@/lib/sentry";
+import { reportRendererError as captureException } from "@/lib/reportRendererError";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
 import { SaveMigrationError } from "@/lib/saveEnvelope";
 import { createSaveEnvelope } from "@/lib/saveEnvelope";
@@ -478,7 +477,7 @@ class SaveProviderImpl implements SaveProvider {
     ) {
       targets.push("steam");
     }
-    if (supabase && this.userId) targets.push("supabase");
+    if (SUPABASE_CONFIGURED && this.userId) targets.push("supabase");
     return targets;
   }
 
@@ -495,9 +494,10 @@ class SaveProviderImpl implements SaveProvider {
       return;
     }
 
-    if (!supabase || !this.userId) {
+    if (!SUPABASE_CONFIGURED || !this.userId) {
       throw new Error("Cloud sync is unavailable. The local save remains queued.");
     }
+    const { SupabaseCloudSaveProvider } = await import("@/lib/supabaseCloudSave");
     const cloud = new SupabaseCloudSaveProvider(this.userId);
     await cloud.uploadSave(
       record.slot,
@@ -517,9 +517,10 @@ class SaveProviderImpl implements SaveProvider {
       return;
     }
 
-    if (!supabase || !this.userId) {
+    if (!SUPABASE_CONFIGURED || !this.userId) {
       throw new Error("Cloud sync is unavailable. The deletion remains queued.");
     }
+    const { SupabaseCloudSaveProvider } = await import("@/lib/supabaseCloudSave");
     const cloud = new SupabaseCloudSaveProvider(this.userId);
     await cloud.deleteCloudSave(slot);
   }
@@ -753,10 +754,11 @@ class SaveProviderImpl implements SaveProvider {
   }
 
   private async _loadSupabaseRecord(slot: number): Promise<RecordCandidate | null> {
-    if (!supabase || !this.userId) return null;
+    if (!SUPABASE_CONFIGURED || !this.userId) return null;
     if (await this.hasPendingDelete("supabase", slot)) return null;
 
     try {
+      const { SupabaseCloudSaveProvider } = await import("@/lib/supabaseCloudSave");
       const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
       // We need the timestamp alongside the state.  Fetch metadata first,
       // then download the full state only when a record exists.
@@ -866,7 +868,8 @@ class SaveProviderImpl implements SaveProvider {
   }
 
   private async _listFromSupabase(): Promise<SaveEntry[]> {
-    if (!supabase || !this.userId) return [];
+    if (!SUPABASE_CONFIGURED || !this.userId) return [];
+    const { SupabaseCloudSaveProvider } = await import("@/lib/supabaseCloudSave");
     const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
     const metas = await supabaseProvider.listCloudSaves();
     const entries = await Promise.all(

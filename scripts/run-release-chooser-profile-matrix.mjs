@@ -33,6 +33,7 @@ if (planOnly) {
           SOAK_PROFILE_MATRIX_ONLY: "true",
           SOAK_PROFILE_MATRIX_OUTPUT: outputPath,
           SOAK_DIAGNOSTIC_ONLY: "false",
+          SOAK_BALANCE_DIAGNOSTICS_ONLY: "false",
           SOAK_WORKER_MODE: "false",
         },
         stdio: "inherit",

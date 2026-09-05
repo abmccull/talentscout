@@ -35,7 +35,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 0 · **Priority:** P1 · **Owner:** Lead engineer
 
-**Status:** Planned · **Depends on:** W00
+**Status:** Completed development baseline; release certification separate · **Depends on:** W00
 
 **Addresses:** R01, Q-SEC
 
@@ -60,7 +60,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 1 · **Priority:** P2 · **Owner:** UI engineer with design review
 
-**Status:** Planned · **Depends on:** W01
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W01
 
 **Addresses:** Q-DESIGN, D02, D03, D04, D05, D06, D09, D11, D12, COHESION, F03, F05
 
@@ -87,7 +87,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 1 · **Priority:** P2 · **Owner:** UI and gameplay engineer
 
-**Status:** Planned · **Depends on:** W01, W02
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W01, W02
 
 **Addresses:** Q-DESIGN, D01, D06, D07, D08, D12, COHESION, F02
 
@@ -114,7 +114,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 1 · **Priority:** P2 · **Owner:** UI engineer with design review
 
-**Status:** Planned · **Depends on:** W02
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W02
 
 **Addresses:** Q-DESIGN, D01, D02, D05, D07, D08, D12, COHESION, F01
 
@@ -141,7 +141,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 2 · **Priority:** P2 · **Owner:** Art reviewer and portrait systems engineer
 
-**Status:** Planned · **Depends on:** W01, W08
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W01, W08
 
 **Addresses:** Q-DESIGN, Q-SAVE, D10, D11, D12, COHESION, F04
 
@@ -168,7 +168,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 2 · **Priority:** P1 · **Owner:** QA and UI engineer
 
-**Status:** Planned · **Depends on:** W02, W03, W04
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W02, W03, W04
 
 **Addresses:** Q-DESIGN, D02, D04, D05, D06, D07, D08, D09, COHESION
 
@@ -195,7 +195,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 2 · **Priority:** P1 · **Owner:** Gameplay engineer with game-design review
 
-**Status:** Planned · **Depends on:** W01
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W01
 
 **Addresses:** Q-GAME, D08, D12
 
@@ -222,7 +222,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 2 · **Priority:** P1 · **Owner:** Persistence and desktop engineer
 
-**Status:** Planned · **Depends on:** W01
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W01
 
 **Addresses:** Q-SAVE, Q-GAME, R02, R06
 
@@ -250,7 +250,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 2 · **Priority:** P2 · **Owner:** Performance engineer
 
-**Status:** Planned · **Depends on:** W01
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W01
 
 **Addresses:** Q-PERF, D06, R05
 
@@ -277,7 +277,7 @@ Execution tracker for the quality plan. All work remains planned unless the indi
 
 **Phase:** 2 · **Priority:** P1 · **Owner:** Release and security engineer
 
-**Status:** Planned · **Depends on:** W01
+**Status:** In progress; see QUALITY_IMPLEMENTATION.md for executed evidence · **Depends on:** W01
 
 **Addresses:** Q-SEC, R01, R02, R03
 

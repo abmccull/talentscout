@@ -76,6 +76,7 @@ import {
   RetirementOutlookCard,
 } from "@/components/game/player-profile/PlayerProfileHistoryCards";
 import { PlayerProfileTabBar } from "@/components/game/player-profile/PlayerProfileTabBar";
+import { PlayerDevelopmentEnvironmentCard } from "@/components/game/player-profile/PlayerDevelopmentEnvironmentCard";
 import {
   FormIndicator,
   ReliabilityDots,
@@ -1168,6 +1169,9 @@ export function PlayerProfile() {
             role="tabpanel"
             aria-labelledby="player-profile-tab-development"
           >
+            {developmentEnvironment && (
+              <PlayerDevelopmentEnvironmentCard environment={developmentEnvironment} />
+            )}
         {/* Overview */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card>

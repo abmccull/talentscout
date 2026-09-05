@@ -4,7 +4,7 @@
 export const BETA_CLOUD_SAVES_ENABLED = false;
 
 export const BETA_CLOUD_SAVES_MESSAGE =
-  "Cloud saves are disabled for the Youth Early Access build while cross-device recovery is hardened.";
+  "Account cloud saves are unavailable. You can save and load your career on this device.";
 
 export const BETA_GLOBAL_LEADERBOARD_ENABLED = false;
 

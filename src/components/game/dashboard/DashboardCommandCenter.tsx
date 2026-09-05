@@ -5,11 +5,12 @@ import { useState } from "react";
 import { ArrowRight, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { DashboardActionTarget, DashboardPriorityItem } from "./dashboardPriorityModel";
-import type { DashboardWorkspaceModel } from "./dashboardWorkspaceModel";
+import { selectDashboardSupportingItems, type DashboardWorkspaceModel } from "./dashboardWorkspaceModel";
 import { DashboardPriorityCard } from "./DashboardPriorityCard";
 const DashboardIntelligencePanel = dynamic(() => import("./DashboardIntelligencePanel"), { ssr: false });
 interface DashboardCommandCenterProps {
   model: DashboardWorkspaceModel;
+  representedObjectiveKey?: string;
   onAction: (target: DashboardActionTarget) => void;
   onOpenPlanner: () => void;
   onMarkReviewed?: (item: DashboardPriorityItem) => void;
@@ -18,9 +19,9 @@ interface DashboardCommandCenterProps {
   onDismiss?: (item: DashboardPriorityItem) => void;
   onDismissInsight?: (insightId: string, fingerprint?: string) => void;
 }
-export function DashboardCommandCenter({ model, onAction, onOpenPlanner, onMarkReviewed, onSnooze, onTogglePin, onDismiss, onDismissInsight }: DashboardCommandCenterProps) {
+export function DashboardCommandCenter({ model, representedObjectiveKey, onAction, onOpenPlanner, onMarkReviewed, onSnooze, onTogglePin, onDismiss, onDismissInsight }: DashboardCommandCenterProps) {
   const [showIntelligence, setShowIntelligence] = useState(false);
-  const items = model.visibleItems.slice(0, 5);
+  const items = selectDashboardSupportingItems(model.visibleItems, representedObjectiveKey).slice(0, 5);
   const [leading, ...remaining] = items;
   const handlers = { onAction, onMarkReviewed, onSnooze, onTogglePin, onDismiss };
   return (
@@ -31,7 +32,9 @@ export function DashboardCommandCenter({ model, onAction, onOpenPlanner, onMarkR
       </div>
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <div data-testid="dashboard-next-action">
-          {leading ? <DashboardPriorityCard item={leading} featured orderIndex={1} {...handlers} /> : (
+          {leading ? <DashboardPriorityCard item={leading} featured orderIndex={1} {...handlers} /> : representedObjectiveKey ? (
+            <p className="py-4 text-sm leading-6 text-quiet">Your next action is in the active case above. No other urgent matter needs attention.</p>
+          ) : (
             <div className="py-4">
               <h3 className="text-xl">Room for the next discovery.</h3>
               <p className="mt-2 max-w-xl text-sm leading-6 text-quiet">No urgent file needs your attention. Choose where to spend your next day.</p>

@@ -10,7 +10,7 @@ import { isYouthFirstHour } from "@/lib/youthFirstHour";
 import { DashboardCommandCenter } from "./DashboardCommandCenter";
 import type { DashboardActionTarget } from "./dashboardPriorityModel";
 import type { DashboardPriorityItem } from "./dashboardPriorityModel";
-import type { DashboardWorkspaceModel } from "./dashboardWorkspaceModel";
+import { getYouthDeskRepresentedObjectiveKey, type DashboardWorkspaceModel } from "./dashboardWorkspaceModel";
 import type {
   DashboardCareerEra,
   DashboardSetScreen,
@@ -70,6 +70,9 @@ export function YouthDeskDashboard({
 }: YouthDeskDashboardProps) {
   const club = scout.currentClubId ? gameState.clubs[scout.currentClubId] : undefined;
   const firstHour = isYouthFirstHour(gameState);
+  const representedObjectiveKey = getYouthDeskRepresentedObjectiveKey(
+    youthDeskAction.kind, currentSeason, currentWeek,
+  );
 
   return (
     <GameLayout>
@@ -157,6 +160,7 @@ export function YouthDeskDashboard({
           {!firstHour && dashboardWorkspace && (
             <DashboardCommandCenter
               model={dashboardWorkspace}
+              representedObjectiveKey={representedObjectiveKey}
               onAction={onDashboardAction}
               onOpenPlanner={() => setScreen("calendar")}
               onMarkReviewed={onMarkReviewed}

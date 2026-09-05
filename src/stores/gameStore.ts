@@ -1,3 +1,4 @@
+import { reportRendererError } from "@/lib/reportRendererError";
 import { revealGamePortraits, revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { create } from "zustand";
 import { createNavigationActions } from "./actions/navigationActions";
@@ -1090,7 +1091,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ gameState: saved });
     void flushGameplayAutosave(saved, set).catch((err) => {
       console.warn("saveGame: provider persist failed:", err);
-      void import("@/lib/sentry").then(({ captureException }) => captureException(err));
+      void reportRendererError(err);
     });
     return saved;
   },

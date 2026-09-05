@@ -40,6 +40,12 @@
 .font-editorial { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
 .dossier-eyebrow { color: var(--muted-foreground); font-size: .75rem; font-weight: 600; line-height: 1.4; letter-spacing: .14em; text-transform: uppercase; }
 .dossier-section { padding-block: 1.5rem; border-top: 1px solid var(--border); }
+/* Solid reading surfaces keep scene art from competing with evidence and controls. */
+.dossier-panel { background: var(--surface); border-block: 1px solid var(--border); }
+.dossier-choice { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-overlay); color: var(--foreground); }
+.dossier-choice:hover { border-color: var(--primary); }
+.dossier-choice[data-selected="true"] { border-color: var(--primary); background: var(--surface-selected); box-shadow: inset 0 -3px 0 var(--primary); }
+.dossier-choice:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
 .dossier-title { font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.75rem, 2.5vw, 2.5rem); line-height: 1.12; font-weight: 400; letter-spacing: -.025em; }
 .game-workspace { margin-inline: auto; max-width: 1480px; padding: 1.5rem clamp(1rem, 3vw, 3rem) 3rem; }
 .game-workspace :where(h1, h2, h3) { text-wrap: balance; }

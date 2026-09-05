@@ -7,7 +7,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import type {
   ScoutReport,
   ConvictionLevel,
@@ -416,22 +416,33 @@ export function ReportComparison() {
             </div>
           </div>
 
-          <div className={`mb-8 grid gap-5 ${reports.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
+          <section className="mb-5 border-t border-[var(--border)] pt-4" aria-label="Comparison decision">
+            <p className="text-base font-medium leading-6">
+              {new Set(comparisonView.cards.map((card) => card.recommendedActionLabel)).size > 1
+                ? "These reports recommend different next steps."
+                : comparisonView.cards[0].recommendedActionLabel === "Action not specified"
+                  ? "A next step has not been recorded in these reports."
+                  : `${reports.length === 2 ? "Both" : "All"} reports recommend: ${comparisonView.cards[0].recommendedActionLabel}.`}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-quiet">{comparisonView.headline}</p>
+          </section>
+
+          <div className={`mb-6 grid gap-5 ${reports.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
             {reports.map((report, idx) => {
               const player = players[idx];
               const card = comparisonView.cards[idx];
               return (
                 <article key={report.id} className="relative min-w-0 border-t-2 border-[var(--border)] pt-5">
                   <button onClick={() => removeFromComparison(report.id)} className="absolute right-0 top-2 flex h-11 w-11 items-center justify-center rounded text-quiet hover:bg-[var(--surface-interactive)]" aria-label={`Remove ${playerNames[idx]} from comparison`}><X size={15} /></button>
-                  {player && <YouthPortrait playerId={player.id} age={player.age} size={96} alt={playerNames[idx]} className="mb-4 !rounded-sm !ring-0 sm:!h-36 sm:!w-36" />}
+                  {player && <YouthPortrait playerId={player.id} age={player.age} size={96} alt={playerNames[idx]} className="mb-3 !h-20 !w-20 !rounded-sm !ring-0 sm:!h-28 sm:!w-28" />}
                   <p className="dossier-eyebrow">File {idx + 1}</p>
                   <h2 className="font-editorial mt-1 text-2xl leading-tight sm:text-3xl">{playerNames[idx]}</h2>
                   {player && <p className="mt-2 text-sm text-quiet">{player.position} · {player.age}</p>}
-                  <p className="mt-5 text-base font-semibold text-[var(--primary)]">{card.recommendedActionLabel}</p>
+                  <p className="mt-3 text-sm font-semibold leading-5 text-[var(--primary)]">{card.recommendedActionLabel}</p>
                   <p className="mt-1 text-sm leading-6 text-quiet">{card.projectedRoleLabel}</p>
                   <dl className="mt-4 space-y-3 text-sm">
                     <div><dt className="dossier-eyebrow">Confidence</dt><dd className="mt-1">{card.confidenceSummary}</dd></div>
-                    <div><dt className="dossier-eyebrow">Evidence</dt><dd className="mt-1">{card.evidenceCount} cues · {card.unknownCount} unknowns</dd></div>
+                    <div><dt className="dossier-eyebrow">Evidence</dt><dd className="mt-1">{card.evidenceCount} {card.evidenceCount === 1 ? "cue" : "cues"} · {card.unknownCount} {card.unknownCount === 1 ? "unknown" : "unknowns"}</dd></div>
                     <div><dt className="dossier-eyebrow">Main concern</dt><dd className="mt-1 leading-6 text-[var(--signal-moment)]">{card.primaryRiskLabel}</dd></div>
                   </dl>
                   <details className="mt-4 text-sm text-quiet">
@@ -449,18 +460,12 @@ export function ReportComparison() {
             })}
           </div>
 
-          {/* Summary text */}
-          <Card className="mb-6 rounded-none border-t border-[var(--border)] bg-transparent">
-            <CardContent className="px-0 py-5">
-              <h2 className="font-editorial mb-3 text-2xl">The decision</h2>
-              <p className="text-sm text-zinc-200 leading-relaxed">{comparisonView.headline}</p>
-              <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{comparisonView.explanation}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="mb-6 rounded-none border-t border-[var(--border)] bg-transparent">
-            <CardContent className="px-0 py-5">
-              <h2 className="font-editorial mb-4 text-2xl">Professional judgment</h2>
+          <details className="group border-t border-[var(--border)]" data-testid="comparison-judgments">
+            <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 py-4 text-base font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
+              Professional judgment <ChevronDown size={18} aria-hidden="true" />
+            </summary>
+            <div className="pb-5">
+              <p className="mb-4 text-sm leading-6 text-quiet">{comparisonView.explanation}</p>
               {comparisonView.mode === "legacy" ? (
                 <p className="text-sm text-zinc-400 leading-relaxed">
                   These selections predate structured verdicts, so there is no authored judgment matrix to compare here.
@@ -505,11 +510,15 @@ export function ReportComparison() {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </details>
 
           {comparisonView.legacyComparison && (
-            <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <details className="border-t border-[var(--border)]" data-testid="comparison-earlier-estimates">
+              <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 py-4 text-base font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
+                Earlier attribute estimates <ChevronDown size={18} aria-hidden="true" />
+              </summary>
+              <div className="grid grid-cols-1 gap-6 pb-5 lg:grid-cols-2">
               {/* Radar Chart */}
               <Card>
                 <CardContent className="px-0 py-5">
@@ -588,11 +597,16 @@ export function ReportComparison() {
                 </div>
               </CardContent>
               </Card>
-            </div>
+              </div>
+            </details>
           )}
 
           {/* Position suitability + Strengths/Weaknesses */}
-          <div className={`mb-6 grid grid-cols-1 gap-6 ${comparisonView.legacyComparison ? "lg:grid-cols-2" : ""}`}>
+          <details className="border-t border-[var(--border)]" data-testid="comparison-strengths">
+            <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 py-4 text-base font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
+              Strengths, concerns and role fit <ChevronDown size={18} aria-hidden="true" />
+            </summary>
+          <div className={`grid grid-cols-1 gap-6 pb-5 ${comparisonView.legacyComparison ? "lg:grid-cols-2" : ""}`}>
             {comparisonView.legacyComparison && (
               <Card>
                 <CardContent className="px-0 py-5">
@@ -609,11 +623,14 @@ export function ReportComparison() {
               </CardContent>
             </Card>
           </div>
+          </details>
 
           {/* Key Metrics Summary Table */}
-          <Card className="mb-6 rounded-none border-t border-[var(--border)] bg-transparent">
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
+          <details className="border-t border-[var(--border)]" data-testid="comparison-reference">
+            <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 py-4 text-base font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
+              All report values <ChevronDown size={18} aria-hidden="true" />
+            </summary>
+              <div className="overflow-x-auto pb-5" role="region" aria-label="Report values side by side" tabIndex={0}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#27272a] text-left text-xs text-quiet">
@@ -729,8 +746,7 @@ export function ReportComparison() {
                   </tbody>
                 </table>
               </div>
-            </CardContent>
-          </Card>
+          </details>
         </div>
       </div>
     </GameLayout>

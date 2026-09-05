@@ -18,13 +18,13 @@ export function PillToggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative h-11 w-16 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-        checked ? "bg-emerald-500" : "bg-zinc-700"
+      className={`relative h-11 w-16 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+        checked ? "bg-[var(--primary)]" : "bg-[var(--border)]"
       }`}
     >
       <span
-        className={`absolute left-1.5 top-1.5 h-8 w-8 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-5" : "translate-x-0"
+        className={`absolute left-1.5 top-1.5 h-8 w-8 rounded-full shadow transition-transform ${
+          checked ? "translate-x-5 bg-[var(--primary-foreground)]" : "translate-x-0 bg-[var(--foreground)]"
         }`}
       />
     </button>
@@ -47,11 +47,8 @@ export function RadioGroup<T extends string>({
       {options.map((option) => (
         <label
           key={option.value}
-          className={`flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-md border px-4 py-2 text-sm transition ${
-            value === option.value
-              ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
-              : "border-[#27272a] text-zinc-400 hover:border-zinc-600 hover:text-white"
-          }`}
+          data-selected={value === option.value}
+          className="dossier-choice flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition"
         >
           <input
             type="radio"
@@ -59,7 +56,7 @@ export function RadioGroup<T extends string>({
             value={option.value}
             checked={value === option.value}
             onChange={() => onChange(option.value)}
-            className="sr-only"
+            className="h-4 w-4 shrink-0 accent-[var(--primary)]"
           />
           {option.label}
         </label>
@@ -78,11 +75,11 @@ export function SettingRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+    <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] py-4">
       <div className="min-w-0">
         <p className="text-sm font-medium">{title}</p>
         {description ? (
-          <p className="mt-0.5 text-xs leading-relaxed text-zinc-400">{description}</p>
+          <p className="mt-0.5 text-sm leading-relaxed text-quiet">{description}</p>
         ) : null}
       </div>
       {children}
