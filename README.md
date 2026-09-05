@@ -73,3 +73,12 @@ Supabase credentials are optional for cloud features. Keep online feedback disab
 - [Crash, rollback, and installer runbooks](docs/release/operations/README.md)
 
 Passing source tests does not certify a signed installer, Steam integration, physical hardware, or human usability/accessibility. Release evidence must refer to the exact source candidate and package bytes being distributed.
+
+
+## Source runtime diagnostics and build isolation
+
+On Windows, after a normal export build and Electron runtime installation, `node scripts/run-source-windows-runtime-diagnostic.mjs` exercises the opening, manual save, graceful close and exact save reopen in an isolated offline profile. Results live under `artifacts/source-runtime-diagnostics`. This checks source Electron behavior; it does not build, sign or certify an installer.
+
+Stop the development server before a production build. Development and production share `.next`, so concurrent builds require separate checkouts and output directories. Playwright uses `out-e2e`; shipping uses `out`. Full release soaks remain separate from smaller development diagnostics.
+
+The current improvement work is tracked in `docs/QUALITY_IMPLEMENTATION.md`. Earlier canonical reports are preserved under `docs/history/canonical-readiness-20260904` with their original source scope.
