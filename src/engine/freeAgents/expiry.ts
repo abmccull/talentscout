@@ -20,6 +20,7 @@ import {
 } from "@/engine/finance/clubEconomics";
 import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
+import { getContractWageBaseline } from "@/engine/finance/wages";
 
 // =============================================================================
 // CONSTANTS
@@ -133,6 +134,7 @@ export function processContractExpiries(
       const extension = preferredRenewalLength(player, appearances, player.morale ?? 5);
       const renewedWage = renewalWageExpectation(
         player,
+        club.reputation,
         extension,
         appearances,
         player.morale ?? 5,
@@ -262,11 +264,12 @@ function preferredRenewalLength(
 
 function renewalWageExpectation(
   player: Player,
+  clubReputation: number,
   contractLength: number,
   appearances: number,
   morale: number,
 ): number {
-  const abilityBaseline = Math.round(player.currentAbility * 60);
+  const abilityBaseline = getContractWageBaseline(player, clubReputation);
   const usageMultiplier = appearances >= 12 ? 1.12
     : appearances >= 6 ? 1.05
       : appearances === 0 ? 0.94
@@ -387,17 +390,17 @@ function getMaxWeeksInPool(ca: number): number {
   return POOL_DURATION_JOURNEYMAN;
 }
 
-function createFreeAgentFromPlayer(
+export function createFreeAgentFromPlayer(
   player: Player,
   club: Club,
   currentSeason: number,
   countryKey: string,
 ): FreeAgent {
-  // Wage expectation based on CA and age
-  const baseWage = Math.round(player.currentAbility * 80);
+  // Preserve the player's actual market context when a contract ends.
+  const baseWage = getContractWageBaseline(player, club.reputation);
   // Older players accept lower wages
   const ageFactor = player.age > 30 ? 0.8 : player.age > 28 ? 0.9 : 1.0;
-  const wageExpectation = Math.round(baseWage * ageFactor);
+  const wageExpectation = Math.max(200, Math.round(baseWage * ageFactor));
 
   // Signing bonus: 2-4 weeks wages
   const signingBonusExpectation = Math.round(wageExpectation * 3);

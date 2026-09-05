@@ -12,6 +12,8 @@ The default build is Youth Scout Early Access: `src/lib/demo.ts:15` enables it u
 
 ## Authority and the real loop
 
+Integrated repair authority: `world/loanClosureSettlement.ts` consumes applied lifecycle events, closed loan history and preallocated message IDs once per committed week. It updates recommendation completion, inbox feedback and scout rewards without another RNG draw. `freeAgents/contractSettlement.ts` settles expired ownership after movement arbitration at the season boundary. These are stages of the existing weekly pipeline, not separate clocks or persistence stores.
+
 The root Zustand store composes action modules. `src/engine/core/gameStatePartitions.ts` explicitly partitions shared world, shared career and mode-owned state while preserving the saved shape. The canonical model is `src/engine/core/types.ts:1760`; split types under `core/types/` are part of the same contract, not independent databases.
 
 The source-backed Youth loop is:
@@ -27,6 +29,10 @@ The source-backed Youth loop is:
 This is a source trace through `calendar.ts`, `observation/session.ts`, `observationActions.ts`, `reportActions.ts` and `weeklyActions.ts`; rendered play must separately confirm that the player can complete it and wants to repeat it. Scouting a player is not equivalent to revealing exact attributes: `Observation`, evidence claims, perceived ability, authored reports and player-facing selectors already exist.
 
 Weekly ordering is explicit in `core/weeklySimulationTelemetry.ts`: activity resolution → world systems → core world tick → post-tick accountability → season rollover → finalize. `core/weeklySimulationPipeline.ts` rejects phase reordering and a completion that does not advance the date. Interactive, async and headless execution enter this shared orchestration through `stores/actions/weeklyActions.ts`, `weeklyAsyncActions.ts`, `weeklyHeadlessTransaction.ts` and `workers/weeklySimulation.worker.ts`. Tests must still establish equivalence and exactly-once effects; the phase contract alone cannot prove them.
+
+The integrated repair adds `freeAgents/contractSettlement.ts` immediately after season-end movement arbitration: unresolved agreed renewals are rechecked after loan/transfer changes, remaining expired ownership is released, and only committed releases create free-agent rows and notices. `match/eligibleRoster.ts` is shared by detailed and abstract selection; registration, injury and suspension determine eligibility before either path ranks players. Academy cover is available when a healthy senior XI or natural goalkeeper is missing. These are active deterministic ownership rules, not a second simulation tick.
+
+`finance/wages.ts` now owns the common ability/club-level wage curve used by generation and contracts. Existing pay anchors renewals and professional moves; unsigned intake uses the destination market. `clubEconomics.ts` retains approved wage capacity during annual reapproval, while `world/relegation.ts` applies authored funding changes once with league membership. These weekly wage limits are distinct from cash and scouting budgets. Joint roster/availability and payroll distributions are development diagnostics, with long-horizon balance tracked in the report.
 
 ## World and player simulation
 

@@ -31,6 +31,7 @@ import {
   scoreDoctrineAgeFit,
 } from "@/engine/world/recruitmentIdentity";
 import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
+import { getContractWageBaseline } from "@/engine/finance/wages";
 
 // =============================================================================
 // CONSTANTS
@@ -338,7 +339,7 @@ export function tickFreeAgentPool(
       if (updatedAgents.some((a) => a.playerId === player.id)) continue;
 
       const maxWeeks = player.currentAbility >= 45 ? 16 : 20;
-      const baseWage = Math.round(player.currentAbility * 80);
+      const baseWage = getContractWageBaseline(player, club.reputation);
       const ageFactor = player.age > 30 ? 0.8 : 0.9;
 
       midSeasonReleases.push({
@@ -349,7 +350,7 @@ export function tickFreeAgentPool(
         releasedSeason: state.currentSeason,
         weeksInPool: 0,
         maxWeeksInPool: maxWeeks,
-        wageExpectation: Math.round(baseWage * ageFactor),
+        wageExpectation: Math.max(MIN_WAGE, Math.round(baseWage * ageFactor)),
         signingBonusExpectation: Math.round(baseWage * ageFactor * 2),
         discoverySource: null,
         discoveredByScout: false,

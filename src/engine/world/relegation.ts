@@ -347,6 +347,9 @@ export function applyRelegationResult(
       leagueId: event.toLeagueId,
       reputation: newReputation,
       budget: newBudget,
+      weeklyWageBudget: Number.isFinite(club.weeklyWageBudget) && (club.weeklyWageBudget ?? 0) > 0
+        ? Math.max(800, Math.min(10_000_000, Math.round(club.weeklyWageBudget! * event.budgetMultiplier)))
+        : club.weeklyWageBudget,
     };
 
     fromLeague.clubIds = fromLeague.clubIds.filter((id) => id !== club.id);

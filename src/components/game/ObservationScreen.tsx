@@ -61,6 +61,7 @@ import {
 } from "./ObservationPhase";
 import { YouthPortraitWithFallback } from "./YouthPortrait";
 import { ObservationPitch } from "./observation/ObservationPitch";
+import { LeaveObservationButton } from "./observation/LeaveObservationButton";
 import {
   LENS_KEYS,
   LENS_VISUAL,
@@ -1142,10 +1143,6 @@ export function ObservationScreen() {
     useGameStore.getState().endObservationSession();
   }, []);
 
-  const handleEndSession = useCallback(() => {
-    useGameStore.getState().endObservationSession();
-  }, []);
-
   const handleContinue = useCallback(() => {
     useGameStore.getState().endObservationSession();
     useGameStore.getState().setScreen("calendar");
@@ -1281,7 +1278,7 @@ export function ObservationScreen() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="hidden text-xs leading-5 text-zinc-400 sm:block"><span className="font-medium text-zinc-200">Passage {activeSession.currentPhaseIndex + 1} of {activeSession.phases.length}</span><br />{activeSession.flaggedMoments.length} recorded · {activeSession.focusTokens.available} focus remaining</div>
                     <div className="flex w-full items-center gap-2 sm:w-auto">
-                      {!isOpeningWatch && <Button variant="ghost" className="min-h-11 shrink-0 text-zinc-300" onClick={handleEndSession}>End early</Button>}
+                      {!isOpeningWatch && <LeaveObservationButton session={activeSession} />}
                       {insightActions.length > 0 && <Button variant="outline" className="min-h-11 shrink-0 gap-2 text-zinc-300" onClick={openInsightOverlay} aria-label="Use Insight action"><Zap size={14} aria-hidden="true" /><span className="hidden min-[430px]:inline">Insight</span><span className="tabular-nums">{insightState.points}</span></Button>}
                       <Button className="min-h-11 min-w-0 flex-1 gap-2 sm:min-w-56 sm:flex-none" onClick={handleAdvancePhase} disabled={!isLastPhase && (openingPhaseRequiresFlag || requiresHalftimeChoice)} data-tutorial-id={isOpeningWatch && activeSession.currentPhaseIndex === 0 ? "observation-advance-to-standout" : undefined}>
                         {isLastPhase ? "Reflect on the watch" : openingPhaseRequiresFlag ? "Record a moment before moving on" : requiresHalftimeChoice ? "Choose how to watch" : "Next phase"}<ChevronRight size={16} className="shrink-0" aria-hidden="true" />
@@ -1304,12 +1301,12 @@ export function ObservationScreen() {
                   <div className="mt-auto space-y-2 border-t border-white/10 p-4" data-tutorial-id="observation-session-controls">
                     {insightActions.length > 0 && <Button variant="outline" className="min-h-11 w-full gap-2" onClick={openInsightOverlay} aria-label="Use Insight action"><Zap size={14} aria-hidden="true" />Use Insight · {insightState.points} IP</Button>}
                     <Button className="min-h-11 w-full gap-2" onClick={handleAdvancePhase}><ChevronRight size={14} aria-hidden="true" />{isLastPhase ? "Go to Reflection" : "Next Phase"}</Button>
-                    {!isOpeningWatch && <Button variant="ghost" className="min-h-11 w-full text-zinc-300" onClick={handleEndSession}>End Session Early</Button>}
+                    {!isOpeningWatch && <LeaveObservationButton session={activeSession} className="w-full" />}
                   </div>
                 </aside>
                 <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[var(--background)] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden" data-tutorial-id="observation-session-controls" data-testid="mobile-observation-controls">
                   <div className="flex items-center gap-2">
-                    {!isOpeningWatch && <Button variant="ghost" className="min-h-11 shrink-0 text-zinc-300" onClick={handleEndSession}>End early</Button>}
+                    {!isOpeningWatch && <LeaveObservationButton session={activeSession} />}
                     {insightActions.length > 0 && <Button variant="outline" className="min-h-11 shrink-0" onClick={openInsightOverlay} aria-label="Use Insight action"><Zap size={14} aria-hidden="true" /></Button>}
                     <Button className="min-h-11 flex-1 gap-2" onClick={handleAdvancePhase}>{isLastPhase ? "Reflect" : "Next phase"}<ChevronRight size={14} aria-hidden="true" /></Button>
                   </div>

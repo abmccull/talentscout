@@ -34,6 +34,7 @@ import type {
 } from "../types";
 import type { PlayerDevelopmentEnvironmentProjection } from "../../world/developmentEnvironment";
 import type { RelegationResult } from "../../world/relegation";
+import type { DeferredLoanClosure } from "../../world/loanClosureSettlement";
 
 export interface Transfer {
   playerId: string;
@@ -188,6 +189,7 @@ export interface TickResult {
   updatedActiveLoans?: LoanDeal[];
   updatedLoanRecommendations?: LoanRecommendation[];
   loanOutcomeXp?: number;
+  deferredLoanClosures?: DeferredLoanClosure[];
 }
 
 export type { LoanOutcome };

@@ -20,6 +20,7 @@ import { formatObservationActivityLabel, type ReflectionResult } from "@/engine/
 import type { EvidenceClassificationId, ScoutCueReading } from "@/engine/core/types";
 import { resolveObservationSignalAssessment } from "@/engine/observation/questions";
 import { describeFlaggedMoment } from "@/engine/observation/momentReading";
+import { buildSessionEvidenceCards } from "@/engine/scout/evidenceModel";
 
 // =============================================================================
 // PROP TYPES
@@ -76,10 +77,12 @@ const REACTION_COLORS: Record<SessionFlaggedMoment["reaction"], string> = {
 
 const CLASSIFICATION_COPY: Record<EvidenceClassificationId, { label: string; description: string }> = {
   technicalExecution: { label: "Technical execution", description: "Body shape, touch, pass, strike, or control." },
+  decisionMaking: { label: "Decision-making", description: "The player selected an option; timing before reception has not been established." },
   preReceiveDecision: { label: "Decision before receiving", description: "Scanning and option selection happened before the ball arrived." },
-  offBallMovement: { label: "Off-ball movement", description: "Timing or positioning created value away from the ball." },
-  pressureResponse: { label: "Response to pressure", description: "The action changed when contact, risk, or a setback arrived." },
-  physicalRepeatability: { label: "Physical repeatability", description: "Balance, recovery, movement quality, or repeated output mattered." },
+  offBallMovement: { label: "Off-ball movement", description: "Timing, movement, or positioning away from the ball." },
+  pressureResponse: { label: "Response to pressure", description: "A response to actual opponent pressure, contact, or a setback." },
+  physicalExecution: { label: "Physical execution", description: "A physical action tested pace, strength, balance, agility, or jumping; repeatability remains open." },
+  physicalRepeatability: { label: "Physical repeatability", description: "The passage explicitly showed repeated effort or output." },
   anomaly: { label: "Unusual signal", description: "Worth keeping because it did not fit the surrounding level or pattern." },
   noConclusion: { label: "No reliable conclusion", description: "Keep the passage, but do not turn it into a trait claim yet." },
 };
@@ -105,11 +108,7 @@ function EvidenceSynthesisPanel({
   session: ObservationSession;
   onClassify: ReflectionScreenProps["onClassifyEvidence"];
 }) {
-  const flaggedMomentIds = useMemo(
-    () => new Set(session.flaggedMoments.map((flagged) => flagged.moment.id)),
-    [session.flaggedMoments],
-  );
-  const cues = (session.cueReadings ?? []).filter((cue) => flaggedMomentIds.has(cue.momentId));
+  const cues = useMemo(() => buildSessionEvidenceCards(session), [session]);
   if (cues.length === 0) return null;
 
   return (
@@ -127,7 +126,8 @@ function EvidenceSynthesisPanel({
       </div>
       <div className="space-y-3">
         {cues.map((cue) => {
-          const selected = session.evidenceDecisions?.[cue.id]?.classification;
+          const decision = session.evidenceDecisions?.[cue.id]?.classification;
+          const selected = decision && cue.suggestedClassifications.includes(decision) ? decision : undefined;
           return (
             <article key={cue.id} className="border-t border-[var(--border)] py-5">
               <div className="flex flex-wrap items-start justify-between gap-2">

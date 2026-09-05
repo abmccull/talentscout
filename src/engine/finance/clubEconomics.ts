@@ -203,8 +203,8 @@ export function deriveClubScoutingBudget(
 
 /**
  * Reapprove every club's annual recruitment envelope from one roster scan.
- * The result is formula-identical to calling both public derivation helpers
- * for each club, but avoids O(clubs * players) work at season rollover.
+ * Vacancies preserve approved wage capacity for replacements. Sporting funding
+ * changes belong to promotion/relegation, not to the surviving payroll size.
  */
 export function reapproveAnnualClubEconomics(
   clubs: Record<string, Club>,
@@ -221,7 +221,9 @@ export function reapproveAnnualClubEconomics(
     );
     reapproved[clubId] = {
       ...club,
-      weeklyWageBudget: deriveClubWeeklyWageBudgetFromRoster(club, roster),
+      weeklyWageBudget: Number.isFinite(club.weeklyWageBudget) && (club.weeklyWageBudget ?? 0) > 0
+        ? Math.round(club.weeklyWageBudget!)
+        : deriveClubWeeklyWageBudgetFromRoster(club, roster),
       scoutingBudget: annualScoutingBudget + carryover,
     };
   }

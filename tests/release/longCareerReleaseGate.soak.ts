@@ -135,6 +135,7 @@ const PROFILE_MATRIX_SEASON_COUNT = Number.parseInt(
 );
 const PROFILE_MATRIX_ONLY = process.env.SOAK_PROFILE_MATRIX_ONLY === "true";
 const BALANCE_DIAGNOSTICS_ONLY = process.env.SOAK_BALANCE_DIAGNOSTICS_ONLY === "true";
+const YOUTH_CONSEQUENCES_ONLY = process.env.SOAK_YOUTH_CONSEQUENCES_ONLY === "true";
 const PROFILE_MATRIX_OUTPUT_PATH = resolve(
   process.env.SOAK_PROFILE_MATRIX_OUTPUT
     ?? "artifacts/release/generated/long-career-chooser-profile-matrix.json",
@@ -1098,8 +1099,8 @@ async function simulateChooserProfileMatrix(): Promise<Array<{
   return chooserProfileMatrix;
 }
 
-const canonicalReleaseSoak = PROFILE_MATRIX_ONLY || BALANCE_DIAGNOSTICS_ONLY ? it.skip : it;
-const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY && !BALANCE_DIAGNOSTICS_ONLY ? it : it.skip;
+const canonicalReleaseSoak = PROFILE_MATRIX_ONLY || BALANCE_DIAGNOSTICS_ONLY || YOUTH_CONSEQUENCES_ONLY ? it.skip : it;
+const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY && !BALANCE_DIAGNOSTICS_ONLY && !YOUTH_CONSEQUENCES_ONLY ? it : it.skip;
 
 describe("full canonical-week release soak", () => {
   canonicalReleaseSoak("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
@@ -1257,7 +1258,7 @@ describe("full canonical-week release soak", () => {
 });
 
 
-const balanceDiagnostic = BALANCE_DIAGNOSTICS_ONLY ? it : it.skip;
+const balanceDiagnostic = BALANCE_DIAGNOSTICS_ONLY && !YOUTH_CONSEQUENCES_ONLY ? it : it.skip;
 balanceDiagnostic("records one matched-policy career without changing canonical invariants", async () => {
   const seed = process.env.SOAK_BALANCE_SEED ?? "";
   const profile = process.env.SOAK_BALANCE_PROFILE as AutonomousCareerChooserProfileId;
@@ -1290,4 +1291,12 @@ balanceDiagnostic("records one matched-policy career without changing canonical 
     passed: failures.length === 0, failures, run, diagnostics,
   }, null, 2)}\n`, "utf8");
   expect(failures, "Diagnostic retained all original invariant failures").toEqual([]);
+});
+
+const youthConsequenceScenario = YOUTH_CONSEQUENCES_ONLY ? it : it.skip;
+youthConsequenceScenario("closes a bounded real-week placement and private-pass review chain", async () => {
+  const output = process.env.SOAK_YOUTH_CONSEQUENCES_OUTPUT;
+  expect(output, "Use a distinct output path to preserve every scenario result").toBeTruthy();
+  const { runYouthConsequenceScenario } = await import("./youthConsequenceScenario");
+  await runYouthConsequenceScenario(process.env.SOAK_YOUTH_CONSEQUENCES_SEED ?? "youth-consequences-v1-01", output!);
 });

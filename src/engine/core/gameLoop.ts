@@ -143,6 +143,8 @@ import {
   settleWeeklyClubObligations,
 } from "../finance/clubEconomics";
 import { calculateMarketValue } from "../players/generation";
+import { settleSeasonContracts } from "../freeAgents/contractSettlement";
+import { settleLoanClosures } from "../world/loanClosureSettlement";
 import { getScoutHomeCountry } from "../world/travel";
 import { getTransferFlowProbability } from "../world/transfers";
 import {
@@ -193,6 +195,8 @@ import {
 import { ADJACENT_POSITIONS, calculateSystemFit, getFormationSlots } from "../firstTeam/systemFit";
 import { getCompatibleRoles } from "../players/roles";
 import { simulateAbstractCompetitionWeek } from "../world/abstractCompetition";
+import { getEligibleMatchRoster } from "../match/eligibleRoster";
+import { calculatePlayerWeeklyWage, getContractWageBaseline } from "../finance/wages";
 import { proposeTransferAgreement } from "../transfers/transferAgreement";
 import { formatTransferNewsBody } from "../transfers";
 import { assessRetirementIntent } from "../transfers/retirementPlanning";
@@ -315,12 +319,7 @@ export function selectStartingXI(
       : 0;
     return player.currentAbility + player.form * 2 + promisedRoleBonus;
   };
-  const eligible = club.playerIds
-    .map((playerId) => players[playerId])
-    .filter((player): player is Player => {
-      if (!player || player.injured) return false;
-      return (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0;
-    })
+  const eligible = getEligibleMatchRoster(club, players, disciplinaryRecords)
     .sort((left, right) => {
       const scoreDelta = selectionScore(right) - selectionScore(left);
       return scoreDelta !== 0 ? scoreDelta : left.id.localeCompare(right.id);
@@ -895,6 +894,7 @@ export function simulateHistoricalWorldMatchWeeks(
     );
     const abstractWeek = simulateAbstractCompetitionWeek({
       worldSeed: state.seed,
+      disciplinaryRecords: availableDisciplinaryRecords,
       season: state.currentSeason,
       week,
       seasonLength,
@@ -2158,6 +2158,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   const detailedFixturesPlayed = simulateWeekFixtures(state, rng, currentDisciplinary);
   const abstractWeek = simulateAbstractCompetitionWeek({
     worldSeed: state.seed,
+    disciplinaryRecords: currentDisciplinary,
     season: state.currentSeason,
     week: state.currentWeek,
     seasonLength: getSeasonLength(state.fixtures, state.currentSeason),
@@ -2318,8 +2319,8 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       state.players,
       { currentWeek: state.currentWeek, currentSeason: state.currentSeason },
     );
-    const youthWeeklyWage = (youth: UnsignedYouth) =>
-      Math.max(100, Math.round(youth.player.currentAbility * 50));
+    const youthWeeklyWage = (youth: UnsignedYouth, club: Club) =>
+      Math.max(100, calculatePlayerWeeklyWage(youth.player.currentAbility, club.reputation));
     youthAgingResult = processYouthAging(
       rng,
       state.unsignedYouth,
@@ -2330,13 +2331,13 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
           const context = youthAffordability[club.id];
           return context
             ? assessClubAffordabilityFromContext(context, {
-                weeklyWageCommitment: youthWeeklyWage(youth),
+                weeklyWageCommitment: youthWeeklyWage(youth, club),
               }).affordable
             : false;
         },
         reserveClubSigning: (youth, club) => {
           const context = youthAffordability[club.id];
-          if (context) context.currentWeeklyCommitment += youthWeeklyWage(youth);
+          if (context) context.currentWeeklyCommitment += youthWeeklyWage(youth, club);
         },
       },
     );
@@ -2568,17 +2569,12 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       const releasedPlayers = expiryResult.releasedPlayers.filter(
         (released) => !retiringPlayerIds.has(released.playerId),
       );
-      newMessages.push(...expiryResult.messages);
+      // Expiry still consumes its established RNG draws, but only committed
+      // releases may produce a player-facing announcement during application.
       contractExpiryResult = { renewals, releasedPlayers };
 
-      if (releasedPlayers.length > 0) {
-        updatedFreeAgentPool = {
-          ...updatedFreeAgentPool,
-          agents: [...updatedFreeAgentPool.agents, ...releasedPlayers],
-          totalReleasedThisSeason:
-            updatedFreeAgentPool.totalReleasedThisSeason + releasedPlayers.length,
-        };
-      }
+      // The authoritative movement resolver indexes committed contract releases.
+      // A proposal can still lose to retirement, a transfer, or a loan return.
     }
 
     // Discovery runs against the final pool for this tick.
@@ -2650,6 +2646,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     updatedActiveLoans: loanPhase.updatedActiveLoans,
     updatedLoanRecommendations,
     loanOutcomeXp,
+    deferredLoanClosures: loanPhase.deferredLoanClosures,
   };
 }
 
@@ -2956,11 +2953,8 @@ export function advanceWeek(
       deal,
       getSeasonLength(state.fixtures, deal.startSeason),
     );
-    const projectedBuyWage = Math.max(
-      100,
-      updatedPlayers[deal.playerId]?.wage
-        ?? Math.round((updatedPlayers[deal.playerId]?.currentAbility ?? 0) * 60),
-    );
+    const loanee = updatedPlayers[deal.playerId];
+    const projectedBuyWage = loanee && loanClub ? getContractWageBaseline(loanee, loanClub.reputation) : 100;
     const buyOptionAffordability = loanClub
       ? assessClubAffordability({
           club: loanClub,
@@ -2979,7 +2973,8 @@ export function advanceWeek(
       playerId: deal.playerId,
       dealId: deal.id,
       resolution: exerciseBuyOption ? "buyOption" : "return",
-      outcome: exerciseBuyOption ? "buy-option-exercised" : evaluatedOutcome,
+      outcome: exerciseBuyOption ? "buy-option-exercised"
+        : evaluateLoanOutcome({ ...deal, buyOptionFee: undefined }, getSeasonLength(state.fixtures, deal.startSeason)),
       reason: exerciseBuyOption ? "Loan buy option exercised" : "Loan term completed",
     });
   }
@@ -3055,13 +3050,14 @@ export function advanceWeek(
   for (const { youthId, clubId } of tickResult.youthAgingResult?.autoSigned ?? []) {
     const youth = tickResult.youthAgingResult?.updatedUnsignedYouth[youthId]
       ?? state.unsignedYouth[youthId];
-    if (!youth || youthSigningIdentityCollisions.has(youth.player.id)) continue;
+    const destination = state.clubs[clubId];
+    if (!youth || !destination || youthSigningIdentityCollisions.has(youth.player.id)) continue;
     movementIntents.push({
       type: "youthSigning",
       playerId: youth.player.id,
       toClubId: clubId,
       contractLength: 3,
-      wage: Math.max(100, Math.round(youth.player.currentAbility * 50)),
+      wage: Math.max(100, calculatePlayerWeeklyWage(youth.player.currentAbility, destination.reputation)),
       reason: "NPC youth recruitment",
     });
   }
@@ -3088,6 +3084,14 @@ export function advanceWeek(
     state.currentSeason,
     getSeasonLength(state.fixtures, state.currentSeason),
   );
+  let seasonContractMessages: InboxMessage[] = [];
+  if (tickResult.endOfSeasonTriggered) {
+    const settlement = settleSeasonContracts(lifecycleResolution,
+      tickResult.contractExpiryResult, state,
+      getSeasonLength(state.fixtures, state.currentSeason));
+    lifecycleResolution = settlement;
+    seasonContractMessages = settlement.messages;
+  }
   const committedYouthSigningPlayerIds = new Set(
     lifecycleResolution.applied
       .filter((movement) => movement.type === "youthSigning")
@@ -3173,10 +3177,25 @@ export function advanceWeek(
       ),
     };
   }
-  const updatedLoanRecommendations = (
-    tickResult.updatedLoanRecommendations ?? state.loanRecommendations ?? []
-  ).map((recommendation) => {
+  const loanClosureSettlement = settleLoanClosures({
+    scout: state.scout,
+    recommendations: tickResult.updatedLoanRecommendations ?? state.loanRecommendations ?? [],
+    prepared: tickResult.deferredLoanClosures ?? [],
+    applied: lifecycleResolution.applied,
+    loanHistory: lifecycleResolution.state.loanHistory,
+    players: lifecycleResolution.state.players,
+    clubs: lifecycleResolution.state.clubs,
+    inbox: state.inbox,
+    week: state.currentWeek,
+    season: state.currentSeason,
+  });
+  const updatedLoanRecommendations = loanClosureSettlement.recommendations.map((recommendation) => {
     if (recommendation.status !== "accepted" || !recommendation.loanDealId) {
+      return recommendation;
+    }
+    // Only this tick's new agreements can fail registration. A prior loan
+    // can legitimately disappear because its actual lifecycle has closed.
+    if (!(tickResult.loanDeals ?? []).some((deal) => deal.id === recommendation.loanDealId)) {
       return recommendation;
     }
     const dealApplied = updatedActiveLoans.some((deal) => deal.id === recommendation.loanDealId);
@@ -3234,7 +3253,7 @@ export function advanceWeek(
   // accidentally amplifying losses, and harder modes do the reverse.
   // Season event effects may also modify scout reputation and fatigue.
   const boardReputationChange = tickResult.boardDirectiveResult?.reputationChange ?? 0;
-  const rawRepChange = tickResult.reputationChange + boardReputationChange;
+  const rawRepChange = tickResult.reputationChange + boardReputationChange + loanClosureSettlement.reputationDelta;
   const scaledRepChange = scaleReputationChange(rawRepChange, state.difficulty);
   const seasonScout = tickResult.seasonEventState?.scout ?? state.scout;
   const reputationUpdatedScout = {
@@ -3250,12 +3269,16 @@ export function advanceWeek(
     {
       [seasonScout.primarySpecialization === "youth"
         ? "potentialAssessment"
-        : "playerJudgment"]: tickResult.loanOutcomeXp ?? 0,
+        : "playerJudgment"]: (tickResult.loanOutcomeXp ?? 0) + loanClosureSettlement.xpAward,
     },
   );
 
   // ---- A4: Satisfaction history: accumulate deltas with a rolling cap ----
   let allDeltas: BoardSatisfactionDelta[] = [...tickResult.satisfactionDeltas];
+  if (loanClosureSettlement.reputationDelta !== 0) {
+    allDeltas.push({ reason: "Loan outcome accountability",
+      delta: loanClosureSettlement.reputationDelta, week: state.currentWeek, season: state.currentSeason });
+  }
 
   // Add board directive reputation change as a satisfaction delta (tier 5)
   if (boardReputationChange !== 0 && tickResult.boardDirectiveResult) {
@@ -3306,7 +3329,7 @@ export function advanceWeek(
   );
 
   // ---- Inbox ----
-  const updatedInbox = [...state.inbox, ...tickResult.newMessages];
+  const updatedInbox = [...state.inbox, ...tickResult.newMessages, ...seasonContractMessages, ...loanClosureSettlement.messages];
 
   // ---- Advance week or season ----
   let nextWeek = state.currentWeek + 1;

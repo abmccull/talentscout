@@ -377,6 +377,32 @@ interface DayCardProps {
   onLaunchInteractiveSession?: () => void;
 }
 
+/** Before the approach is committed, candidates are a public attendance list.
+ * The day's precomputed attribute readings are outcomes, not selection hints.
+ */
+export function FocusCandidateButton({ candidate, active, onSelect }: {
+  candidate: DayResult["observations"][number];
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button type="button" aria-pressed={active} onClick={onSelect}
+      className={`min-h-11 w-full rounded-lg border px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${
+        active ? "border-amber-400/60 bg-amber-400/10"
+          : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
+      }`}>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="min-w-0 break-words text-xs font-medium text-white">{candidate.playerName}</span>
+        {(candidate.age || candidate.position) && (
+          <span className="text-[10px] text-zinc-300">
+            {candidate.position}{candidate.age ? `, ${candidate.age}` : ""}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 export function DayCard({
   dayResult,
   allDayResults,
@@ -525,27 +551,12 @@ export function DayCard({
                           {availableFocusCandidates.map((candidate) => {
                             const active = pendingFocusIds.includes(candidate.playerId);
                             return (
-                              <button
+                              <FocusCandidateButton
                                 key={candidate.playerId}
-                                type="button"
-                                aria-pressed={active}
-                                className={`min-h-11 w-full rounded-lg border px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${
-                                  active
-                                    ? "border-amber-400/60 bg-amber-400/10"
-                                    : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
-                                }`}
-                                onClick={() => toggleFocusCandidate(candidate.playerId)}
-                              >
-                                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                  <span className="min-w-0 break-words text-xs font-medium text-white">{candidate.playerName}</span>
-                                  {(candidate.age || candidate.position) && (
-                                    <span className="text-[10px] text-zinc-300">
-                                      {candidate.position}{candidate.age ? `, ${candidate.age}` : ""}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="mt-0.5 break-words text-[11px] text-zinc-300">{candidate.topAttributes}</p>
-                              </button>
+                                candidate={candidate}
+                                active={active}
+                                onSelect={() => toggleFocusCandidate(candidate.playerId)}
+                              />
                             );
                           })}
                         </div>

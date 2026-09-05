@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Activity, DayResult, Scout } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
 import { rollActivityQuality, type ActivityQualityTier } from "@/engine/core/activityQuality";
-import { DayCard } from "@/components/game/WeekSimulationScreen";
+import { DayCard, FocusCandidateButton } from "@/components/game/WeekSimulationScreen";
 
 const OUTCOME = "A steady follow-up session. The player performed as expected.";
 
@@ -28,6 +28,20 @@ function render(day: DayResult, interactiveSessionCompleted = false): string {
 }
 
 describe("day outcome preview boundary", () => {
+  it("cannot reveal seeded attribute outcomes while selecting attention targets", () => {
+    const candidate = { playerId: "prospect", playerName: "Ryan Ashley", position: "CB", age: 17,
+      topAttributes: "agility 17, balance 8, pace 5" };
+    for (const active of [false, true]) {
+      const button = (topAttributes: string) => renderToStaticMarkup(createElement(FocusCandidateButton, {
+        candidate: { ...candidate, topAttributes }, active, onSelect: () => undefined,
+      }));
+      const html = button(candidate.topAttributes);
+      expect(html).toContain("Ryan Ashley");
+      expect(html).toContain("CB");
+      expect(html).not.toContain("agility");
+      expect(html).toBe(button("pace 20, composure 20, passing 20"));
+    }
+  });
   it("does not render any precomputed outcome narrative before the approach is resolved", () => {
     const day = pendingDay();
     const html = render(day);

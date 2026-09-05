@@ -325,6 +325,7 @@ export function generateMoments(
 
     moments.push({
       id,
+      actionId: action.id,
       playerId: player.playerId,
       momentType,
       quality,

@@ -50,6 +50,8 @@ describe("football health snapshots", () => {
     expect(health.movements.retainedByType.retirement).toBe(1);
     expect(health.populations.activeWorld.byLeague).toEqual({ league: 1 });
     expect(health.rosters.clubsWithFewerThanElevenSeniors).toBe(1);
+    expect(health.rosters.clubsWithFewerThanElevenRegistered).toBe(1);
+    expect(health.rosters.clubDepth[0]).toMatchObject({ registeredCount: 1, availableCount: 1, weeklyPayroll: source.players.senior.wage });
     expect(health.finance.completedSeasonIncome).toBe(200);
     expect(health.finance.completedSeasonExpenses).toBe(40);
     expect(health.finance.careerBalance).toBe(-50);

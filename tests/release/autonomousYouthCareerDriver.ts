@@ -24,6 +24,8 @@ import {
 import type { DelegationPolicyId, WeeklyIntentId } from "@/engine/core/weeklyStrategy";
 import { reconcileInboxActionRequirements } from "@/engine/world/inboxActionAuthority";
 import { useGameStore } from "@/stores/gameStore";
+import { getScheduledActivityInstances } from "@/engine/core/calendar";
+import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
 
 const INTENT_ROTATION: WeeklyIntentId[] = [
   "balancedDesk",
@@ -443,6 +445,46 @@ function clearWeekSchedule(): void {
   const store = useGameStore.getState();
   for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
     store.unscheduleActivity(dayIndex);
+  }
+}
+
+/** Choose from the same academy shortlist the planner shows, using public need. */
+export function chooseAutonomousPlacementDestination(state: GameState, playerId: string): string | undefined {
+  const youth = Object.values(state.unsignedYouth ?? {}).find((entry) =>
+    (entry.player.id === playerId || entry.id === playerId) && !entry.placed && !entry.retired);
+  if (!youth) return undefined;
+  const report = Object.values(state.reports).filter((entry) =>
+    entry.scoutId === state.scout.id && entry.playerId === youth.player.id)
+    .sort((a, b) => compareReportRecency(b, a))[0];
+  if (!report || report.recommendedAction === "pass") return undefined;
+  const eligible = getEligibleClubsForPlacement(youth, Object.values(state.clubs), state.scout, state.leagues,
+    { preferredClubId: report.intendedClubId });
+  // A filed audience is a commitment; do not silently retarget it.
+  if (report.intendedClubId) return eligible.find((club) => club.id === report.intendedClubId)?.id;
+  const needsPosition = (clubId: string) => Object.values(state.youthRecruitmentBriefs ?? {}).some((brief) =>
+    brief.clubId === clubId && brief.status === "open" && brief.maxAge >= youth.player.age
+    && (brief.expiresSeason > state.currentSeason ||
+      (brief.expiresSeason === state.currentSeason && brief.expiresWeek > state.currentWeek))
+    && brief.requiredPositions.some((position) => position === youth.player.position || youth.player.secondaryPositions.includes(position)));
+  // Retain the shortlist's own-club/route ordering inside the need tier.
+  return eligible.find((club) => needsPosition(club.id))?.id ?? eligible[0]?.id;
+}
+
+/** Finish an already selected pitch; never create additional work or add resources. */
+export function completeScheduledPlacementDestinations(): void {
+  const store = useGameStore.getState();
+  const state = store.gameState;
+  if (!state) return;
+  for (const { activity, dayIndex } of getScheduledActivityInstances(state.schedule)) {
+    if (activity.type !== "writePlacementReport" || !activity.targetId || activity.destinationClubId) continue;
+    const destinationClubId = chooseAutonomousPlacementDestination(state, activity.targetId);
+    if (!destinationClubId) continue;
+    store.unscheduleActivity(dayIndex);
+    store.scheduleActivity({ ...activity, destinationClubId }, dayIndex);
+    const placed = useGameStore.getState().gameState?.schedule.activities[dayIndex];
+    if (!placed || placed.instanceId !== activity.instanceId || placed.destinationClubId !== destinationClubId) {
+      throw new Error("Autonomous placement destination could not preserve its scheduled activity");
+    }
   }
 }
 
@@ -909,6 +951,7 @@ function diagnosticNow(): number {
 
 export async function driveAutonomousYouthCareerWeek(
   telemetry: AutonomousCareerTelemetry,
+  options: { afterSchedule?: () => void } = {},
 ): Promise<AutonomousCareerWeekTiming> {
   const startedAtMs = diagnosticNow();
   stabilizeAutonomousCareerState(telemetry);
@@ -924,7 +967,11 @@ export async function driveAutonomousYouthCareerWeek(
   store.setWeeklyIntent(chooseWeeklyIntent(state, telemetry));
   store.setDelegationPolicy(chooseDelegationPolicy(state, telemetry));
   store.autoSchedule(buildPriorities(state, telemetry));
+  completeScheduledPlacementDestinations();
   ensureCourseStudyScheduled();
+  // Dedicated bounded scenarios can choose their next legal calendar action;
+  // the ordinary soak uses the unchanged profile schedule and canonical tick.
+  options.afterSchedule?.();
   ensureScheduledWork();
   const scheduledAtMs = diagnosticNow();
 

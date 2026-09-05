@@ -239,8 +239,9 @@ function describeFlaggedEvidence(session: ObservationSession, flagged: SessionFl
     else if (flag.reaction === "concerning") reactions.concerning += 1;
     else reactions.inconclusive += 1;
     const cue = visibleFlaggedCue(session, flag);
-    positive ||= flag.reaction === "promising" || cue?.direction === "positive";
-    negative ||= flag.reaction === "concerning" || cue?.direction === "negative";
+    const usableDirection = cue && cue.clarity !== "glimpse" ? cue.direction : undefined;
+    positive ||= flag.reaction === "promising" || usableDirection === "positive";
+    negative ||= flag.reaction === "concerning" || usableDirection === "negative";
   }
   const stance = positive && negative ? "mixed"
     : negative ? "concern"

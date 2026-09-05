@@ -52,6 +52,18 @@ function club(
 }
 
 describe("club economics", () => {
+  it("keeps approved replacement capacity after departures without a yearly payroll growth ratchet", () => {
+    const approved = club("a", { reputation: 13, budget: 100_000, weeklyWageBudget: 15_400 });
+    const thin = { p: player("p", "a", 1_000) };
+    const first = reapproveAnnualClubEconomics({ a: approved }, thin).a;
+    expect(first.weeklyWageBudget).toBe(15_400);
+    expect(reapproveAnnualClubEconomics({ a: first }, {}).a.weeklyWageBudget).toBe(15_400);
+    const expensive = { p: player("p", "a", 15_400) };
+    expect(reapproveAnnualClubEconomics({ a: first }, expensive).a.weeklyWageBudget).toBe(15_400);
+    expect(first.budget).toBe(approved.budget);
+    expect(assessClubAffordability({ club: first, players: thin, weeklyWageCommitment: 1_000 }).affordable).toBe(true);
+  });
+
   it.each([0, 1, 125, 749])("preserves a spent or partial scouting budget of %i through serialization and normalization", (budget) => {
     const saved = JSON.parse(JSON.stringify(club("spent", { scoutingBudget: budget }))) as Club;
     const normalized = normalizeClubEconomics(saved, {});

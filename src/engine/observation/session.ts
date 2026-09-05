@@ -33,6 +33,7 @@ import type {
 import { ACTIVITY_MODE_MAP, VENUE_PHASE_RANGES } from "@/engine/observation/types";
 import { getStrategicChoiceResolutions } from "@/engine/observation/quickInteraction";
 import { createObservationSituation } from "@/engine/observation/situations";
+import { getSupportedCueClassifications } from "@/engine/scout/cueSemantics";
 import {
   buildContextualScoutingQuestions,
   resolveObservationSignalAssessment,
@@ -492,7 +493,8 @@ export function classifySessionEvidence(
 ): ObservationSession {
   if (session.state !== "reflection") return session;
   const cue = session.cueReadings?.find((candidate) => candidate.id === cueId);
-  if (!cue || !cue.suggestedClassifications.includes(classification)) return session;
+  if (!cue || !getSupportedCueClassifications(cue).includes(classification)
+    || (classification !== "noConclusion" && !cue.suggestedClassifications.includes(classification))) return session;
   return {
     ...session,
     evidenceDecisions: {

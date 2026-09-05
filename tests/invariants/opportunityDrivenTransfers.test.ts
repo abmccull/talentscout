@@ -124,6 +124,8 @@ function createState(overrides: {
         scoutingPhilosophy: "marketSmart",
         youthAcademyRating: 66,
         budget: 10_000_000,
+        // This empty receiving club has approved recruitment capacity.
+        weeklyWageBudget: 150_000,
         leagueId: "league-target",
         managerId: "manager-target",
         playerIds: [],
@@ -139,6 +141,7 @@ function createState(overrides: {
         budget: 10_000_000,
         leagueId: "league-target",
         managerId: "manager-other",
+        weeklyWageBudget: 150_000,
         playerIds: [],
         academyPlayerIds: [],
       },

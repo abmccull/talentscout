@@ -19,6 +19,7 @@ import {
 } from "@/engine/world/transferMotivation";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
 import { normalizeCountryKey } from "@/lib/country";
+import { getContractWageBaseline } from "@/engine/finance/wages";
 
 export type TransferAgreementRole = NonNullable<LoanDeal["agreedPlayingTime"]>;
 export type TransferRegistrationStatus = "clear" | "conditional" | "blocked";
@@ -290,7 +291,7 @@ export function proposeTransferTerms(
     ),
   );
 
-  const abilityBaseline = Math.max(player.wage, Math.round(player.currentAbility * 60));
+  const abilityBaseline = getContractWageBaseline(player, buyingClub.reputation);
   const wage = roundWeeklyWage(
     abilityBaseline
     * roleWeight(role)

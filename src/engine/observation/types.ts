@@ -163,6 +163,8 @@ export interface FocusTokenState {
 export interface PlayerMoment {
   /** Unique identifier within the session. */
   id: string;
+  /** Stable action semantics; older saved moments use conservative attribute/context inference. */
+  actionId?: string;
   /** The player this moment belongs to. */
   playerId: string;
   /** Category of action this moment represents. */

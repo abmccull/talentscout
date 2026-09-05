@@ -226,6 +226,22 @@ export function collectGameSystemsHealth(state: GameState, completedSeasons: num
   const placementFees = state.finances?.placementFeeRecords ?? [];
   const decisionReviews = Object.values(state.recommendationReviews ?? {})
     .filter((review) => review.origin === "decision" && review.status === "complete");
+  const payroll = new Map<string, number>();
+  for (const player of active) {
+    const owner = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    if (owner) payroll.set(owner, (payroll.get(owner) ?? 0) + Math.max(0, player.wage));
+  }
+  const clubDepth = clubs.map((club) => {
+    const registered = [...new Set([...club.playerIds, ...(club.academyPlayerIds ?? []), ...(club.loanedInPlayerIds ?? [])])]
+      .map((id) => state.players[id]).filter((player): player is Player => !!player && player.clubId === club.id);
+    const available = registered.filter((player) => !player.injured
+      && (state.disciplinaryRecords?.[player.id]?.suspensionWeeksRemaining ?? 0) <= 0);
+    return { clubId: club.id, leagueId: club.leagueId, reputation: club.reputation,
+      seniorCount: club.playerIds.length, academyCount: club.academyPlayerIds?.length ?? 0,
+      registeredCount: registered.length, availableCount: available.length,
+      availableKeepers: available.filter((player) => player.position === "GK").length,
+      budget: club.budget, weeklyWageBudget: club.weeklyWageBudget ?? null, weeklyPayroll: payroll.get(club.id) ?? 0 };
+  });
   return {
     schemaVersion: 1 as const,
     completedSeasons,
@@ -241,6 +257,12 @@ export function collectGameSystemsHealth(state: GameState, completedSeasons: num
       seniorSizes: summarizeNumbers(clubs.map((club) => club.playerIds.length)),
       academySizes: summarizeNumbers(clubs.map((club) => club.academyPlayerIds?.length ?? 0)),
       clubsWithFewerThanElevenSeniors: clubs.filter((club) => club.playerIds.length < 11).length,
+      registeredSizes: summarizeNumbers(clubDepth.map((club) => club.registeredCount)),
+      availableSizes: summarizeNumbers(clubDepth.map((club) => club.availableCount)),
+      clubsWithFewerThanElevenRegistered: clubDepth.filter((club) => club.registeredCount < 11).length,
+      clubsWithFewerThanElevenAvailable: clubDepth.filter((club) => club.availableCount < 11).length,
+      clubsWithoutAvailableKeeper: clubDepth.filter((club) => club.availableKeepers === 0).length,
+      clubDepth,
       freeAgents: state.freeAgentPool?.agents.length ?? 0,
       activeLoans: state.activeLoans?.length ?? 0,
     },

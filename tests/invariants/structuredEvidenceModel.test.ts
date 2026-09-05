@@ -259,7 +259,7 @@ describe("structured scouting evidence model", () => {
         reaction: "promising",
       }],
       evidenceDecisions: {
-        [cue.id]: { cueId: cue.id, classification: "anomaly" },
+        [cue.id]: { cueId: cue.id, classification: "noConclusion" },
       },
     };
 
@@ -269,7 +269,7 @@ describe("structured scouting evidence model", () => {
       sessionId: reflection.id,
       momentId: "moment-1",
       playerId: "player-1",
-      classification: "anomaly",
+      classification: "noConclusion",
       sourceType: "liveObservation",
       version: 1,
     });

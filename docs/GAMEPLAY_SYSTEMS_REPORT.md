@@ -24,6 +24,10 @@ The baseline contains functioning world, report, career and persistence foundati
 - Equipment resale display and execution share a quote. Unsupported salary/lifestyle promises and traced obsolete observation/data/accuracy paths were removed; live children and compatibility fields remain.
 - Clubs value reports independently of arbitrary asking prices. Ordinary bids, first counteroffers, exclusive offers and paid welcome bonuses stay tied to report value and buyer budgets. Duplicate sale and private-pass restrictions remain.
 - Diagnostics extend the canonical career runner with population distributions and structural invariants, dated retirement participation checks, requested season checkpoints and source fingerprints.
+- Season-end contract arbitration settles rejected renewals into real releases, with pool membership and news derived from committed movement. Match selection shares healthy registered eligibility and academy cover across detailed and abstract competition.
+- Approved club wage capacity survives vacancies. Promotion/relegation changes funding through its existing atomic transition. A shared wage curve aligns generation and contract negotiations with club level while keeping affordability, player demands and real cash costs.
+- Mature loans settle into an actual purchase or return; expired legacy loans retry normally. Loan messages and scouting rewards follow committed movement and history, with duplicate settlement and retirement precedence protected.
+- Inconclusive reflection cannot infer a positive or negative judgment from hidden execution. Static phase/venue prose no longer promises talent discovery or weather/lighting unsupported by its inputs.
 - The mocked soak provider uses the existing structured-save interface. This eliminates discarded full-state serialization while preserving all persistence-helper calls, deterministic outcomes and explicit save checks; real-provider verification remains separate.
 
 ## Validation ledger
@@ -39,6 +43,16 @@ The baseline contains functioning world, report, career and persistence foundati
 | Corrected `9ec81eb` export and browser journeys | Export passed; 9 journeys passed across the full run and one corrected-test rerun | The resumed-guide test now compares the actual saved instruction; it no longer assumes a forced opening sequence |
 | Intermediate strict canonical season | Passed; 46 ticks, 33,790,364 save bytes | Intermediate source, mocked persistence, no replay or decades claim |
 | 5/10/20/30-season diagnostics and replay | Pending | Required |
+| Frozen `f0e3309` 20×30 attempt | Failed seed 3 at season 2→3: expired owned contract | No career reached final acceptance; failure retained, repaired candidate must restart |
+| Contract settlement regressions | 26 passed across five files; typecheck and architecture pass | Contract-only five-season preflight passed; combined acceptance pending |
+| Contract-only preflight | Three seeds plus a fresh reference replay completed five seasons each; matching digest and unchanged source, 920 total ticks | Repeated senior roster attrition exposed a separate economic defect; this source excludes later combined repairs |
+| Squad/economy triage | Academy availability discrepancy and vacancy-driven wage-cap cuts reproduced | New combined fixes require long-career distribution validation |
+| Combined roster/economy/scouting repair suite | 1,882 tests in 332 files passed; typecheck and architecture passed, 729 modules and zero cycles | Final export, long-career and provider acceptance still pending |
+| Combined loan, reflection and atmosphere repairs | 1,892 tests in 334 files passed; typecheck and architecture passed, 730 modules, 3,413 edges and zero cycles | New frozen export and endurance still required |
+| Intermediate Morgan Reed/Jesse Rowe playthrough | Three inconclusive cues supported a tentative private report, which booked a real two-day tournament and carried the authored question into the next watch | Reflection prompt defect found and fixed after this preview build; final render remains required |
+| Leave-watch and focus selection | Desktop/mobile dialog geometry, cancel-first focus, keyboard wrapping, Escape restoration and explicit discard to unresolved day verified; pending picker shows identity only; no page errors | Intermediate preview, before final combined export |
+| Main-thread transport optimization | Rejected: faster probe changed ordered state and failed exact digest | No product integration or relaxed determinism gate |
+| Further actual-play information boundaries | Pending focus picker no longer exposes future attribute readings; regression passes | Action/category and leave-watch corrections integrated; final export pending |
 | Actual save-provider endurance/recovery | Pending | Required |
 | Human comprehension, attachment, repeat play | Pending | Cannot infer from simulation diversity |
 

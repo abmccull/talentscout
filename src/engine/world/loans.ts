@@ -29,6 +29,7 @@ import { getWorldConditionModifiers } from "@/engine/world/worldConditions";
 import {
   addGameWeeksWithSeasonLength,
   gameWeeksBetweenWithSeasonLength,
+  isGameDateAtOrAfter,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
 
@@ -303,7 +304,7 @@ export function processLoanReturns(
 
   for (const deal of activeLoans) {
     if (deal.status !== "active") continue;
-    if (deal.endWeek === week && deal.endSeason === season) {
+    if (isGameDateAtOrAfter({ week, season }, { week: deal.endWeek, season: deal.endSeason })) {
       const player = state.players[deal.playerId];
       const parentClub = state.clubs[deal.parentClubId];
       const loanClub = state.clubs[deal.loanClubId];

@@ -1,8 +1,10 @@
-import type { PlayerAttribute } from "@/engine/core/types";
+import type { EvidenceClassificationId, PlayerAttribute } from "@/engine/core/types";
 import type { PlayerMoment } from "./types";
 
 export interface MomentAction {
   id: string;
+  /** Interpretations supported by the action, independent of the scout's question. */
+  classifications: readonly EvidenceClassificationId[];
   momentType: PlayerMoment["momentType"];
   /** Ordered contributors: even a one-attribute cue must describe this action. */
   attributes: readonly PlayerAttribute[];
@@ -17,6 +19,7 @@ export interface MomentAction {
 export const MOMENT_ACTIONS: readonly MomentAction[] = [
   {
     id: "short-pass", momentType: "technicalAction", attributes: ["passing"], pressure: false,
+    classifications: ["technicalExecution"],
     descriptions: {
       high: "{playerName} weighted a short pass precisely into a teammate's stride under minimal pressure.",
       medium: "{playerName} completed a short pass under minimal pressure, though the receiver had to check their stride.",
@@ -26,6 +29,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "pressured-reception", momentType: "technicalAction", attributes: ["firstTouch", "passing"], pressure: true,
+    classifications: ["technicalExecution","pressureResponse"],
     descriptions: {
       high: "{playerName} controlled a bouncing pass with a defender closing, then released an accurate forward pass.",
       medium: "{playerName} needed a second touch with a defender closing, but recovered and found a teammate.",
@@ -35,6 +39,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "dribble-duel", momentType: "technicalAction", attributes: ["dribbling"], pressure: true, outfieldOnly: true,
+    classifications: ["technicalExecution"],
     descriptions: {
       high: "{playerName} beat a close marker with a body feint and carried the ball into space.",
       medium: "{playerName} tried to beat a close marker, then turned back to retain the ball.",
@@ -44,6 +49,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "cross", momentType: "technicalAction", attributes: ["crossing"], pressure: false, outfieldOnly: true,
+    classifications: ["technicalExecution"],
     descriptions: {
       high: "{playerName} used the space on the flank to deliver an accurate cross into a teammate's path.",
       medium: "{playerName} had time on the flank and sent a cross into a crowded area without finding a clear target.",
@@ -53,6 +59,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "finish", momentType: "technicalAction", attributes: ["finishing", "shooting"], pressure: false, outfieldOnly: true,
+    classifications: ["technicalExecution"],
     descriptions: {
       high: "{playerName} found time in the box and struck a clean finish beyond the goalkeeper.",
       medium: "{playerName} found time in the box but directed the shot within the goalkeeper's reach.",
@@ -62,6 +69,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "contested-header", momentType: "technicalAction", attributes: ["heading"], pressure: true, outfieldOnly: true,
+    classifications: ["technicalExecution"],
     descriptions: {
       high: "{playerName} directed a contested header accurately toward a teammate while a defender challenged.",
       medium: "{playerName} made contact with a contested header but could not direct it cleanly.",
@@ -71,6 +79,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "tackle", momentType: "technicalAction", attributes: ["tackling"], pressure: true, outfieldOnly: true,
+    classifications: ["technicalExecution"],
     descriptions: {
       high: "{playerName} timed the tackle cleanly as the attacker tried to drive past.",
       medium: "{playerName} got a foot to the ball as the attacker drove past, leaving possession contested.",
@@ -80,6 +89,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "recovery-sprint", momentType: "physicalTest", attributes: ["pace"], pressure: true,
+    classifications: ["physicalExecution"],
     descriptions: {
       high: "{playerName} accelerated quickly enough to close the gap to a dangerous runner.",
       medium: "{playerName} matched the runner's pace but could not quite close the gap.",
@@ -89,6 +99,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "aerial-contest", momentType: "physicalTest", attributes: ["jumping", "strength"], pressure: true,
+    classifications: ["physicalExecution"],
     descriptions: {
       high: "{playerName} rose above an opponent in a physical aerial contest and held their position through contact.",
       medium: "{playerName} matched the opponent's leap in a physical aerial contest without gaining a clear advantage.",
@@ -98,6 +109,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "balance-challenge", momentType: "physicalTest", attributes: ["balance", "strength"], pressure: true,
+    classifications: ["physicalExecution"],
     descriptions: {
       high: "{playerName} absorbed a shoulder challenge and kept their feet while shielding the ball.",
       medium: "{playerName} staggered under a shoulder challenge but regained balance.",
@@ -107,6 +119,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "repeat-run", momentType: "physicalTest", attributes: ["stamina"], pressure: false,
+    classifications: ["physicalRepeatability","physicalExecution"],
     descriptions: {
       high: "{playerName} repeated a recovery run at the same pace after several earlier efforts, without an opponent challenging directly.",
       medium: "{playerName} completed another recovery run after earlier efforts but needed time to catch their breath.",
@@ -116,6 +129,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "change-direction", momentType: "physicalTest", attributes: ["agility", "balance"], pressure: false,
+    classifications: ["physicalExecution"],
     descriptions: {
       high: "{playerName} changed direction sharply in open space while keeping their weight balanced.",
       medium: "{playerName} changed direction in open space but needed an extra step to regain balance.",
@@ -125,6 +139,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "decision-under-pressure", momentType: "mentalResponse", attributes: ["decisionMaking", "composure"], pressure: true,
+    classifications: ["decisionMaking","pressureResponse"],
     descriptions: {
       high: "{playerName} stayed calm as defenders closed in and selected the open teammate immediately.",
       medium: "{playerName} hesitated as defenders closed in, then settled for a safe option.",
@@ -134,6 +149,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "unhurried-decision", momentType: "mentalResponse", attributes: ["decisionMaking", "anticipation"], pressure: false,
+    classifications: ["decisionMaking"],
     descriptions: {
       high: "{playerName} used the available time to anticipate the next run and choose the open option.",
       medium: "{playerName} had time to survey the options but chose a predictable route.",
@@ -143,6 +159,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "teammate-direction", momentType: "mentalResponse", attributes: ["leadership"], pressure: false,
+    classifications: ["noConclusion"],
     descriptions: {
       high: "{playerName} used a pause in play to give teammates clear, useful directions.",
       medium: "{playerName} offered teammates directions during a pause, though the message needed repeating.",
@@ -152,6 +169,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "support-run", momentType: "tacticalDecision", attributes: ["offTheBall", "teamwork"], pressure: false, outfieldOnly: true,
+    classifications: ["offBallMovement"],
     descriptions: {
       high: "{playerName} timed a supporting run into free space to offer the ball carrier a clear passing lane.",
       medium: "{playerName} moved to support the ball carrier but arrived after the clearest passing lane had closed.",
@@ -161,6 +179,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "press-trigger", momentType: "tacticalDecision", attributes: ["pressing", "teamwork"], pressure: true, outfieldOnly: true,
+    classifications: ["offBallMovement"],
     descriptions: {
       high: "{playerName} read the pressing trigger and closed the correct opponent as teammates squeezed the passing lanes.",
       medium: "{playerName} joined the press but arrived slightly out of sync with teammates.",
@@ -170,6 +189,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "runner-marking", momentType: "tacticalDecision", attributes: ["marking", "defensiveAwareness"], pressure: true, outfieldOnly: true,
+    classifications: ["offBallMovement"],
     descriptions: {
       high: "{playerName} stayed with a dangerous runner through the crowd and denied the passing route.",
       medium: "{playerName} stayed close to a dangerous runner but briefly lost the ideal marking position.",
@@ -179,6 +199,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "cover-position", momentType: "tacticalDecision", attributes: ["positioning", "defensiveAwareness"], pressure: false,
+    classifications: ["offBallMovement"],
     descriptions: {
       high: "{playerName} used the time before the attack developed to take an effective covering position.",
       medium: "{playerName} took a covering position before the attack developed but needed a late adjustment.",
@@ -188,6 +209,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "shape-communication", momentType: "tacticalDecision", attributes: ["teamwork", "defensiveAwareness"], pressure: true,
+    classifications: ["noConclusion"],
     descriptions: {
       high: "{playerName} coordinated the defensive line as an attack approached, closing the dangerous gap.",
       medium: "{playerName} tried to coordinate the defensive line as an attack approached, with mixed understanding among teammates.",
@@ -197,6 +219,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "response-to-mistake", momentType: "characterReveal", attributes: ["composure", "professionalism"], pressure: true,
+    classifications: ["pressureResponse"],
     descriptions: {
       high: "{playerName} responded to a costly mistake by refocusing immediately and preparing for the next action.",
       medium: "{playerName} showed frustration after a costly mistake, then settled back into the next action.",
@@ -206,6 +229,7 @@ export const MOMENT_ACTIONS: readonly MomentAction[] = [
   },
   {
     id: "response-to-instruction", momentType: "characterReveal", attributes: ["professionalism", "teamwork"], pressure: false,
+    classifications: ["noConclusion"],
     descriptions: {
       high: "{playerName} listened to an instruction during a pause and applied the change at the next opportunity.",
       medium: "{playerName} acknowledged an instruction during a pause but needed a reminder before applying it.",

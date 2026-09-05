@@ -39,6 +39,17 @@ function reflect(session: ObservationSession, seed: string) {
 }
 
 describe("reflection follows the watch actually completed", () => {
+  it("keeps an inconclusive watch open regardless of the unreadable cues' underlying direction", () => {
+    const session = negativeWatch();
+    session.flaggedMoments = session.flaggedMoments.map((flag) => ({ ...flag, reaction: "needs_more_data" }));
+    session.cueReadings = session.cueReadings!.map((cue) => ({ ...cue, clarity: "glimpse", direction: "negative" }));
+    const result = reflect(session, "incomplete-watch");
+    const opposite = { ...session, cueReadings: session.cueReadings.map((cue) => ({ ...cue, direction: "positive" as const })) };
+    expect(reflect(opposite, "incomplete-watch")).toEqual(result);
+    expect(result.reflectionPrompts.join(" ")).toContain("remains open");
+    expect(result.reflectionPrompts.join(" ")).not.toMatch(/raise concerns|encouraging signals|conflicting signals/);
+  });
+
   it("keeps a one-player negative watch truthful across every narrative draw", () => {
     const session = negativeWatch();
     for (let index = 0; index < 40; index += 1) {

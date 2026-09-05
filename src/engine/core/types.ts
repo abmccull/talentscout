@@ -1198,9 +1198,11 @@ export type ScoutingQuestionId =
 /** Football interpretation chosen by the player after seeing a passage. */
 export type EvidenceClassificationId =
   | "technicalExecution"
+  | "decisionMaking"
   | "preReceiveDecision"
   | "offBallMovement"
   | "pressureResponse"
+  | "physicalExecution"
   | "physicalRepeatability"
   | "anomaly"
   | "noConclusion";
@@ -1236,6 +1238,8 @@ export interface ScoutCueFactorBreakdown {
 /** A possible cue during a live session. It never exposes hidden player truth. */
 export interface ScoutCueReading {
   id: string;
+  /** Catalog action that supports this cue; absent in older saved evidence. */
+  actionId?: string;
   sessionId: string;
   momentId: string;
   playerId: string;

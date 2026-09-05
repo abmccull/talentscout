@@ -411,7 +411,7 @@ export function InitialAssessmentBuilder({
               meta={(
                 <span className="flex flex-wrap gap-x-3 gap-y-1">
                   <span>{formatToken(card.classification)}</span>
-                  <span>{formatToken(card.questionId)}</span>
+                  <span>Question: {formatToken(card.questionId)}</span>
                   <span>{formatToken(card.clarity)}</span>
                   <span>{Math.round(card.confidence * 100)}% cue confidence</span>
                 </span>

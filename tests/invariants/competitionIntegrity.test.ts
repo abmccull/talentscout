@@ -204,6 +204,7 @@ describe("competition season integrity", () => {
     } as unknown as GameState;
 
     const result = processRelegationPromotion(state, createRNG("relegation-s1"));
+    for (const candidate of Object.values(state.clubs)) candidate.weeklyWageBudget = 20_000;
     const applied = applyRelegationResult(state, result);
     const replayed = applyRelegationResult(
       { ...state, ...applied } as GameState,
@@ -211,6 +212,9 @@ describe("competition season integrity", () => {
     );
 
     expect(result.events).toHaveLength(12);
+    for (const event of result.events) {
+      expect(applied.clubs[event.clubId].weeklyWageBudget).toBe(Math.round(20_000 * event.budgetMultiplier));
+    }
     expect(applied.leagues.l1.clubIds).toEqual(
       expect.arrayContaining(["a1", "a2", "a3", "b1", "b2", "b3"]),
     );

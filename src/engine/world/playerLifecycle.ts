@@ -9,8 +9,10 @@ import type {
   PlayerMovementType,
   TransferAddOn,
 } from "@/engine/core/types";
+import { calculatePlayerWeeklyWage, getContractWageBaseline } from "@/engine/finance/wages";
 import {
   gameWeeksBetweenWithSeasonLength,
+  isGameDateAtOrAfter,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
 import {
@@ -20,6 +22,7 @@ import {
   getTransferContingentReserve,
   normalizeClubEconomicsMap,
 } from "@/engine/finance/clubEconomics";
+import { evaluateLoanOutcome } from "@/engine/world/loans";
 
 export interface LifecycleWorldState {
   players: Record<string, Player>;
@@ -295,8 +298,8 @@ function defaultContractLength(player: Player): number {
   return 3;
 }
 
-function defaultWage(player: Player): number {
-  return Math.max(100, player.wage, Math.round(player.currentAbility * 60));
+function defaultWage(player: Player, club: Club): number {
+  return getContractWageBaseline(player, club.reputation);
 }
 
 function loanDurationWeeks(
@@ -466,7 +469,7 @@ export function resolvePlayerMovements(
         reject(rejected, intent, "contract renewal must be issued by the owning club");
         continue;
       }
-      const renewedWage = Math.max(100, intent.wage ?? defaultWage(player));
+      const renewedWage = Math.max(100, intent.wage ?? defaultWage(player, state.clubs[owner]));
       const affordability = assessClubAffordability({
         club: state.clubs[owner],
         players: state.players,
@@ -534,7 +537,8 @@ export function resolvePlayerMovements(
         continue;
       }
       const signingBonus = intent.type === "freeAgentSigning" ? (intent.signingBonus ?? 0) : 0;
-      const signedWage = Math.max(100, intent.wage ?? defaultWage(player));
+      const signedWage = Math.max(100, intent.wage ?? (intent.type === "youthSigning"
+        ? calculatePlayerWeeklyWage(player.currentAbility, target.reputation) : defaultWage(player, target)));
       const affordability = assessClubAffordability({
         club: target,
         players: state.players,
@@ -589,7 +593,7 @@ export function resolvePlayerMovements(
         continue;
       }
       const signingBonus = Math.max(0, intent.signingBonus ?? 0);
-      const transferWage = Math.max(100, intent.wage ?? defaultWage(player));
+      const transferWage = Math.max(100, intent.wage ?? defaultWage(player, toClub));
       const addOnObligations = buildTransferAddOnObligations({
         playerId: player.id,
         creditorClubId: intent.fromClubId,
@@ -759,9 +763,10 @@ export function resolvePlayerMovements(
         player.id,
         "loanWageContribution",
       );
-      if (intent.resolution === "buyOption") {
+      let resolution = intent.resolution;
+      if (resolution === "buyOption") {
         const fee = deal.buyOptionFee ?? 0;
-        const buyingWage = defaultWage(player);
+        const buyingWage = defaultWage(player, loanClub);
         const affordability = assessClubAffordability({
           club: loanClub,
           players: state.players,
@@ -770,10 +775,18 @@ export function resolvePlayerMovements(
           releasedWeeklyCommitment: releasedLoanContribution,
         });
         if (!deal.buyOptionFee || !affordability.affordable) {
-          reject(rejected, intent, "buy option is unavailable or unaffordable");
-          continue;
+          if (!isGameDateAtOrAfter({ week: currentWeek, season: currentSeason }, { week: deal.endWeek, season: deal.endSeason })) {
+            reject(rejected, intent, "buy option is unavailable or unaffordable");
+            continue;
+          }
+          // A competing agreement can consume quoted headroom. The loan still
+          // ends on its due date; declining a purchase cannot extend it forever.
+          resolution = "return";
         }
       }
+      const resolvedIntent = resolution !== intent.resolution
+        ? { ...intent, resolution, reason: "Loan term completed; buy option unavailable or unaffordable" }
+        : intent;
       state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.activeLoans = state.activeLoans.filter((active) => active.id !== deal.id);
       state.clubs[deal.loanClubId] = markPlayerObligations(
@@ -783,9 +796,9 @@ export function resolvePlayerMovements(
         "loanWageContribution",
       ) ?? state.clubs[deal.loanClubId];
 
-      if (intent.resolution === "buyOption") {
+      if (resolution === "buyOption") {
         const fee = deal.buyOptionFee ?? 0;
-        const boughtWage = defaultWage(player);
+        const boughtWage = defaultWage(player, loanClub);
         state.clubs[deal.parentClubId] = {
           ...state.clubs[deal.parentClubId],
           budget: state.clubs[deal.parentClubId].budget + fee,
@@ -808,7 +821,7 @@ export function resolvePlayerMovements(
           status: "completed",
           outcome: "buy-option-exercised",
         });
-        movement = eventFor("loanBuyOption", intent, currentWeek, currentSeason,
+        movement = eventFor("loanBuyOption", resolvedIntent, currentWeek, currentSeason,
           state.playerMovementHistory.length + applied.length, {
             fromClubId: deal.parentClubId,
             toClubId: deal.loanClubId,
@@ -824,13 +837,16 @@ export function resolvePlayerMovements(
         };
         state.players[player.id] = returnedPlayer;
         state.clubs = registerAtClub(state.clubs, returnedPlayer, deal.parentClubId);
-        const recalled = intent.resolution === "recall";
+        const recalled = resolution === "recall";
         state.loanHistory.push({
           ...deal,
           status: recalled ? "recalled" : "completed",
-          outcome: recalled ? "recalled-early" : (intent.outcome ?? "neutral"),
+          outcome: recalled ? "recalled-early"
+            : intent.resolution === "buyOption" || intent.outcome === "buy-option-exercised"
+              ? evaluateLoanOutcome({ ...deal, buyOptionFee: undefined }, seasonLength)
+              : (intent.outcome ?? "neutral"),
         });
-        movement = eventFor(recalled ? "loanRecall" : "loanReturn", intent,
+        movement = eventFor(recalled ? "loanRecall" : "loanReturn", resolvedIntent,
           currentWeek, currentSeason, state.playerMovementHistory.length + applied.length, {
             fromClubId: deal.loanClubId,
             toClubId: deal.parentClubId,

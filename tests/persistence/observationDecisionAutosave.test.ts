@@ -83,7 +83,8 @@ describe("observation decisions queue resumable checkpoints", () => {
   });
 
   it("saves reflection interpretation and private notes in the same latest session", () => {
-    const cue = { id: "cue-1", suggestedClassifications: ["technicalExecution"] } as ScoutCueReading;
+    const cue = { id: "cue-1", actionId: "short-pass", clarity: "usable", attributesHinted: ["passing"],
+      pressureContext: false, suggestedClassifications: ["technicalExecution", "noConclusion"] } as ScoutCueReading;
     const { actions, savedSession } = setup({ state: "reflection", cueReadings: [cue] });
     actions.classifySessionEvidence("cue-1", "technicalExecution");
     actions.addSessionNote("See the player against stronger pressure.");

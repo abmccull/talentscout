@@ -5,6 +5,8 @@ import type { DecisionRecord } from "@/engine/consequences/types";
 import { useGameStore } from "@/stores/gameStore";
 import {
   chooseAutonomousOptionIndex,
+  chooseAutonomousPlacementDestination,
+  completeScheduledPlacementDestinations,
   chooseAutonomousDecisionOption,
   collectAutonomousCareerPresentationSignals,
   createAutonomousCareerTelemetry,
@@ -16,6 +18,73 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+function placementState(): GameState {
+  return {
+    currentSeason: 1, currentWeek: 3, scout: { id: "scout" },
+    unsignedYouth: { youth: { id: "youth", country: "england", placed: false,
+      player: { id: "player", age: 15, position: "CM", secondaryPositions: ["DM"] } } },
+    reports: { report: { id: "report", playerId: "player", scoutId: "scout", submittedSeason: 1, submittedWeek: 2 } },
+    clubs: {
+      quality: { id: "quality", leagueId: "england", youthAcademyRating: 20, playerIds: [] },
+      need: { id: "need", leagueId: "england", youthAcademyRating: 8, playerIds: [] },
+      foreign: { id: "foreign", leagueId: "france", youthAcademyRating: 20, playerIds: [] },
+      full: { id: "full", leagueId: "england", youthAcademyRating: 20, playerIds: Array(40).fill("owned") },
+    },
+    leagues: { england: { country: "england" }, france: { country: "france" } },
+    youthRecruitmentBriefs: { need: { clubId: "need", status: "open", maxAge: 17,
+      requiredPositions: ["DM"], expiresSeason: 1, expiresWeek: 8 } },
+    schedule: { week: 3, activities: [null, { type: "writePlacementReport", targetId: "player", slots: 1,
+      description: "Existing pitch", instanceId: "pitch-original" }, null, null, null, null, null] },
+  } as unknown as GameState;
+}
+
+describe("autonomous placement audience", () => {
+  it("uses a current public position need from the UI's legal shortlist without reading hidden ability", () => {
+    const state = placementState();
+    for (const key of ["currentAbility", "potentialAbility", "attributes"]) {
+      Object.defineProperty(state.unsignedYouth.youth.player, key, { get: () => { throw new Error("hidden truth read"); } });
+    }
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBe("need");
+    state.youthRecruitmentBriefs.need.expiresWeek = 3;
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBe("quality");
+  });
+
+  it("preserves the authored audience and rejects full, underage foreign, closed and unreported cases", () => {
+    const state = placementState();
+    state.reports.report.intendedClubId = "quality";
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBe("quality");
+    for (const clubId of ["full", "foreign"]) {
+      state.reports.report.intendedClubId = clubId;
+      expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
+    }
+    delete state.reports.report.intendedClubId;
+    state.reports.report.recommendedAction = "pass";
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
+    delete state.reports.report.recommendedAction;
+    state.unsignedYouth.youth.retired = true;
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
+    state.unsignedYouth.youth.retired = false;
+    state.reports = {};
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
+  });
+
+  it("fills only the already selected pitch, retaining its slot and identity across repeated calls", () => {
+    const gameState = placementState();
+    const original = { ...gameState.schedule.activities[1]! };
+    const store = { gameState,
+      unscheduleActivity: vi.fn((index: number) => { gameState.schedule.activities[index] = null; }),
+      scheduleActivity: vi.fn((activity, index: number) => { gameState.schedule.activities[index] = activity; }),
+    };
+    vi.spyOn(useGameStore, "getState").mockImplementation(() => store as never);
+    completeScheduledPlacementDestinations();
+    completeScheduledPlacementDestinations();
+    expect(gameState.schedule.activities[1]).toEqual({ ...original, destinationClubId: "need" });
+    expect(gameState.schedule.activities.filter(Boolean)).toHaveLength(1);
+    expect(store.unscheduleActivity).toHaveBeenCalledTimes(1);
+    expect(store.scheduleActivity).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("autonomous youth career driver profiles", () => {

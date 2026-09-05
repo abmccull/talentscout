@@ -6,6 +6,7 @@
 import { withVisualIdentity } from "./portraits/identity";
 import type { RNG } from "@/engine/rng";
 import { getSeasonBirthYear } from "@/engine/core/seasonDate";
+import { calculatePlayerWeeklyWage } from "@/engine/finance/wages";
 import type {
   Player,
   Position,
@@ -332,12 +333,6 @@ export function calculateMarketValue(
   return Math.max(5_000, Math.round(base));
 }
 
-function calculateWage(ca: number, clubRep: number): number {
-  const caFactor = Math.pow(ca / 100, 2.2);
-  const weekly = caFactor * 50_000 * (clubRep / 80);
-  return Math.round(weekly / 500) * 500;
-}
-
 // ---------------------------------------------------------------------------
 // Public name-pool utilities
 // ---------------------------------------------------------------------------
@@ -456,7 +451,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     clubId,
     contractClubId: clubId || undefined,
     contractExpiry: clubId ? currentSeason + rng.nextInt(1, 5) : 0,
-    wage: calculateWage(currentAbility, clubReputation),
+    wage: calculatePlayerWeeklyWage(currentAbility, clubReputation),
     marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position, clubReputation),
     attributes,
     currentAbility,
