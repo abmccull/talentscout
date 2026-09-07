@@ -171,6 +171,7 @@ export interface TickResult {
     wage: number;
     signingBonus: number;
     contractLength: number;
+    relaxWeeklyWageCap?: boolean;
   }>;
   freeAgentRemovedPlayerIds?: string[];
   midSeasonReleases?: FreeAgent[];
