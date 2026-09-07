@@ -63,9 +63,11 @@ function regular(reputation: number, relativeAbility = 0) {
     fixtures[id] = { id, season: 1, week: index + 1, leagueId: "league", homeClubId: club.id, awayClubId: "opponent", played: true };
     matchRatings[id] = { [player.id]: { playerId: player.id, fixtureId: id, started: true, minutesPlayed: 90, rating: 7, eventCount: 4, stats: {}, source: "simulated" } };
   }
-  const state: RenewalState = { players: { [player.id]: player, ...Object.fromEntries(squadMates.map((entry) => [entry.id, entry])) },
+  const state = {
+    players: { [player.id]: player, ...Object.fromEntries(squadMates.map((entry) => [entry.id, entry])) },
     clubs: { [club.id]: club }, currentSeason: 1, currentWeek: 46,
-    fixtures, matchRatings, managerProfiles: {}, leagues: { league: { id: "league", name: "League", shortName: "LGE", country: "England", tier: 3, clubIds: [club.id], season: 1 } } };
+    fixtures, matchRatings, managerProfiles: {}, leagues: { league: { id: "league", name: "League", shortName: "LGE", country: "England", tier: 3, clubIds: [club.id], season: 1 } },
+  } as unknown as RenewalState;
   return { player, club, state };
 }
 

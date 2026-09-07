@@ -92,7 +92,7 @@ describe("competitive roster floor attrition guards", () => {
     const withKeeperPlayers = {
       ...players,
       "thin-gk": { id: "thin-gk", position: "GK", clubId: "thin" },
-    } as GameState["players"];
+    } as unknown as GameState["players"];
     const withKeeper = scoreFreeAgentClubInterest(
       keeper,
       club("thin", [...thinIds, "thin-gk"]),
