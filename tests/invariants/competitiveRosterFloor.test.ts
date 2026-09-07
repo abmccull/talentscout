@@ -408,6 +408,59 @@ describe("competitive roster floor attrition guards", () => {
     ]);
   });
 
+  it("restores signed-but-unattached free agents to the available market", () => {
+    const players = {
+      orphan: player("orphan", "GK", "", 40),
+    } as Record<string, Player>;
+    players.orphan.clubId = undefined as unknown as string;
+    players.orphan.contractClubId = undefined;
+    const state = {
+      currentWeek: 4,
+      currentSeason: 2,
+      players,
+      clubs: {
+        thin: club("thin", [], { reputation: 20, budget: 200_000, weeklyWageBudget: 20_000 }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [{
+          playerId: "orphan",
+          country: "england",
+          nationality: "English",
+          releasedFrom: "other",
+          releasedSeason: 1,
+          weeksInPool: 3,
+          maxWeeksInPool: 20,
+          wageExpectation: 400,
+          signingBonusExpectation: 400,
+          discoverySource: null,
+          discoveredByScout: false,
+          npcInterest: [],
+          status: "signed",
+        }],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "orphan-restore",
+    } as unknown as GameState;
+    const rng = {
+      chance: () => false,
+      nextInt: (min: number) => min,
+      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
+      gaussian: () => 0,
+    };
+    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
+    expect(result.updatedPool.agents).toEqual([
+      expect.objectContaining({ playerId: "orphan", status: "available" }),
+    ]);
+    expect(result.npcSignedPlayerIds).toEqual([
+      expect.objectContaining({ playerId: "orphan", clubId: "thin", relaxWeeklyWageCap: true }),
+    ]);
+  });
+
   it("still releases when a floor-preserving renewal is unaffordable", () => {
     const ids = Array.from({ length: 5 }, (_, index) => `u${index}`);
     const players = Object.fromEntries(ids.map((id, index) => {
