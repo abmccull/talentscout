@@ -235,20 +235,22 @@ describe("competitive roster floor attrition guards", () => {
       managerProfiles: {},
       seed: "emergency-restock",
     } as unknown as GameState;
-    const rng = {
-      chance: () => false,
-      nextInt: (min: number) => min,
-      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
-      gaussian: () => 0,
-    };
+    const rng = new RNG("emergency-restock");
+    rng.chance = () => false;
 
-    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
     const signedClubs = result.npcSignedPlayerIds.map((entry) => entry.clubId);
     expect(signedClubs.every((id) => id === "thin")).toBe(true);
     expect(result.npcSignedPlayerIds.some((entry) => entry.playerId === "fa-gk")).toBe(true);
-    expect(result.npcSignedPlayerIds.map((entry) => entry.playerId).sort()).toEqual([
-      "fa-cm", "fa-gk", "fa-st",
-    ]);
+    expect(result.npcSignedPlayerIds.map((entry) => entry.playerId)).toEqual(
+      expect.arrayContaining(["fa-cm", "fa-gk", "fa-st"]),
+    );
+    // Pool claims plus journeyman spawn fill to the competitive XI floor.
+    expect(result.npcSignedPlayerIds).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - thinIds.length);
+    expect(result.spawnedPlayers.length).toBe(
+      COMPETITIVE_REGISTERED_FLOOR - thinIds.length - 3,
+    );
+    expect(result.spawnedPlayers.every((spawned) => !spawned.clubId)).toBe(true);
   });
 
   it("emergency keeper restock ignores reputation banding when a club has no GK", () => {
@@ -295,16 +297,111 @@ describe("competitive roster floor attrition guards", () => {
       managerProfiles: {},
       seed: "emergency-keeper-rep",
     } as unknown as GameState;
-    const rng = {
-      chance: () => false,
-      nextInt: (min: number) => min,
-      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
-      gaussian: () => 0,
-    };
-    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
+    const rng = new RNG("emergency-keeper-rep");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
     expect(result.npcSignedPlayerIds).toEqual([
-      expect.objectContaining({ playerId: "fa-gk-low", clubId: "big" }),
+      expect.objectContaining({ playerId: "fa-gk-low", clubId: "big", relaxWeeklyWageCap: true }),
     ]);
+    expect(result.spawnedPlayers).toEqual([]);
+  });
+
+  it("spawns emergency journeymen when the free-agent pool cannot supply XI or GK", () => {
+    const thinIds = Array.from({ length: 8 }, (_, index) => `starve-${index}`);
+    const players = Object.fromEntries(
+      thinIds.map((id) => [id, player(id, "CM", "starve", 40)]),
+    ) as Record<string, Player>;
+    const state = {
+      currentWeek: 20,
+      currentSeason: 2,
+      players,
+      clubs: {
+        starve: club("starve", thinIds, {
+          reputation: 22,
+          budget: 500_000,
+          weeklyWageBudget: 50_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-spawn",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-spawn");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
+    expect(result.npcSignedPlayerIds).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - thinIds.length);
+    expect(result.spawnedPlayers).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - thinIds.length);
+    expect(result.spawnedPlayers.some((spawned) => spawned.position === "GK")).toBe(true);
+    expect(result.npcSignedPlayerIds.every((entry) =>
+      entry.clubId === "starve"
+      && entry.relaxWeeklyWageCap === true
+      && entry.signingBonus === 0)).toBe(true);
+  });
+
+  it("emergency restock can claim same-tick mid-season releases", () => {
+    // Already has a keeper so depth restock claims the mid-season body instead of
+    // spawning a GK and filling the XI without touching the release stream.
+    const thinIds = Array.from({ length: 9 }, (_, index) => `need-${index}`);
+    const donorIds = Array.from({ length: 18 }, (_, index) => `donor-${index}`);
+    const players = Object.fromEntries([
+      ...thinIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "need", 40),
+      ]),
+      ...donorIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "donor", 35),
+      ]),
+    ]) as Record<string, Player>;
+    players["donor-1"].age = 28;
+    players["donor-1"].currentAbility = 40;
+    const state = {
+      currentWeek: 18,
+      currentSeason: 2,
+      players,
+      clubs: {
+        need: club("need", thinIds, {
+          reputation: 20,
+          budget: 300_000,
+          weeklyWageBudget: 40_000,
+        }),
+        donor: club("donor", donorIds, {
+          reputation: 25,
+          budget: 400_000,
+          weeklyWageBudget: 50_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-midseason-claim",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-midseason-claim");
+    let releaseRolls = 0;
+    rng.chance = (probability: number) => {
+      if (probability < 0.01) {
+        releaseRolls += 1;
+        return releaseRolls === 1;
+      }
+      return false;
+    };
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: true });
+    expect(result.midSeasonReleases.some((agent) => agent.playerId === "donor-1")).toBe(true);
+    expect(result.npcSignedPlayerIds.some((entry) =>
+      entry.playerId === "donor-1" && entry.clubId === "need")).toBe(true);
   });
 
   it("force-offers renewals that would otherwise leave a club below the registered floor", () => {
@@ -396,13 +493,9 @@ describe("competitive roster floor attrition guards", () => {
       managerProfiles: {},
       seed: "emergency-over-wage",
     } as unknown as GameState;
-    const rng = {
-      chance: () => false,
-      nextInt: (min: number) => min,
-      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
-      gaussian: () => 0,
-    };
-    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
+    const rng = new RNG("emergency-over-wage");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
     expect(result.npcSignedPlayerIds).toEqual([
       expect.objectContaining({ playerId: "fa-cheap", clubId: "over" }),
     ]);
@@ -446,19 +539,21 @@ describe("competitive roster floor attrition guards", () => {
       managerProfiles: {},
       seed: "orphan-restore",
     } as unknown as GameState;
-    const rng = {
-      chance: () => false,
-      nextInt: (min: number) => min,
-      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
-      gaussian: () => 0,
-    };
-    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
-    expect(result.updatedPool.agents).toEqual([
-      expect.objectContaining({ playerId: "orphan", status: "available" }),
-    ]);
-    expect(result.npcSignedPlayerIds).toEqual([
-      expect.objectContaining({ playerId: "orphan", clubId: "thin", relaxWeeklyWageCap: true }),
-    ]);
+    const rng = new RNG("orphan-restore");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
+    expect(result.updatedPool.agents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "orphan", status: "available" }),
+      ]),
+    );
+    expect(result.npcSignedPlayerIds).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "orphan", clubId: "thin", relaxWeeklyWageCap: true }),
+      ]),
+    );
+    expect(result.npcSignedPlayerIds).toHaveLength(COMPETITIVE_REGISTERED_FLOOR);
+    expect(result.spawnedPlayers).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - 1);
   });
 
   it("still releases when a floor-preserving renewal is unaffordable", () => {

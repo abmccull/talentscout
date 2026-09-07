@@ -175,6 +175,8 @@ export interface TickResult {
   }>;
   freeAgentRemovedPlayerIds?: string[];
   midSeasonReleases?: FreeAgent[];
+  /** Emergency journeyman bodies staged before freeAgentSigning apply. */
+  emergencySpawnedPlayers?: Player[];
   contractExpiryResult?: {
     renewals: Array<{
       playerId: string;

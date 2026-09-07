@@ -2592,6 +2592,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   let freeAgentNPCSignings: TickResult["freeAgentNPCSignings"];
   let freeAgentRemovedPlayerIds: string[] | undefined;
   let midSeasonReleases: FreeAgent[] | undefined;
+  let emergencySpawnedPlayers: Player[] | undefined;
   let contractExpiryResult: {
     renewals: Array<{
       playerId: string;
@@ -2614,6 +2615,9 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
     freeAgentRemovedPlayerIds = poolResult.removedPlayerIds;
     midSeasonReleases = poolResult.midSeasonReleases;
+    emergencySpawnedPlayers = poolResult.spawnedPlayers.length > 0
+      ? poolResult.spawnedPlayers
+      : undefined;
     newMessages.push(...poolResult.messages);
 
     if (endOfSeasonTriggered) {
@@ -2694,6 +2698,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     freeAgentNPCSignings,
     freeAgentRemovedPlayerIds,
     midSeasonReleases,
+    emergencySpawnedPlayers,
     contractExpiryResult,
     // Loan system
     loanDeals: loanPhase.loanDealResult.deals.length > 0 ? loanPhase.loanDealResult.deals : undefined,
@@ -2810,10 +2815,21 @@ export function advanceWeek(
   // ---- Youth aging: auto-signed youth become regular players ----
   const youthSigningIdentityCollisions = new Set<string>();
   const stagedYouthSigningPlayerIds = new Set<string>();
+  const stagedEmergencySpawnPlayerIds = new Set<string>();
   const causallyLinkedYouthExitPlayerIds = new Set<string>();
   const causallyReferencedPlayerIds = tickResult.youthAgingResult
     ? collectCausallyReferencedPlayerIds(state)
     : new Set<string>();
+  for (const spawned of tickResult.emergencySpawnedPlayers ?? []) {
+    if (updatedPlayers[spawned.id] || state.retiredPlayers?.[spawned.id]) continue;
+    updatedPlayers[spawned.id] = {
+      ...spawned,
+      clubId: "",
+      contractClubId: undefined,
+      contractExpiry: 0,
+    };
+    stagedEmergencySpawnPlayerIds.add(spawned.id);
+  }
   if (tickResult.youthAgingResult) {
     for (const { youthId, clubId } of tickResult.youthAgingResult.autoSigned) {
       const youth = state.unsignedYouth[youthId] ?? tickResult.youthAgingResult.updatedUnsignedYouth[youthId];
@@ -3206,6 +3222,21 @@ export function advanceWeek(
       // approval rejects the proposed signing. Do not leave the temporary
       // detached Player in the active world under the same identity.
       delete updatedPlayers[playerId];
+    }
+  }
+  if (stagedEmergencySpawnPlayerIds.size > 0) {
+    const rejectedEmergencySpawns = [...stagedEmergencySpawnPlayerIds].filter((playerId) =>
+      lifecycleResolution.rejected.some(
+        ({ intent }) => intent.type === "freeAgentSigning" && intent.playerId === playerId,
+      )
+      || !lifecycleResolution.applied.some(
+        (movement) => movement.type === "freeAgentSigning" && movement.playerId === playerId,
+      ));
+    if (rejectedEmergencySpawns.length > 0) {
+      updatedPlayers = { ...updatedPlayers };
+      for (const playerId of rejectedEmergencySpawns) {
+        delete updatedPlayers[playerId];
+      }
     }
   }
   youthPool = reconcileYouthSigningPlacements(
