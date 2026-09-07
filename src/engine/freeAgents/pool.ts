@@ -223,6 +223,15 @@ export function tickFreeAgentPool(
 
   for (const agent of pool.agents) {
     if (isTerminalStatus(agent.status)) {
+      // Recover free agents marked signed but never actually attached — a failed
+      // lifecycle apply must not permanently remove them from the market.
+      if (agent.status === "signed") {
+        const player = state.players[agent.playerId];
+        const attached = Boolean(player && (player.contractClubId ?? player.clubId));
+        if (player && !attached) {
+          updatedAgents.push({ ...agent, status: "available", npcInterest: [] });
+        }
+      }
       continue;
     }
 
@@ -447,7 +456,9 @@ export function tickFreeAgentPool(
       const agent = updatedAgents[chosenIndex];
       const player = state.players[agent.playerId]!;
       claimedAgentIds.add(agent.playerId);
-      updatedAgents[chosenIndex] = { ...agent, status: "signed" };
+      // Leave the agent available until lifecycle apply succeeds. Marking signed
+      // here permanently orphans rejected claims from the free-agent market.
+      updatedAgents[chosenIndex] = { ...agent, status: "available" };
       npcSignedPlayerIds.push({
         playerId: agent.playerId,
         clubId: target.club.id,
