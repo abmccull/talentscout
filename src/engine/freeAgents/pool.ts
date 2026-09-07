@@ -32,6 +32,12 @@ import {
 } from "@/engine/world/recruitmentIdentity";
 import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
 import { getContractWageBaseline } from "@/engine/finance/wages";
+import {
+  COMPETITIVE_REGISTERED_FLOOR,
+  countRegisteredAtClub,
+  countRegisteredKeepers,
+  wouldBreachCompetitiveRosterFloor,
+} from "@/engine/match/eligibleRoster";
 
 // =============================================================================
 // CONSTANTS
@@ -334,6 +340,8 @@ export function tickFreeAgentPool(
 
       const club = state.clubs[ownerClubId];
       if (!club) continue;
+      // Preserve competitive depth and the last registered keeper.
+      if (wouldBreachCompetitiveRosterFloor(club, state.players, player.id)) continue;
 
       // Don't release if already in pool
       if (updatedAgents.some((a) => a.playerId === player.id)) continue;
@@ -402,12 +410,16 @@ function findInterestedNPCClub(
       weeklyWageCommitment: agent.wageExpectation,
     });
     if (!affordability.affordable) return [];
-    // Reputation match: within 30 points
+    // Reputation match: ordinary clubs stay within 25; critically thin squads
+    // may look a little further so funded lower-league sides can restock.
     const playerReputation = player.currentAbility / 2;
     const repDiff = Math.abs(club.reputation - playerReputation);
-    if (repDiff > 25 || club.playerIds.length >= 30) return [];
+    const registered = countRegisteredAtClub(club, state.players);
+    const thinSquad = registered < COMPETITIVE_REGISTERED_FLOOR;
+    const repBand = thinSquad ? 40 : 25;
+    if (repDiff > repBand || club.playerIds.length >= 30) return [];
     const weight = scoreFreeAgentClubInterest(player, club, state, agent);
-    if (weight < 0.25) return [];
+    if (weight < (thinSquad ? 0.05 : 0.25)) return [];
     return [{
       item: club,
       weight,
@@ -434,6 +446,15 @@ export function scoreFreeAgentClubInterest(
     : coverage <= 1.35 ? 1.65
       : coverage <= 2.35 ? 0.95
         : 0.35;
+  const registered = countRegisteredAtClub(club, state.players);
+  const shortage = Math.max(0, COMPETITIVE_REGISTERED_FLOOR - registered);
+  // Funded thin squads must out-compete healthy clubs for ordinary free agents.
+  const depthUrgency = shortage === 0 ? 1
+    : shortage <= 2 ? 2.4
+      : shortage <= 5 ? 4.2
+        : 6.5;
+  const keepers = countRegisteredKeepers(club, state.players);
+  const keeperUrgency = player.position === "GK" && keepers === 0 ? 3.2 : 1;
   const doctrine = deriveClubRecruitmentDoctrine({
     club,
     seed: state.seed,
@@ -449,5 +470,8 @@ export function scoreFreeAgentClubInterest(
   const managerFit = !manager ? 1
     : tacticalPositions(manager.preferredFormation).has(player.position) ? 1.12
       : 0.6;
-  return Math.max(0.01, squadNeed * ageFit * reputationFit * geographyFit * managerFit);
+  return Math.max(
+    0.01,
+    squadNeed * depthUrgency * keeperUrgency * ageFit * reputationFit * geographyFit * managerFit,
+  );
 }

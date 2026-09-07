@@ -196,7 +196,10 @@ import {
 import { ADJACENT_POSITIONS, calculateSystemFit, getFormationSlots } from "../firstTeam/systemFit";
 import { getCompatibleRoles } from "../players/roles";
 import { simulateAbstractCompetitionWeek } from "../world/abstractCompetition";
-import { getEligibleMatchRoster } from "../match/eligibleRoster";
+import {
+  getEligibleMatchRoster,
+  wouldBreachCompetitiveRosterFloor,
+} from "../match/eligibleRoster";
 import { calculatePlayerWeeklyWage, getContractWageBaseline } from "../finance/wages";
 import { proposeTransferAgreement, type TransferAgreementProposal } from "../transfers/transferAgreement";
 import { formatTransferNewsBody } from "../transfers";
@@ -1288,6 +1291,8 @@ export function selectOpportunityDrivenTransfers(
     const fromClub = state.clubs[ownerClubId];
     const destination = state.clubs[opportunity.targetClubId];
     if (!fromClub || !destination || fromClub.id === destination.id) continue;
+    // Thin selling squads and last keepers stay put; buyers still compete elsewhere.
+    if (wouldBreachCompetitiveRosterFloor(fromClub, state.players, player.id)) continue;
     const reservedIncoming = index.reservedIncomingByClub.get(destination.id) ?? 0;
     if (destination.playerIds.length + reservedIncoming >= 30) continue;
     const candidateKey = `${player.id}:${destination.id}`;
@@ -1415,6 +1420,7 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     const ownerClubId = player.contractClubId ?? player.clubId;
     const fromClub = state.clubs[ownerClubId];
     if (!fromClub) continue;
+    if (wouldBreachCompetitiveRosterFloor(fromClub, state.players, player.id)) continue;
 
     const selected = selectViableAITransferDestination(player, fromClub, state, rng, {
       index: destinationIndex, spentBudget, motivation,

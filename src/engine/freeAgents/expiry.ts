@@ -22,6 +22,11 @@ import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import { getContractWageBaseline } from "@/engine/finance/wages";
 import { getClubAbilityMidpoint } from "@/engine/players/clubAbility";
+import {
+  countRegisteredKeepers,
+  listRegisteredAtClub,
+  COMPETITIVE_REGISTERED_FLOOR,
+} from "@/engine/match/eligibleRoster";
 
 // =============================================================================
 // CONSTANTS
@@ -111,6 +116,7 @@ export function processContractExpiries(
       .map((player) => player.id);
     renewalPriorityByClub.set(club.id, new Set(ranked));
   }
+  const pendingReleasesByClub = new Map<string, Set<string>>();
 
   for (const [playerId, player] of Object.entries(state.players)) {
     const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
@@ -125,8 +131,18 @@ export function processContractExpiries(
     const retainedForSquadDepth = renewalPriorityByClub.get(ownerClubId)?.has(playerId) ?? false;
 
     const renewalChance = calculateContractRenewalChance(player, club, state);
+    const rolledOffer = (!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance);
+    const pendingReleases = pendingReleasesByClub.get(ownerClubId) ?? new Set<string>();
+    const remainingAfterRelease = listRegisteredAtClub(club, state.players)
+      .filter((member) => !pendingReleases.has(member.id) && member.id !== playerId);
+    const pendingKeeperReleases = [...pendingReleases]
+      .filter((id) => state.players[id]?.position === "GK").length;
+    const wouldBreachFloor = remainingAfterRelease.length < COMPETITIVE_REGISTERED_FLOOR
+      || (player.position === "GK"
+        && countRegisteredKeepers(club, state.players) - pendingKeeperReleases <= 1);
+    const clubOffersRenewal = rolledOffer || wouldBreachFloor;
 
-    if ((!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance)) {
+    if (clubOffersRenewal) {
       const appearances = currentSeasonAppearances(player.id, club.id, state);
       const extension = preferredRenewalLength(player, appearances, player.morale ?? 5);
       const renewedWage = renewalWageExpectation(
@@ -160,6 +176,8 @@ export function processContractExpiries(
     }
 
     // Release to free agent pool
+    pendingReleases.add(playerId);
+    pendingReleasesByClub.set(ownerClubId, pendingReleases);
     const countryKey =
       normalizeCountryKey(state.leagues[club.leagueId]?.country)
       ?? countryKeyFromNationality(player.nationality)
