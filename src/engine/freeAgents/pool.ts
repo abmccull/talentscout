@@ -405,6 +405,7 @@ export function tickFreeAgentPool(
     let keepers = target.keepers;
     const claimNext = (requireKeeper: boolean): boolean => {
       let chosenIndex = -1;
+      let chosenWage = Number.POSITIVE_INFINITY;
       for (let index = 0; index < updatedAgents.length; index += 1) {
         const agent = updatedAgents[index];
         if (agent.status !== "available" || claimedAgentIds.has(agent.playerId)) continue;
@@ -425,8 +426,15 @@ export function tickFreeAgentPool(
           const playerReputation = player.currentAbility / 2;
           if (Math.abs(target.club.reputation - playerReputation) > 55) continue;
         }
-        chosenIndex = index;
-        break;
+        // Prefer the cheapest affordable body so thin clubs are not stranded one
+        // signing short after spending headroom on expensive free agents.
+        if (
+          agent.wageExpectation < chosenWage
+          || (agent.wageExpectation === chosenWage && (chosenIndex < 0 || agent.playerId < updatedAgents[chosenIndex].playerId))
+        ) {
+          chosenIndex = index;
+          chosenWage = agent.wageExpectation;
+        }
       }
       if (chosenIndex < 0) return false;
       const agent = updatedAgents[chosenIndex];
@@ -440,6 +448,11 @@ export function tickFreeAgentPool(
         signingBonus: agent.signingBonusExpectation,
         contractLength: player.age >= 32 ? 1 : player.age >= 29 ? 2 : 3,
       });
+      // Keep subsequent claims on this club honest about remaining wage capacity.
+      const entry = affordabilityContext[target.club.id];
+      if (entry) {
+        entry.currentWeeklyCommitment += Math.max(0, agent.wageExpectation);
+      }
       registered += 1;
       if (player.position === "GK") keepers += 1;
       return true;
