@@ -10,6 +10,7 @@ import {
   selectViableAITransferDestination,
 } from "@/engine/core/gameLoop";
 import { proposeTransferAgreement } from "@/engine/transfers/transferAgreement";
+import { isLoanEligible } from "@/engine/world/loans";
 import { RNG } from "@/engine/rng";
 import {
   COMPETITIVE_REGISTERED_FLOOR,
@@ -633,5 +634,43 @@ describe("competitive roster floor attrition guards", () => {
     expect(result.renewedPlayerIds).toEqual([]);
     expect(result.releasedPlayers.map((agent: FreeAgent) => agent.playerId).sort())
       .toEqual(ids.sort());
+  });
+});
+
+describe("competitive roster floor loan outflow", () => {
+  it("blocks loans that would remove the last registered keeper or breach the buffer", () => {
+    const squadIds = Array.from({ length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR }, (_, index) => `loan-${index}`);
+    const players = Object.fromEntries(
+      squadIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "parent", 40),
+      ]),
+    ) as Record<string, Player>;
+    for (const id of squadIds) {
+      players[id].contractExpiry = 4;
+      players[id].age = 20;
+      players[id].currentAbility = 30;
+    }
+    const parent = club("parent", squadIds, { reputation: 40 });
+    expect(isLoanEligible(players["loan-0"], parent, players, 1)).toBe(false);
+    expect(isLoanEligible(players["loan-1"], parent, players, 1)).toBe(false);
+
+    const deepIds = Array.from({ length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR + 3 }, (_, index) => `deep-${index}`);
+    const deepPlayers = Object.fromEntries(
+      deepIds.map((id, index) => [
+        id,
+        player(id, index < 2 ? "GK" : "CM", "deep", index < 2 ? 35 : 30),
+      ]),
+    ) as Record<string, Player>;
+    for (const id of deepIds) {
+      deepPlayers[id].contractExpiry = 4;
+      deepPlayers[id].age = 20;
+    }
+    for (let index = 0; index < 5; index += 1) {
+      deepPlayers[deepIds[index]].currentAbility = 80 - index;
+    }
+    deepPlayers[deepIds[deepIds.length - 1]].currentAbility = 20;
+    const deep = club("deep", deepIds, { reputation: 40 });
+    expect(isLoanEligible(deepPlayers[deepIds[deepIds.length - 1]], deep, deepPlayers, 1)).toBe(true);
   });
 });

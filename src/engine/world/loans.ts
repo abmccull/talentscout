@@ -32,6 +32,7 @@ import {
   isGameDateAtOrAfter,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
+import { wouldBreachCompetitiveOutflowGuard } from "@/engine/match/eligibleRoster";
 
 // =============================================================================
 // CONSTANTS
@@ -128,6 +129,9 @@ export function isLoanEligible(
     .sort((a, b) => b - a);
   const top5Threshold = squadCAs[4] ?? 0;
   if (player.currentAbility >= top5Threshold && squadCAs.length >= 5) return false;
+
+  // Do not loan out the last competitive buffer body or the last registered GK.
+  if (wouldBreachCompetitiveOutflowGuard(club, allPlayers, player.id)) return false;
 
   return true;
 }

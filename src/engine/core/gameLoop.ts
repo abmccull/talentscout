@@ -2624,6 +2624,12 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     const pendingOutflowPlayerIds = new Set<string>([
       ...(playerRetirements?.retiredPlayerIds ?? []),
       ...(contractExpiryResult?.releasedPlayers.map((released) => released.playerId) ?? []),
+      // Same-tick movements that detach a player from their current clubId before
+      // lifecycle apply. Emergency depth must see the post-move squad.
+      ...transfers.map((transfer) => transfer.playerId),
+      ...loanPhase.loanDealResult.deals.map((deal) => deal.playerId),
+      ...loanPhase.loanReturnResult.deals.map((deal) => deal.playerId),
+      ...loanPhase.loanRecallResult.deals.map((deal) => deal.playerId),
     ]);
 
     // Existing pool members resolve before new mid-season releases are introduced,
