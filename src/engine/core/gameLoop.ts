@@ -199,6 +199,7 @@ import { simulateAbstractCompetitionWeek } from "../world/abstractCompetition";
 import {
   getEligibleMatchRoster,
   wouldBreachCompetitiveOutflowGuard,
+  wouldBreachCompetitiveRosterFloor,
 } from "../match/eligibleRoster";
 import { calculatePlayerWeeklyWage, getContractWageBaseline } from "../finance/wages";
 import { proposeTransferAgreement, type TransferAgreementProposal } from "../transfers/transferAgreement";
@@ -2402,6 +2403,16 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
             player.age >= 40
             || (player.age >= 32 && rng.chance(assessment.probability))
           ) {
+            const club = state.clubs[ownerClubId];
+            // Age-40 retirements always proceed. Younger retirements defer when
+            // they would leave a club without a competitive XI or last keeper.
+            if (
+              club
+              && player.age < 40
+              && wouldBreachCompetitiveRosterFloor(club, state.players, player.id)
+            ) {
+              return result;
+            }
             result.retiredPlayerIds.push(player.id);
           }
           return result;

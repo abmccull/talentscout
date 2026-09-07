@@ -403,8 +403,7 @@ export function tickFreeAgentPool(
   for (const target of thinTargets) {
     let registered = target.registered;
     let keepers = target.keepers;
-    while (registered < COMPETITIVE_REGISTERED_FLOOR || keepers === 0) {
-      const needKeeper = keepers === 0;
+    const claimNext = (requireKeeper: boolean): boolean => {
       let chosenIndex = -1;
       for (let index = 0; index < updatedAgents.length; index += 1) {
         const agent = updatedAgents[index];
@@ -412,7 +411,7 @@ export function tickFreeAgentPool(
         if (agent.releasedFrom === target.club.id) continue;
         const player = state.players[agent.playerId];
         if (!player) continue;
-        if (needKeeper && player.position !== "GK") continue;
+        if (requireKeeper && player.position !== "GK") continue;
         const entry = affordabilityContext[target.club.id];
         if (!entry) continue;
         const affordability = assessClubAffordabilityFromContext(entry, {
@@ -420,12 +419,16 @@ export function tickFreeAgentPool(
           weeklyWageCommitment: agent.wageExpectation,
         });
         if (!affordability.affordable) continue;
-        const playerReputation = player.currentAbility / 2;
-        if (Math.abs(target.club.reputation - playerReputation) > 45) continue;
+        // Missing keepers may recruit outside ordinary reputation bands; depth
+        // restock still keeps a wide but finite band so funded lower clubs rebuild.
+        if (!requireKeeper) {
+          const playerReputation = player.currentAbility / 2;
+          if (Math.abs(target.club.reputation - playerReputation) > 55) continue;
+        }
         chosenIndex = index;
         break;
       }
-      if (chosenIndex < 0) break;
+      if (chosenIndex < 0) return false;
       const agent = updatedAgents[chosenIndex];
       const player = state.players[agent.playerId]!;
       claimedAgentIds.add(agent.playerId);
@@ -439,7 +442,14 @@ export function tickFreeAgentPool(
       });
       registered += 1;
       if (player.position === "GK") keepers += 1;
-      if (!needKeeper && registered >= COMPETITIVE_REGISTERED_FLOOR) break;
+      return true;
+    };
+
+    while (keepers === 0) {
+      if (!claimNext(true)) break;
+    }
+    while (registered < COMPETITIVE_REGISTERED_FLOOR) {
+      if (!claimNext(false)) break;
     }
   }
 

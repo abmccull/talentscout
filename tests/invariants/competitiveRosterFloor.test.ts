@@ -251,6 +251,62 @@ describe("competitive roster floor attrition guards", () => {
     ]);
   });
 
+  it("emergency keeper restock ignores reputation banding when a club has no GK", () => {
+    const squadIds = Array.from({ length: 16 }, (_, index) => `full-${index}`);
+    const players = Object.fromEntries([
+      ...squadIds.map((id) => [id, player(id, "CM", "big", 140)]),
+      ["fa-gk-low", player("fa-gk-low", "GK", "", 40)],
+    ]) as Record<string, Player>;
+    players["fa-gk-low"].clubId = undefined as unknown as string;
+    players["fa-gk-low"].contractClubId = undefined;
+    const state = {
+      currentWeek: 8,
+      currentSeason: 3,
+      players,
+      clubs: {
+        big: club("big", squadIds, {
+          reputation: 90,
+          budget: 50_000_000,
+          weeklyWageBudget: 1_000_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [{
+          playerId: "fa-gk-low",
+          country: "england",
+          nationality: "English",
+          releasedFrom: "other",
+          releasedSeason: 2,
+          weeksInPool: 1,
+          maxWeeksInPool: 20,
+          wageExpectation: 500,
+          signingBonusExpectation: 1_000,
+          discoverySource: null,
+          discoveredByScout: false,
+          npcInterest: [],
+          status: "available",
+        }],
+        lastRefreshSeason: 3,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-keeper-rep",
+    } as unknown as GameState;
+    const rng = {
+      chance: () => false,
+      nextInt: (min: number) => min,
+      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
+      gaussian: () => 0,
+    };
+    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
+    expect(result.npcSignedPlayerIds).toEqual([
+      expect.objectContaining({ playerId: "fa-gk-low", clubId: "big" }),
+    ]);
+  });
+
   it("force-offers renewals that would otherwise leave a club below the registered floor", () => {
     const ids = Array.from({ length: COMPETITIVE_REGISTERED_FLOOR }, (_, index) => `r${index}`);
     const players = Object.fromEntries(ids.map((id, index) => {
