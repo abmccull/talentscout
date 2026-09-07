@@ -180,6 +180,7 @@ export interface PoolTickResult {
     wage: number;
     signingBonus: number;
     contractLength: number;
+    relaxWeeklyWageCap?: boolean;
   }>;
   /** Player IDs of free agents who retired or dropped out. */
   removedPlayerIds: string[];
@@ -415,15 +416,17 @@ export function tickFreeAgentPool(
         if (requireKeeper && player.position !== "GK") continue;
         const entry = affordabilityContext[target.club.id];
         if (!entry) continue;
+        const emergencyDepth = requireKeeper || registered < COMPETITIVE_REGISTERED_FLOOR;
         // Depth/GK emergencies may temporarily exceed wage budget so a funded
         // club is not stranded one body short; signing bonus cash still gates.
         const affordability = assessClubAffordabilityFromContext(entry, {
           upfrontCost: agent.signingBonusExpectation,
-          weeklyWageCommitment: (requireKeeper || registered < COMPETITIVE_REGISTERED_FLOOR)
-            ? 0
-            : agent.wageExpectation,
+          weeklyWageCommitment: emergencyDepth ? 0 : agent.wageExpectation,
         });
-        if (!affordability.affordable) continue;
+        const canPay = emergencyDepth
+          ? affordability.remainingBudgetAfterReserve >= 0
+          : affordability.affordable;
+        if (!canPay) continue;
         // Missing keepers may recruit outside ordinary reputation bands; depth
         // restock still keeps a wide but finite band so funded lower clubs rebuild.
         if (!requireKeeper) {
@@ -451,6 +454,7 @@ export function tickFreeAgentPool(
         wage: agent.wageExpectation,
         signingBonus: agent.signingBonusExpectation,
         contractLength: player.age >= 32 ? 1 : player.age >= 29 ? 2 : 3,
+        relaxWeeklyWageCap: true,
       });
       // Keep subsequent claims on this club honest about remaining wage capacity.
       const entry = affordabilityContext[target.club.id];

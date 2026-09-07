@@ -3099,7 +3099,10 @@ export function advanceWeek(
       wage: signing.wage,
       contractLength: signing.contractLength,
       signingBonus: signing.signingBonus,
-      reason: "NPC free-agent agreement",
+      relaxWeeklyWageCap: signing.relaxWeeklyWageCap,
+      reason: signing.relaxWeeklyWageCap
+        ? "Emergency competitive roster restock"
+        : "NPC free-agent agreement",
     });
   }
 

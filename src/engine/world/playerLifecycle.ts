@@ -71,6 +71,8 @@ export type PlayerMovementIntent =
       wage: number;
       contractLength: number;
       signingBonus?: number;
+      /** Competitive XI/GK emergency restock may temporarily exceed wage budget. */
+      relaxWeeklyWageCap?: boolean;
     })
   | (BaseIntent & {
       type: "contractRenewal";
@@ -545,7 +547,10 @@ export function resolvePlayerMovements(
         upfrontCost: signingBonus,
         weeklyWageCommitment: signedWage,
       });
-      if (!affordability.affordable) {
+      const canAfford = intent.type === "freeAgentSigning" && intent.relaxWeeklyWageCap
+        ? affordability.remainingBudgetAfterReserve >= 0
+        : affordability.affordable;
+      if (!canAfford) {
         const pressure = affordability.remainingBudgetAfterReserve < 0
           ? `cash shortfall ${Math.abs(affordability.remainingBudgetAfterReserve)}`
           : `weekly wage shortfall ${Math.abs(affordability.remainingWeeklyHeadroom)}`;
