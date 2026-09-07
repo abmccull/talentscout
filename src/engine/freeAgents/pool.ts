@@ -415,9 +415,13 @@ export function tickFreeAgentPool(
         if (requireKeeper && player.position !== "GK") continue;
         const entry = affordabilityContext[target.club.id];
         if (!entry) continue;
+        // Depth/GK emergencies may temporarily exceed wage budget so a funded
+        // club is not stranded one body short; signing bonus cash still gates.
         const affordability = assessClubAffordabilityFromContext(entry, {
           upfrontCost: agent.signingBonusExpectation,
-          weeklyWageCommitment: agent.wageExpectation,
+          weeklyWageCommitment: (requireKeeper || registered < COMPETITIVE_REGISTERED_FLOOR)
+            ? 0
+            : agent.wageExpectation,
         });
         if (!affordability.affordable) continue;
         // Missing keepers may recruit outside ordinary reputation bands; depth

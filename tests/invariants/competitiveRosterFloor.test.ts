@@ -351,6 +351,63 @@ describe("competitive roster floor attrition guards", () => {
     expect(result.releasedPlayers).toEqual([]);
   });
 
+  it("emergency restock can fill a thin club that is already over its wage budget", () => {
+    const thinIds = Array.from({ length: 10 }, (_, index) => `over-${index}`);
+    const players = Object.fromEntries([
+      ...thinIds.map((id, index) => [id, player(id, index === 0 ? "GK" : "CM", "over", 40)]),
+      ["fa-cheap", player("fa-cheap", "CM", "", 30)],
+    ]) as Record<string, Player>;
+    for (const id of thinIds) players[id].wage = 2_000;
+    players["fa-cheap"].clubId = undefined as unknown as string;
+    players["fa-cheap"].contractClubId = undefined;
+    const state = {
+      currentWeek: 15,
+      currentSeason: 2,
+      players,
+      clubs: {
+        over: club("over", thinIds, {
+          reputation: 15,
+          budget: 200_000,
+          weeklyWageBudget: 10_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [{
+          playerId: "fa-cheap",
+          country: "england",
+          nationality: "English",
+          releasedFrom: "other",
+          releasedSeason: 1,
+          weeksInPool: 2,
+          maxWeeksInPool: 20,
+          wageExpectation: 1_500,
+          signingBonusExpectation: 500,
+          discoverySource: null,
+          discoveredByScout: false,
+          npcInterest: [],
+          status: "available",
+        }],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-over-wage",
+    } as unknown as GameState;
+    const rng = {
+      chance: () => false,
+      nextInt: (min: number) => min,
+      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
+      gaussian: () => 0,
+    };
+    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
+    expect(result.npcSignedPlayerIds).toEqual([
+      expect.objectContaining({ playerId: "fa-cheap", clubId: "over" }),
+    ]);
+  });
+
   it("still releases when a floor-preserving renewal is unaffordable", () => {
     const ids = Array.from({ length: 5 }, (_, index) => `u${index}`);
     const players = Object.fromEntries(ids.map((id, index) => {
