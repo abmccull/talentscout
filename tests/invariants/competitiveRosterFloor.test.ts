@@ -13,6 +13,8 @@ import { proposeTransferAgreement } from "@/engine/transfers/transferAgreement";
 import { RNG } from "@/engine/rng";
 import {
   COMPETITIVE_REGISTERED_FLOOR,
+  COMPETITIVE_ROSTER_OUTFLOW_FLOOR,
+  wouldBreachCompetitiveOutflowGuard,
   wouldBreachCompetitiveRosterFloor,
 } from "@/engine/match/eligibleRoster";
 
@@ -99,8 +101,8 @@ describe("competitive roster floor attrition guards", () => {
     expect(withoutKeeper).toBeGreaterThan(withKeeper * 2);
   });
 
-  it("blocks mid-season releases that would breach the registered XI floor", () => {
-    const ids = Array.from({ length: COMPETITIVE_REGISTERED_FLOOR }, (_, index) => `p${index}`);
+  it("blocks mid-season releases inside the outflow buffer above the XI floor", () => {
+    const ids = Array.from({ length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR }, (_, index) => `p${index}`);
     const players = Object.fromEntries(ids.map((id, index) => [
       id,
       player(id, index === 0 ? "GK" : "CM", "club", 50),
@@ -136,8 +138,11 @@ describe("competitive roster floor attrition guards", () => {
     expect(result.midSeasonReleases).toEqual([]);
   });
 
-  it("keeps AI sellers from falling below the competitive registered floor", () => {
-    const sellerIds = Array.from({ length: COMPETITIVE_REGISTERED_FLOOR }, (_, index) => `s${index}`);
+  it("keeps AI sellers from falling through the outflow buffer", () => {
+    const sellerIds = Array.from(
+      { length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR },
+      (_, index) => `s${index}`,
+    );
     const moving = player("s0", "CM", "seller", 70);
     moving.personalityProfile = { transferWillingness: 1 } as Player["personalityProfile"];
     const players = Object.fromEntries([
@@ -167,7 +172,8 @@ describe("competitive roster floor attrition guards", () => {
       playerMovementHistory: [],
     } as unknown as GameState;
 
-    expect(wouldBreachCompetitiveRosterFloor(seller, players, moving.id)).toBe(true);
+    expect(wouldBreachCompetitiveOutflowGuard(seller, players, moving.id)).toBe(true);
+    expect(wouldBreachCompetitiveRosterFloor(seller, players, moving.id)).toBe(false);
     expect(proposeTransferAgreement({
       player: moving, sellingClub: seller, buyingClub: buyer, state,
     }).viable).toBe(true);
@@ -178,6 +184,71 @@ describe("competitive roster floor attrition guards", () => {
       index: createTransferDestinationIndex(state),
     })?.destination.id).toBe("buyer");
     expect(draw).toHaveBeenCalled();
+  });
+
+  it("emergency-restocks a funded thin club and missing keeper from the free-agent pool", () => {
+    const thinIds = Array.from({ length: 4 }, (_, index) => `thin-${index}`);
+    const players = Object.fromEntries([
+      ...thinIds.map((id) => [id, player(id, "CM", "thin", 40)]),
+      ["fa-gk", player("fa-gk", "GK", "", 35)],
+      ["fa-cm", player("fa-cm", "CM", "", 38)],
+      ["fa-st", player("fa-st", "ST", "", 36)],
+    ]) as Record<string, Player>;
+    for (const id of ["fa-gk", "fa-cm", "fa-st"]) {
+      players[id].clubId = undefined as unknown as string;
+      players[id].contractClubId = undefined;
+    }
+    const agent = (playerId: string): FreeAgent => ({
+      playerId,
+      country: "england",
+      nationality: "English",
+      releasedFrom: "other",
+      releasedSeason: 1,
+      weeksInPool: 2,
+      maxWeeksInPool: 20,
+      wageExpectation: 400,
+      signingBonusExpectation: 800,
+      discoverySource: null,
+      discoveredByScout: false,
+      npcInterest: [],
+      status: "available",
+    });
+    const state = {
+      currentWeek: 12,
+      currentSeason: 2,
+      players,
+      clubs: {
+        thin: club("thin", thinIds, {
+          reputation: 18,
+          budget: 250_000,
+          weeklyWageBudget: 40_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [agent("fa-gk"), agent("fa-cm"), agent("fa-st")],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-restock",
+    } as unknown as GameState;
+    const rng = {
+      chance: () => false,
+      nextInt: (min: number) => min,
+      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
+      gaussian: () => 0,
+    };
+
+    const result = tickFreeAgentPool(state, rng as never, { allowMidSeasonReleases: false });
+    const signedClubs = result.npcSignedPlayerIds.map((entry) => entry.clubId);
+    expect(signedClubs.every((id) => id === "thin")).toBe(true);
+    expect(result.npcSignedPlayerIds.some((entry) => entry.playerId === "fa-gk")).toBe(true);
+    expect(result.npcSignedPlayerIds.map((entry) => entry.playerId).sort()).toEqual([
+      "fa-cm", "fa-gk", "fa-st",
+    ]);
   });
 
   it("force-offers renewals that would otherwise leave a club below the registered floor", () => {

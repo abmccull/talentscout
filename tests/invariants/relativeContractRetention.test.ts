@@ -24,9 +24,38 @@ function regular(reputation: number, relativeAbility = 0) {
   const player = { ...generatePlayer(new RNG("relative-regular"), { position: "CM", ageRange: [26, 26],
     abilityRange: [ability, ability], nationality: "English", clubId: "club", clubReputation: reputation }),
     id: "target", wage: 1_000, contractExpiry: 1, form: 0, morale: 5, secondaryPositions: [], personalityProfile: undefined };
+  const squadMates = Array.from({ length: 14 }, (_, index) => {
+    const id = `squad-${index}`;
+    const position = index === 0 ? "GK"
+      : index < 5 ? "CB"
+        : index < 9 ? "FB"
+          : "ST";
+    return {
+      id,
+      firstName: "Squad",
+      lastName: String(index),
+      age: 24,
+      nationality: "English",
+      position,
+      secondaryPositions: [],
+      clubId: "club",
+      contractClubId: "club",
+      contractExpiry: 4,
+      currentAbility: ability,
+      potentialAbility: ability,
+      marketValue: 10_000,
+      wage: 500,
+      form: 0,
+      morale: 5,
+      injured: false,
+      attributes: {},
+      seasonRatings: [],
+      recentMatchRatings: [],
+    };
+  });
   const club: Club = { id: "club", name: "Club", shortName: "CLU", leagueId: "league", reputation,
     budget: 1_000_000, weeklyWageBudget: 1_000_000, scoutingPhilosophy: "marketSmart",
-    managerId: "manager", playerIds: [player.id], youthAcademyRating: 4 };
+    managerId: "manager", playerIds: [player.id, ...squadMates.map((entry) => entry.id)], youthAcademyRating: 4 };
   const fixtures: Record<string, Fixture> = {};
   const matchRatings: Record<string, Record<string, PlayerMatchRating>> = {};
   for (let index = 0; index < 12; index += 1) {
@@ -34,7 +63,8 @@ function regular(reputation: number, relativeAbility = 0) {
     fixtures[id] = { id, season: 1, week: index + 1, leagueId: "league", homeClubId: club.id, awayClubId: "opponent", played: true };
     matchRatings[id] = { [player.id]: { playerId: player.id, fixtureId: id, started: true, minutesPlayed: 90, rating: 7, eventCount: 4, stats: {}, source: "simulated" } };
   }
-  const state: RenewalState = { players: { [player.id]: player }, clubs: { [club.id]: club }, currentSeason: 1, currentWeek: 46,
+  const state: RenewalState = { players: { [player.id]: player, ...Object.fromEntries(squadMates.map((entry) => [entry.id, entry])) },
+    clubs: { [club.id]: club }, currentSeason: 1, currentWeek: 46,
     fixtures, matchRatings, managerProfiles: {}, leagues: { league: { id: "league", name: "League", shortName: "LGE", country: "England", tier: 3, clubIds: [club.id], season: 1 } } };
   return { player, club, state };
 }

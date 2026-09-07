@@ -161,17 +161,24 @@ export function processContractExpiries(
           releasedWeeklyCommitment: Math.max(0, player.wage),
         },
       );
-      if (!affordability?.affordable || !rng.chance(playerAcceptance)) {
+      if (!affordability?.affordable) {
         // Fall through to release when the club cannot carry the next deal.
       } else {
-        renewals.push({
-          playerId,
-          clubId: ownerClubId,
-          contractLength: extension,
-          wage: renewedWage,
-        });
-        renewedPlayerIds.push(playerId);
-        continue;
+        // Depth/GK floor offers still require affordability. Player refusal cannot
+        // dissolve the last competitive XI or the last registered keeper.
+        const playerRoll = rng.chance(playerAcceptance);
+        if (!(wouldBreachFloor || playerRoll)) {
+          // Fall through when the player declines an ordinary offer.
+        } else {
+          renewals.push({
+            playerId,
+            clubId: ownerClubId,
+            contractLength: extension,
+            wage: renewedWage,
+          });
+          renewedPlayerIds.push(playerId);
+          continue;
+        }
       }
     }
 

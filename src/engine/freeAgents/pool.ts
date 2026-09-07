@@ -36,7 +36,7 @@ import {
   COMPETITIVE_REGISTERED_FLOOR,
   countRegisteredAtClub,
   countRegisteredKeepers,
-  wouldBreachCompetitiveRosterFloor,
+  wouldBreachCompetitiveOutflowGuard,
 } from "@/engine/match/eligibleRoster";
 
 // =============================================================================
@@ -340,8 +340,8 @@ export function tickFreeAgentPool(
 
       const club = state.clubs[ownerClubId];
       if (!club) continue;
-      // Preserve competitive depth and the last registered keeper.
-      if (wouldBreachCompetitiveRosterFloor(club, state.players, player.id)) continue;
+      // Preserve competitive depth buffer and the last registered keeper.
+      if (wouldBreachCompetitiveOutflowGuard(club, state.players, player.id)) continue;
 
       // Don't release if already in pool
       if (updatedAgents.some((a) => a.playerId === player.id)) continue;
@@ -365,6 +365,81 @@ export function tickFreeAgentPool(
         npcInterest: [],
         status: "available",
       });
+    }
+  }
+
+  // 7. Emergency restock: funded clubs already below a competitive XI (or
+  // without a keeper) claim available free agents before the week ends.
+  const pendingSigningsByClub = new Map<string, number>();
+  const pendingKeepersByClub = new Map<string, number>();
+  const claimedAgentIds = new Set(npcSignedPlayerIds.map((entry) => entry.playerId));
+  for (const signing of npcSignedPlayerIds) {
+    pendingSigningsByClub.set(
+      signing.clubId,
+      (pendingSigningsByClub.get(signing.clubId) ?? 0) + 1,
+    );
+    const signedPlayer = state.players[signing.playerId];
+    if (signedPlayer?.position === "GK") {
+      pendingKeepersByClub.set(
+        signing.clubId,
+        (pendingKeepersByClub.get(signing.clubId) ?? 0) + 1,
+      );
+    }
+  }
+  const thinTargets = Object.values(state.clubs)
+    .map((club) => {
+      const registered = countRegisteredAtClub(club, state.players)
+        + (pendingSigningsByClub.get(club.id) ?? 0);
+      const keepers = countRegisteredKeepers(club, state.players)
+        + (pendingKeepersByClub.get(club.id) ?? 0);
+      return { club, registered, keepers };
+    })
+    .filter((entry) =>
+      entry.registered < COMPETITIVE_REGISTERED_FLOOR || entry.keepers === 0)
+    .sort((left, right) => left.registered - right.registered
+      || left.keepers - right.keepers
+      || left.club.id.localeCompare(right.club.id));
+
+  for (const target of thinTargets) {
+    let registered = target.registered;
+    let keepers = target.keepers;
+    while (registered < COMPETITIVE_REGISTERED_FLOOR || keepers === 0) {
+      const needKeeper = keepers === 0;
+      let chosenIndex = -1;
+      for (let index = 0; index < updatedAgents.length; index += 1) {
+        const agent = updatedAgents[index];
+        if (agent.status !== "available" || claimedAgentIds.has(agent.playerId)) continue;
+        if (agent.releasedFrom === target.club.id) continue;
+        const player = state.players[agent.playerId];
+        if (!player) continue;
+        if (needKeeper && player.position !== "GK") continue;
+        const entry = affordabilityContext[target.club.id];
+        if (!entry) continue;
+        const affordability = assessClubAffordabilityFromContext(entry, {
+          upfrontCost: agent.signingBonusExpectation,
+          weeklyWageCommitment: agent.wageExpectation,
+        });
+        if (!affordability.affordable) continue;
+        const playerReputation = player.currentAbility / 2;
+        if (Math.abs(target.club.reputation - playerReputation) > 45) continue;
+        chosenIndex = index;
+        break;
+      }
+      if (chosenIndex < 0) break;
+      const agent = updatedAgents[chosenIndex];
+      const player = state.players[agent.playerId]!;
+      claimedAgentIds.add(agent.playerId);
+      updatedAgents[chosenIndex] = { ...agent, status: "signed" };
+      npcSignedPlayerIds.push({
+        playerId: agent.playerId,
+        clubId: target.club.id,
+        wage: agent.wageExpectation,
+        signingBonus: agent.signingBonusExpectation,
+        contractLength: player.age >= 32 ? 1 : player.age >= 29 ? 2 : 3,
+      });
+      registered += 1;
+      if (player.position === "GK") keepers += 1;
+      if (!needKeeper && registered >= COMPETITIVE_REGISTERED_FLOOR) break;
     }
   }
 
