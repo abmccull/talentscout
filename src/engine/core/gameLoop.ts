@@ -2604,22 +2604,9 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   } | undefined;
 
   if (state.freeAgentPool) {
-    // Existing pool members resolve before new releases are introduced, so a
-    // player cannot be released and re-signed in the same weekly transaction.
-    const poolResult = tickFreeAgentPool(
-      { ...state, freeAgentPool: freeAgentNegotiationResult.updatedPool },
-      rng,
-      { allowMidSeasonReleases: !endOfSeasonTriggered },
-    );
-    updatedFreeAgentPool = poolResult.updatedPool;
-    freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
-    freeAgentRemovedPlayerIds = poolResult.removedPlayerIds;
-    midSeasonReleases = poolResult.midSeasonReleases;
-    emergencySpawnedPlayers = poolResult.spawnedPlayers.length > 0
-      ? poolResult.spawnedPlayers
-      : undefined;
-    newMessages.push(...poolResult.messages);
-
+    // Season-end contract arbitration runs before emergency restock so pending
+    // releases/retirements are visible in competitive depth counts and claimable
+    // as same-tick free-agent bodies (release still applies first in lifecycle).
     if (endOfSeasonTriggered) {
       const retiringPlayerIds = new Set(playerRetirements?.retiredPlayerIds ?? []);
       const expiryResult = processContractExpiries(state, rng);
@@ -2632,10 +2619,32 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       // Expiry still consumes its established RNG draws, but only committed
       // releases may produce a player-facing announcement during application.
       contractExpiryResult = { renewals, releasedPlayers };
-
-      // The authoritative movement resolver indexes committed contract releases.
-      // A proposal can still lose to retirement, a transfer, or a loan return.
     }
+
+    const pendingOutflowPlayerIds = new Set<string>([
+      ...(playerRetirements?.retiredPlayerIds ?? []),
+      ...(contractExpiryResult?.releasedPlayers.map((released) => released.playerId) ?? []),
+    ]);
+
+    // Existing pool members resolve before new mid-season releases are introduced,
+    // so a mid-season release cannot be NPC-signed before emergency restock sees it.
+    const poolResult = tickFreeAgentPool(
+      { ...state, freeAgentPool: freeAgentNegotiationResult.updatedPool },
+      rng,
+      {
+        allowMidSeasonReleases: !endOfSeasonTriggered,
+        pendingOutflowPlayerIds,
+        additionalClaimAgents: contractExpiryResult?.releasedPlayers,
+      },
+    );
+    updatedFreeAgentPool = poolResult.updatedPool;
+    freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
+    freeAgentRemovedPlayerIds = poolResult.removedPlayerIds;
+    midSeasonReleases = poolResult.midSeasonReleases;
+    emergencySpawnedPlayers = poolResult.spawnedPlayers.length > 0
+      ? poolResult.spawnedPlayers
+      : undefined;
+    newMessages.push(...poolResult.messages);
 
     // Discovery runs against the final pool for this tick.
     const discoveryResult = discoverFreeAgents(

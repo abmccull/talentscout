@@ -345,6 +345,48 @@ describe("competitive roster floor attrition guards", () => {
       && entry.signingBonus === 0)).toBe(true);
   });
 
+  it("restocks a funded club whose last keeper is pending retirement this tick", () => {
+    const squadIds = Array.from({ length: 14 }, (_, index) => `aging-${index}`);
+    const players = Object.fromEntries(
+      squadIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "aging", 50),
+      ]),
+    ) as Record<string, Player>;
+    players["aging-0"].age = 40;
+    const state = {
+      currentWeek: 46,
+      currentSeason: 5,
+      players,
+      clubs: {
+        aging: club("aging", squadIds, {
+          reputation: 40,
+          budget: 2_000_000,
+          weeklyWageBudget: 100_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 5,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-pending-retire",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-pending-retire");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, {
+      allowMidSeasonReleases: false,
+      pendingOutflowPlayerIds: new Set(["aging-0"]),
+    });
+    expect(result.spawnedPlayers.some((spawned) => spawned.position === "GK")).toBe(true);
+    expect(result.npcSignedPlayerIds.some((entry) =>
+      entry.clubId === "aging" && entry.relaxWeeklyWageCap === true)).toBe(true);
+  });
+
   it("emergency restock can claim same-tick mid-season releases", () => {
     // Already has a keeper so depth restock claims the mid-season body instead of
     // spawning a GK and filling the XI without touching the release stream.

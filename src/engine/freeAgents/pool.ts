@@ -39,6 +39,7 @@ import {
   COMPETITIVE_REGISTERED_FLOOR,
   countRegisteredAtClub,
   countRegisteredKeepers,
+  listRegisteredAtClub,
   wouldBreachCompetitiveOutflowGuard,
 } from "@/engine/match/eligibleRoster";
 
@@ -217,7 +218,21 @@ export interface PoolTickResult {
 export function tickFreeAgentPool(
   state: GameState,
   rng: RNG,
-  options: { allowMidSeasonReleases?: boolean } = {},
+  options: {
+    allowMidSeasonReleases?: boolean;
+    /**
+     * Players leaving this tick (retirements, contract releases, etc.). Excluded
+     * from competitive registered/GK counts so emergency restock sees the
+     * post-outflow squad before lifecycle apply.
+     */
+    pendingOutflowPlayerIds?: ReadonlySet<string>;
+    /**
+     * Extra claimable free-agent records for this tick only (e.g. season-end
+     * contract releases). Not appended to the returned pool; lifecycle/settlement
+     * remains authoritative for pool membership.
+     */
+    additionalClaimAgents?: FreeAgent[];
+  } = {},
 ): PoolTickResult {
   const pool = state.freeAgentPool;
   const npcSignedPlayerIds: PoolTickResult["npcSignedPlayerIds"] = [];
@@ -397,6 +412,10 @@ export function tickFreeAgentPool(
   // Same-tick mid-season releases are claimable (release still applies first
   // via lifecycle priority). When the market cannot supply a body, spawn a
   // journeyman so funded clubs are not stranded by an empty GK/depth pool.
+  // Pending same-tick outflows (retirements / contract releases) are excluded
+  // from depth counts so season-end age-40 keeper exits are restocked immediately.
+  const pendingOutflowPlayerIds = options.pendingOutflowPlayerIds ?? new Set<string>();
+  const additionalClaimAgents = [...(options.additionalClaimAgents ?? [])];
   const pendingSigningsByClub = new Map<string, number>();
   const pendingKeepersByClub = new Map<string, number>();
   const claimedAgentIds = new Set(npcSignedPlayerIds.map((entry) => entry.playerId));
@@ -414,13 +433,19 @@ export function tickFreeAgentPool(
       );
     }
   }
+  const countAfterOutflow = (club: Club) => {
+    const remaining = listRegisteredAtClub(club, state.players)
+      .filter((player) => !pendingOutflowPlayerIds.has(player.id));
+    return {
+      registered: remaining.length + (pendingSigningsByClub.get(club.id) ?? 0),
+      keepers: remaining.filter((player) => player.position === "GK").length
+        + (pendingKeepersByClub.get(club.id) ?? 0),
+    };
+  };
   const thinTargets = Object.values(state.clubs)
     .map((club) => {
-      const registered = countRegisteredAtClub(club, state.players)
-        + (pendingSigningsByClub.get(club.id) ?? 0);
-      const keepers = countRegisteredKeepers(club, state.players)
-        + (pendingKeepersByClub.get(club.id) ?? 0);
-      return { club, registered, keepers };
+      const counts = countAfterOutflow(club);
+      return { club, registered: counts.registered, keepers: counts.keepers };
     })
     .filter((entry) =>
       entry.registered < COMPETITIVE_REGISTERED_FLOOR || entry.keepers === 0)
@@ -428,9 +453,10 @@ export function tickFreeAgentPool(
       || left.keepers - right.keepers
       || left.club.id.localeCompare(right.club.id));
 
-  const claimSources: Array<{ agents: FreeAgent[]; label: "pool" | "midSeason" }> = [
+  const claimSources: Array<{ agents: FreeAgent[]; label: "pool" | "midSeason" | "additional" }> = [
     { agents: updatedAgents, label: "pool" },
     { agents: midSeasonReleases, label: "midSeason" },
+    { agents: additionalClaimAgents, label: "additional" },
   ];
 
   for (const target of thinTargets) {
