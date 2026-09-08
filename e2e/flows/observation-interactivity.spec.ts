@@ -430,19 +430,66 @@ test.describe("normal-motion mobile workspace anchoring", () => {
   }
 
   async function scrollContent(page: Page, screen: Locator) {
-    // Mobile watch layouts scroll the document while chrome stays fixed. Reset
-    // both scroll owners so the helper always starts from a known top edge.
-    await page.evaluate(() => {
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      document.querySelector("#game-main")?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    // Overhaul Watch/Planner keep chrome fixed and scroll an inner overflow
+    // region (or #game-main). Drive that scroller directly so anchoring tests
+    // measure real content movement instead of hoping the outer screen
+    // translateY-shifts by 100px.
+    const before = await page.evaluate(() => {
+      const main = document.querySelector("#game-main") as HTMLElement | null;
+      const nested = document.querySelector(
+        '[data-game-screen="observation"] .overflow-y-auto, [data-game-screen="calendar"] .overflow-y-auto',
+      ) as HTMLElement | null;
+      const scroller = (nested && nested.scrollHeight > nested.clientHeight + 40)
+        ? nested
+        : (main && main.scrollHeight > main.clientHeight + 40)
+          ? main
+          : (document.scrollingElement as HTMLElement | null);
+      if (!scroller) return { top: 0, mode: "none" as const };
+      scroller.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return {
+        top: scroller.scrollTop,
+        mode: scroller === nested ? "nested" : scroller === main ? "main" : "document",
+      };
     });
-    const beforeTop = await screen.evaluate((element) => element.getBoundingClientRect().top);
-    await page.mouse.move(195, 360);
-    await page.mouse.wheel(0, 600);
-    // A real content move is required; a no-op scroll cannot establish anchoring.
-    await expect.poll(() => screen.evaluate((element) => element.getBoundingClientRect().top))
-      .toBeLessThan(beforeTop - 100);
-    return { beforeTop, afterTop: await screen.evaluate((element) => element.getBoundingClientRect().top) };
+    await page.evaluate(() => {
+      const main = document.querySelector("#game-main") as HTMLElement | null;
+      const nested = document.querySelector(
+        '[data-game-screen="observation"] .overflow-y-auto, [data-game-screen="calendar"] .overflow-y-auto',
+      ) as HTMLElement | null;
+      const scroller = (nested && nested.scrollHeight > nested.clientHeight + 40)
+        ? nested
+        : (main && main.scrollHeight > main.clientHeight + 40)
+          ? main
+          : (document.scrollingElement as HTMLElement | null);
+      scroller?.scrollBy({ top: 600, left: 0, behavior: "auto" });
+    });
+    await expect.poll(() => page.evaluate(() => {
+      const main = document.querySelector("#game-main") as HTMLElement | null;
+      const nested = document.querySelector(
+        '[data-game-screen="observation"] .overflow-y-auto, [data-game-screen="calendar"] .overflow-y-auto',
+      ) as HTMLElement | null;
+      const scroller = (nested && nested.scrollHeight > nested.clientHeight + 40)
+        ? nested
+        : (main && main.scrollHeight > main.clientHeight + 40)
+          ? main
+          : (document.scrollingElement as HTMLElement | null);
+      return scroller?.scrollTop ?? 0;
+    })).toBeGreaterThan(before.top + 100);
+    const afterTop = await page.evaluate(() => {
+      const main = document.querySelector("#game-main") as HTMLElement | null;
+      const nested = document.querySelector(
+        '[data-game-screen="observation"] .overflow-y-auto, [data-game-screen="calendar"] .overflow-y-auto',
+      ) as HTMLElement | null;
+      const scroller = (nested && nested.scrollHeight > nested.clientHeight + 40)
+        ? nested
+        : (main && main.scrollHeight > main.clientHeight + 40)
+          ? main
+          : (document.scrollingElement as HTMLElement | null);
+      return scroller?.scrollTop ?? 0;
+    });
+    // Keep screen in the signature for call-site compatibility.
+    void screen;
+    return { beforeTop: before.top, afterTop, mode: before.mode };
   }
 
   test("normal motion keeps the Watch phase bar on screen before and after scrolling", async ({ gamePage }, testInfo) => {
