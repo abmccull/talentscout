@@ -274,6 +274,9 @@ function migrateInboxMessages(state: GameState): void {
   const seasonEventsByName = new Map(state.seasonEvents.map((event) => [event.name, event]));
   state.inbox = state.inbox.map((message) => {
     if (message.type !== "event") return message;
+    // Prior-season event notices are historical records; only the active
+    // season's templates may rewrite planner copy and related IDs.
+    if (message.season !== state.currentSeason) return message;
     const titleBase = message.title.replace(/\s+— Decision Required$/, "");
     const seasonEvent = seasonEventsByName.get(titleBase);
     if (!seasonEvent) return message;
@@ -442,14 +445,21 @@ function isGameDate(value: unknown): value is GameDate {
 
 function clampWeekToSeason(state: GameState, date: GameDate): GameDate {
   const season = Math.max(1, Math.floor(date.season));
+  const week = Math.max(1, Math.floor(date.week));
+  // Completed seasons may retain post-fixture end-of-season weeks after their
+  // competition calendar has been replaced by the next season's fixtures.
+  // Rewriting those historical dates into the next season corrupts chronology.
+  if (season < state.currentSeason) {
+    return { season, week };
+  }
   const seasonLength = getSeasonLength(state.fixtures, season);
-  if (date.week <= seasonLength) {
-    return { season, week: Math.max(1, Math.floor(date.week)) };
+  if (week <= seasonLength) {
+    return { season, week };
   }
   return addGameWeeks(
     state.fixtures,
     { season, week: 1 },
-    Math.max(0, Math.floor(date.week) - 1),
+    Math.max(0, week - 1),
   );
 }
 
