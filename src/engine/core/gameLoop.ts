@@ -196,7 +196,11 @@ import {
 import { ADJACENT_POSITIONS, calculateSystemFit, getFormationSlots } from "../firstTeam/systemFit";
 import { getCompatibleRoles } from "../players/roles";
 import { simulateAbstractCompetitionWeek } from "../world/abstractCompetition";
-import { getEligibleMatchRoster } from "../match/eligibleRoster";
+import {
+  getEligibleMatchRoster,
+  wouldBreachCompetitiveOutflowGuard,
+  wouldBreachCompetitiveRosterFloor,
+} from "../match/eligibleRoster";
 import { calculatePlayerWeeklyWage, getContractWageBaseline } from "../finance/wages";
 import { proposeTransferAgreement, type TransferAgreementProposal } from "../transfers/transferAgreement";
 import { formatTransferNewsBody } from "../transfers";
@@ -1288,6 +1292,7 @@ export function selectOpportunityDrivenTransfers(
     const fromClub = state.clubs[ownerClubId];
     const destination = state.clubs[opportunity.targetClubId];
     if (!fromClub || !destination || fromClub.id === destination.id) continue;
+    if (wouldBreachCompetitiveOutflowGuard(fromClub, state.players, player.id)) continue;
     const reservedIncoming = index.reservedIncomingByClub.get(destination.id) ?? 0;
     if (destination.playerIds.length + reservedIncoming >= 30) continue;
     const candidateKey = `${player.id}:${destination.id}`;
@@ -1415,6 +1420,7 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     const ownerClubId = player.contractClubId ?? player.clubId;
     const fromClub = state.clubs[ownerClubId];
     if (!fromClub) continue;
+    if (wouldBreachCompetitiveOutflowGuard(fromClub, state.players, player.id)) continue;
 
     const selected = selectViableAITransferDestination(player, fromClub, state, rng, {
       index: destinationIndex, spentBudget, motivation,
@@ -2397,6 +2403,16 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
             player.age >= 40
             || (player.age >= 32 && rng.chance(assessment.probability))
           ) {
+            const club = state.clubs[ownerClubId];
+            // Age-40 retirements always proceed. Younger retirements defer when
+            // they would leave a club without a competitive XI or last keeper.
+            if (
+              club
+              && player.age < 40
+              && wouldBreachCompetitiveRosterFloor(club, state.players, player.id)
+            ) {
+              return result;
+            }
             result.retiredPlayerIds.push(player.id);
           }
           return result;
@@ -2576,6 +2592,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   let freeAgentNPCSignings: TickResult["freeAgentNPCSignings"];
   let freeAgentRemovedPlayerIds: string[] | undefined;
   let midSeasonReleases: FreeAgent[] | undefined;
+  let emergencySpawnedPlayers: Player[] | undefined;
   let contractExpiryResult: {
     renewals: Array<{
       playerId: string;
@@ -2587,19 +2604,9 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   } | undefined;
 
   if (state.freeAgentPool) {
-    // Existing pool members resolve before new releases are introduced, so a
-    // player cannot be released and re-signed in the same weekly transaction.
-    const poolResult = tickFreeAgentPool(
-      { ...state, freeAgentPool: freeAgentNegotiationResult.updatedPool },
-      rng,
-      { allowMidSeasonReleases: !endOfSeasonTriggered },
-    );
-    updatedFreeAgentPool = poolResult.updatedPool;
-    freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
-    freeAgentRemovedPlayerIds = poolResult.removedPlayerIds;
-    midSeasonReleases = poolResult.midSeasonReleases;
-    newMessages.push(...poolResult.messages);
-
+    // Season-end contract arbitration runs before emergency restock so pending
+    // releases/retirements are visible in competitive depth counts and claimable
+    // as same-tick free-agent bodies (release still applies first in lifecycle).
     if (endOfSeasonTriggered) {
       const retiringPlayerIds = new Set(playerRetirements?.retiredPlayerIds ?? []);
       const expiryResult = processContractExpiries(state, rng);
@@ -2612,10 +2619,38 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       // Expiry still consumes its established RNG draws, but only committed
       // releases may produce a player-facing announcement during application.
       contractExpiryResult = { renewals, releasedPlayers };
-
-      // The authoritative movement resolver indexes committed contract releases.
-      // A proposal can still lose to retirement, a transfer, or a loan return.
     }
+
+    const pendingOutflowPlayerIds = new Set<string>([
+      ...(playerRetirements?.retiredPlayerIds ?? []),
+      ...(contractExpiryResult?.releasedPlayers.map((released) => released.playerId) ?? []),
+      // Same-tick movements that detach a player from their current clubId before
+      // lifecycle apply. Emergency depth must see the post-move squad.
+      ...transfers.map((transfer) => transfer.playerId),
+      ...loanPhase.loanDealResult.deals.map((deal) => deal.playerId),
+      ...loanPhase.loanReturnResult.deals.map((deal) => deal.playerId),
+      ...loanPhase.loanRecallResult.deals.map((deal) => deal.playerId),
+    ]);
+
+    // Existing pool members resolve before new mid-season releases are introduced,
+    // so a mid-season release cannot be NPC-signed before emergency restock sees it.
+    const poolResult = tickFreeAgentPool(
+      { ...state, freeAgentPool: freeAgentNegotiationResult.updatedPool },
+      rng,
+      {
+        allowMidSeasonReleases: !endOfSeasonTriggered,
+        pendingOutflowPlayerIds,
+        additionalClaimAgents: contractExpiryResult?.releasedPlayers,
+      },
+    );
+    updatedFreeAgentPool = poolResult.updatedPool;
+    freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
+    freeAgentRemovedPlayerIds = poolResult.removedPlayerIds;
+    midSeasonReleases = poolResult.midSeasonReleases;
+    emergencySpawnedPlayers = poolResult.spawnedPlayers.length > 0
+      ? poolResult.spawnedPlayers
+      : undefined;
+    newMessages.push(...poolResult.messages);
 
     // Discovery runs against the final pool for this tick.
     const discoveryResult = discoverFreeAgents(
@@ -2678,6 +2713,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     freeAgentNPCSignings,
     freeAgentRemovedPlayerIds,
     midSeasonReleases,
+    emergencySpawnedPlayers,
     contractExpiryResult,
     // Loan system
     loanDeals: loanPhase.loanDealResult.deals.length > 0 ? loanPhase.loanDealResult.deals : undefined,
@@ -2794,10 +2830,21 @@ export function advanceWeek(
   // ---- Youth aging: auto-signed youth become regular players ----
   const youthSigningIdentityCollisions = new Set<string>();
   const stagedYouthSigningPlayerIds = new Set<string>();
+  const stagedEmergencySpawnPlayerIds = new Set<string>();
   const causallyLinkedYouthExitPlayerIds = new Set<string>();
   const causallyReferencedPlayerIds = tickResult.youthAgingResult
     ? collectCausallyReferencedPlayerIds(state)
     : new Set<string>();
+  for (const spawned of tickResult.emergencySpawnedPlayers ?? []) {
+    if (updatedPlayers[spawned.id] || state.retiredPlayers?.[spawned.id]) continue;
+    updatedPlayers[spawned.id] = {
+      ...spawned,
+      clubId: "",
+      contractClubId: undefined,
+      contractExpiry: 0,
+    };
+    stagedEmergencySpawnPlayerIds.add(spawned.id);
+  }
   if (tickResult.youthAgingResult) {
     for (const { youthId, clubId } of tickResult.youthAgingResult.autoSigned) {
       const youth = state.unsignedYouth[youthId] ?? tickResult.youthAgingResult.updatedUnsignedYouth[youthId];
@@ -3083,7 +3130,10 @@ export function advanceWeek(
       wage: signing.wage,
       contractLength: signing.contractLength,
       signingBonus: signing.signingBonus,
-      reason: "NPC free-agent agreement",
+      relaxWeeklyWageCap: signing.relaxWeeklyWageCap,
+      reason: signing.relaxWeeklyWageCap
+        ? "Emergency competitive roster restock"
+        : "NPC free-agent agreement",
     });
   }
 
@@ -3187,6 +3237,21 @@ export function advanceWeek(
       // approval rejects the proposed signing. Do not leave the temporary
       // detached Player in the active world under the same identity.
       delete updatedPlayers[playerId];
+    }
+  }
+  if (stagedEmergencySpawnPlayerIds.size > 0) {
+    const rejectedEmergencySpawns = [...stagedEmergencySpawnPlayerIds].filter((playerId) =>
+      lifecycleResolution.rejected.some(
+        ({ intent }) => intent.type === "freeAgentSigning" && intent.playerId === playerId,
+      )
+      || !lifecycleResolution.applied.some(
+        (movement) => movement.type === "freeAgentSigning" && movement.playerId === playerId,
+      ));
+    if (rejectedEmergencySpawns.length > 0) {
+      updatedPlayers = { ...updatedPlayers };
+      for (const playerId of rejectedEmergencySpawns) {
+        delete updatedPlayers[playerId];
+      }
     }
   }
   youthPool = reconcileYouthSigningPlacements(

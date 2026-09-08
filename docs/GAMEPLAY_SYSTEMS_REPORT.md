@@ -1,12 +1,12 @@
 # Gameplay systems report
 
-Status: implementation in progress. Baseline `5f141698b87f5964c71723f9f32381cda24df587`; work branch `codex/game-systems-overhaul-20260905`.
+Status: **GAME SYSTEMS READY** for the P0 multi-seed S5 joint-registered XI/GK gate plus native IndexedDB S1 restart. Frozen overhaul baseline `2a1e355ad3ef3a47efc614dba73506ae8da976bb`; gate-evidence tip `492317e20e08b39045b5bd30458fe27b4d03e66c` on `cursor/game-systems-ready-path-1752` (base `codex/game-systems-overhaul-20260905`). First green S5 repair stack `b4af6397cff989b2bfb5b3bc69d99c52291a75a1`. Ledger tip `c95dad6f91cc488ac8350b0788b463445263fbb5` (docs-only) on the same branch.
 
 Original systems score: **58/100 (provisional)**.
 
-Final systems score: **not yet assessed**. Implemented changes, tests, gameplay evidence and remaining deductions must be reviewed before assigning a final score.
+Final systems score: **not yet assessed for decades acceptance**. P0 S5 joint XI/GK and native S1 restart gates are green on the tip; 20×30 and S10/S30 native restart remain open and are not claimed.
 
-The baseline contains functioning world, report, career and persistence foundations, alongside reproduced chronology, claim-polarity and weekly-ownership defects. See GAMEPLAY_SYSTEMS_AUDIT.md for each finding and GAMEPLAY_SYSTEMS_PLAN.md for milestones. The source changes, including the additional report-lifecycle and native-order repair in SYS-63, are integrated locally. Combined checks passed: 1,993 tests in 343 files, full typecheck, and architecture validation with 732 modules, 3,429 edges and zero cycles. Final build and career acceptance have not begun for this candidate.
+The baseline contains functioning world, report, career and persistence foundations, alongside repaired chronology, claim-polarity and weekly-ownership defects. See GAMEPLAY_SYSTEMS_AUDIT.md for each finding and GAMEPLAY_SYSTEMS_PLAN.md for milestones.
 
 ## Implemented systems
 
@@ -39,15 +39,34 @@ The baseline contains functioning world, report, career and persistence foundati
 
 ## Validation ledger
 
-Latest completed candidate evidence is bound to `48315c33270d207364800063949abd7d51d0dfa8` (tree `d5636acf9154d98b09e5c85ab8a4807a649a44f1`). Its clean export passed at 1,047,486 gzip bytes and all nine browser journeys passed. Actual unguided play changed questions/lenses, retained negative evidence, filed a tentative private report, booked a real follow-up and verified mobile/desktop interruption recovery. The affected-journey visual review scored 7.8/10; this is separate from systems readiness and human enjoyment.
+Latest overhaul work is bound to frozen baseline tip `2a1e355ad3ef3a47efc614dba73506ae8da976bb`. P0 gate evidence below was collected on code tip `492317e20e08b39045b5bd30458fe27b4d03e66c` (clean tree); the ledger tip is the docs commit that records this verdict on `cursor/game-systems-ready-path-1752`.
 
-The bounded consequence case completed 98 canonical ticks: two earned recommendations led to actual signings, four placement reviews and two private-pass reviews resolved on schedule, and a rival signed the passed player. With no senior ratings yet, placement reviews correctly remained unscored; no numeric success or calibration claim follows. Immutable reports, ownership, contract/roster settlement and duplicate feedback checks passed.
+### P0 gate table (evidence tip `492317e`)
 
-The same candidate's long run was stopped after both running seeds completed five seasons. Seed 1 had 16/282 clubs below 11 jointly registered players; seed 2 had 21/282, including a three-player squad. These failures are retained despite zero configured structural invariant violations. No 10/20/30-season or fresh replay acceptance was obtained. The new roster/funding repair wave must be validated from a fresh source candidate.
+| Gate | Result | Evidence |
+|---|---|---|
+| Multi-seed S5 joint XI/GK | **Passed** — below11reg=0/0/0, noGKreg=0/0/0, viol=0 on seeds 1–3 | `scripts/run-game-systems-diagnostics.mjs --profile=smoke --seasons=5 --seeds=3 --seed-start=1 --checkpoints=1,5 --out=artifacts/release/generated/game-systems/s5-preflight-tip`; diagnostics status `Passed supporting diagnostics`, `sourceUnchanged: true`; run `run-2026-09-08T00-30-44-376Z-646f839d` |
+| Supporting determinism replay | **Passed** | Same diagnostics run; seed-1 determinism-replay worker completed; soak status Passed |
+| Native IndexedDB S1 restart | **Passed** | `npm run build:e2e` on tip; `SOAK_STORAGE_CHECKPOINT_DIRECTORY` = tip seed-1-run storage-inputs; `npx playwright test e2e/regression/retained-storage-checkpoints.spec.ts -g "completed season 1 survives"` → 1 passed (~1.9m); log `artifacts/release/generated/game-systems/native-s1/console.log` |
+| Typecheck | **Passed** | `npx tsc --noEmit -p tsconfig.json` |
+| Marketplace relisting freshness | **Invalid / closed** | No new evidence; prior adversarial tests stand |
+| Native S10 / S30 | Not run | Only S1 certified this sprint |
+| 20×30 | Not run | Explicitly out of scope until after S5 green; still not claimed |
 
-Native S1 verification is also failed, not complete. After correcting exact HTTP status handling and shortening a Windows profile path, a real IndexedDB commit exposed four report-pointer regressions plus producer/migration gameplay differences. The guard stopped before browser restart. The first source repairs and stricter boundary tests are integrated. Independent review then reproduced SYS-63; its additional lifecycle and RNG-map-order corrections are now integrated with 78 focused tests passing. Actual native execution remains pending. Verification separately checks receipt bytes, an approved migration oracle, immediate load state, documented Dashboard actions, the complete committed row and a whole-browser restart; the mocked simulation provider does not substitute for this evidence.
+### How native S1 was certified
 
-The following historical rows describe evidence and limits at each named checkpoint; they do not certify the new source candidate.
+1. Produce tip-bound S1 storage input: `node scripts/run-game-systems-diagnostics.mjs --profile=smoke --seasons=1 --seeds=1 --checkpoints=1 --out=artifacts/release/generated/game-systems/s1-storage-input` on a clean tree.
+2. Build the instrumented export: `npm run build:e2e` (bridge SHA must equal `git rev-parse HEAD`).
+3. Run only the season-1 retained-storage case with matching env:
+   - `SOAK_STORAGE_CHECKPOINT_DIRECTORY=<.../storage-inputs/<sha>/seed-1-run>`
+   - `SOAK_CANDIDATE_SHA` / `SOAK_CANDIDATE_TREE_SHA` = tip
+   - `npx playwright test e2e/regression/retained-storage-checkpoints.spec.ts -g "completed season 1 survives"`
+
+### Repair stack closing the S5 gate
+
+Emergency FA restock (cheapest claim, cash-only, `relaxWeeklyWageCap`, orphan restore), journeyman spawn when the pool cannot supply XI/GK, same-tick mid-season/expiry claimability, season-end/loan/transfer outflow-aware depth counts, loan outflow floor guard, and post-`advanceWeek` `repairCompetitiveRosterGaps` on the store weekly progression path. Save migration preserves past-season contact chronology and inbox season-event IDs so native S1 migration digests stay aligned.
+
+The following historical rows describe evidence and limits at each named checkpoint; they do not override the tip gate table above.
 
 | Evidence | Result | Limit |
 |---|---|---|
@@ -59,7 +78,7 @@ The following historical rows describe evidence and limits at each named checkpo
 | Checkpoint `66b51d1` export / browser play | Export passed; guided opening, unguided opening/reload and private-pass save journey passed | Subsequent actual play found pricing, action/narrative and calendar defects; that checkpoint is intermediate |
 | Corrected `9ec81eb` export and browser journeys | Export passed; 9 journeys passed across the full run and one corrected-test rerun | The resumed-guide test now compares the actual saved instruction; it no longer assumes a forced opening sequence |
 | Intermediate strict canonical season | Passed; 46 ticks, 33,790,364 save bytes | Intermediate source, mocked persistence, no replay or decades claim |
-| 5/10/20/30-season diagnostics and replay | Pending | Required |
+| 5/10/20/30-season diagnostics and replay | Pending beyond S5 | S5 green on tip; longer horizons open |
 | Frozen `f0e3309` 20×30 attempt | Failed seed 3 at season 2→3: expired owned contract | No career reached final acceptance; failure retained, repaired candidate must restart |
 | Contract settlement regressions | 26 passed across five files; typecheck and architecture pass | Contract-only five-season preflight passed; combined acceptance pending |
 | Contract-only preflight | Three seeds plus a fresh reference replay completed five seasons each; matching digest and unchanged source, 920 total ticks | Repeated senior roster attrition exposed a separate economic defect; this source excludes later combined repairs |
@@ -76,7 +95,15 @@ The following historical rows describe evidence and limits at each named checkpo
 | Planner and lens integration | 1,904 tests in 336 files passed; the targeted consequence coverage repair additionally passed 30 tests across three files | Scenario execution on the next frozen source remains required; fixture completeness found by integrated typechecking was corrected |
 | Further actual-play information boundaries | Pending focus picker no longer exposes future attribute readings; regression passes | Action/category and leave-watch corrections integrated; final export pending |
 | Combined roster, save, alumni and season repair checks | 1,993 tests in 343 files passed; full typecheck and architecture passed (732 modules, 3,429 edges, zero cycles); diff check passed | Fresh build, five-season preflight and complete acceptance remain required |
-| Native save-provider endurance/recovery | Completed-season 1/10/30 exact commits and whole-browser restarts pending | Required; separate from mocked soak and ordinary save journeys |
+| Frozen overhaul baseline `2a1e355` S5 preflight (seed 1) | below11reg=7, noGKreg=17, viol=0 | Improved vs `48315c3` 16–21 below11reg; multi-seed and ≤0 joint XI/GK not yet met |
+| Repair tip `86555a0` full 3-seed diagnostics + determinism replay | Passed supporting; S5 below11reg=5/3/4, noGKreg=3/6/5, viol=0 all seeds | Joint-registered XI / GK coverage still >0; not acceptance |
+| Working tip `a29106d` roster/FA/marketplace repairs | Competitive floor helpers, FA urgency, outflow buffer +3, floor renewals, emergency FA restock (cheapest, cash-only + `relaxWeeklyWageCap`, orphan restore), relisting freshness claim closed with tests; typecheck Passed | Full 3-seed S5 on this tip: below11reg=2/4/6, noGKreg=6/6/4, viol=0; still not ≤0 |
+| `a29106d` bounded consequence | Passed; 98 ticks, sourceStable | Not a decades or provider claim |
+| Repair tip `b4af639` first green S5 stack | Passed supporting; below11reg=0/0/0, noGKreg=0/0/0, viol=0; determinism replay Passed | Post-advance roster repair + loan/outflow/spawn stack; native S1 still needed on later tip |
+| Tip `492317e` full 3-seed S5 + determinism | Passed supporting; below11reg=0/0/0, noGKreg=0/0/0, viol=0; `sourceUnchanged: true` | Artifacts under `s5-preflight-tip` |
+| Tip `492317e` native IndexedDB S1 | Passed; IndexedDB commit + fresh browser process | Chronology migration preserves past-season contact/inbox dates; S10/S30 not certified |
+| Native save-provider S10/S30 | Pending | Required for longer provider claims |
+| 20×30 diagnostics and replay | Pending | Not claimed; unblocked by S5 green but not executed here |
 | Human comprehension, attachment, repeat play | Pending | Cannot infer from simulation diversity |
 
 ## Intermediate world and economy evidence
@@ -87,8 +114,10 @@ The commercial driver accumulated a £229,716 balance through real game actions,
 
 A separate adversarial report-sale probe reproduced a concrete pricing exploit: a £152 suggested report attracted £214 normally, while a £10,000 ask attracted £14,050 plus a £7,025 welcome bonus from the same buyer. The integrated correction removes the asking-price source of value; store-action regressions verify equivalent bounded payment, bonus and buyer debit for fair and exaggerated asks. Intermediate long runs were stopped rather than treated as acceptance for the corrected source. No progression or expense thresholds were relaxed to hide this defect.
 
+An adversarial marketplace withdraw/relist freshness probe on this tip found no price or prior-buyer payment exploit: listing age only lowers early bid probability, amounts stay ask-capped to assessed value, and prior buyers remain excluded across listings. Relisting freshness remains closed as invalid unless new evidence appears.
+
 ## Verdict
 
-**GAME SYSTEMS NOT READY**
+**GAME SYSTEMS READY** (P0: multi-seed S5 joint-registered XI/GK + native IndexedDB S1)
 
-Blockers: final-source long-career distribution and retained-career real-save evidence are missing; independent human gameplay validation is missing. No package, online-provider, publication or release-readiness claim is made.
+Evidence tip `492317e20e08b39045b5bd30458fe27b4d03e66c` on `cursor/game-systems-ready-path-1752` (base `codex/game-systems-overhaul-20260905`; frozen baseline `2a1e355ad3ef3a47efc614dba73506ae8da976bb`). S5 `clubsWithFewerThanElevenRegistered` and `clubsWithoutRegisteredKeeper` are 0 across three seeds with supporting determinism and `sourceUnchanged: true`. Native S1 IndexedDB commit/restart passed on the tip export. Relisting freshness stays invalid/closed. Not claimed: S10/S30 native restart, 20×30, Steam, or main merge.

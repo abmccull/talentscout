@@ -171,9 +171,12 @@ export interface TickResult {
     wage: number;
     signingBonus: number;
     contractLength: number;
+    relaxWeeklyWageCap?: boolean;
   }>;
   freeAgentRemovedPlayerIds?: string[];
   midSeasonReleases?: FreeAgent[];
+  /** Emergency journeyman bodies staged before freeAgentSigning apply. */
+  emergencySpawnedPlayers?: Player[];
   contractExpiryResult?: {
     renewals: Array<{
       playerId: string;
