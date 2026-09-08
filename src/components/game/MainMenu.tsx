@@ -16,6 +16,8 @@ import {
   Settings,
   ShieldCheck,
   Trash2,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { APP_VERSION } from "@/config/version";
@@ -27,6 +29,7 @@ import {
   BETA_CLOUD_SAVES_MESSAGE,
 } from "@/config/beta";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { useAudio } from "@/lib/audio/useAudio";
 
 // Session flag — splash only shown once per browser session.
 let splashShownThisSession = false;
@@ -71,6 +74,8 @@ export function MainMenu() {
     signOut: state.signOut,
     cloudSaveEnabled: state.cloudSaveEnabled,
   })));
+
+  const { volumes, toggleMute } = useAudio();
 
   const [showLoadPicker, setShowLoadPicker] = useState(false);
   const [showSplash, setShowSplash] = useState(!splashShownThisSession);
@@ -289,6 +294,21 @@ export function MainMenu() {
           >
             <Map size={16} className="mr-2" aria-hidden="true" />
             What&apos;s Coming
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="lg"
+            className="w-full text-base text-zinc-300"
+            onClick={toggleMute}
+            title={volumes.muted ? "Unmute audio" : "Mute audio"}
+          >
+            {volumes.muted ? (
+              <VolumeX size={18} className="mr-2" aria-hidden="true" />
+            ) : (
+              <Volume2 size={18} className="mr-2" aria-hidden="true" />
+            )}
+            {volumes.muted ? "Unmute" : "Mute"}
           </Button>
 
           {continueSave?.recovery && (

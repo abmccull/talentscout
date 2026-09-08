@@ -495,6 +495,11 @@ export function GameLayout({
     setScreen(screen);
     setSidebarOpen(false);
 
+    // Complete guided milestone when navigating to the expected screen
+    if (guidedSessionActive && currentGuidedTask === "openedCalendar" && screen === "calendar") {
+      useTutorialStore.getState().completeMilestone("openedCalendar");
+    }
+
     // Auto-open screen guide on first click of a newly-visible nav item.
     if (isFirstVisit && (useGameStore.getState().gameState?.guidedSessionRequested !== false
       || useTutorialStore.getState().guidedSessionForcedReplay)) {
