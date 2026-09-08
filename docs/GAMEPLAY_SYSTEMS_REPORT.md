@@ -1,6 +1,6 @@
 # Gameplay systems report
 
-Status: **GAME SYSTEMS READY** for the P0 multi-seed S5 joint-registered XI/GK gate plus native IndexedDB S1 restart. Frozen overhaul baseline `2a1e355ad3ef3a47efc614dba73506ae8da976bb`; gate-evidence tip `492317e20e08b39045b5bd30458fe27b4d03e66c` on `cursor/game-systems-ready-path-1752` (base `codex/game-systems-overhaul-20260905`). First green S5 repair stack `b4af6397cff989b2bfb5b3bc69d99c52291a75a1`. Ledger tip follows this docs commit on the same branch.
+Status: **GAME SYSTEMS READY** for the P0 multi-seed S5 joint-registered XI/GK gate plus native IndexedDB S1 restart. Frozen overhaul baseline `2a1e355ad3ef3a47efc614dba73506ae8da976bb`; gate-evidence tip `492317e20e08b39045b5bd30458fe27b4d03e66c` on `cursor/game-systems-ready-path-1752` (base `codex/game-systems-overhaul-20260905`). First green S5 repair stack `b4af6397cff989b2bfb5b3bc69d99c52291a75a1`. Ledger tip `c95dad6f91cc488ac8350b0788b463445263fbb5` (docs-only) on the same branch.
 
 Original systems score: **58/100 (provisional)**.
 
