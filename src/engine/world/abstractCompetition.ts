@@ -1,5 +1,6 @@
 import type {
   Club,
+  DisciplinaryRecord,
   Fixture,
   League,
   Player,
@@ -7,6 +8,7 @@ import type {
   Weather,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
+import { getEligibleMatchRoster } from "@/engine/match/eligibleRoster";
 
 export const ABSTRACT_COMPETITION_SIMULATION_DETAIL = "abstract" as const;
 
@@ -38,6 +40,7 @@ export interface AbstractCompetitionWeekInput {
   players: Record<string, Player>;
   fixtures?: Record<string, Fixture>;
   matchRatings?: Record<string, Record<string, PlayerMatchRating>>;
+  disciplinaryRecords?: Record<string, DisciplinaryRecord>;
   /**
    * Optional global season length from the parent world. When it is longer
    * than the league's abstract round count, rounds are spaced across that
@@ -315,37 +318,9 @@ function comparePlayers(left: Player, right: Player): number {
 function getClubRoster(
   club: Club,
   players: Record<string, Player>,
+  discipline: Readonly<Record<string, DisciplinaryRecord>> = {},
 ): Player[] {
-  const seniorRosterIds = uniqueSorted([
-    ...club.playerIds,
-    ...(club.loanedInPlayerIds ?? []),
-  ]);
-
-  const seniorRoster = seniorRosterIds
-    .map((playerId) => players[playerId])
-    .filter((player): player is Player => Boolean(player))
-    .filter((player) => player.clubId === club.id);
-
-  if (seniorRoster.length >= 11) {
-    const fit = seniorRoster.filter((player) => !player.injured);
-    return (fit.length >= 11 ? fit : seniorRoster).sort(comparePlayers);
-  }
-
-  // A thin senior list should call up registered academy players. Previously
-  // academy cover was considered only when the senior list was completely
-  // empty, so a club with one remaining senior and a healthy youth squad tried
-  // to play every abstract fixture with that single player.
-  const emergencyRosterIds = uniqueSorted([
-    ...seniorRosterIds,
-    ...(club.academyPlayerIds ?? []),
-  ]);
-  const emergencyRoster = emergencyRosterIds
-    .map((playerId) => players[playerId])
-    .filter((player): player is Player => Boolean(player))
-    .filter((player) => player.clubId === club.id);
-  const fitEmergencyRoster = emergencyRoster.filter((player) => !player.injured);
-  return (fitEmergencyRoster.length >= 11 ? fitEmergencyRoster : emergencyRoster)
-    .sort(comparePlayers);
+  return getEligibleMatchRoster(club, players, discipline).sort(comparePlayers);
 }
 
 function takeBestPlayers(
@@ -367,8 +342,9 @@ function selectParticipants(
   club: Club,
   players: Record<string, Player>,
   rng: RNG,
+  discipline: Readonly<Record<string, DisciplinaryRecord>> = {},
 ): Participant[] {
-  const roster = getClubRoster(club, players);
+  const roster = getClubRoster(club, players, discipline);
   if (roster.length === 0) return [];
 
   const selected = new Map<string, Player>();
@@ -640,9 +616,10 @@ function simulateFixture(
   fixtureId: string,
   rng: RNG,
   existingFixture?: Fixture,
+  discipline: Readonly<Record<string, DisciplinaryRecord>> = {},
 ): AbstractPlayedFixture {
-  const homeParticipants = selectParticipants(homeClub, players, new RNG(`${fixtureId}:home`));
-  const awayParticipants = selectParticipants(awayClub, players, new RNG(`${fixtureId}:away`));
+  const homeParticipants = selectParticipants(homeClub, players, new RNG(`${fixtureId}:home`), discipline);
+  const awayParticipants = selectParticipants(awayClub, players, new RNG(`${fixtureId}:away`), discipline);
 
   const homeStrength = averageStrength(homeParticipants);
   const awayStrength = averageStrength(awayParticipants);
@@ -773,6 +750,7 @@ export function simulateAbstractCompetitionWeek(
         fixtureId,
         new RNG(fixtureSeed),
         existingFixture,
+        input.disciplinaryRecords,
       );
       fixturesPlayed.push(played);
       matchRatingsByFixture[played.id] = played.playerRatings;

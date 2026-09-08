@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   isTutorialSequenceAvailableForBuild,
 } from "@/stores/gameScreenScope";
-import { useTutorialStore } from "@/stores/tutorialStore";
+import { createEmptyGuidedMilestones, useTutorialStore } from "@/stores/tutorialStore";
 
 beforeEach(() => {
   useTutorialStore.setState({
@@ -17,19 +17,7 @@ beforeEach(() => {
     guidedSessionForcedReplay: false,
     guidedSessionCompleted: false,
     guidedSessionKind: "firstWeek",
-    guidedMilestones: {
-      viewedDashboard: false,
-      openedCalendar: false,
-      scheduledActivity: false,
-      advancedWeek: false,
-      attendedMatch: false,
-      focusedPlayer: false,
-      flaggedBreakthrough: false,
-      completedMatch: false,
-      wroteReport: false,
-      submittedReport: false,
-      checkedInbox: false,
-    },
+    guidedMilestones: createEmptyGuidedMilestones(),
     currentGuidedTask: "viewedDashboard",
     visitedScreens: new Set(),
     activeScreenGuide: null,

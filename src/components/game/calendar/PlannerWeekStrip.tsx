@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { Activity } from "@/engine/core/types";
 import { X } from "lucide-react";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { ACTIVITY_DISPLAY } from "./ActivityCard";
 
 interface PlannerWeekStripProps {
@@ -17,6 +18,8 @@ interface PlannerWeekStripProps {
   severity: "ok" | "warn" | "danger";
   upcomingEvent?: { name: string; startWeek: number };
   isWeekBlank?: boolean;
+  playerNames?: Record<string, string>;
+  openingShell?: boolean;
   prelude?: ReactNode;
   onClearSelection: () => void;
   onRequestOpportunitySelection?: () => void;
@@ -42,6 +45,8 @@ export function PlannerWeekStrip({
   severity,
   upcomingEvent,
   isWeekBlank = false,
+  playerNames = {},
+  openingShell = false,
   prelude,
   onClearSelection,
   onRequestOpportunitySelection,
@@ -70,18 +75,22 @@ export function PlannerWeekStrip({
       id="planner-itinerary"
       data-tutorial-id="calendar-grid"
       aria-labelledby="itinerary-heading"
-      className="sticky -top-4 z-20 -mx-2 mb-4 rounded-2xl border border-emerald-400/20 bg-[#0c1217]/95 p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 md:top-0 sm:p-4"
+      className="relative mb-6 border-y border-[var(--border)] py-5"
     >
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 id="itinerary-heading" className="text-base font-semibold text-white">
-              Weekly itinerary
+              Your seven days
             </h2>
-            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200">
+            <span className={`rounded-full border px-2.5 py-1 text-meta font-semibold ${
+              openingShell
+                ? "border-[color:var(--primary)]/25 bg-[color:var(--primary)]/10 text-amber-100"
+                : "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+            }`}>
               {slotsUsed}/7 days committed
             </span>
-            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+            <span className={`rounded-full border px-2.5 py-1 text-meta font-semibold ${
               severity === "danger"
                 ? "border-red-400/25 bg-red-400/10 text-red-200"
                 : severity === "warn"
@@ -93,8 +102,8 @@ export function PlannerWeekStrip({
           </div>
           <p className="mt-1 text-sm leading-6 text-zinc-300" aria-live="polite">
             {selectedActivity
-              ? `${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Selected activity"} is live in compare mode. Choose a start day in the strip.`
-              : `${openDayCount} open day${openDayCount === 1 ? "" : "s"}. The strip is the week: every placement should make the next choice harder or clearer.`}
+              ? `${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Selected activity"} selected. Choose its start day.`
+              : `${openDayCount} open day${openDayCount === 1 ? "" : "s"}. Choose work below or select an open day.`}
           </p>
         </div>
         {selectedActivity && (
@@ -108,24 +117,23 @@ export function PlannerWeekStrip({
         )}
       </div>
 
-      {prelude && <div className="mb-4">{prelude}</div>}
 
       {receiptMessage && (
         <div
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          className="workspace-receipt-pulse mb-4 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-2 text-sm text-emerald-100"
+          className="workspace-receipt-pulse mb-4 rounded border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/[0.08] px-3 py-2 text-sm text-amber-50"
         >
           {receiptMessage}
         </div>
       )}
 
       <div
-        className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] xl:grid xl:grid-cols-7 xl:overflow-visible xl:pb-0"
+        className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] xl:grid xl:grid-cols-4 2xl:grid-cols-7 xl:overflow-visible xl:pb-0"
         tabIndex={0}
         role="region"
-        aria-label="Weekly itinerary days. Use left and right arrow keys to scroll."
+        aria-label="Your seven days days. Use left and right arrow keys to scroll."
         onKeyDown={(event) => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
@@ -152,9 +160,11 @@ export function PlannerWeekStrip({
           return (
             <div
               key={dayKey}
-              className={`workspace-interactive relative min-h-[112px] min-w-[176px] snap-start rounded-xl border p-3 transition sm:min-h-[120px] xl:min-h-[132px] xl:min-w-0 ${
+              className={`workspace-interactive relative min-h-11 min-w-[15rem] snap-start rounded border p-3 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] xl:min-w-0 ${
                 activity
-                  ? "border-emerald-400/25 bg-emerald-400/[0.06]"
+                  ? openingShell
+                    ? "border-[color:var(--primary)]/30 bg-[color:var(--primary)]/[0.08]"
+                    : "border-emerald-400/25 bg-emerald-400/[0.06]"
                   : isPreviewed
                     ? "border-blue-300/45 bg-blue-400/[0.08]"
                     : canPlaceSelected || isDropTarget
@@ -184,7 +194,7 @@ export function PlannerWeekStrip({
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+                  <p className="text-eyebrow font-bold uppercase tracking-[0.14em] text-quiet">
                     {translateDay(dayKey)}
                   </p>
                   <p className="mt-1 text-xs text-zinc-400">
@@ -194,8 +204,8 @@ export function PlannerWeekStrip({
                         ? "Available start"
                         : canPromptSelection
                           ? isWeekBlank
-                            ? "Needs the first call"
-                            : "Open for a decision"
+                            ? "Available"
+                            : "Available"
                           : "Open day"}
                   </p>
                 </div>
@@ -214,15 +224,26 @@ export function PlannerWeekStrip({
               {activity && display && Icon ? (
                 <div className="mt-4 space-y-3">
                   <div className="flex items-start gap-2">
+                    {activity.targetId ? (
+                      <YouthPortraitWithFallback
+                        playerId={activity.targetId}
+                        size={48}
+                        className="mt-0.5 shrink-0"
+                        alt={playerNames[activity.targetId] ?? "Booked prospect"}
+                      />
+                    ) : (
                     <span className={`mt-0.5 rounded-lg border border-white/10 bg-black/30 p-2 ${display.color}`}>
                       <Icon size={16} aria-hidden="true" />
                     </span>
+                    )}
                     <div className="min-w-0">
-                      <p className={`text-sm font-semibold ${display.color}`}>{display.label}</p>
+                      <p className={`text-sm font-semibold ${openingShell ? "text-[color:var(--primary)]" : display.color}`}>
+                        {activity.targetId ? playerNames[activity.targetId] ?? display.label : display.label}
+                      </p>
                       <p className="mt-1 line-clamp-3 text-xs leading-5 text-zinc-300">{activity.description}</p>
                     </div>
                   </div>
-                  <p className="text-[11px] text-zinc-400">
+                  <p className="text-meta text-zinc-400">
                     Occupies {activity.slots} day{activity.slots === 1 ? "" : "s"}.
                   </p>
                 </div>
@@ -260,13 +281,13 @@ export function PlannerWeekStrip({
                     event.preventDefault();
                     next.focus();
                   }}
-                  className={`workspace-interactive mt-4 flex min-h-[68px] w-full flex-col items-start justify-center rounded-xl border px-3 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                  className={`workspace-interactive mt-4 flex min-h-[68px] w-full flex-col items-start justify-center rounded border px-3 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
                     selectedActivity
                       ? canPlaceSelected
-                        ? "border-blue-400/30 bg-blue-400/[0.06] font-semibold text-blue-100 hover:bg-blue-400/10"
-                        : "border-white/10 bg-black/20 text-zinc-500"
+                        ? "border-[color:var(--primary)] bg-[color:var(--primary)]/12 font-semibold text-[color:var(--primary)] hover:bg-[color:var(--primary)]/18"
+                        : "border-white/10 bg-black/20 text-quiet"
                       : renderExpandedEmptyState
-                        ? "border-emerald-400/35 bg-emerald-400/[0.08] text-white hover:bg-emerald-400/[0.12]"
+                        ? "border-[color:var(--primary)]/35 bg-[color:var(--primary)]/[0.08] text-white hover:bg-[color:var(--primary)]/[0.12]"
                         : isPassiveBlankDay
                           ? "border-dashed border-white/10 bg-transparent text-zinc-400 hover:border-emerald-400/25 hover:bg-emerald-400/[0.04] hover:text-zinc-200 xl:min-h-[48px] xl:rounded-lg xl:px-2"
                         : "border-white/12 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.07]"
@@ -279,8 +300,8 @@ export function PlannerWeekStrip({
                         : "Unavailable"
                       : renderExpandedEmptyState
                         ? isWeekBlank
-                          ? "Choose the first live look"
-                          : "Choose the next live look"
+                          ? "Choose work"
+                          : "Choose work"
                         : "Open day"}
                   </span>
                   {(selectedActivity || renderExpandedEmptyState) && (
@@ -289,7 +310,7 @@ export function PlannerWeekStrip({
                         selectedActivity
                           ? canPlaceSelected
                             ? "text-blue-100/85"
-                            : "text-zinc-500"
+                            : "text-quiet"
                           : "text-emerald-100/85"
                       }`}
                     >
@@ -298,8 +319,8 @@ export function PlannerWeekStrip({
                           ? `Commit ${selectedActivity.slots} day${selectedActivity.slots === 1 ? "" : "s"} here.`
                           : "This slot is blocked by another commitment."
                         : isWeekBlank
-                          ? "Start the week with evidence, access, or recovery before the trail goes quiet."
-                          : "Use one open slot to make the next evidence choice clearer."}
+                          ? "Observation, contacts or recovery."
+                          : "Observation, contacts or recovery."}
                     </span>
                   )}
                 </button>
@@ -309,8 +330,10 @@ export function PlannerWeekStrip({
         })}
       </div>
 
+      {prelude && <div className="mt-4">{prelude}</div>}
+
       {(upcomingEvent || severity !== "ok") && (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-3 text-[11px]">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-3 text-meta">
           {upcomingEvent && (
             <span className="text-zinc-300">
               Next event: <strong className="font-semibold text-white">{upcomingEvent.name}</strong> in W{upcomingEvent.startWeek}

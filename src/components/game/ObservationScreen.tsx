@@ -13,8 +13,8 @@ import {
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Button } from "@/components/ui/button";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import {
   Eye,
@@ -31,9 +31,6 @@ import {
   BarChart3,
   MessageSquare,
   Shuffle,
-  SlidersHorizontal,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import type {
   ObservationSession,
@@ -62,7 +59,15 @@ import {
   AnalysisContent,
   QuickInteractionContent,
 } from "./ObservationPhase";
+import { YouthPortraitWithFallback } from "./YouthPortrait";
 import { ObservationPitch } from "./observation/ObservationPitch";
+import { LeaveObservationButton } from "./observation/LeaveObservationButton";
+import { QuestionFocusGuide, QuestionLensMatch } from "./observation/QuestionFocusGuide";
+import {
+  LENS_KEYS,
+  LENS_VISUAL,
+  lensShapeClass,
+} from "./observation/lensVisual";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isOpeningDiscoverySession } from "@/engine/youth/openingCase";
 import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
@@ -71,32 +76,24 @@ import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
 // Constants
 // ---------------------------------------------------------------------------
 
-const LENS_KEYS: LensType[] = ["technical", "physical", "mental", "tactical", "general"];
-
-const LENS_COLORS: Record<LensType, string> = {
-  technical: "text-blue-400",
-  physical:  "text-orange-400",
-  mental:    "text-purple-400",
-  tactical:  "text-yellow-400",
-  general:   "text-zinc-400",
-};
-
-const LENS_BORDER: Record<LensType, string> = {
-  technical: "border-blue-500/30",
-  physical:  "border-orange-500/30",
-  mental:    "border-purple-500/30",
-  tactical:  "border-yellow-500/30",
-  general:   "border-zinc-500/30",
-};
+function LensMark({ lens }: { lens: LensType }) {
+  const visual = LENS_VISUAL[lens];
+  return (
+    <i
+      className={`inline-block shrink-0 ${lensShapeClass(visual.shape)}`}
+      aria-hidden="true"
+    />
+  );
+}
 
 const REACTION_CONFIG: Record<
   SessionFlaggedMoment["reaction"],
   { label: string; icon: React.ElementType; className: string }
 > = {
-  promising:      { label: "Promising",      icon: CheckCircle2, className: "text-emerald-400" },
-  concerning:     { label: "Concerning",      icon: AlertTriangle, className: "text-red-400" },
-  interesting:    { label: "Interesting",     icon: HelpCircle, className: "text-amber-400" },
-  needs_more_data: { label: "Needs More Data", icon: Database, className: "text-blue-400" },
+  promising:      { label: "Promising",      icon: CheckCircle2, className: "signal-focus" },
+  concerning:     { label: "Concerning",      icon: AlertTriangle, className: "signal-danger" },
+  interesting:    { label: "Interesting",     icon: HelpCircle, className: "signal-moment" },
+  needs_more_data: { label: "Needs More Data", icon: Database, className: "text-zinc-300" },
 };
 
 const MODE_LABELS: Record<ObservationSession["mode"], string> = {
@@ -120,6 +117,7 @@ const MODE_ICONS: Record<ObservationSession["mode"], React.ElementType> = {
 // -- MomentCard --------------------------------------------------------------
 
 interface MomentCardProps {
+  minute: number;
   moment: PlayerMoment;
   cue?: ScoutCueReading;
   isFocused: boolean;
@@ -130,124 +128,47 @@ interface MomentCardProps {
 }
 
 const MomentCard = memo(function MomentCard({
-  moment,
-  cue,
-  isFocused,
-  playerName,
-  canFlag,
-  alreadyFlagged,
-  onFlag,
+  moment, cue, isFocused, playerName, canFlag, alreadyFlagged, onFlag, minute,
 }: MomentCardProps) {
   const [showReactions, setShowReactions] = useState(false);
-
-  const handleFlagClick = useCallback(() => {
-    if (!canFlag || alreadyFlagged) return;
-    setShowReactions((v) => !v);
-  }, [canFlag, alreadyFlagged]);
-
-  const handleReaction = useCallback(
-    (reaction: SessionFlaggedMoment["reaction"]) => {
-      onFlag(moment.id, reaction);
-      setShowReactions(false);
-    },
-    [moment.id, onFlag],
-  );
-
   return (
-    <Card
-      className={`border ${
-        isFocused
-          ? "border-emerald-500/30 bg-emerald-500/5"
-          : "border-[#27272a] bg-[#0f0f0f]"
-      } ${moment.isStandout ? "ring-1 ring-amber-500/30" : ""}`}
-    >
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="mb-1 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                {playerName}
-              </span>
-              <Badge variant="secondary" className="text-[10px] py-0">
-                {cue?.clarity && cue.clarity !== "missed" ? cue.clarity : "Passage"}
-              </Badge>
-              {moment.isStandout && (
-                <Badge variant="warning" className="text-[10px] py-0">
-                  Standout
-                </Badge>
-              )}
-              {moment.pressureContext && (
-                <Badge variant="outline" className="py-0 text-[10px] text-zinc-400">
-                  Under Pressure
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-zinc-300 leading-snug">
-              {isFocused && cue ? cue.detail : moment.vagueDescription}
-            </p>
-            {isFocused && cue && (
-              <p className="mt-1.5 text-[10px] leading-4 text-zinc-400">
-                {cue.regionalContext}
-              </p>
-            )}
-            {isFocused && (cue?.attributesHinted.length ?? 0) > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {cue!.attributesHinted.map((attr) => (
-                  <span
-                    key={attr}
-                    className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400"
-                  >
-                    {attr}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Flag button */}
-          <div className="shrink-0">
-            {alreadyFlagged ? (
-              <Flag size={14} className="text-amber-400" aria-label="Flagged" />
-            ) : canFlag ? (
-              <button
-                onClick={handleFlagClick}
-                data-tutorial-id={moment.isStandout ? "observation-flag-moment" : undefined}
-                className={`flex h-11 items-center justify-center gap-2 rounded text-zinc-300 transition hover:bg-amber-400/10 hover:text-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
-                  moment.isStandout ? "px-3" : "w-11"
-                }`}
-                aria-label={moment.isStandout ? "Flag standout moment" : "Flag this moment"}
-                aria-expanded={showReactions}
-              >
-                <Flag size={14} aria-hidden="true" />
-                {moment.isStandout && <span className="text-xs font-semibold">Flag moment</span>}
-              </button>
-            ) : null}
-          </div>
+    <article className="relative border-b border-white/10 py-3 last:border-0 sm:py-5">
+      <div className="mb-2 flex items-center gap-3">
+        <span className="w-8 shrink-0 text-sm font-semibold tabular-nums text-zinc-400">{minute}′</span>
+        <h3 className="min-w-0 flex-1 text-sm font-semibold text-[var(--foreground)]">{playerName}</h3>
+        {alreadyFlagged && <Flag size={14} className="text-[var(--signal-moment)]" aria-label="Flagged" />}
+      </div>
+      <div className="sm:pl-11">
+        <p className="text-sm leading-6 text-zinc-200">{isFocused && cue ? cue.detail : moment.vagueDescription}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span className="text-zinc-400">{isFocused && cue ? `${formatSituationLabel(cue.clarity)} · ${formatSituationLabel(cue.confidenceBand)} confidence` : "Peripheral view · Uncertain"}</span>
+          {moment.isStandout && <span className="font-medium text-[var(--signal-moment)]">Standout moment</span>}
+          {moment.pressureContext && <span className="text-zinc-400">Under pressure</span>}
         </div>
-
-        {/* Reaction picker */}
-        {showReactions && (
-          <div className="mt-2 grid grid-cols-2 gap-1 border-t border-[#27272a] pt-2">
-            {(Object.entries(REACTION_CONFIG) as [SessionFlaggedMoment["reaction"], typeof REACTION_CONFIG[keyof typeof REACTION_CONFIG]][]).map(
-              ([reaction, config]) => {
-                const Icon = config.icon;
-                return (
-                  <button
-                    key={reaction}
-                    onClick={() => handleReaction(reaction)}
-                    data-tutorial-id={reaction === "promising" ? "observation-promising-reaction" : undefined}
-                    className={`flex min-h-11 items-center gap-1.5 rounded px-2 py-1.5 text-xs transition hover:bg-[#27272a] ${config.className}`}
-                  >
-                    <Icon size={12} aria-hidden="true" />
-                    {config.label}
-                  </button>
-                );
-              },
-            )}
+        {isFocused && cue?.regionalContext && <details className="mt-2 text-xs leading-5 text-zinc-400"><summary className="min-h-11 cursor-pointer py-2">Local context</summary><p>{cue.regionalContext}</p></details>}
+        {isFocused && (cue?.attributesHinted.length ?? 0) > 0 && <p className="mt-2 text-xs text-zinc-300">Possible signal: {cue!.attributesHinted.map(formatSituationLabel).join(" · ")}</p>}
+        {canFlag && !alreadyFlagged && (
+          <button
+            type="button" onClick={() => setShowReactions((open) => !open)}
+            data-tutorial-id="observation-flag-moment"
+            className="mt-3 flex min-h-11 items-center gap-2 rounded-sm px-2 text-sm font-medium text-[var(--signal-moment)] hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--signal-moment)]"
+            aria-label={moment.isStandout ? "Flag standout moment" : "Flag this moment"} aria-expanded={showReactions}
+          ><Flag size={14} aria-hidden="true" />Flag moment</button>
+        )}
+        {showReactions && !alreadyFlagged && (
+          <div className="mt-2 grid grid-cols-2 gap-1 border-t border-white/10 pt-2" role="group" data-tutorial-id="observation-reactions" aria-label={`Your first read of ${playerName}`}>
+            {(Object.entries(REACTION_CONFIG) as [SessionFlaggedMoment["reaction"], typeof REACTION_CONFIG[keyof typeof REACTION_CONFIG]][]).map(([reaction, config]) => {
+              const Icon = config.icon;
+              return <button key={reaction} type="button" onClick={() => { onFlag(moment.id, reaction); setShowReactions(false); }}
+                data-tutorial-id={reaction === "promising" ? "observation-promising-reaction" : undefined}
+                className={`flex min-h-11 items-center gap-2 rounded-sm px-2 py-2 text-xs hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${config.className}`}>
+                <Icon size={14} aria-hidden="true" />{config.label}
+              </button>;
+            })}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 });
 
@@ -261,7 +182,7 @@ interface PhaseContentProps {
   session: ObservationSession;
   flaggedMomentIds: Set<string>;
   hasPhaseFlag: boolean;
-  requiresStandoutFlag: boolean;
+  requiredLeadId?: string;
   onFlagMoment: (momentId: string, reaction: SessionFlaggedMoment["reaction"]) => void;
   onDialogueChoice: (nodeId: string, optionId: string) => void;
   onDataPointSelect: (pointId: string) => void;
@@ -273,7 +194,7 @@ const PhaseContent = memo(function PhaseContent({
   session,
   flaggedMomentIds,
   hasPhaseFlag,
-  requiresStandoutFlag,
+  requiredLeadId,
   onFlagMoment,
   onDialogueChoice,
   onDataPointSelect,
@@ -284,7 +205,7 @@ const PhaseContent = memo(function PhaseContent({
   // Full Observation: player moments
   if (session.mode === "fullObservation") {
     return (
-      <div className="space-y-2">
+      <div>
         {phase.moments.length === 0 ? (
           <p className="py-6 text-center text-xs text-zinc-400">No moments observed in this phase.</p>
         ) : (
@@ -295,10 +216,11 @@ const PhaseContent = memo(function PhaseContent({
               <MomentCard
                 key={moment.id}
                 moment={moment}
+                minute={phase.minute}
                 cue={cue}
                 isFocused={sessionPlayer?.isFocused ?? false}
                 playerName={sessionPlayer?.name ?? moment.playerId}
-                canFlag={requiresStandoutFlag ? moment.isStandout : !hasPhaseFlag}
+                canFlag={requiredLeadId ? moment.playerId === requiredLeadId : !hasPhaseFlag}
                 alreadyFlagged={flaggedMomentIds.has(moment.id)}
                 onFlag={onFlagMoment}
               />
@@ -365,193 +287,63 @@ interface FocusPanelProps {
 }
 
 const FocusPanel = memo(function FocusPanel({
-  session,
-  onAllocateFocus,
-  onRemoveFocus,
-  selectedPlayerId,
-  focusSelectedLensPicker = false,
+  session, onAllocateFocus, onRemoveFocus, selectedPlayerId, focusSelectedLensPicker = false,
 }: FocusPanelProps) {
-  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
   const firstSelectedLensRef = useRef<HTMLButtonElement>(null);
-  const { focusTokens, players } = session;
-
-  const focusedPlayers = players.filter((p) => p.isFocused);
-  const unfocusedPlayers = players.filter((p) => !p.isFocused);
-  const canAllocate = focusTokens.available > 0;
-
-  useEffect(() => {
-    if (!selectedPlayerId) return;
-    const selectedPlayer = players.find(
-      (player) => player.playerId === selectedPlayerId,
-    );
-    if (selectedPlayer && !selectedPlayer.isFocused && canAllocate) {
-      setPendingFocusId(selectedPlayerId);
-    }
-  }, [canAllocate, players, selectedPlayerId]);
+  const releaseFocusRef = useRef<HTMLButtonElement>(null);
+  const focusHeadingRef = useRef<HTMLHeadingElement>(null);
+  const selected = session.players.find((player) => player.playerId === selectedPlayerId) ?? session.players[0];
+  const canAllocate = session.focusTokens.available > 0;
+  const otherFocused = session.players.filter((player) => player.isFocused && player.playerId !== selected?.playerId);
+  const selectedId = selected?.playerId;
+  const selectedIsFocused = selected?.isFocused;
 
   useEffect(() => {
-    if (!focusSelectedLensPicker || pendingFocusId !== selectedPlayerId) return;
-    const frame = requestAnimationFrame(() => {
-      firstSelectedLensRef.current?.focus({ preventScroll: true });
-    });
+    if (!focusSelectedLensPicker || !selectedId || selectedIsFocused || !canAllocate) return;
+    const frame = requestAnimationFrame(() => firstSelectedLensRef.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
-  }, [focusSelectedLensPicker, pendingFocusId, selectedPlayerId]);
-
-  const handleConfirmFocus = useCallback(
-    (playerId: string, lens: LensType) => {
-      onAllocateFocus(playerId, lens);
-      setPendingFocusId(null);
-    },
-    [onAllocateFocus],
-  );
+  }, [focusSelectedLensPicker, selectedId, selectedIsFocused, canAllocate]);
 
   return (
-    <div
-      className="flex-1 overflow-y-auto p-4 space-y-4"
-      data-tutorial-id="observation-focus-panel"
-    >
-      {/* Token counter */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Eye size={14} className="text-emerald-500" aria-hidden="true" />
-            Focus Tokens
-          </h3>
-          <span className="text-xs text-zinc-400 tabular-nums">
-            {focusTokens.available}/{focusTokens.total} remaining
-          </span>
+    <section className="px-4 py-3 sm:px-6 sm:py-4" data-tutorial-id="observation-focus-panel" aria-labelledby="observation-focus-title">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 ref={focusHeadingRef} tabIndex={-1} id="observation-focus-title" className="dossier-eyebrow text-zinc-400">Your attention</h2>
+          <p className="mt-1 hidden text-base font-semibold text-[var(--foreground)] sm:block">{selected?.name ?? "Choose a player"}</p>
         </div>
-        {/* Token pips */}
-        <div className="flex gap-1.5" role="meter" aria-valuenow={focusTokens.available} aria-valuemax={focusTokens.total} aria-label="Focus tokens remaining">
-          {Array.from({ length: focusTokens.total }).map((_, i) => (
-            <div
-              key={i}
-              className={`h-2 flex-1 rounded-full transition-colors ${
-                i < focusTokens.available ? "bg-emerald-500" : "bg-zinc-700"
-              }`}
-              aria-hidden="true"
-            />
-          ))}
-        </div>
+        <p className="shrink-0 text-right text-xs leading-5 text-zinc-400"><span className="text-base font-semibold tabular-nums text-[var(--foreground)]">{session.focusTokens.available}/{session.focusTokens.total}</span><span className="ml-1 sm:ml-0 sm:block">focus remaining</span></p>
       </div>
-
-      {/* Active focus allocations */}
-      {focusedPlayers.length > 0 && (
-        <div>
-          <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-            Active Focus
-          </h4>
-          <div className="space-y-2">
-            {focusedPlayers.map((player) => {
-              const lens = player.currentLens ?? "general";
-              return (
-                <div
-                  key={player.playerId}
-                  className={`rounded-md border ${LENS_BORDER[lens]} bg-[#141414] p-3 ${
-                    player.playerId === selectedPlayerId
-                      ? "ring-1 ring-emerald-400/70"
-                      : ""
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-sm font-medium text-zinc-200">{player.name}</p>
-                      <p className="text-xs text-zinc-400">{player.position}</p>
-                    </div>
-                    <button
-                      onClick={() => onRemoveFocus(player.playerId)}
-                      className="flex h-11 w-11 items-center justify-center rounded text-zinc-400 transition hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                      aria-label={`Remove focus from ${player.name}`}
-                    >
-                      <X size={12} aria-hidden="true" />
-                    </button>
-                  </div>
-                  <div
-                    className="flex min-h-9 items-center justify-between rounded border border-[#27272a] bg-[#0a0a0a] px-2 py-1.5 text-xs"
-                    aria-label={`${lens} observation lens locked for ${player.name}`}
-                  >
-                    <span className={`font-medium capitalize ${LENS_COLORS[lens]}`}>{lens}</span>
-                    <span className="text-[10px] text-zinc-400">Locked for this focus</span>
-                  </div>
-                </div>
-              );
-            })}
+      {selected?.isFocused ? (
+        <div className="mt-3 flex items-center justify-between gap-3 border-l-2 border-[var(--primary)] pl-3">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-medium text-[var(--foreground)]"><LensMark lens={selected.currentLens ?? "general"} />{LENS_VISUAL[selected.currentLens ?? "general"].label} focus</p>
+            <p className="mt-1 hidden text-xs text-zinc-400 sm:block">Lens locked while you keep watching.</p>
           </div>
+          <button ref={releaseFocusRef} type="button" onClick={() => { onRemoveFocus(selected.playerId); requestAnimationFrame(() => (firstSelectedLensRef.current ?? focusHeadingRef.current)?.focus({ preventScroll: true })); }} aria-label={`Remove focus from ${selected.name}`} className="min-h-11 rounded-sm px-2 text-xs text-zinc-300 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">Release focus</button>
         </div>
-      )}
-
-      {/* Available players to focus */}
-      {unfocusedPlayers.length > 0 && (
-        <div>
-          <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-            Players in Session
-          </h4>
-          <div className="space-y-1">
-            {unfocusedPlayers.map((player) => {
-              const isPending = pendingFocusId === player.playerId;
-              return (
-                <div key={player.playerId}>
-                  <div className={`flex min-h-11 items-center justify-between rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-[#141414] transition motion-reduce:transition-none ${
-                    player.playerId === selectedPlayerId
-                      ? "bg-emerald-500/10 ring-1 ring-emerald-400/30"
-                      : ""
-                  }`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span className="truncate">{player.name}</span>
-                      <span className="shrink-0 text-zinc-400">{player.position}</span>
-                    </div>
-                    {canAllocate && (
-                      <button
-                        onClick={() =>
-                          setPendingFocusId(isPending ? null : player.playerId)
-                        }
-                        className="ml-2 min-h-10 shrink-0 rounded px-2.5 py-1 text-[10px] text-emerald-400 transition motion-reduce:transition-none hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400"
-                        aria-label={`Add focus to ${player.name}`}
-                        aria-expanded={isPending}
-                      >
-                        {isPending ? "Cancel" : "Focus"}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Lens selector for pending player */}
-                  {isPending && (
-                    <div className="mt-1 mb-2 rounded border border-[#27272a] bg-[#141414] p-2 space-y-1">
-                      <p className="mb-1.5 text-[10px] text-zinc-400">Select lens for {player.name}</p>
-                      {LENS_KEYS.map((lens) => (
-                        <button
-                          key={lens}
-                          ref={
-                            player.playerId === selectedPlayerId && lens === LENS_KEYS[0]
-                              ? firstSelectedLensRef
-                              : undefined
-                          }
-                          onClick={() => handleConfirmFocus(player.playerId, lens)}
-                          className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition motion-reduce:transition-none hover:bg-[#27272a] ${LENS_COLORS[lens]}`}
-                          aria-label={`Use ${lens} lens for ${player.name}`}
-                        >
-                          <span className="capitalize font-medium">{lens}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+      ) : selected && canAllocate ? (
+        <>
+          <p className="mt-2 hidden text-xs leading-5 text-zinc-400 lg:block">Choose a lens. Each closer look costs one focus.</p>
+          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 lg:flex-wrap" role="group" aria-label={`Observation lens for ${selected.name}`}>
+            {LENS_KEYS.map((lens, index) => (
+              <button key={lens} type="button" ref={index === 0 ? firstSelectedLensRef : undefined}
+                onClick={() => { onAllocateFocus(selected.playerId, lens); requestAnimationFrame(() => releaseFocusRef.current?.focus({ preventScroll: true })); }} aria-label={`Use ${lens} lens for ${selected.name}`}
+                data-tutorial-id={index === 0 ? "observation-focus-lens" : undefined}
+                className="flex min-h-11 shrink-0 items-center gap-2 rounded-sm bg-white/[0.045] px-3 text-xs font-medium text-zinc-200 transition-colors hover:bg-[var(--primary)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] motion-reduce:transition-none">
+                <LensMark lens={lens} />{LENS_VISUAL[lens].label}
+                {session.mode === "fullObservation" && <QuestionLensMatch questionId={session.scoutingQuestionId} lens={lens} />}
+              </button>
+            ))}
           </div>
-        </div>
+        </>
+      ) : <p className="mt-3 text-sm leading-6 text-zinc-400">No focus remaining this half. Keep watching for a peripheral signal.</p>}
+      {session.mode === "fullObservation" && (
+        <QuestionFocusGuide questionId={session.scoutingQuestionId} placement="attention" currentLens={selected?.isFocused ? selected.currentLens : undefined} />
       )}
-
-      {!canAllocate && focusedPlayers.length === 0 && (
-        <p className="py-4 text-center text-xs text-zinc-400">
-          No focus tokens remaining this half.
-        </p>
-      )}
-    </div>
+      {otherFocused.length > 0 && <div className="mt-3 border-t border-white/10 pt-2">
+        {otherFocused.map((player) => <div key={player.playerId} className="flex items-center justify-between gap-2 text-xs text-zinc-400"><span>{player.name} · {LENS_VISUAL[player.currentLens ?? "general"].label}</span><button type="button" aria-label={`Remove focus from ${player.name}`} onClick={() => onRemoveFocus(player.playerId)} className="min-h-11 shrink-0 px-2 text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">Release</button></div>)}
+      </div>}
+    </section>
   );
 });
 
@@ -580,7 +372,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
         </h3>
         {primaryPlayer && (
           <div className="rounded-md border border-[#27272a] bg-[#141414] p-3 mb-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
               About
             </p>
             <p className="text-sm font-medium text-zinc-200">{primaryPlayer.name}</p>
@@ -589,7 +381,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
         )}
         {speaker && (
           <div className="rounded-md border border-[#27272a] bg-[#141414] p-3">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
               Speaking with
             </p>
             <p className="text-sm font-medium text-zinc-200">{speaker.name}</p>
@@ -600,7 +392,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
       {/* Dialogue progress */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <span className="text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Progress
           </span>
           <span className="text-xs text-zinc-400 tabular-nums">
@@ -624,7 +416,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
       {/* Hypotheses formed */}
       {session.hypotheses.length > 0 && (
         <div>
-          <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <h4 className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Hypotheses Formed
           </h4>
           <div className="space-y-1.5">
@@ -634,7 +426,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
                 className="rounded border border-[#27272a] bg-[#141414] px-3 py-2"
               >
                 <p className="text-xs text-zinc-300 leading-snug">{hyp.text}</p>
-                <p className="mt-0.5 text-[10px] capitalize text-zinc-400">{hyp.domain}</p>
+                <p className="mt-0.5 text-eyebrow capitalize text-zinc-400">{hyp.domain}</p>
               </div>
             ))}
           </div>
@@ -646,7 +438,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
         <p className="text-lg font-bold text-amber-400 tabular-nums">
           {session.insightPointsEarned}
         </p>
-        <p className="text-[10px] text-zinc-400">Insight Earned</p>
+        <p className="text-eyebrow text-zinc-400">Insight Earned</p>
       </div>
     </div>
   );
@@ -687,7 +479,7 @@ const MinimalInfoSidebar = memo(function MinimalInfoSidebar({
         <p className="text-lg font-bold text-amber-400 tabular-nums">
           {session.insightPointsEarned}
         </p>
-        <p className="text-[10px] text-zinc-400">Insight Earned</p>
+        <p className="text-eyebrow text-zinc-400">Insight Earned</p>
       </div>
     </div>
   );
@@ -703,6 +495,7 @@ interface SetupViewProps {
 
 function formatSituationLabel(value: string): string {
   return value
+    .replace(/[_-]+/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/^./, (character) => character.toUpperCase());
 }
@@ -740,51 +533,39 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
     })));
   const selectedDefinition = questionOptions.find((question) => question.id === selected);
   return (
-    <fieldset className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.05] p-3 sm:p-4">
-      <legend className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+    <fieldset className="mt-6 border-t border-white/15 pt-4">
+      <legend className="dossier-eyebrow pr-3 text-zinc-300">
         What are you here to learn?
       </legend>
-      <p className="mt-1 text-xs leading-5 text-zinc-300">
-        Choose one question to guide your attention. Your focus and scouting strengths decide how clearly you read each passage.
-      </p>
+      <details className="mt-1">
+        <summary className="min-h-11 cursor-pointer py-3 text-sm text-[var(--primary)]">{selectedDefinition?.label ?? "Choose a question"} · Change question</summary>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {questionOptions.map((question) => (
-          <label
+          <ChoiceCard
             key={question.id}
-            className={`relative min-h-16 cursor-pointer rounded-lg border px-3 py-2.5 text-left transition focus-within:ring-2 focus-within:ring-cyan-300 ${
-              selected === question.id
-                ? "border-cyan-300/55 bg-cyan-300/10"
-                : "border-white/10 bg-black/20 hover:border-white/25"
-            }`}
+            type="radio"
+            name={`scouting-question-${session.id}`}
+            value={question.id}
+            selected={selected === question.id}
+            recommended={question.recommended}
+            onSelect={() => onChange(question.id)}
+            className="min-h-16 px-3 py-2.5"
           >
-            <input
-              type="radio"
-              name={`scouting-question-${session.id}`}
-              value={question.id}
-              checked={selected === question.id}
-              onChange={() => onChange(question.id)}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-            <span className="flex items-center justify-between gap-2 text-xs font-semibold leading-4 text-white">
-              <span>{question.label}</span>
-              {question.recommended && (
-                <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-cyan-100">
-                  Best fit
-                </span>
-              )}
-            </span>
-            <span className="mt-1 block text-[10px] leading-4 text-cyan-100/65">{question.focus}</span>
-          </label>
+            <span className="block text-xs font-semibold leading-4 text-white">{question.label}</span>
+            
+          </ChoiceCard>
         ))}
       </div>
+      </details>
       {selectedDefinition && (
-        <p className="mt-3 rounded-lg bg-black/20 px-3 py-2 text-[11px] leading-4 text-zinc-300">
+        <p className="mt-3 text-sm leading-6 text-zinc-300">
           <span className="block">{selectedDefinition.prompt}</span>
           {selectedDefinition.reason && (
-            <span className="mt-1 block text-cyan-100/65">Why it fits: {selectedDefinition.reason}</span>
+            <span className="mt-1 block text-xs leading-5 text-zinc-400">Why it fits: {selectedDefinition.reason}</span>
           )}
         </p>
       )}
+      <QuestionFocusGuide questionId={selected} placement="setup" />
     </fieldset>
   );
 });
@@ -820,33 +601,30 @@ const HalftimeApproachPanel = memo(function HalftimeApproachPanel({
 }) {
   return (
     <section
-      className="shrink-0 border-b border-amber-300/25 bg-amber-300/[0.06] px-3 py-3 sm:px-4"
+      className="shrink-0 border-y border-white/10 px-4 py-4 sm:px-6"
       aria-labelledby="halftime-read-title"
       data-tutorial-id={selected ? undefined : "observation-halftime-approach"}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Half-time adjustment</p>
+          <p className="dossier-eyebrow text-[var(--signal-moment)]">Half-time adjustment</p>
           <h2 id="halftime-read-title" className="mt-0.5 text-sm font-semibold text-white">How will you watch the second half?</h2>
         </div>
-        {selected && <Badge variant="warning" className="text-[10px]">Locked</Badge>}
+        {selected && <Badge variant="warning" className="text-eyebrow">Locked</Badge>}
       </div>
-      <div className="mt-2 grid gap-2 md:grid-cols-3">
+      <div className="mt-2 grid gap-2">
         {HALFTIME_APPROACHES.map((approach) => (
-          <button
+          <ChoiceCard
             key={approach.id}
-            type="button"
-            onClick={() => onSelect(approach.id)}
-            disabled={Boolean(selected)}
-            className={`min-h-16 rounded-lg border p-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:cursor-default ${
-              selected === approach.id
-                ? "border-amber-300/60 bg-amber-300/12"
-                : "border-white/10 bg-black/20 hover:border-white/25 disabled:opacity-55"
-            }`}
+            selected={selected === approach.id}
+            disabled={Boolean(selected) && selected !== approach.id}
+            disabledReason={selected && selected !== approach.id ? "Second-half approach is locked." : undefined}
+            onSelect={() => onSelect(approach.id)}
+            className="min-h-16 p-2.5"
           >
             <span className="block text-xs font-semibold text-white">{approach.label}</span>
-            <span className="mt-1 block text-[10px] leading-4 text-zinc-400">{approach.description}</span>
-          </button>
+            <span className="mt-1 block text-eyebrow leading-4 text-quiet">{approach.description}</span>
+          </ChoiceCard>
         ))}
       </div>
     </section>
@@ -860,128 +638,43 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
   const veteranPrologue = useGameStore((state) => state.gameState?.veteranPrologue);
   const lead = players[0];
 
-  if (
-    isOpeningDiscovery
-    && lead
-    && veteranPrologue
-    && veteranPrologue.activityInstanceId === session.activityInstanceId
-  ) {
-    const background = veteranPrologue.templateId === "data-anomaly"
-      ? "/images/backgrounds/reports-desk.png"
-      : veteranPrologue.templateId === "international-limited-access"
-        ? "/images/backgrounds/world-map.png"
-        : veteranPrologue.templateId === "rival-already-watching"
-          ? "/images/backgrounds/rivals-binoculars.png"
-          : mode === "investigation"
-            ? "/images/backgrounds/network-lounge.png"
-            : "/images/backgrounds/match-atmosphere.png";
-    const beginLabel = mode === "analysis"
-      ? "Test the signal"
-      : mode === "investigation"
-        ? "Start the investigation"
-        : "Watch the live evidence";
-
+  if (isOpeningDiscovery && lead) {
+    const prologue = veteranPrologue?.activityInstanceId === session.activityInstanceId ? veteranPrologue : undefined;
+    const background = prologue?.templateId === "data-anomaly" ? "/images/backgrounds/reports-desk.png"
+      : prologue?.templateId === "international-limited-access" ? "/images/backgrounds/world-map.png"
+      : prologue?.templateId === "rival-already-watching" ? "/images/backgrounds/rivals-binoculars.png"
+      : mode === "investigation" ? "/images/backgrounds/network-lounge.png"
+      : "/images/backgrounds/activities/touchline-documentary.webp";
+    const beginLabel = !prologue ? "Watch the match" : mode === "analysis" ? "Test the signal" : mode === "investigation" ? "Start the investigation" : "Watch the live evidence";
     return (
-      <div className="relative flex flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-8">
-        <ScreenBackground src={background} opacity={0.38} />
-        <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-emerald-300/20 bg-[#0a0f0c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-300/10">
-              <ModeIcon size={25} className="text-emerald-300" aria-hidden="true" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                {veteranPrologue.venueLabel} · {MODE_LABELS[mode]}
-              </p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
-                {veteranPrologue.title}
-              </h2>
-              <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
-                {veteranPrologue.premise}
-              </p>
-              <blockquote className="mt-4 rounded-xl border-l-2 border-amber-300/60 bg-amber-300/[0.06] px-4 py-3 text-sm italic leading-6 text-amber-50/90">
-                “{veteranPrologue.pressure}”
-                <footer className="mt-1 text-xs not-italic text-amber-200/70">
-                  — {veteranPrologue.sourceContactName}
-                </footer>
-              </blockquote>
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Your lead</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{lead.name}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Your deadline</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{veteranPrologue.deadline}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Who is in conflict</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{veteranPrologue.stakeholderConflict}</p>
-                </div>
-              </div>
-              <ScoutingQuestionSelector session={session} onChange={onQuestionChange} />
-              <Button
-                onClick={onBegin}
-                size="lg"
-                className="mt-6 w-full gap-2 sm:w-auto"
-                data-tutorial-id="observation-begin-session"
-              >
-                <Play size={16} aria-hidden="true" />
-                {beginLabel}
-              </Button>
+      <div className="grid min-h-0 flex-1 overflow-y-auto bg-[var(--background)] lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.15fr)]">
+        <section className="relative flex min-h-[176px] flex-col justify-end overflow-hidden bg-[#19221b] px-5 py-6 sm:px-8 sm:py-8 lg:min-h-full">
+          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${background}')` }} aria-hidden="true" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/25 to-black/10" aria-hidden="true" />
+          <div className="relative flex items-end gap-4">
+            <YouthPortraitWithFallback playerId={lead.playerId} size={96} alt={lead.name} className="h-24 w-24 shrink-0 rounded-none ring-0 ring-offset-0" />
+            <div>
+              <p className="dossier-eyebrow text-white/70">Your lead</p>
+              <h2 className="mt-1 font-editorial text-2xl text-white sm:text-3xl">{lead.name}</h2>
+              <p className="mt-1 text-sm text-white/75">{lead.position} · First encounter</p>
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isOpeningDiscovery && lead) {
-    return (
-      <div className="relative flex flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-8">
-        <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.38} />
-        <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-emerald-300/20 bg-[#0a0f0c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-300/10">
-              <Binoculars size={25} className="text-emerald-300" aria-hidden="true" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">10:42 · Local school ground</p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">The match started early.</h2>
-              <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
-                No academy scout is here yet. {lead.name}, a {lead.position}, was mentioned quietly—but the source only saw one previous match. You have three phases to decide whether the name belongs in your notebook.
-              </p>
-              <blockquote className="mt-4 rounded-xl border-l-2 border-amber-300/60 bg-amber-300/[0.06] px-4 py-3 text-sm italic leading-6 text-amber-50/90">
-                “Don&apos;t ask me if he&apos;s a star. I&apos;m telling you nobody important has written the name down yet.”
-                <footer className="mt-1 text-xs not-italic text-amber-200/70">
-                  — {session.sourceContactName ?? "Tommy Reyes"}, 14 minutes ago
-                </footer>
-              </blockquote>
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Your lead</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{lead.name}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Time available</p>
-                  <p className="mt-1 text-sm font-semibold text-white">Three key passages of play</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">What matters</p>
-                  <p className="mt-1 text-sm font-semibold text-white">Being first, not being certain</p>
-                </div>
-              </div>
-              <ScoutingQuestionSelector session={session} onChange={onQuestionChange} />
-              <Button
-                onClick={onBegin}
-                size="lg"
-                className="mt-6 w-full gap-2 sm:w-auto"
-                data-tutorial-id="observation-begin-session"
-              >
-                <Play size={16} aria-hidden="true" />
-                Watch the match
-              </Button>
-            </div>
+        </section>
+        <div className="px-5 pb-28 pt-5 sm:px-8 sm:py-8 lg:px-10 xl:px-14">
+          <div className="mx-auto max-w-2xl">
+            <p className="dossier-eyebrow text-zinc-400">{prologue ? `${prologue.venueLabel} · ${MODE_LABELS[mode]}` : "10:42 · Local school ground"}</p>
+            <h2 className="mt-3 font-editorial text-3xl leading-tight text-[var(--foreground)] sm:text-4xl">{prologue?.title ?? "The match started early."}</h2>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">{prologue?.premise ?? `No academy scout is here yet. ${lead.name} was mentioned quietly, but the source only saw one previous match. Watch the play and decide whether the name deserves another look.`}</p>
+            <details className="mt-3 text-sm text-quiet"><summary className="min-h-11 cursor-pointer py-3">The contact’s note</summary><blockquote className="border-l-2 border-[var(--signal-moment)] pl-4 text-sm italic leading-7 text-zinc-300">
+              “{prologue?.pressure ?? "Don't ask me if he's a star. I'm telling you nobody important has written the name down yet."}”
+              <footer className="mt-1 text-xs not-italic text-zinc-400">— {prologue?.sourceContactName ?? session.sourceContactName ?? "Tommy Reyes"}{!prologue && ", 14 minutes ago"}</footer>
+            </blockquote></details>
+            <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+              <div><dt className="text-xs text-zinc-400">{prologue ? "Your deadline" : "Time available"}</dt><dd className="mt-1 font-medium text-zinc-200">{prologue?.deadline ?? "Three passages"}</dd></div>
+              <div><dt className="text-xs text-zinc-400">{prologue ? "The tension" : "Your task"}</dt><dd className="mt-1 font-medium text-zinc-200">{prologue?.stakeholderConflict ?? "Find a reason to look again"}</dd></div>
+            </dl>
+            <ScoutingQuestionSelector session={session} onChange={onQuestionChange} />
+            <Button onClick={onBegin} size="lg" className="mt-5 min-h-12 w-full gap-2 max-sm:fixed max-sm:inset-x-4 max-sm:bottom-4 max-sm:z-40 max-sm:mt-0 max-sm:w-auto shadow-[0_0_0_16px_var(--background)] sm:w-auto sm:min-w-56 sm:shadow-none" data-tutorial-id="observation-begin-session"><Play size={16} aria-hidden="true" />{beginLabel}</Button>
           </div>
         </div>
       </div>
@@ -1004,7 +697,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
 
       {venueAtmosphere && (
         <div className="mb-4 max-w-sm rounded-lg border border-[#27272a] bg-[#0f0f0f] p-4 text-left">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <p className="mb-1 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Venue Atmosphere
           </p>
           <p className="text-xs text-zinc-300 leading-snug mb-2">
@@ -1012,20 +705,20 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
           </p>
           {venueAtmosphere.amplifiedAttributes.length > 0 && (
             <div className="mb-1 flex flex-wrap gap-1">
-              <span className="text-[10px] text-emerald-500 mr-1">Amplified:</span>
+              <span className="text-eyebrow text-emerald-500 mr-1">Amplified:</span>
               {venueAtmosphere.amplifiedAttributes.map((a) => (
-                <span key={a} className="rounded bg-emerald-900/30 px-1.5 py-0.5 text-[10px] text-emerald-400">
-                  {a}
+                <span key={a} className="rounded bg-emerald-900/30 px-1.5 py-0.5 text-eyebrow text-emerald-400">
+                  {formatSituationLabel(a)}
                 </span>
               ))}
             </div>
           )}
           {venueAtmosphere.dampenedAttributes.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              <span className="text-[10px] text-red-500 mr-1">Dampened:</span>
+              <span className="text-eyebrow text-red-500 mr-1">Dampened:</span>
               {venueAtmosphere.dampenedAttributes.map((a) => (
-                <span key={a} className="rounded bg-red-900/30 px-1.5 py-0.5 text-[10px] text-red-400">
-                  {a}
+                <span key={a} className="rounded bg-red-900/30 px-1.5 py-0.5 text-eyebrow text-red-400">
+                  {formatSituationLabel(a)}
                 </span>
               ))}
             </div>
@@ -1035,28 +728,28 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
 
       {situation && (
         <div className="mb-4 w-full max-w-sm rounded-lg border border-sky-500/20 bg-sky-500/5 p-4 text-left">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+          <p className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-sky-300">
             What this situation can reveal
           </p>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded bg-black/20 p-2">
-              <p className="text-[9px] text-zinc-500">Level</p>
-              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.competitionLevel)}</p>
+              <p className="text-eyebrow text-quiet">Level</p>
+              <p className="mt-0.5 text-eyebrow font-medium text-white">{formatSituationLabel(situation.competitionLevel)}</p>
             </div>
             <div className="rounded bg-black/20 p-2">
-              <p className="text-[9px] text-zinc-500">Stakes</p>
-              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.stakes)}</p>
+              <p className="text-eyebrow text-quiet">Stakes</p>
+              <p className="mt-0.5 text-eyebrow font-medium text-white">{formatSituationLabel(situation.stakes)}</p>
             </div>
             <div className="rounded bg-black/20 p-2">
-              <p className="text-[9px] text-zinc-500">Tactical frame</p>
-              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.tacticalFrame)}</p>
+              <p className="text-eyebrow text-quiet">Tactical frame</p>
+              <p className="mt-0.5 text-eyebrow font-medium text-white">{formatSituationLabel(situation.tacticalFrame)}</p>
             </div>
           </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+          <p className="mt-2 text-eyebrow leading-relaxed text-zinc-400">
             Evidence uncertainty ×{situation.uncertaintyMultiplier.toFixed(2)} · Misleading-sample risk {Math.round(situation.misleadingSignalRisk * 100)}%
           </p>
           {situation.biasWarnings[0] && (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-amber-200/80">
+            <p className="mt-1.5 text-eyebrow leading-relaxed text-amber-200/80">
               Watch for: {situation.biasWarnings[0]}
             </p>
           )}
@@ -1065,7 +758,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
 
       {players.length > 0 && (
         <div className="mb-6 max-w-sm w-full rounded-lg border border-[#27272a] bg-[#0f0f0f] p-4 text-left">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <p className="mb-2 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
             Players in Session ({players.length})
           </p>
           <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -1156,19 +849,19 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
             <p className="text-xl font-bold text-emerald-400 tabular-nums">
               {result.insightPointsEarned}
             </p>
-            <p className="mt-0.5 text-[10px] text-zinc-400">Insight Points</p>
+            <p className="mt-0.5 text-eyebrow text-zinc-400">Insight Points</p>
           </div>
           <div className="rounded-lg border border-[#27272a] bg-[#0f0f0f] p-3 text-center">
             <p className="text-xl font-bold text-amber-400 tabular-nums">
               {result.flaggedMoments.length}
             </p>
-            <p className="mt-0.5 text-[10px] text-zinc-400">{MODE_FLAGGED_SHORT_LABEL[result.mode]}</p>
+            <p className="mt-0.5 text-eyebrow text-zinc-400">{MODE_FLAGGED_SHORT_LABEL[result.mode]}</p>
           </div>
           <div className="rounded-lg border border-[#27272a] bg-[#0f0f0f] p-3 text-center">
             <p className="text-xl font-bold text-zinc-200 capitalize">
               {result.qualityTier}
             </p>
-            <p className="mt-0.5 text-[10px] text-zinc-400">Quality Tier</p>
+            <p className="mt-0.5 text-eyebrow text-zinc-400">Quality Tier</p>
           </div>
         </div>
 
@@ -1249,13 +942,13 @@ const CompleteView = memo(function CompleteView({ session, onContinue }: Complet
           <p className="text-xl font-bold text-emerald-400 tabular-nums">
             {result.insightPointsEarned}
           </p>
-          <p className="mt-0.5 text-[10px] text-zinc-400">Insight Points</p>
+          <p className="mt-0.5 text-eyebrow text-zinc-400">Insight Points</p>
         </div>
         <div className="rounded-lg border border-[#27272a] bg-[#0f0f0f] p-3 text-center">
           <p className="text-xl font-bold text-amber-400 tabular-nums">
             {result.focusedPlayerIds.length}
           </p>
-          <p className="mt-0.5 text-[10px] text-zinc-400">Players Observed</p>
+          <p className="mt-0.5 text-eyebrow text-zinc-400">Players Observed</p>
         </div>
       </div>
       <Button onClick={onContinue} size="lg">
@@ -1272,14 +965,16 @@ const CompleteView = memo(function CompleteView({ session, onContinue }: Complet
 export function ObservationScreen() {
   const activeSession = useGameStore((s) => s.activeSession);
   const gameState = useGameStore((s) => s.gameState);
+  const setScreen = useGameStore((s) => s.setScreen);
   const { playSFX } = useAudio();
+
+  useEffect(() => {
+    if (!activeSession) setScreen("dashboard");
+  }, [activeSession, setScreen]);
 
   // Local UI state — all hooks must be called before any early return
   const [showInsightOverlay, setShowInsightOverlay] = useState(false);
   const [selectedPitchPlayerId, setSelectedPitchPlayerId] = useState<string | null>(null);
-  const [showMobileFocus, setShowMobileFocus] = useState(false);
-  const mobileFocusSheetRef = useRef<HTMLDivElement>(null);
-  const mobileFocusToggleRef = useRef<HTMLButtonElement>(null);
   const insightDialogRef = useRef<HTMLDivElement>(null);
   const insightCloseRef = useRef<HTMLButtonElement>(null);
   const insightReturnFocusRef = useRef<HTMLButtonElement | null>(null);
@@ -1294,11 +989,10 @@ export function ObservationScreen() {
     ),
     [activeSession?.flaggedMoments],
   );
-  const openingBreakthroughFlagged = Boolean(
+  const openingEvidenceFlagged = Boolean(
     gameState?.openingCase
     && activeSession?.flaggedMoments.some(
-      (flagged) => flagged.moment.playerId === gameState.openingCase?.playerId
-        && flagged.moment.isStandout,
+      (flagged) => flagged.moment.playerId === gameState.openingCase?.playerId,
     ),
   );
   const openingPhaseRequiresFlag = Boolean(
@@ -1306,7 +1000,7 @@ export function ObservationScreen() {
     && activeSession?.mode === "fullObservation"
     && gameState?.veteranPrologue?.activityInstanceId !== activeSession?.activityInstanceId
     && activeSession?.currentPhaseIndex === 1
-    && !openingBreakthroughFlagged,
+    && !openingEvidenceFlagged,
   );
 
   const hasPhaseFlag = (activeSession?.flaggedMoments ?? []).some(
@@ -1335,18 +1029,18 @@ export function ObservationScreen() {
         activeSession.mode,
       )
     : [];
+  const firstSessionPlayerId = activeSession?.players[0]?.playerId ?? null;
   const openingTargetId = isOpeningDiscoverySession(activeSession)
-    ? activeSession?.players[0]?.playerId ?? null
+    ? firstSessionPlayerId
     : null;
 
   // Reset overlay when session changes
   useEffect(() => {
     setShowInsightOverlay(false);
     setSelectedPitchPlayerId(
-      openingTargetId,
+      openingTargetId ?? firstSessionPlayerId,
     );
-    setShowMobileFocus(false);
-  }, [activeSession?.id, openingTargetId]);
+  }, [activeSession?.id, openingTargetId, firstSessionPlayerId]);
 
   const closeInsightOverlay = useCallback(() => {
     setShowInsightOverlay(false);
@@ -1406,12 +1100,6 @@ export function ObservationScreen() {
   const handleAllocateFocus = useCallback((playerId: string, lens: LensType) => {
     playSFX("click");
     useGameStore.getState().allocateSessionFocus(playerId, lens);
-    requestAnimationFrame(() => {
-      if (!mobileFocusSheetRef.current?.getClientRects().length) return;
-      mobileFocusSheetRef.current
-        .querySelector<HTMLButtonElement>('button[aria-label="Close focus controls"]')
-        ?.focus({ preventScroll: true });
-    });
   }, [playSFX]);
 
   const handleRemoveFocus = useCallback((playerId: string) => {
@@ -1429,49 +1117,12 @@ export function ObservationScreen() {
   const handlePitchPlayerSelect = useCallback((playerId: string) => {
     playSFX("click");
     setSelectedPitchPlayerId(playerId);
-    setShowMobileFocus(true);
   }, [playSFX]);
-
-  const closeMobileFocus = useCallback(() => {
-    setShowMobileFocus(false);
-    requestAnimationFrame(() => mobileFocusToggleRef.current?.focus({ preventScroll: true }));
-  }, []);
 
   const handleHalftimeApproach = useCallback((approach: ObservationHalftimeApproach) => {
     playSFX("page-turn");
     useGameStore.getState().setSessionHalftimeApproach(approach);
   }, [playSFX]);
-
-  useEffect(() => {
-    if (!showMobileFocus) return;
-    requestAnimationFrame(() => {
-      mobileFocusSheetRef.current
-        ?.querySelector<HTMLButtonElement>('button[aria-label="Close focus controls"]')
-        ?.focus({ preventScroll: true });
-    });
-  }, [showMobileFocus]);
-
-  const handleMobileFocusKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeMobileFocus();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = mobileFocusSheetRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-    );
-    if (!focusable?.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }, [closeMobileFocus]);
 
   const handleDialogueChoice = useCallback(
     (nodeId: string, optionId: string) => {
@@ -1498,10 +1149,6 @@ export function ObservationScreen() {
     useGameStore.getState().endObservationSession();
   }, []);
 
-  const handleEndSession = useCallback(() => {
-    useGameStore.getState().endObservationSession();
-  }, []);
-
   const handleContinue = useCallback(() => {
     useGameStore.getState().endObservationSession();
     useGameStore.getState().setScreen("calendar");
@@ -1513,16 +1160,29 @@ export function ObservationScreen() {
   }, [closeInsightOverlay]);
 
   // ── Guard ──────────────────────────────────────────────────────────────────
-  if (!activeSession) return null;
+  if (!activeSession) {
+    return (
+      <GameLayout chrome="watch">
+        <p className="sr-only">Returning to the desk. The watch session has ended.</p>
+      </GameLayout>
+    );
+  }
 
   const { state, mode } = activeSession;
   const ModeIcon = MODE_ICONS[mode];
+  const isLiveWatch = mode === "fullObservation";
+  const isOpeningWatch = isOpeningDiscoverySession(activeSession);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <GameLayout>
-      <div className="relative flex min-h-[calc(100dvh-7.5rem)] min-w-0 flex-col overflow-x-hidden pb-20 md:h-full md:min-h-0 md:pb-20 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden lg:pb-0">
-        <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.85} />
+    <GameLayout chrome="watch">
+      <div className="relative flex min-h-[calc(100dvh-3rem)] min-w-0 flex-col overflow-x-hidden bg-[var(--background)] lg:h-[calc(100dvh-3rem)] lg:min-h-0 lg:overflow-hidden">
+        <ScreenBackground
+          src={isOpeningWatch
+            ? "/images/backgrounds/activities/touchline-documentary.webp"
+            : "/images/backgrounds/match-atmosphere.png"}
+          opacity={0.72}
+        />
 
         <div className="relative z-10 flex flex-1 flex-col min-h-0">
 
@@ -1530,13 +1190,10 @@ export function ObservationScreen() {
           <div className="shrink-0 border-b border-[#27272a] bg-[#0c0c0c] px-3 py-2.5 sm:px-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <ModeIcon size={14} className="text-emerald-400 shrink-0" aria-hidden="true" />
-                <span className="truncate text-sm font-semibold text-zinc-200">
+                <ModeIcon size={14} className="signal-focus shrink-0" aria-hidden="true" />
+                <h1 className="truncate text-base font-semibold text-[var(--foreground)]">
                   {MODE_LABELS[mode]}
-                </span>
-                <Badge variant="secondary" className="hidden text-[10px] capitalize min-[430px]:inline-flex">
-                  {activeSession.specialization}
-                </Badge>
+                </h1>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                 {state === "active" && currentPhase && (
@@ -1546,9 +1203,6 @@ export function ObservationScreen() {
                         ? `${currentPhase.minute}'`
                         : `Step ${currentPhase.minute}`}
                     </Badge>
-                    <Badge variant="secondary" className="text-xs tabular-nums">
-                      {activeSession.currentPhaseIndex + 1} / {activeSession.phases.length}
-                    </Badge>
                     {isHalfTime && (
                       <Badge variant="warning" className="text-xs">
                         Half Time
@@ -1556,25 +1210,13 @@ export function ObservationScreen() {
                     )}
                   </>
                 )}
-                <Badge
-                  variant={
-                    state === "complete"
-                      ? "success"
-                      : state === "reflection"
-                        ? "warning"
-                        : "outline"
-                  }
-                  className="text-xs capitalize"
-                >
-                  {state}
-                </Badge>
               </div>
             </div>
             {state === "active" && (
-              <p className="mt-0.5 text-[11px] capitalize text-zinc-400">
+              <p className="mt-0.5 text-meta capitalize text-zinc-400">
                 {activeSession.activityType.replace(/([A-Z])/g, " $1").trim()}
                 {mode === "fullObservation" && activeSession.venueAtmosphere?.weather
-                  ? ` · ${activeSession.venueAtmosphere.weather}`
+                  ? ` · ${formatSituationLabel(activeSession.venueAtmosphere.weather)}`
                   : ""}
                 {activeSession.situation
                   ? ` · ${formatSituationLabel(activeSession.situation.stakes)} stakes · ${formatSituationLabel(activeSession.situation.tacticalFrame)}`
@@ -1602,359 +1244,81 @@ export function ObservationScreen() {
           )}
 
           {state === "active" && currentPhase && (
-            <div
-              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden lg:flex-row lg:overflow-hidden"
-              data-testid="active-observation-layout"
-            >
-
-              {/* ── Left: Phase content (60%) ───────────────────────────── */}
-              <div className="flex min-w-0 flex-none flex-col lg:flex-1 lg:self-stretch lg:overflow-hidden">
-
-                {/* Phase description banner */}
-                <div className="shrink-0 border-b border-[#27272a] bg-[#0f0f0f] px-4 py-2">
-                  <p className="text-xs text-zinc-400 leading-snug">
-                    {currentPhase.description || "Observing…"}
-                  </p>
+            isLiveWatch ? (
+              <div className="grid min-h-0 min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:grid-cols-[minmax(0,1fr)_390px] xl:grid-cols-[minmax(0,1fr)_420px]" data-testid="active-observation-layout">
+                <div className="flex min-h-0 min-w-0 flex-col">
+                  <ObservationPitch session={activeSession} phase={currentPhase} selectedPlayerId={selectedPitchPlayerId} onSelectPlayer={handlePitchPlayerSelect} />
                 </div>
-
-                {/* Atmosphere event banner — match modes only */}
-                {mode === "fullObservation" && currentPhase.atmosphereEvent && (
-                  <div
-                    className="shrink-0 border-b border-amber-500/30 bg-amber-500/5 px-4 py-2"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle
-                        size={13}
-                        className="text-amber-400 mt-0.5 shrink-0"
-                        aria-hidden="true"
-                      />
+                <aside className="flex min-h-0 min-w-0 flex-col bg-[var(--background)] lg:overflow-y-auto" aria-label="Your scouting notebook">
+                  <FocusPanel session={activeSession} onAllocateFocus={handleAllocateFocus} onRemoveFocus={handleRemoveFocus} selectedPlayerId={selectedPitchPlayerId} />
+                  {isHalfTime && <HalftimeApproachPanel selected={activeSession.halftimeApproach} onSelect={handleHalftimeApproach} />}
+                  <section className="border-t border-white/10 px-4 py-3 sm:px-6 sm:py-5" aria-labelledby="observation-evidence-heading" data-tutorial-id="observation-evidence-feed">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mr-2">
-                          Atmosphere Event
-                        </span>
-                        <span className="text-xs text-amber-200">
-                          {currentPhase.atmosphereEvent.description}
-                        </span>
+                        <p className="dossier-eyebrow hidden text-zinc-400 sm:block">Touchline notebook</p>
+                        <h2 id="observation-evidence-heading" className="font-editorial text-xl text-[var(--foreground)] sm:mt-1 sm:text-2xl">What you noticed</h2>
                       </div>
+                      <span className="mt-1 text-sm tabular-nums text-zinc-400">{currentPhase.minute}′</span>
                     </div>
-                  </div>
-                )}
-
-                {/* Chaos indicator — match modes only */}
-                {mode === "fullObservation" && activeSession.venueAtmosphere && (
-                  <div className="shrink-0 px-4 py-1.5 flex items-center gap-2 border-b border-[#27272a]">
-                    <span className="text-[10px] text-zinc-400">Observation clarity</span>
-                    <div className="flex-1 h-1 bg-[#27272a] rounded-full overflow-hidden max-w-[80px]">
-                      <div
-                        className="h-full rounded-full bg-emerald-500/60"
-                        style={{
-                          width: `${Math.round((1 - activeSession.venueAtmosphere.chaosLevel) * 100)}%`,
-                        }}
-                        aria-hidden="true"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {mode === "fullObservation" && isHalfTime && (
-                  <HalftimeApproachPanel
-                    selected={activeSession.halftimeApproach}
-                    onSelect={handleHalftimeApproach}
-                  />
-                )}
-
-                {/* Phase content — scrollable */}
-                <div className="min-h-0 flex-none p-3 sm:p-4 lg:flex-1 lg:overflow-y-auto">
-                  {mode === "fullObservation" ? (
-                    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(420px,1.15fr)_minmax(300px,0.85fr)]">
-                      <ObservationPitch
-                        session={activeSession}
-                        phase={currentPhase}
-                        selectedPlayerId={selectedPitchPlayerId}
-                        onSelectPlayer={handlePitchPlayerSelect}
-                      />
-                      <section
-                        className="min-w-0"
-                        aria-labelledby="observation-evidence-heading"
-                        data-tutorial-id="observation-evidence-feed"
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <h2
-                            id="observation-evidence-heading"
-                            className="text-[10px] font-semibold uppercase tracking-[0.13em] text-zinc-400"
-                          >
-                            What you noticed
-                          </h2>
-                          <span className="text-[10px] text-zinc-400">
-                            {currentPhase.moments.length} {currentPhase.moments.length === 1 ? "moment" : "moments"}
-                          </span>
-                        </div>
-                        <PhaseContent
-                          phase={currentPhase}
-                          session={activeSession}
-                          flaggedMomentIds={flaggedMomentIds}
-                          hasPhaseFlag={hasPhaseFlag}
-                          requiresStandoutFlag={openingPhaseRequiresFlag}
-                          onFlagMoment={handleFlagMoment}
-                          onDialogueChoice={handleDialogueChoice}
-                          onDataPointSelect={handleDataPointSelect}
-                          onStrategicChoice={handleStrategicChoice}
-                        />
-                      </section>
-                    </div>
-                  ) : (
-                    <PhaseContent
-                      phase={currentPhase}
-                      session={activeSession}
-                      flaggedMomentIds={flaggedMomentIds}
-                      hasPhaseFlag={hasPhaseFlag}
-                      requiresStandoutFlag={openingPhaseRequiresFlag}
-                      onFlagMoment={handleFlagMoment}
-                      onDialogueChoice={handleDialogueChoice}
-                      onDataPointSelect={handleDataPointSelect}
-                      onStrategicChoice={handleStrategicChoice}
-                    />
+                    <p className="mt-2 hidden text-xs leading-5 text-zinc-400 sm:block">A first impression. Test it before you make a claim.</p>
+                    <PhaseContent phase={currentPhase} session={activeSession} flaggedMomentIds={flaggedMomentIds} hasPhaseFlag={hasPhaseFlag} requiredLeadId={openingPhaseRequiresFlag ? gameState?.openingCase?.playerId : undefined} onFlagMoment={handleFlagMoment} onDialogueChoice={handleDialogueChoice} onDataPointSelect={handleDataPointSelect} onStrategicChoice={handleStrategicChoice} />
+                  </section>
+                  {activeSession.flaggedMoments.length > 0 && (
+                    <details className="border-t border-white/10 px-4 py-4 sm:px-6">
+                      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">In your notebook · {activeSession.flaggedMoments.length} {activeSession.flaggedMoments.length === 1 ? "moment" : "moments"}</summary>
+                      <ol className="mt-3 space-y-4">
+                        {activeSession.flaggedMoments.map((flagged) => {
+                          const cue = activeSession.cueReadings?.find((reading) => reading.momentId === flagged.moment.id);
+                          const player = activeSession.players.find((candidate) => candidate.playerId === flagged.moment.playerId);
+                          return <li key={flagged.id} className="border-l border-white/20 pl-3">
+                            <p className="text-xs text-zinc-400">{flagged.minute}′ · {player?.name ?? "Player"}</p>
+                            <p className="mt-1 text-sm leading-6 text-zinc-300">{cue?.detail ?? flagged.moment.vagueDescription}</p>
+                            <p className={`mt-1 text-xs font-medium ${REACTION_CONFIG[flagged.reaction].className}`}>{REACTION_CONFIG[flagged.reaction].label} · Initial read</p>
+                          </li>;
+                        })}
+                      </ol>
+                    </details>
                   )}
+                </aside>
+                <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[var(--background)] px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6" data-tutorial-id="observation-session-controls" data-testid="mobile-observation-controls">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="hidden text-xs leading-5 text-zinc-400 sm:block"><span className="font-medium text-zinc-200">Passage {activeSession.currentPhaseIndex + 1} of {activeSession.phases.length}</span><br />{activeSession.flaggedMoments.length} recorded · {activeSession.focusTokens.available} focus remaining</div>
+                    <div className="flex w-full items-center gap-2 sm:w-auto">
+                      {!isOpeningWatch && <LeaveObservationButton session={activeSession} />}
+                      {insightActions.length > 0 && <Button variant="outline" className="min-h-11 shrink-0 gap-2 text-zinc-300" onClick={openInsightOverlay} aria-label="Use Insight action"><Zap size={14} aria-hidden="true" /><span className="hidden min-[430px]:inline">Insight</span><span className="tabular-nums">{insightState.points}</span></Button>}
+                      <Button className="min-h-11 min-w-0 flex-1 gap-2 sm:min-w-56 sm:flex-none" onClick={handleAdvancePhase} disabled={!isLastPhase && (openingPhaseRequiresFlag || requiresHalftimeChoice)} data-tutorial-id={isOpeningWatch && activeSession.currentPhaseIndex === 0 ? "observation-advance-to-standout" : undefined}>
+                        {isLastPhase ? "Reflect on the watch" : openingPhaseRequiresFlag ? "Record a moment before moving on" : requiresHalftimeChoice ? "Choose how to watch" : "Next phase"}<ChevronRight size={16} className="shrink-0" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              {/* ── Right sidebar: mode-aware ──────────────────────────── */}
-              <aside className="hidden w-72 shrink-0 flex-col overflow-hidden border-l border-[#27272a] bg-[#0c0c0c] lg:flex">
-
-                {/* Sidebar content based on mode */}
-                {mode === "fullObservation" ? (
-                  <FocusPanel
-                    session={activeSession}
-                    onAllocateFocus={handleAllocateFocus}
-                    onRemoveFocus={handleRemoveFocus}
-                    selectedPlayerId={selectedPitchPlayerId}
-                  />
-                ) : mode === "investigation" ? (
-                  <InvestigationSidebar session={activeSession} />
-                ) : (
-                  <MinimalInfoSidebar session={activeSession} />
-                )}
-
-                {/* Insight action button — visible when scout has any IP available */}
-                {insightActions.length > 0 && !isOpeningDiscoverySession(activeSession) && (
-                  <div className="shrink-0 border-t border-[#27272a] px-4 py-2">
-                    <button
-                      onClick={openInsightOverlay}
-                      className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs font-medium text-amber-400 transition hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-                      aria-label="Use Insight action"
-                    >
-                      <Zap size={12} aria-hidden="true" />
-                      Use Insight
-                      <span className="ml-auto tabular-nums">
-                        {insightState.points} IP
-                      </span>
-                    </button>
+            ) : (
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-24 lg:flex-row lg:overflow-hidden lg:pb-0" data-testid="active-observation-layout">
+                <div className="flex min-w-0 flex-1 flex-col lg:overflow-y-auto">
+                  <div className="border-b border-white/10 px-4 py-4 sm:px-6"><p className="text-sm leading-6 text-zinc-300">{currentPhase.description || "Observing…"}</p></div>
+                  <div className="px-4 py-5 sm:px-6">
+                    <PhaseContent phase={currentPhase} session={activeSession} flaggedMomentIds={flaggedMomentIds} hasPhaseFlag={hasPhaseFlag} requiredLeadId={openingPhaseRequiresFlag ? gameState?.openingCase?.playerId : undefined} onFlagMoment={handleFlagMoment} onDialogueChoice={handleDialogueChoice} onDataPointSelect={handleDataPointSelect} onStrategicChoice={handleStrategicChoice} />
                   </div>
-                )}
-
-                {/* Flagged moments count */}
-                {activeSession.flaggedMoments.length > 0 && (
-                  <div className="shrink-0 border-t border-[#27272a] px-4 py-2">
-                    <div className="flex items-center gap-2 text-xs text-zinc-400">
-                      <Flag size={11} className="text-amber-400" aria-hidden="true" />
-                      <span>
-                        {activeSession.flaggedMoments.length} moment
-                        {activeSession.flaggedMoments.length !== 1 ? "s" : ""} flagged
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Advance / End buttons — pinned to bottom */}
-                <div
-                  className="shrink-0 border-t border-[#27272a] p-4 space-y-2"
-                  data-tutorial-id="observation-session-controls"
-                >
-                  {isLastPhase ? (
-                    <Button className="w-full" onClick={handleAdvancePhase}>
-                      <Flag size={14} className="mr-2" aria-hidden="true" />
-                      Go to Reflection
-                    </Button>
-                  ) : (
-                    <Button
-                      className="w-full"
-                      onClick={handleAdvancePhase}
-                      disabled={openingPhaseRequiresFlag || requiresHalftimeChoice}
-                      data-tutorial-id={
-                        isOpeningDiscoverySession(activeSession)
-                        && activeSession.currentPhaseIndex === 0
-                          ? "observation-advance-to-standout"
-                          : undefined
-                      }
-                    >
-                      <ChevronRight size={14} className="mr-2" aria-hidden="true" />
-                      {openingPhaseRequiresFlag
-                        ? "Flag the standout moment"
-                        : requiresHalftimeChoice
-                          ? "Choose a half-time approach"
-                          : "Next Phase"}
-                    </Button>
-                  )}
-                  {!isOpeningDiscoverySession(activeSession) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full text-zinc-400"
-                      onClick={handleEndSession}
-                    >
-                      End Session Early
-                    </Button>
-                  )}
+                  <details className="border-t border-white/10 px-4 py-4 lg:hidden"><summary className="min-h-11 cursor-pointer text-sm font-medium text-zinc-300">Session context</summary>{mode === "investigation" ? <InvestigationSidebar session={activeSession} /> : <MinimalInfoSidebar session={activeSession} />}</details>
                 </div>
-              </aside>
-
-              {/* Mobile context sheet: stays in the single vertical flow. */}
-              <section className="border-t border-[#27272a] bg-[#0c0c0c] lg:hidden">
-                <button
-                  ref={mobileFocusToggleRef}
-                  type="button"
-                  onClick={() => setShowMobileFocus((open) => !open)}
-                  className="flex min-h-12 w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400"
-                  aria-expanded={showMobileFocus}
-                  aria-controls="mobile-observation-context"
-                >
-                  <SlidersHorizontal size={15} className="shrink-0 text-emerald-400" aria-hidden="true" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-zinc-200">
-                      {mode === "fullObservation" ? "Focus targets and lenses" : "Session context"}
-                    </span>
-                    <span className="block truncate text-[10px] text-zinc-400">
-                      {mode === "fullObservation"
-                        ? selectedPitchPlayerId
-                          ? `${activeSession.players.find((player) => player.playerId === selectedPitchPlayerId)?.name ?? "Player"} selected`
-                          : `${activeSession.focusTokens.available}/${activeSession.focusTokens.total} focus tokens remaining`
-                        : "Open supporting information"}
-                    </span>
-                  </span>
-                  {showMobileFocus ? (
-                    <ChevronUp size={16} className="shrink-0 text-zinc-400" aria-hidden="true" />
-                  ) : (
-                    <ChevronDown size={16} className="shrink-0 text-zinc-400" aria-hidden="true" />
-                  )}
-                </button>
-              </section>
-
-              {showMobileFocus && (
-                <>
-                  <button
-                    type="button"
-                    className="fixed inset-0 z-40 cursor-default bg-black/60 backdrop-blur-[1px] lg:hidden"
-                    onClick={closeMobileFocus}
-                    aria-label="Dismiss focus sheet backdrop"
-                    tabIndex={-1}
-                  />
-                  <div
-                    ref={mobileFocusSheetRef}
-                    id="mobile-observation-context"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="mobile-observation-context-title"
-                    onKeyDown={handleMobileFocusKeyDown}
-                    className="fixed inset-x-3 bottom-[calc(8.75rem+env(safe-area-inset-bottom))] z-50 flex max-h-[56dvh] flex-col overflow-hidden rounded-2xl border border-emerald-300/20 bg-[#0b0f0d] shadow-[0_24px_70px_rgba(0,0,0,0.65)] md:bottom-20 md:left-[15.75rem] md:right-3 lg:hidden"
-                  >
-                    <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-                      <div className="min-w-0">
-                        <h2 id="mobile-observation-context-title" className="text-sm font-semibold text-zinc-100">
-                          {mode === "fullObservation" ? "Choose your focus" : "Session context"}
-                        </h2>
-                        <p className="truncate text-[10px] text-zinc-400">
-                          {mode === "fullObservation" && selectedPitchPlayerId
-                            ? activeSession.players.find((player) => player.playerId === selectedPitchPlayerId)?.name ?? "Selected player"
-                            : "Supporting information"}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={closeMobileFocus}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                        aria-label="Close focus controls"
-                      >
-                        <X size={18} aria-hidden="true" />
-                      </button>
-                    </div>
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                      {mode === "fullObservation" ? (
-                        <FocusPanel
-                          session={activeSession}
-                          onAllocateFocus={handleAllocateFocus}
-                          onRemoveFocus={handleRemoveFocus}
-                          selectedPlayerId={selectedPitchPlayerId}
-                          focusSelectedLensPicker
-                        />
-                      ) : mode === "investigation" ? (
-                        <InvestigationSidebar session={activeSession} />
-                      ) : (
-                        <MinimalInfoSidebar session={activeSession} />
-                      )}
-                    </div>
+                <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-white/10 bg-[var(--surface)] lg:flex">
+                  {mode === "investigation" ? <InvestigationSidebar session={activeSession} /> : <MinimalInfoSidebar session={activeSession} />}
+                  <div className="mt-auto space-y-2 border-t border-white/10 p-4" data-tutorial-id="observation-session-controls">
+                    {insightActions.length > 0 && <Button variant="outline" className="min-h-11 w-full gap-2" onClick={openInsightOverlay} aria-label="Use Insight action"><Zap size={14} aria-hidden="true" />Use Insight · {insightState.points} IP</Button>}
+                    <Button className="min-h-11 w-full gap-2" onClick={handleAdvancePhase}><ChevronRight size={14} aria-hidden="true" />{isLastPhase ? "Go to Reflection" : "Next Phase"}</Button>
+                    {!isOpeningWatch && <LeaveObservationButton session={activeSession} className="w-full" />}
                   </div>
-                </>
-              )}
-
-              {/* Mobile actions remain reachable above the fixed workspace nav. */}
-              <div
-                className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-white/10 bg-[#0a0d0b]/95 p-3 shadow-[0_-12px_30px_rgba(0,0,0,0.35)] backdrop-blur md:bottom-0 md:left-60 lg:hidden"
-                data-tutorial-id="observation-session-controls"
-                data-testid="mobile-observation-controls"
-              >
-                <div className="flex gap-2">
-                  {!isOpeningDiscoverySession(activeSession) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-11 flex-1 text-zinc-300"
-                      onClick={handleEndSession}
-                    >
-                      End early
-                    </Button>
-                  )}
-                  {insightActions.length > 0 && !isOpeningDiscoverySession(activeSession) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="min-h-11 shrink-0 border-amber-500/30 text-amber-300"
-                      onClick={openInsightOverlay}
-                      aria-label="Use Insight action"
-                    >
-                      <Zap size={13} className="mr-1.5" aria-hidden="true" />
-                      Insight
-                    </Button>
-                  )}
-                  {isLastPhase ? (
-                    <Button className="min-h-11 flex-[1.35]" onClick={handleAdvancePhase}>
-                      <Flag size={14} className="mr-1.5" aria-hidden="true" />
-                      Reflect
-                    </Button>
-                  ) : (
-                    <Button
-                      className="min-h-11 flex-[1.35]"
-                      onClick={handleAdvancePhase}
-                      disabled={openingPhaseRequiresFlag || requiresHalftimeChoice}
-                      data-tutorial-id={
-                        isOpeningDiscoverySession(activeSession)
-                        && activeSession.currentPhaseIndex === 0
-                          ? "observation-advance-to-standout"
-                          : undefined
-                      }
-                    >
-                      {openingPhaseRequiresFlag
-                        ? "Flag the moment"
-                        : requiresHalftimeChoice
-                          ? "Choose half-time approach"
-                          : "Next phase"}
-                      <ChevronRight size={14} className="ml-1.5" aria-hidden="true" />
-                    </Button>
-                  )}
+                </aside>
+                <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[var(--background)] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden" data-tutorial-id="observation-session-controls" data-testid="mobile-observation-controls">
+                  <div className="flex items-center gap-2">
+                    {!isOpeningWatch && <LeaveObservationButton session={activeSession} />}
+                    {insightActions.length > 0 && <Button variant="outline" className="min-h-11 shrink-0" onClick={openInsightOverlay} aria-label="Use Insight action"><Zap size={14} aria-hidden="true" /></Button>}
+                    <Button className="min-h-11 flex-1 gap-2" onClick={handleAdvancePhase}>{isLastPhase ? "Reflect" : "Next phase"}<ChevronRight size={14} aria-hidden="true" /></Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           )}
 
           {/* ── Insight overlay ─────────────────────────────────────────── */}

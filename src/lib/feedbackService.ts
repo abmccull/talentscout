@@ -6,7 +6,7 @@
  * Supabase gracefully by returning an error result.
  */
 
-import { supabase } from "@/lib/supabase";
+import { SUPABASE_CONFIGURED } from "@/lib/supabaseConfiguration";
 import { useGameStore } from "@/stores/gameStore";
 import { APP_VERSION } from "@/config/version";
 import {
@@ -56,13 +56,13 @@ function collectGameContext(): Record<string, unknown> | null {
 }
 
 export function isFeedbackSubmissionAvailable(): boolean {
-  return BETA_ONLINE_FEEDBACK_ENABLED && Boolean(supabase);
+  return BETA_ONLINE_FEEDBACK_ENABLED && SUPABASE_CONFIGURED;
 }
 
 export async function submitFeedback(
   input: SubmitFeedbackInput,
 ): Promise<SubmitFeedbackResult> {
-  if (!BETA_ONLINE_FEEDBACK_ENABLED || !supabase) {
+  if (!BETA_ONLINE_FEEDBACK_ENABLED || !SUPABASE_CONFIGURED) {
     return { success: false, error: FEEDBACK_UNAVAILABLE_MESSAGE };
   }
 
@@ -89,6 +89,8 @@ export async function submitFeedback(
   const gameContext = collectGameContext();
 
   try {
+    const { supabase } = await import("@/lib/supabase");
+    if (!supabase) return { success: false, error: FEEDBACK_UNAVAILABLE_MESSAGE };
     const { error } = await supabase.from("feedback").insert({
       category: input.category,
       title,

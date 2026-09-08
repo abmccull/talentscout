@@ -27,6 +27,7 @@ import type {
   SimulatedFixture,
 } from "./types";
 import type { RNG } from "../../rng/index";
+import type { DeferredLoanClosure } from "../../world/loanClosureSettlement";
 
 export interface WeeklyLoanPhaseResult {
   updatedActiveLoans: LoanDeal[];
@@ -46,6 +47,7 @@ export interface WeeklyLoanPhaseResult {
   loanOutcomeReputation: number;
   loanOutcomeXp: number;
   loanMessages: GameState["inbox"];
+  deferredLoanClosures: DeferredLoanClosure[];
 }
 
 export function runWeeklyLoanPhase(
@@ -89,14 +91,11 @@ export function runWeeklyLoanPhase(
     ? processLoanRecalls(loanState, state.currentWeek, state.currentSeason, rng)
     : { deals: [], messages: [] };
 
-  let updatedLoanRecommendations = loanDealResult.updatedRecommendations;
-  let loanOutcomeReputation = 0;
-  let loanOutcomeXp = loanDealResult.xpAward;
-  const loanMessages = [
-    ...loanReturnResult.messages,
-    ...loanDealResult.messages,
-    ...loanRecallResult.messages,
-  ];
+  const updatedLoanRecommendations = loanDealResult.updatedRecommendations;
+  const loanOutcomeReputation = 0;
+  const loanOutcomeXp = loanDealResult.xpAward;
+  const loanMessages = [...loanDealResult.messages];
+  const deferredLoanClosures: DeferredLoanClosure[] = [];
   const closedLoanIds = new Set<string>();
   const loanClosures: Array<{ deal: LoanDeal; outcome: LoanOutcome }> = [];
   for (const deal of loanReturnResult.deals) {
@@ -121,6 +120,13 @@ export function runWeeklyLoanPhase(
     }
   }
   for (const { deal, outcome } of loanClosures) {
+    const preparedMessage = [...loanReturnResult.messages, ...loanRecallResult.messages]
+      .find((message) => message.relatedId === deal.playerId);
+    const closure: DeferredLoanClosure = {
+      loanDealId: deal.id,
+      movementMessage: preparedMessage,
+    };
+    deferredLoanClosures.push(closure);
     const recommendation = updatedLoanRecommendations.find(
       (item) => item.loanDealId === deal.id && !item.reputationApplied,
     );
@@ -135,16 +141,10 @@ export function runWeeklyLoanPhase(
       state.currentSeason,
       rng,
     );
-    loanOutcomeReputation += reward.reputationDelta;
-    loanOutcomeXp += reward.xpAward;
-    loanMessages.push(reward.message);
-    if (reward.updatedRecommendation) {
-      updatedLoanRecommendations = updatedLoanRecommendations.map((item) =>
-        item.id === reward.updatedRecommendation?.id
-          ? reward.updatedRecommendation
-          : item,
-      ) as LoanRecommendation[];
-    }
+    // Reserve the same feedback ID (and RNG draws) as before, without settling
+    // a proposal whose purchase or return can still lose during application.
+    closure.recommendationId = recommendation.id;
+    closure.feedbackMessageId = reward.message.id;
   }
 
   return {
@@ -156,6 +156,7 @@ export function runWeeklyLoanPhase(
     loanOutcomeReputation,
     loanOutcomeXp,
     loanMessages,
+    deferredLoanClosures,
   };
 }
 

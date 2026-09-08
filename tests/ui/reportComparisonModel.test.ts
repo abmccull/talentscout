@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ScoutReport } from "@/engine/core/types";
-import { buildReportComparisonViewModel } from "@/components/game/reportComparisonModel";
+import type { Player, ScoutReport, UnsignedYouth } from "@/engine/core/types";
+import { buildReportComparisonViewModel, resolveReportComparisonPlayers } from "@/components/game/reportComparisonModel";
 
 function report(
   id: string,
@@ -111,7 +111,7 @@ describe("report comparison authority", () => {
 
     expect(model.mode).toBe("mixed");
     expect(model.legacyComparison).toBeNull();
-    expect(model.explanation).toMatch(/false equivalence/i);
+    expect(model.explanation).toMatch(/fair numeric comparison/i);
     expect(model.structuredRows[0].cells[1].available).toBe(false);
   });
 
@@ -134,5 +134,31 @@ describe("report comparison authority", () => {
     expect(model.mode).toBe("legacy");
     expect(model.legacyComparison?.attributes).toHaveLength(1);
     expect(model.structuredRows.every((row) => row.cells.every((cell) => !cell.available))).toBe(true);
+  });
+});
+
+describe("report comparison player continuity", () => {
+  it("keeps an unsigned prospect and a retired player named in the same comparison", () => {
+    const youth = { id: "young-player", firstName: "Ari", lastName: "Prospect" } as Player;
+    const retired = { id: "retired-player", firstName: "Jonas", lastName: "Veteran" } as Player;
+    const reports = [report("young", { playerId: youth.id }), report("retired", { playerId: retired.id })];
+    const players = resolveReportComparisonPlayers(reports, {
+      players: {},
+      unsignedYouth: { "youth-record": { id: "youth-record", player: youth } as UnsignedYouth },
+      retiredPlayers: { [retired.id]: retired },
+    });
+    const comparison = buildReportComparisonViewModel({ reports, players, clubs: undefined });
+    expect(comparison.cards.map((card) => card.playerName)).toEqual(["Ari Prospect", "Jonas Veteran"]);
+  });
+
+  it("accepts an unsigned-youth record alias and leaves a missing identity unresolved", () => {
+    const youth = { id: "young-player", firstName: "Ari", lastName: "Prospect" } as Player;
+    const players = resolveReportComparisonPlayers([
+      { playerId: "youth-record" }, { playerId: "missing" },
+    ], {
+      players: {},
+      unsignedYouth: { "youth-record": { id: "youth-record", player: youth } as UnsignedYouth },
+    });
+    expect(players).toEqual([youth, undefined]);
   });
 });

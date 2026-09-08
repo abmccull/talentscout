@@ -2,45 +2,21 @@
 
 import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Wrench } from "lucide-react";
-import {
-  ALL_EQUIPMENT_SLOTS,
-  getEquipmentItem,
-  getEquipmentMonthlyTotal,
-} from "@/engine/finance";
+import { BookOpen, Laptop, Compass, Phone, BarChart3, type LucideIcon } from "lucide-react";
+import { ALL_EQUIPMENT_SLOTS, getEquipmentItem, getEquipmentMonthlyTotal } from "@/engine/finance";
 import type { EquipmentSlot } from "@/engine/finance";
+import { getScoutHomeCountry } from "@/engine/world/travel";
+import { getCountryDisplayName } from "@/lib/country";
 import { EquipmentSlotBrowser } from "./EquipmentSlotBrowser";
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
-  notebook: "Field Notebook",
-  video: "Video Analysis",
-  travel: "Travel Gear",
-  network: "Networking Tools",
-  analysis: "Analysis Software",
+  notebook: "Field Notebook", video: "Video Analysis", travel: "Travel Gear",
+  network: "Networking Tools", analysis: "Analysis Software",
 };
-
-function getTierColor(tier: number, isSpecialist: boolean): string {
-  if (isSpecialist) return "text-purple-400";
-  switch (tier) {
-    case 2: return "text-blue-400";
-    case 3: return "text-amber-400";
-    case 4: return "text-emerald-400";
-    default: return "text-zinc-500";
-  }
-}
-
-function getTierBorderColor(tier: number, isSpecialist: boolean): string {
-  if (isSpecialist) return "border-purple-600/40";
-  switch (tier) {
-    case 2: return "border-blue-600/40";
-    case 3: return "border-amber-600/40";
-    case 4: return "border-emerald-600/40";
-    default: return "border-zinc-700";
-  }
-}
+const SLOT_ICONS: Record<EquipmentSlot, LucideIcon> = {
+  notebook: BookOpen, video: Laptop, travel: Compass, network: Phone, analysis: BarChart3,
+};
 
 function formatEffect(type: string, value: number): string {
   const percent = [
@@ -49,100 +25,76 @@ function formatEffect(type: string, value: number): string {
     "youthDiscoveryBonus", "gutFeelingBonus", "paEstimateAccuracy",
     "systemFitAccuracy", "anomalyDetectionRate", "predictionAccuracy", "valuationAccuracy",
   ];
-  if (percent.includes(type)) {
-    return `+${Math.round(value * 100)}% ${type.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`;
-  }
+  const label = type.replace(/([A-Z])/g, " $1").toLowerCase().trim();
+  if (percent.includes(type)) return `+${Math.round(value * 100)}% ${label}`;
   if (type === "fatigueReduction") return `-${value} fatigue`;
-  if (type === "attributesPerSession") return `+${value} attributes/session`;
+  if (type === "attributesPerSession") return `+${value} attributes per session`;
   if (type === "familiarityGainBonus") return `+${value} familiarity gain`;
   if (type === "travelSlotReduction") return `-${value} travel slot`;
-  return `+${value} ${type}`;
+  return `+${value} ${label}`;
 }
 
 export function EquipmentPanel() {
   const gameState = useGameStore((s) => s.gameState);
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot | null>(null);
-
   if (!gameState?.finances?.equipment) return null;
 
   const { loadout } = gameState.finances.equipment;
   const monthlyTotal = getEquipmentMonthlyTotal(loadout);
+  const homeCountry = getCountryDisplayName(getScoutHomeCountry(gameState.scout));
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Wrench size={14} className="text-zinc-400" aria-hidden="true" />
-            Equipment
-          </span>
-          {monthlyTotal > 0 && (
-            <Badge variant="secondary" className="text-[10px]">
-              £{monthlyTotal.toLocaleString()}/mo
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2" data-tutorial-id="equipment-loadout">
-          {ALL_EQUIPMENT_SLOTS.map((slot) => {
-            const itemId = loadout[slot];
-            const item = getEquipmentItem(itemId);
-            if (!item) return null;
-
-            const isSpecialist = !!item.specialization;
-            const tierColor = getTierColor(item.tier, isSpecialist);
-            const borderColor = getTierBorderColor(item.tier, isSpecialist);
-            const firstEffect = item.effects[0];
-
-            return (
-              <div
-                key={slot}
-                className={`rounded-md border p-2.5 ${borderColor} bg-zinc-900/50 cursor-pointer hover:bg-zinc-800/50 transition-colors`}
-                onClick={() => setSelectedSlot(selectedSlot === slot ? null : slot)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setSelectedSlot(selectedSlot === slot ? null : slot);
-                  }
-                }}
-                aria-label={`Browse ${SLOT_LABELS[slot]} equipment`}
-              >
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">
-                  {SLOT_LABELS[slot]}
-                </p>
-                <p className="text-xs font-medium text-white truncate">{item.name}</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className={`text-[10px] font-semibold ${tierColor}`}>
-                    {isSpecialist ? "SPEC" : `T${item.tier}`}
-                  </span>
-                  {item.monthlyCost > 0 && (
-                    <span className="text-[9px] text-zinc-600">
-                      £{item.monthlyCost}/mo
-                    </span>
+    <section className="max-w-5xl" aria-labelledby="equipment-loadout-heading">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border)] pb-4">
+        <h2 id="equipment-loadout-heading" className="font-editorial text-2xl text-white">In the bag</h2>
+        <p className="text-sm text-zinc-400">{monthlyTotal > 0 ? `£${monthlyTotal.toLocaleString()} per month in running costs` : "No monthly running costs"}</p>
+      </div>
+      <div data-tutorial-id="equipment-loadout">
+        {ALL_EQUIPMENT_SLOTS.map((slot) => {
+          const item = getEquipmentItem(loadout[slot]);
+          if (!item) return null;
+          const Icon = SLOT_ICONS[slot];
+          const isSelected = selectedSlot === slot;
+          return (
+            <article key={slot} className="border-b border-[var(--border)] py-5">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <Icon size={23} strokeWidth={1.5} className="mt-1 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-zinc-400">{SLOT_LABELS[slot]} · {item.specialization ? "Specialist equipment" : `Grade ${item.tier}`}</p>
+                  <h3 className="mt-1 text-base font-semibold text-white">{item.name}</h3>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-300">{item.description}</p>
+                  {item.effects.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-sm text-zinc-200">
+                      {item.effects.map((effect, index) => (
+                        <li key={index}>
+                          {formatEffect(effect.type, effect.value)}
+                          {effect.homeRegionOnly && <span className="text-zinc-400"> · while working in {homeCountry}</span>}
+                          {effect.activityTypes && effect.activityTypes.length > 0 && (
+                            <span className="text-zinc-400"> · {effect.activityTypes.map((activity) => activity.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()).join(", ")}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-zinc-400">Standard kit · no additional scouting bonus</p>
                   )}
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedSlot(isSelected ? null : slot)} aria-expanded={isSelected} aria-controls={isSelected ? `equipment-shop-${slot}` : undefined} aria-label={`Browse ${SLOT_LABELS[slot]} equipment`}>
+                      {isSelected ? "Close upgrades" : "Compare upgrades"}
+                    </Button>
+                    <span className="text-xs text-zinc-400">Equipped{item.monthlyCost > 0 ? ` · £${item.monthlyCost.toLocaleString()}/month` : " · no monthly fee"}</span>
+                  </div>
                 </div>
-                {firstEffect && (
-                  <p className="text-[9px] text-emerald-400/80 mt-1 truncate">
-                    {formatEffect(firstEffect.type, firstEffect.value)}
-                  </p>
-                )}
               </div>
-            );
-          })}
-        </div>
-
-        {selectedSlot && (
-          <div data-tutorial-id="equipment-shop">
-            <EquipmentSlotBrowser
-              slot={selectedSlot}
-              onClose={() => setSelectedSlot(null)}
-            />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              {isSelected && (
+                <div id={`equipment-shop-${slot}`} className="mt-4" data-tutorial-id="equipment-shop">
+                  <EquipmentSlotBrowser slot={slot} onClose={() => setSelectedSlot(null)} />
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }

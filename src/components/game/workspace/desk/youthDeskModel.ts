@@ -1,5 +1,38 @@
 "use client";
 
+import type { Observation, ReportRecommendedAction, ScoutReport } from "@/engine/core/types";
+import { getFreshReportObservationIds } from "@/engine/reports/reportAccountability";
+
+/** The latest authored choice controls nudges; new evidence permits reconsideration. */
+export function buildYouthDeskDecisionIndex(
+  reports: Iterable<ScoutReport>,
+  observations: Iterable<Observation>,
+  scoutId: string,
+): Map<string, { filedAction?: ReportRecommendedAction; passedForNow: boolean; canReconsider: boolean }> {
+  const latest = new Map<string, ScoutReport>();
+  for (const report of reports) {
+    if (report.scoutId !== scoutId) continue;
+    const current = latest.get(report.playerId);
+    if (!current || report.submittedSeason > current.submittedSeason
+      || (report.submittedSeason === current.submittedSeason && report.submittedWeek > current.submittedWeek)
+      || (report.submittedSeason === current.submittedSeason && report.submittedWeek === current.submittedWeek
+        && (report.revision ?? 1) > (current.revision ?? 1))) latest.set(report.playerId, report);
+  }
+  const byPlayer = new Map<string, Observation[]>();
+  for (const observation of observations) {
+    if (observation.scoutId !== scoutId) continue;
+    const playerObservations = byPlayer.get(observation.playerId) ?? [];
+    playerObservations.push(observation);
+    byPlayer.set(observation.playerId, playerObservations);
+  }
+  return new Map([...latest].map(([playerId, report]) => [playerId, {
+    filedAction: report.recommendedAction,
+    passedForNow: report.recommendedAction === "pass",
+    canReconsider: report.recommendedAction === "pass"
+      && getFreshReportObservationIds(byPlayer.get(playerId) ?? [], report).length > 0,
+  }]));
+}
+
 export interface YouthDeskProspectEntry {
   youth: {
     id: string;
@@ -16,6 +49,9 @@ export interface YouthDeskProspectEntry {
   observationCount: number;
   intelCount: number;
   reported: boolean;
+  filedAction?: ReportRecommendedAction;
+  passedForNow?: boolean;
+  canReconsider?: boolean;
   buzzLevel: number;
   visibility: number;
   hasFirmRead: boolean;
@@ -36,7 +72,9 @@ export interface YouthActiveCaseModel {
   title: string;
   summary: string;
   subjectName?: string;
-  stageId: "lead" | "liveLook" | "case" | "recommendation" | "tracked";
+  playerId?: string;
+  subjectAge?: number;
+  stageId: "lead" | "liveLook" | "case" | "recommendation" | "tracked" | "passed";
   stageLabel: string;
   stageSteps: Array<{
     label: string;
@@ -90,7 +128,9 @@ export function buildYouthActiveCaseModel(args: {
     scheduledSlots,
     openDayCount,
   } = args;
-  const focusEntry = decisionReadyYouth[0] ?? evidenceQueue[0] ?? observedYouthEvidence[0];
+  const eligible = (entry: YouthDeskProspectEntry) => !entry.passedForNow || entry.canReconsider;
+  const focusEntry = decisionReadyYouth.find(eligible) ?? evidenceQueue.find(eligible)
+    ?? observedYouthEvidence.find(eligible) ?? observedYouthEvidence[0];
   const linkedBrief = focusEntry
     ? openRecruitmentBriefs.find((brief) => matchesBrief(focusEntry, brief)) ?? openRecruitmentBriefs[0]
     : openRecruitmentBriefs[0];
@@ -100,7 +140,8 @@ export function buildYouthActiveCaseModel(args: {
     : undefined;
 
   let stageIndex = 0;
-  if (focusEntry?.reported || pendingPlacementCount > 0) stageIndex = 4;
+  if (focusEntry?.canReconsider) stageIndex = 2;
+  else if (focusEntry?.reported || pendingPlacementCount > 0) stageIndex = 4;
   else if (focusEntry?.hasFirmRead) stageIndex = 3;
   else if ((focusEntry?.observationCount ?? 0) >= 2 || (focusEntry?.intelCount ?? 0) >= 2) stageIndex = 2;
   else if ((focusEntry?.observationCount ?? 0) >= 1) stageIndex = 1;
@@ -111,7 +152,7 @@ export function buildYouthActiveCaseModel(args: {
   if (!focusEntry) {
     return {
       title: "Find the lead worth your next week",
-      summary: "You do not have an active case yet. The desk should create one name, one context, and one reason to care before the calendar gets noisy again.",
+      summary: "Start with one player worth watching. Choose a local match or youth event to find your first lead.",
       stageId,
       stageLabel,
       stageSteps: STAGE_LABELS.map((label, index) => ({
@@ -119,10 +160,10 @@ export function buildYouthActiveCaseModel(args: {
         active: index === 0,
         complete: false,
       })),
-      evidenceLine: "No live evidence yet. Discovery work should create the first lead.",
+      evidenceLine: "No first-hand evidence yet. A live visit can give you a name to follow.",
       networkLine: "No active background context is attached to a case yet.",
       scheduleLine: openDayCount === 7
-        ? "The week is still blank. Planner should create the first live look."
+        ? "Your week is open. Plan a live look to find your first lead."
         : `${scheduledSlots}/7 days are committed, but none are anchored to a live case yet.`,
       recommendationLine: pendingPlacementCount > 0
         ? `${pendingPlacementCount} recommendation${pendingPlacementCount === 1 ? "" : "s"} still need outcome tracking.`
@@ -130,6 +171,21 @@ export function buildYouthActiveCaseModel(args: {
       briefLine: linkedBrief
         ? `${linkedBrief.requiredPositions.join("/")} pathway expires in S${linkedBrief.expiresSeason} W${linkedBrief.expiresWeek}.`
         : "No academy brief is shaping the desk yet.",
+    };
+  }
+
+  if (focusEntry.passedForNow && !focusEntry.canReconsider) {
+    return {
+      title: `${subjectName}: passed for now`,
+      summary: "The judgment is preserved. Spend the next look elsewhere; fresh evidence can reopen this case.",
+      subjectName, playerId: focusEntry.youth.player.id, subjectAge: focusEntry.youth.player.age,
+      stageId: "passed", stageLabel: "Passed for now",
+      stageSteps: [{ label: "Evidence saved", active: false, complete: true }, { label: "Passed for now", active: true, complete: false }, { label: "New evidence", active: false, complete: false }],
+      evidenceLine: `${focusEntry.observationCount} observations remain on record.`,
+      networkLine: "A later reliable report or another first-hand observation may challenge this call.",
+      scheduleLine: `${openDayCount} open day${openDayCount === 1 ? "" : "s"} remain for other prospects.`,
+      recommendationLine: "This is a private pass, not a recruitment recommendation.",
+      briefLine: "Future career checkpoints will show what became of the player.",
     };
   }
 
@@ -144,34 +200,42 @@ export function buildYouthActiveCaseModel(args: {
     liveLook: `Get another live look on ${subjectName}`,
     case: `Build the full case on ${subjectName}`,
     recommendation: `Back your judgment on ${subjectName}`,
-    tracked: `${subjectName} is now a tracked recommendation`,
+    tracked: `${subjectName} has a filed judgment`,
+    passed: `${subjectName}: passed for now`,
   };
 
   const summaries: Record<YouthActiveCaseModel["stageId"], string> = {
-    lead: "The name is interesting, but the evidence still belongs to rumor and first impressions. The week should buy context, not conviction.",
-    liveLook: "One impression is a clue. The desk should now test whether the player survives a new context, opponent, or emotional load.",
-    case: "The evidence is starting to stack. What matters now is whether the dossier can survive challenge, not just accumulate notes.",
-    recommendation: "You have enough repeat information to make a defensible call. The question is whether you are ready to attach your reputation to it.",
-    tracked: "The recommendation has left the desk. What remains is accountability: did the pathway, timing, and pitch hold up in the real world?",
+    lead: "The name is interesting. Watch the player in person before deciding how far to back the first impression.",
+    liveLook: "Test the first impression against a new opponent, setting or moment of pressure.",
+    case: "Your evidence is taking shape. Test the weakest part of the case before writing your recommendation.",
+    recommendation: "You have repeated evidence. Check the club fit and decide how strongly you are prepared to recommend this player.",
+    tracked: focusEntry.filedAction === "monitor"
+      ? "You chose to keep the case under review. Another context may change the judgment."
+      : "Your judgment is on file. Follow its delivery, any club response, and the player's later career.",
+    passed: "The evidence and judgment remain on record.",
   };
 
   return {
-    title: titles[stageId],
-    summary: summaries[stageId],
+    title: focusEntry.canReconsider ? `New evidence on ${subjectName}` : titles[stageId],
+    summary: focusEntry.canReconsider ? "Something new has arrived since you passed. Compare it with the original reason before deciding whether to reopen the case." : summaries[stageId],
     subjectName,
+    playerId: focusEntry.youth.player.id,
+    subjectAge: focusEntry.youth.player.age,
     stageId,
-    stageLabel,
+    stageLabel: focusEntry.canReconsider ? "Reconsider" : stageId === "tracked" ? "Judgment filed" : stageLabel,
     stageSteps,
     evidenceLine: `${focusEntry.observationCount} live look${focusEntry.observationCount === 1 ? "" : "s"} and ${focusEntry.intelCount} context note${focusEntry.intelCount === 1 ? "" : "s"} are on file.`,
     networkLine: focusEntry.intelCount > 0
-      ? `Private context is attached to the case. Make sure it sharpens the read instead of replacing it.`
-      : "No supporting context is attached yet. The next week can still add family, coach, or contact color.",
+      ? `You have background notes. Compare them with what you saw on the pitch.`
+      : "A coach, family or trusted contact could help you test the remaining question.",
     scheduleLine: openDayCount === 0
       ? "The week is fully committed. Every new call now requires displacing something else."
-      : `${openDayCount} open day${openDayCount === 1 ? "" : "s"} remain. Planner should be used to decide what this case is worth.`,
-    recommendationLine: focusEntry.hasFirmRead
+      : `${openDayCount} open day${openDayCount === 1 ? "" : "s"} remain. Decide which question deserves your next day.`,
+    recommendationLine: focusEntry.canReconsider
+      ? "The earlier pass remains on record. New evidence permits a revised judgment, without requiring a recommendation."
+      : focusEntry.hasFirmRead
       ? "The evidence bar is high enough to support a recommendation if the fit and timing are believable."
-      : "The desk still needs another context before the recommendation can be trusted.",
+      : "Watch the player in another setting before making a firm recommendation.",
     briefLine: linkedBrief
       ? `This brief weights ${humanizeBriefPriority(linkedBrief.developmentPriority)} most heavily for the ${linkedBrief.requiredPositions.join("/")} pathway. It expires in S${linkedBrief.expiresSeason} W${linkedBrief.expiresWeek} with ${linkedBrief.competitionPressure} pressure.`
       : "No live academy brief currently sharpens this case.",

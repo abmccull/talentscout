@@ -151,10 +151,10 @@ export function WikiSidebar({
 
       {comingLaterCategories.length > 0 && (
         <div className="border-t border-zinc-800 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
             Coming later
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+          <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
             {comingLaterCategories.map((category) => category.title).join(", ")}
           </p>
         </div>

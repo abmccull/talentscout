@@ -61,6 +61,8 @@ export const SHARED_WORLD_STATE_KEYS = [
 
 export const SHARED_CAREER_STATE_KEYS = [
   "scout",
+  "playerPortraits",
+  "guidedSessionRequested",
   "schedule",
   "weeklyStrategy",
   "dashboardState",

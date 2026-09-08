@@ -2,41 +2,21 @@ import { describe, expect, it } from "vitest";
 
 import {
   canOpenReportWorkflowStep,
-  isConciseOpeningReportMode,
   resolveReportWorkflow,
+  shouldUseInitialAssessment,
 } from "@/components/game/reportWriterMode";
 
-describe("report writer opening mode", () => {
-  it("uses concise mode only for the first guided opening report", () => {
-    expect(isConciseOpeningReportMode({
-      isYouthScout: true,
-      openingStage: "report",
-      openingPlayerId: "lead",
-      selectedPlayerId: "lead",
-      previousReportExists: false,
-      observationCount: 1,
-      contextCount: 1,
-    })).toBe(true);
-
-    expect(isConciseOpeningReportMode({
-      isYouthScout: true,
-      openingStage: "report",
-      openingPlayerId: "lead",
-      selectedPlayerId: "lead",
-      previousReportExists: true,
-      observationCount: 1,
-      contextCount: 1,
-    })).toBe(false);
-
-    expect(isConciseOpeningReportMode({
-      isYouthScout: true,
-      openingStage: "report",
-      openingPlayerId: "lead",
-      selectedPlayerId: "lead",
-      previousReportExists: false,
-      observationCount: 2,
-      contextCount: 2,
-    })).toBe(false);
+describe("report writer workflow", () => {
+  it("keeps a restored opening report on the guided assessment despite open club briefs", () => {
+    const input = {
+      isYouthCase: true, hasOpenBrief: true, playerId: "opening-player",
+      openingCase: { playerId: "opening-player", stage: "report" as const },
+    };
+    expect(shouldUseInitialAssessment(input)).toBe(true);
+    expect(shouldUseInitialAssessment({ ...input, playerId: "another-player" })).toBe(false);
+    expect(shouldUseInitialAssessment({ ...input, openingCase: { ...input.openingCase, stage: "complete" } })).toBe(false);
+    expect(shouldUseInitialAssessment({ ...input, isYouthCase: false })).toBe(false);
+    expect(shouldUseInitialAssessment({ ...input, openingCase: undefined, hasOpenBrief: false })).toBe(true);
   });
 
   it("keeps the writer on the next unresolved decision and counts remaining choices", () => {

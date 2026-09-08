@@ -54,6 +54,8 @@ describe("club squad capacity", () => {
       leagueId: "league",
       reputation: 50,
       budget: 1_000_000,
+      // This fixture isolates the sporting roster cap; affordability is covered separately.
+      weeklyWageBudget: 1_000_000,
       scoutingPhilosophy: "marketSmart",
       managerId: "manager",
       playerIds: Object.keys(players),

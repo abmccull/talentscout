@@ -3,7 +3,10 @@
  * All randomness flows through the provided RNG instance.
  */
 
+import { withVisualIdentity } from "./portraits/identity";
 import type { RNG } from "@/engine/rng";
+import { getSeasonBirthYear } from "@/engine/core/seasonDate";
+import { calculatePlayerWeeklyWage } from "@/engine/finance/wages";
 import type {
   Player,
   Position,
@@ -17,6 +20,7 @@ import { generatePersonalityTraits } from "./personality";
 import { generateBehavioralTraits } from "./behavioralTraits";
 import { generatePersonalityProfile } from "./personalityEffects";
 import { getBestRole } from "./roles";
+import { getClubAbilityRange } from "./clubAbility";
 import type { ClubData, LeagueData, NamePool, NationalityWeight } from "@/data/types";
 import type { CountryData } from "@/data/types";
 // England data is imported only to supply backward-compatible defaults.
@@ -330,12 +334,6 @@ export function calculateMarketValue(
   return Math.max(5_000, Math.round(base));
 }
 
-function calculateWage(ca: number, clubRep: number): number {
-  const caFactor = Math.pow(ca / 100, 2.2);
-  const weekly = caFactor * 50_000 * (clubRep / 80);
-  return Math.round(weekly / 500) * 500;
-}
-
 // ---------------------------------------------------------------------------
 // Public name-pool utilities
 // ---------------------------------------------------------------------------
@@ -436,7 +434,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     secondaryPositions.push(rng.pick(opts));
   }
 
-  const birthYear = 2024 - age;
+  const birthYear = getSeasonBirthYear(age, currentSeason);
   const month = rng.nextInt(1, 12);
   const maxDay = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 28;
   const day = rng.nextInt(1, maxDay);
@@ -454,7 +452,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     clubId,
     contractClubId: clubId || undefined,
     contractExpiry: clubId ? currentSeason + rng.nextInt(1, 5) : 0,
-    wage: calculateWage(currentAbility, clubReputation),
+    wage: calculatePlayerWeeklyWage(currentAbility, clubReputation),
     marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position, clubReputation),
     attributes,
     currentAbility,
@@ -476,6 +474,15 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     seasonRatings: [],
   };
 
+  // Start tracking from world entry; an absent legacy history remains unknown.
+  player.injuryHistory = {
+    playerId: player.id,
+    injuries: [],
+    totalWeeksMissed: 0,
+    injuryProneness: 0,
+    reinjuryWindowWeeksLeft: 0,
+  };
+
   // Generate behavioral traits based on position + actual attributes
   player.playerTraits = generateBehavioralTraits(rng, player);
 
@@ -486,7 +493,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
   const bestRole = getBestRole(player);
   player.naturalRole = bestRole.role;
 
-  return player;
+  return withVisualIdentity(player);
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +511,12 @@ function buildPositionSlots(rng: RNG, size: number): Position[] {
     "LW", "LW", "RW", "RW",
     "ST", "ST", "ST",
   ];
-  return rng.shuffle(slots).slice(0, size);
+  const selected = rng.shuffle(slots).slice(0, size);
+  // The requested 26–28-player squads extend the same authored position mix.
+  while (selected.length < size) selected.push(rng.pick(slots));
+  // Truncating the shuffle must not remove every professional goalkeeper.
+  if (!selected.includes("GK")) selected[selected.length - 1] = "GK";
+  return selected;
 }
 
 /**
@@ -534,9 +546,7 @@ export function generateSquad(
 ): Player[] {
   const squadSize = rng.nextInt(22, 28);
   const slots = buildPositionSlots(rng, squadSize);
-  const repFraction = (club.reputation - 10) / 90;
-  const caMin = Math.round(15 + repFraction * 110);
-  const caMax = Math.round(40 + repFraction * 160);
+  const [caMin, caMax] = getClubAbilityRange(club.reputation);
 
   // Prefer the caller-supplied weights; fall back to the England tier table.
   const resolvedWeights: NationalityWeight[] =

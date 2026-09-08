@@ -1,18 +1,20 @@
 "use client";
 
+import { resolvePlayerDisplayName, resolvePlayerEntity } from "@/lib/playerResolution";
+
 import { useState } from "react";
-import { Trophy } from "lucide-react";
+import { ArrowRight, Compass } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { PlayerAgeTimeline, selectPlayerAgeTimeline } from "./PlayerAgeTimeline";
+import { PlayerAvatar } from "./PlayerAvatar";
 import type { DiscoveryRecord, ScoutReport, TransferRecord } from "@/engine/core/types";
 import {
   OUTCOME_COLORS,
   OUTCOME_REASON_COLORS,
   OUTCOME_REASON_SHORT_LABELS,
 } from "@/engine/firstTeam";
-import { ScreenBackground } from "@/components/ui/screen-background";
 
 type SortOption = "recent" | "accuracy" | "outcomes";
 
@@ -96,6 +98,8 @@ interface DiscoveryCardProps {
   report?: ScoutReport;
   transferRecord?: TransferRecord;
   clubNames: Record<string, string>;
+  portraitAge?: number;
+  onInspect?: () => void;
 }
 
 function DiscoveryCard({
@@ -104,6 +108,8 @@ function DiscoveryCard({
   report,
   transferRecord,
   clubNames,
+  portraitAge,
+  onInspect,
 }: DiscoveryCardProps) {
   const validatedAccuracy = report?.postTransferRating;
   const careerOutcomeLabel = record.careerOutcome
@@ -111,153 +117,88 @@ function DiscoveryCard({
     : null;
 
   return (
-    <div className="space-y-3 rounded-lg border border-[#27272a] bg-[#141414] p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-semibold text-white">{playerName}</p>
-            {careerOutcomeLabel && (
-              <Badge
-                variant="secondary"
-                className="shrink-0 border-emerald-500/40 bg-emerald-500/10 text-[10px] text-emerald-300"
-              >
-                {careerOutcomeLabel}
-              </Badge>
-            )}
-          </div>
-          <p className="text-xs text-zinc-500">
-            Discovered W{record.discoveredWeek} S{record.discoveredSeason}
-          </p>
-        </div>
-        {validatedAccuracy !== undefined && (
-          <div className="shrink-0 text-right">
-            <p className={`text-lg font-bold ${accuracyColor(validatedAccuracy)}`}>
-              {validatedAccuracy}%
+    <article className="dossier-section py-6 sm:py-8">
+      <div className="flex flex-col items-start gap-5 sm:flex-row sm:justify-between">
+        <div className="flex w-full min-w-0 items-start gap-4 sm:w-auto sm:flex-1">
+          <PlayerAvatar playerId={record.playerId} atAge={portraitAge} size={88} alt={playerName} className="shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs text-[var(--muted-foreground)]">First recorded · Season {record.discoveredSeason}, Week {record.discoveredWeek}</p>
+            <h2 className="mt-1 font-editorial text-2xl text-[var(--foreground)] sm:text-3xl">{playerName}</h2>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+              {careerOutcomeLabel ?? "The career is still unfolding."}
             </p>
-            <p className="text-[10px] text-zinc-500">validated</p>
           </div>
+        </div>
+        {onInspect && (
+          <Button variant="outline" onClick={onInspect} className="shrink-0 gap-2">
+            Open player file <ArrowRight size={16} aria-hidden="true" />
+          </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-md border border-[#27272a] px-2 py-1.5">
-          <p className="text-[10px] text-zinc-500">Original Read</p>
-          <p className="text-sm font-bold text-white">
-            {formatStarRead(report?.perceivedCAStars)}
-          </p>
-        </div>
-        <div className="rounded-md border border-[#27272a] px-2 py-1.5">
-          <p className="text-[10px] text-zinc-500">Upside Read</p>
-          <p className="text-sm font-bold text-white">
-            {formatUpsideRead(report?.perceivedPARange)}
-          </p>
-        </div>
-        <div className="rounded-md border border-[#27272a] px-2 py-1.5">
-          <p className="text-[10px] text-zinc-500">Tracked</p>
-          <p className="text-sm font-bold text-white">
-            {record.careerSnapshots.length} season
-            {record.careerSnapshots.length === 1 ? "" : "s"}
-          </p>
-        </div>
+      <div className="mt-6 grid gap-x-8 gap-y-5 lg:grid-cols-[1fr_1fr]">
+        <section aria-label={`Original judgment of ${playerName}`}>
+          <p className="text-xs uppercase tracking-[0.14em] text-[var(--primary)]">Your original call</p>
+          {report ? (
+            <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+              <div><dt className="text-[var(--muted-foreground)]">Ability estimate</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{formatStarRead(report.perceivedCAStars)}</dd></div>
+              <div><dt className="text-[var(--muted-foreground)]">Upside estimate</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{formatUpsideRead(report.perceivedPARange)}</dd></div>
+            </dl>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">No original report is retained with this record.</p>
+          )}
+          {report && <p className="mt-3 text-xs text-[var(--muted-foreground)]">Original report craft: {report.qualityScore}/100</p>}
+        </section>
+
+        <section aria-label={`Career evidence for ${playerName}`}>
+          <p className="text-xs uppercase tracking-[0.14em] text-[var(--primary)]">What followed</p>
+          {validatedAccuracy !== undefined ? (
+            <div className="mt-3">
+              <p className="text-sm text-[var(--muted-foreground)]">Career-validated report accuracy <strong className={accuracyColor(validatedAccuracy)}>{validatedAccuracy}%</strong></p>
+              <div className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full bg-[var(--secondary)]" role="progressbar" aria-label="Career-validated report accuracy" aria-valuemin={0} aria-valuemax={100} aria-valuenow={validatedAccuracy}>
+                <div className={`h-full ${accuracyBg(validatedAccuracy)}`} style={{ width: `${validatedAccuracy}%` }} />
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">The record is not yet sufficient to validate the original call.</p>
+          )}
+          <p className="mt-3 text-xs text-[var(--muted-foreground)]">{record.careerSnapshots.length} recorded season{record.careerSnapshots.length === 1 ? "" : "s"}</p>
+          {record.placementClubId && (
+            <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+              Placed with <strong className="text-[var(--foreground)]">{clubNames[record.placementClubId] ?? "an academy"}</strong>
+              {record.placementSeason && ` · Season ${record.placementSeason}, Week ${record.placementWeek ?? "?"}`}
+            </p>
+          )}
+          {transferRecord && (transferRecord.outcome || transferRecord.outcomeReason) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-[var(--muted-foreground)]">Transfer outcome</span>
+              <span className={transferRecord.outcome ? OUTCOME_COLORS[transferRecord.outcome] : "text-[var(--muted-foreground)]"}>{transferRecord.outcome ?? "Unresolved"}</span>
+              {transferRecord.outcomeReason && <span className={OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}>{OUTCOME_REASON_SHORT_LABELS[transferRecord.outcomeReason]}</span>}
+            </div>
+          )}
+        </section>
       </div>
 
-      {validatedAccuracy !== undefined ? (
-        <div>
-          <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">Career-validated report accuracy</span>
-            <span className={accuracyColor(validatedAccuracy)}>
-              {validatedAccuracy}%
-            </span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className={`h-full rounded-full transition-all ${accuracyBg(validatedAccuracy)}`}
-              style={{ width: `${validatedAccuracy}%` }}
-            />
-          </div>
-        </div>
-      ) : (
-        <p className="text-xs text-zinc-500">
-          Accuracy is pending enough real career evidence.
-        </p>
-      )}
-
-      {record.placementClubId && (
-        <div className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs">
-          <span className="text-zinc-500">Placed with </span>
-          <span className="font-medium text-blue-300">
-            {clubNames[record.placementClubId] ?? "an academy"}
-          </span>
-          {record.placementSeason && (
-            <span className="text-zinc-500">
-              {` · W${record.placementWeek ?? "?"} S${record.placementSeason}`}
-            </span>
-          )}
-        </div>
-      )}
-
-      {transferRecord && (transferRecord.outcome || transferRecord.outcomeReason) && (
-        <div>
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-            Transfer Outcome
-          </p>
-          <div className="flex items-center gap-1.5">
-            {transferRecord.outcome ? (
-              <span
-                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase ${OUTCOME_COLORS[transferRecord.outcome]}`}
-              >
-                {transferRecord.outcome}
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-md border border-zinc-500/20 bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-zinc-300">
-                Unresolved
-              </span>
-            )}
-            {transferRecord.outcomeReason && (
-              <span
-                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium ${OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}`}
-              >
-                {OUTCOME_REASON_SHORT_LABELS[transferRecord.outcomeReason]}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
+      <PlayerAgeTimeline playerId={record.playerId} compact className="mt-6 max-w-md border-t border-[var(--border)] pt-5" />
       {record.careerSnapshots.length > 0 && (
-        <div>
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-            Career Timeline
-          </p>
-          <div className="flex flex-wrap gap-1">
+        <details className="mt-5 border-t border-[var(--border)] pt-2">
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-[var(--muted-foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]">Season-by-season record</summary>
+          <ol className="divide-y divide-[var(--border)]">
             {record.careerSnapshots.map((snapshot) => (
-              <div
-                key={snapshot.season}
-                className="rounded border border-[#27272a] px-1.5 py-1 text-[9px]"
-              >
-                <span className="text-zinc-500">S{snapshot.season} </span>
-                <span className="font-semibold text-white">Age {snapshot.age}</span>
-                <span className="text-zinc-600"> · {snapshot.position}</span>
-                <span className="text-zinc-600">
-                  {` · ${clubNames[snapshot.clubId] ?? "Unattached"}`}
-                </span>
-              </div>
+              <li key={snapshot.season} className="flex flex-wrap gap-x-5 gap-y-1 py-3 text-sm">
+                <span className="font-semibold text-[var(--foreground)]">Season {snapshot.season}</span>
+                <span className="text-[var(--muted-foreground)]">Age {snapshot.age} · {snapshot.position} · {clubNames[snapshot.clubId] ?? "Unattached"}</span>
+              </li>
             ))}
-          </div>
-        </div>
+          </ol>
+        </details>
       )}
-
-      {report && (
-        <p className="text-[10px] text-zinc-600">
-          Original report craft: {report.qualityScore}/100
-        </p>
-      )}
-    </div>
+    </article>
   );
 }
 
 export function DiscoveriesScreen() {
-  const { gameState, getPlayer } = useGameStore();
+  const { gameState, setScreen, selectPlayer } = useGameStore();
   const [sort, setSort] = useState<SortOption>("recent");
 
   if (!gameState) return null;
@@ -302,25 +243,27 @@ export function DiscoveriesScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6">
-        <ScreenBackground src="/images/backgrounds/discoveries-trophy.png" opacity={0.78} />
-        <div className="relative z-10">
+      <div className="relative min-h-full px-4 py-6 sm:px-8 sm:py-8">
+
+        <div className="relative z-10 mx-auto max-w-6xl">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold">Career Tracker</h1>
+              <p className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--primary)]">Your calls, over time</p>
+              <h1 className="font-editorial text-3xl text-[var(--foreground)] sm:text-4xl">Career Tracker</h1>
               <p className="text-sm text-zinc-400">
                 Track your original calls against the careers that followed
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-1" aria-label="Sort tracked careers">
+            {discoveries.length > 0 && (
+            <div className="flex flex-wrap gap-1 lg:pr-24" aria-label="Sort tracked careers">
               {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
                 <button
                   key={option}
                   onClick={() => setSort(option)}
-                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs transition ${
+                  className={`min-h-11 cursor-pointer rounded border px-3 py-2 text-xs transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                     sort === option
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                      ? "border-[var(--border)] bg-[var(--secondary)] text-[var(--primary)]"
                       : "border-[#27272a] text-zinc-400 hover:bg-[#1a1a1a] hover:text-white"
                   }`}
                   aria-pressed={sort === option}
@@ -329,64 +272,36 @@ export function DiscoveriesScreen() {
                 </button>
               ))}
             </div>
+            )}
           </div>
 
-          <div
-            className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3"
-            data-tutorial-id="discoveries-trajectory"
-          >
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-zinc-500">Tracked Careers</p>
-                <p className="text-2xl font-bold text-emerald-400">
-                  {discoveries.length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-zinc-500">Validated Calls</p>
-                <p className="text-2xl font-bold text-amber-400">
-                  {validatedScores.length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-zinc-500">Avg Validated Accuracy</p>
-                <p
-                  className={`text-2xl font-bold ${
-                    avgValidatedAccuracy !== null
-                      ? accuracyColor(avgValidatedAccuracy)
-                      : "text-zinc-500"
-                  }`}
-                >
-                  {avgValidatedAccuracy !== null ? `${avgValidatedAccuracy}%` : "—"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          {discoveries.length > 0 && (
+            <dl className="mb-2 flex flex-wrap gap-x-8 gap-y-3 border-y border-[var(--border)] py-4 text-sm" data-tutorial-id="discoveries-trajectory">
+              <div className="flex gap-2"><dt className="text-[var(--muted-foreground)]">Tracked careers</dt><dd className="font-semibold text-[var(--foreground)]">{discoveries.length}</dd></div>
+              <div className="flex gap-2"><dt className="text-[var(--muted-foreground)]">Validated calls</dt><dd className="font-semibold text-[var(--foreground)]">{validatedScores.length}</dd></div>
+              {avgValidatedAccuracy !== null && <div className="flex gap-2"><dt className="text-[var(--muted-foreground)]">Average validated accuracy</dt><dd className={`font-semibold ${accuracyColor(avgValidatedAccuracy)}`}>{avgValidatedAccuracy}%</dd></div>}
+            </dl>
+          )}
 
           {sorted.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <Trophy size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-                <p className="text-sm text-zinc-500">No tracked careers yet.</p>
-                <p className="mt-1 text-xs text-zinc-600">
-                  Submit reports to preserve your original calls and follow what happens next.
-                </p>
-              </CardContent>
-            </Card>
+            <section className="dossier-section max-w-3xl px-5 py-8 sm:px-8 sm:py-10" data-tutorial-id="discoveries-trajectory" aria-labelledby="first-career-call">
+              <Compass size={24} className="mb-5 text-[var(--accent)]" aria-hidden="true" />
+              <h2 id="first-career-call" className="font-editorial text-2xl text-white">Put your first judgment on record.</h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">
+                No tracked careers yet. Submit a report on a player you have watched. Your original call will stay here as their career unfolds.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button onClick={() => setScreen("youthScouting")}>Review prospects</Button>
+                <Button variant="outline" onClick={() => setScreen("career")}>Back to Career</Button>
+              </div>
+            </section>
           ) : (
             <div
-              className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+              className="divide-y divide-[var(--border)]"
               data-tutorial-id="discoveries-list"
             >
               {sorted.map((record) => {
-                const player = getPlayer(record.playerId);
-                const playerName = player
-                  ? `${player.firstName} ${player.lastName}`
-                  : "Unknown Player";
+                const playerName = resolvePlayerDisplayName(gameState, record.playerId);
                 return (
                   <DiscoveryCard
                     key={record.playerId}
@@ -395,6 +310,11 @@ export function DiscoveriesScreen() {
                     report={firstReportByPlayerId.get(record.playerId)}
                     transferRecord={transferByPlayerId.get(record.playerId)}
                     clubNames={clubNames}
+                    portraitAge={selectPlayerAgeTimeline(gameState, record.playerId)?.frames.at(-1)?.age}
+                    onInspect={resolvePlayerEntity(gameState, record.playerId) ? () => {
+                      selectPlayer(record.playerId);
+                      setScreen("playerProfile");
+                    } : undefined}
                   />
                 );
               })}

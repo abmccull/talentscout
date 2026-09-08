@@ -1,9 +1,13 @@
+import { reportRendererError } from "@/lib/reportRendererError";
+import { revealGamePortraits, revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { create } from "zustand";
 import { createNavigationActions } from "./actions/navigationActions";
 import { createObservationActions } from "./actions/observationActions";
 import { createReportActions } from "./actions/reportActions";
 import { createProgressionActions } from "./actions/progressionActions";
 import { createFinanceActions } from "./actions/financeActions";
+import { createDurableGameplaySetter } from "./actions/durableGameplayCommit";
+import { runOwnedSaveLoad } from "./actions/saveLoadOwnership";
 import { createWeeklyActions } from "./actions/weeklyActions";
 import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
 import { createDashboardActions } from "./actions/dashboardActions";
@@ -180,7 +184,15 @@ import {
   type SaveSource,
 } from "@/lib/saveProvider";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
+import {
+  flushGameplayAutosave,
+  queueGameplayAutosave,
+  resetGameplayAutosaveWatermark,
+  snapshotPersistedGameState,
+} from "@/stores/actions/persistGameplayAutosave";
 import { useTutorialStore } from "@/stores/tutorialStore";
+import { createSessionReflectionResult } from "@/stores/actions/createSessionReflectionResult";
+import { reconcileOpeningReportStage } from "@/engine/youth/openingFollowUp";
 import {
   applyScenarioSetup,
   getInvalidScenarioReason,
@@ -208,7 +220,7 @@ import {
   createOpeningCase,
   type OpeningCaseChoiceId,
 } from "@/engine/youth/openingCase";
-import { resolveCareerOpeningMode } from "@/engine/youth/openingMode";
+import { resolveCareerOpeningMode, shouldStartYouthGuidedHour } from "@/engine/youth/openingMode";
 import {
   readPlayerExperience,
   recordVeteranPrologueTemplate,
@@ -342,6 +354,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastWeekSummary: null,
   batchSummary: null,
   isAdvancingWeek: false,
+  activeWeeklyTransactionId: null,
   lastWeeklyExecutionRoute: null,
   lastWeeklyWorkerTelemetry: null,
   weeklyTransactionError: null,
@@ -358,6 +371,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   isSaving: false,
   isLoadingSave: false,
+  activeSaveLoadId: null,
   saveConflict: null,
   isResolvingSaveConflict: false,
   autosaveError: null,
@@ -385,7 +399,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Post-submit listing prompt (transient — not persisted)
   pendingListingReportId: null,
-  dismissPendingListing: () => set({ pendingListingReportId: null }),
+  dismissPendingListing: () => {
+    useTutorialStore.getState().completeMilestone("checkedInbox");
+    set({ pendingListingReportId: null });
+  },
 
   // Report comparison (F11) — transient UI state
   comparisonReportIds: [],
@@ -396,9 +413,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Start new game
   startNewGame: async (config) => {
     if (newGameStartInFlight) return;
+    resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     set({
       isAdvancingWeek: false,
+      activeWeeklyTransactionId: null,
+      activeSaveLoadId: null,
+      isLoadingSave: false,
+      isResolvingSaveConflict: false,
       lastWeeklyExecutionRoute: null,
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
@@ -924,13 +946,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const openingCase = openingMode === "tutorial"
       ? createOpeningCase(openingInput)
       : veteranPrologue?.openingCase ?? null;
-    const finalGameState: GameState = openingCase
-      ? {
-          ...scenarioState,
-          openingCase,
-          ...(veteranPrologue ? { veteranPrologue } : {}),
-        }
-      : scenarioState;
+    let finalGameState: GameState = {
+      ...scenarioState,
+      // Guide choice belongs to this career, independently of another save's tutorial cache.
+      guidedSessionRequested: effectiveConfig.specialization === "youth"
+        ? shouldStartYouthGuidedHour({ openingMode, guideFirstHour: effectiveConfig.guideFirstHour }) && Boolean(openingCase)
+        : !scenario,
+      ...(openingCase ? { openingCase } : {}),
+      ...(veteranPrologue ? { veteranPrologue } : {}),
+    };
+    if (openingCase?.playerId) {
+      finalGameState = revealGamePortraits(finalGameState, [openingCase.playerId], "opening");
+    }
 
     set({
       gameState: finalGameState,
@@ -944,20 +971,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Teaching and career variety are separate: the authored case teaches the
     // loop once, while generated veteran prologues never reactivate mentor UI.
-    if (openingMode === "tutorial" && openingCase) {
+    if (shouldStartYouthGuidedHour({
+      openingMode,
+      guideFirstHour: effectiveConfig.guideFirstHour,
+    }) && openingCase) {
       useTutorialStore.getState().startGuidedSession(
         !!effectiveConfig.startingClubId,
         "discoveryHook",
         {
           forceReplay:
             tutorialState.guidedSessionCompleted || tutorialState.dismissed,
+          careerId: finalGameState.scout.id,
         },
       );
     } else if (effectiveConfig.specialization !== "youth" && !scenario) {
       useTutorialStore.getState().startGuidedSession(
         !!effectiveConfig.startingClubId,
         "firstWeek",
+        { careerId: finalGameState.scout.id },
       );
+    } else {
+      useTutorialStore.getState().skipGuidedSession();
     }
     if (openingCase) {
       const openingPlayerIds = new Set(openingCase.playerPoolIds);
@@ -986,6 +1020,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // The standard path lands on the dashboard before the guided session starts.
       useTutorialStore.getState().completeMilestone("viewedDashboard");
     }
+    const { gameState: startedState, activeSession } = get();
+    if (startedState) {
+      queueGameplayAutosave(
+        snapshotPersistedGameState(startedState, activeSession),
+        set,
+      );
+    }
     } finally {
       newGameStartInFlight = false;
     }
@@ -995,15 +1036,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     terminateWeeklySimulationWorker();
     // Every runtime entrypoint, including direct test/import loads, passes
     // through the same pure and idempotent migration used by save providers.
-    const scenarioSafeState = migrateSaveState(rawState);
+    const migratedState = reconcileOpeningReportStage(migrateSaveState(rawState));
+    const scenarioSafeState = revealKnownGamePortraits(migratedState);
+    const allocatedPortraitsOnLoad = scenarioSafeState !== migratedState;
     assertEarlyAccessSaveCompatibility(scenarioSafeState);
     const resumableSession = scenarioSafeState.activeObservationSession ?? null;
-    const awaitingOpeningDecision = scenarioSafeState.openingCase?.stage === "decision";
+    const resumedReflection = resumableSession?.state === "reflection"
+      ? createSessionReflectionResult(scenarioSafeState, resumableSession)
+      : null;
+    // Failed validation must leave the active career's queued save intact.
+    const hadPendingAutosave = resetGameplayAutosaveWatermark();
+    const openingStage = scenarioSafeState.openingCase?.stage;
     const restoreScreen = resumableSession
       ? "observation"
-      : awaitingOpeningDecision
+      : openingStage === "decision"
         ? "openingDiscovery"
-        : "dashboard";
+        : openingStage === "report"
+          ? "reportWriter"
+          : "dashboard";
     set({
       gameState: scenarioSafeState,
       isLoaded: true,
@@ -1014,6 +1064,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       scenarioOutcomeScenarioId: null,
       pendingCelebration: null,
       activeSession: resumableSession,
+      lastReflectionResult: resumedReflection,
       sessionReturnScreen: resumableSession
         ? resolveGameScreenForBuild("dashboard", true)
         : null,
@@ -1021,50 +1072,47 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastWeekSummary: null,
       batchSummary: null,
       saveConflict: null,
+      activeSaveLoadId: null,
+      isLoadingSave: false,
       isResolvingSaveConflict: false,
       isAdvancingWeek: false,
+      activeWeeklyTransactionId: null,
       lastWeeklyExecutionRoute: null,
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
     });
 
-    const tutState = useTutorialStore.getState();
-    if (!tutState.dismissed && !tutState.guidedSessionCompleted) {
-      const hasIncomplete = Object.values(tutState.guidedMilestones).some((value) => !value);
-      if (hasIncomplete) useTutorialStore.setState({ guidedSessionActive: true });
+    if (hadPendingAutosave || allocatedPortraitsOnLoad) {
+      // Newly visible legacy/pack bindings must persist with the same live ledger.
+      // An already-started old write cannot be cancelled. Commit the loaded
+      // career behind it so that old I/O can never become the final autosave.
+      queueGameplayAutosave(
+        snapshotPersistedGameState(scenarioSafeState, resumableSession),
+        set,
+      );
     }
+
+    useTutorialStore.getState().resumeGuidedSession(scenarioSafeState);
   },
 
   saveGame: () => {
     const { gameState, activeSession } = get();
     if (!gameState) return null;
-    const saved = {
-      ...gameState,
-      activeObservationSession: activeSession,
-      lastSaved: Date.now(),
-    };
+    const saved = snapshotPersistedGameState(gameState, activeSession);
     set({ gameState: saved });
-    getActiveSaveProvider()
-      .then((provider) => persistGameState(provider, "autosave", saved, "Autosave"))
-      .then((commit) => {
-        const savedAt = commit?.record.state.lastSaved;
-        if (!Number.isFinite(savedAt)) return;
-        set((current) => {
-          const currentState = current.gameState;
-          if (!currentState || currentState.lastSaved >= savedAt!) return {};
-          return {
-            gameState: {
-              ...currentState,
-              lastSaved: savedAt!,
-            },
-          };
-        });
-      })
-      .catch((err) => {
-        console.warn("saveGame: provider persist failed:", err);
-        void import("@/lib/sentry").then(({ captureException }) => captureException(err));
-      });
+    void flushGameplayAutosave(saved, set).catch((err) => {
+      console.warn("saveGame: provider persist failed:", err);
+      void reportRendererError(err);
+    });
     return saved;
+  },
+
+  flushGameplaySave: async () => {
+    const { gameState, activeSession } = get();
+    if (!gameState) return;
+    const saved = snapshotPersistedGameState(gameState, activeSession);
+    set({ gameState: saved });
+    await flushGameplayAutosave(saved, set);
   },
 
   // Persistence (save provider)
@@ -1085,12 +1133,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         saved,
         name,
       );
-      set({
-        gameState: {
-          ...saved,
-          lastSaved: commit?.record.state.lastSaved ?? Date.now(),
-        },
-      });
+      // Saving a snapshot does not authorize restoring it over newer play.
+      // Reference checks also protect a different career loaded during I/O.
+      set((current) => current.gameState === gameState && current.activeSession === activeSession
+        ? {
+            gameState: {
+              ...current.gameState,
+              lastSaved: commit?.record.state.lastSaved ?? saved.lastSaved,
+            },
+          }
+        : {});
       await get().refreshSaveSlots();
     } finally {
       set({ isSaving: false });
@@ -1098,11 +1150,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadFromSlot: async (slot) => {
-    set({ isLoadingSave: true });
-    try {
+    if (newGameStartInFlight) return;
+    await runOwnedSaveLoad(get, set, "load", async (isCurrent) => {
       const provider = await getActiveSaveProvider();
+      if (!isCurrent()) return;
       const slotName = slotNumberToSaveName(slot);
       const conflict = await provider.checkConflict(slotName);
+      if (!isCurrent()) return;
       if (conflict) {
         set({
           saveConflict: {
@@ -1115,12 +1169,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       set({ saveConflict: null });
       const loaded = await provider.load(slotName);
-      if (!loaded) return;
+      if (!isCurrent() || !loaded) return;
 
       get().loadGame(loadResultGameState(loaded));
-    } finally {
-      set({ isLoadingSave: false });
-    }
+    });
   },
 
   deleteSlot: async (slot) => {
@@ -1171,15 +1223,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   restoreSaveRecoveryCopy: async (archiveId) => {
-    set({ isLoadingSave: true });
-    try {
+    if (newGameStartInFlight) return;
+    await runOwnedSaveLoad(get, set, "load", async (isCurrent) => {
       const provider = await getActiveSaveProvider();
+      if (!isCurrent()) return;
       const restored = await provider.restoreRecoveryCopy(archiveId);
+      if (!isCurrent()) return;
       get().loadGame(loadResultGameState(restored));
       await get().refreshSaveSlots();
-    } finally {
-      set({ isLoadingSave: false });
-    }
+    });
   },
 
   refreshSaveSyncStatus: async () => {
@@ -1199,18 +1251,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resolveSaveConflict: async (slot, preferredSource) => {
-    set({ isResolvingSaveConflict: true });
-    try {
+    if (newGameStartInFlight) return;
+    await runOwnedSaveLoad(get, set, "conflict", async (isCurrent) => {
       const provider = await getActiveSaveProvider();
+      if (!isCurrent()) return;
       const slotName = slotNumberToSaveName(slot);
       const resolved = await provider.resolveConflict(slotName, preferredSource);
-
+      if (!isCurrent()) return;
       get().loadGame(loadResultGameState(resolved));
       set({ saveConflict: null });
       await get().refreshSaveSlots();
-    } finally {
-      set({ isResolvingSaveConflict: false });
-    }
+    });
   },
 
   // Weekly cycle actions (extracted to actions/weeklyActions.ts)
@@ -1223,10 +1274,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ...createReportActions(get, set),
 
   // Progression actions (extracted to actions/progressionActions.ts)
-  ...createProgressionActions(get, set),
+  ...createProgressionActions(get, createDurableGameplaySetter(get, set)),
 
   // Finance actions (extracted to actions/financeActions.ts)
-  ...createFinanceActions(get, set),
+  ...createFinanceActions(get, createDurableGameplaySetter(get, set)),
 
   // Helpers
 

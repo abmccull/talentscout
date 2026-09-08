@@ -266,6 +266,15 @@
         ]
       }
     },
+    "sentryProviderReceipt": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/sentry-provider-receipt.md",
+      "generatedEvidence": {
+        "kind": "sentry-provider-receipt",
+        "path": "artifacts/release/generated/certifications/sentry-provider-receipt.json"
+      }
+    },
     "assetCommercialRights": {
       "status": "Passed",
       "evidence": [
@@ -289,7 +298,8 @@
         "minimumSeedCount": 20,
         "minimumSeasonCount": 30,
         "requireProcessIsolation": true,
-        "requireDeterministicReplay": true
+        "requireDeterministicReplay": true,
+        "requireAcceptedSourceTransport": true
       },
       "releaseException": {
         "kind": "long-career-timing-exception",

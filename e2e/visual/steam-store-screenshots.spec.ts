@@ -189,6 +189,7 @@ async function seedDashboardShowcase(gamePage: GamePage) {
     };
     nextState.players["steam-dashboard-player"] = {
       ...playerTemplate,
+      visualIdentity: undefined, // This showcase creates a different fictional person.
       ...(nextState.players["steam-dashboard-player"] ?? {}),
       id: "steam-dashboard-player",
       firstName: "Luca",

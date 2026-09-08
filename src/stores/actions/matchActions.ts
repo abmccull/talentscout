@@ -1,4 +1,6 @@
 import type { GetState, SetState } from "./types";
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
+import { queueGameplayAutosave, snapshotPersistedGameState } from "./persistGameplayAutosave";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
   Activity,
@@ -174,6 +176,16 @@ export function createMatchActions(get: GetState, set: SetState) {
           ],
         },
       });
+    }
+    // Focus is the first photograph boundary for the legacy match experience.
+    // Do not spend a finite catalog on every unselected starting player.
+    const current = get();
+    if (current.gameState) {
+      const nextState = revealGamePortraits(current.gameState, [playerId], "observed");
+      if (nextState !== current.gameState) {
+        set({ gameState: nextState });
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+      }
     }
     // Tutorial auto-advance: step expects "playerFocused"
     useTutorialStore.getState().checkAutoAdvance("playerFocused");

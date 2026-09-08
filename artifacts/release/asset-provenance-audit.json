@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-04T17:31:24.579Z",
+  "generatedAt": "2026-09-04T22:41:34.509Z",
   "manifestPath": "docs/asset-provenance.json",
-  "manifestStatus": "owner-attested-approved",
+  "manifestStatus": "legacy-owner-attestation-plus-documented-original-generation",
   "status": "pass",
   "summary": {
-    "assetCount": 149,
-    "trackedCount": 149,
+    "assetCount": 582,
+    "trackedCount": 582,
     "untrackedCount": 0,
     "blockerCount": 0,
-    "totalBytes": 89900658
+    "totalBytes": 95478116
   },
   "groups": [
     {
       "id": "meshy-generated-images",
       "rightsStatus": "approved",
       "evidenceCount": 1,
-      "assetCount": 37
+      "assetCount": 53
     },
     {
       "id": "openai-steam-store-art",
@@ -41,6 +41,12 @@
       "rightsStatus": "projectSource",
       "evidenceCount": 1,
       "assetCount": 0
+    },
+    {
+      "id": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2,
+      "assetCount": 417
     }
   ],
   "blockers": [],
@@ -862,6 +868,134 @@
       "evidenceCount": 1
     },
     {
+      "path": "public/images/avatars/youth-01.png",
+      "bytes": 152026,
+      "sha256": "dd4ad95a4ceaba96b984e234589ff3115b24445d9de0ba398900acb06e8a0d95",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-02.png",
+      "bytes": 165290,
+      "sha256": "104d0173ba260d855953b22a7cba182021aee810f42ac8fa5e0aac7fd520bd02",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-03.png",
+      "bytes": 113344,
+      "sha256": "189beeaef4c638c182ce61e097ea622c703a3c04eda56b99a46ff1ffdc7ec875",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-04.png",
+      "bytes": 174537,
+      "sha256": "58e8123deb6ef405f7fc35045c0b0ce5987a725a69dc6cb4a645444d14005d8d",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-05.png",
+      "bytes": 139793,
+      "sha256": "0c4e607f4aea8b9022e3467bc163c508b0fbe396ad82e150b89dae5537d42afe",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-06.png",
+      "bytes": 147587,
+      "sha256": "845bc3b97ce38a635759f835e2e8e983a14aabed1d07404e5f98ea6e13115c12",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-07.png",
+      "bytes": 170327,
+      "sha256": "3c635aaa597997c8f8f4093ce321597e8c494b2500c02937e839ff4aa1553358",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-08.png",
+      "bytes": 159059,
+      "sha256": "7085c34cb19156119cb83a648c3999c733aea4899d88d6736a07bd9a88df9843",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-09.png",
+      "bytes": 153907,
+      "sha256": "d193ae213535aaa00638547bef565e64f209abced3e2ae2defcac4630d075530",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-10.png",
+      "bytes": 171571,
+      "sha256": "9d0d0ab7c8c35512620c1e8dc42ce01ddf4bf2bcc2fa4729d78f841f1d617054",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-11.png",
+      "bytes": 159578,
+      "sha256": "de852a1c7c7eceace35c23aaa64b4cee234558af704775bcaffe968b09f1e4c9",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-12.png",
+      "bytes": 136639,
+      "sha256": "23f56c5f3e1dece2703cb9de1e9b68c6795d335fe73f546ea9ebcadfa9c93e08",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-13.png",
+      "bytes": 160593,
+      "sha256": "0f029b42b5996560280b85f63e4e0dc6cb5fb60e3db954b6af3d0e696c0b1e3b",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-14.png",
+      "bytes": 166388,
+      "sha256": "509d9f7e5943863fa52672817528ea76a4c29601129ef664a8f671d4ac61c4b2",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-15.png",
+      "bytes": 182994,
+      "sha256": "367381fe06500d17428938f5021a75d904507e8b577e7aa0d75583a9387877fd",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/youth-16.png",
+      "bytes": 150763,
+      "sha256": "cece17b3029f42b578b110fa67af34b05d2426c4fcc9603806b121162182c5a3",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
       "path": "public/images/backgrounds/activities/academy.png",
       "bytes": 732167,
       "sha256": "dc12aa08e31a0d1249e731fa4d29815f4f71383dd6b7e593846b652ee6e58846",
@@ -932,6 +1066,14 @@
       "groupId": "meshy-generated-images",
       "rightsStatus": "approved",
       "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/touchline-documentary.webp",
+      "bytes": 205564,
+      "sha256": "61a7d520e79edfaecfada9133fd5fc343374e7204c6e59c49b91030c9de9bb1f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
     },
     {
       "path": "public/images/backgrounds/activities/training.png",
@@ -1108,6 +1250,3334 @@
       "groupId": "meshy-generated-images",
       "rightsStatus": "approved",
       "evidenceCount": 1
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-15.webp",
+      "bytes": 7012,
+      "sha256": "ad0bc4258528adbfacca50c05317b4a824d619aea42966c89a2d55b394c06a05",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-18.webp",
+      "bytes": 6846,
+      "sha256": "563908aa65bad55bb7159b43b95bff073ff5f06a30d58f8291301dd44d93d579",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-22.webp",
+      "bytes": 6778,
+      "sha256": "5a7601865dcc76e74ffb8e20e968421f57a36b1f0ab4501f8fa2298e238918c1",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-27.webp",
+      "bytes": 6830,
+      "sha256": "3eb594ceab54e1b4a9e203a42e2714d752d12203502c9725d3901b6e00d4cf71",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-31.webp",
+      "bytes": 6676,
+      "sha256": "fe4611e76d53bbbee996e3ed140706b002f9cbd8b411722929853c42977d4bc3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-35.webp",
+      "bytes": 6860,
+      "sha256": "865dd44d083fbf2f448bfd3b969bcf2ba30e1d247ad2d727be42a6fa90d1763d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-39.webp",
+      "bytes": 6608,
+      "sha256": "fde4cdbfa3959500db1ed7eba3bcd605663926467630a9e44dd76979b13c1243",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/acorn/age-45.webp",
+      "bytes": 7388,
+      "sha256": "4a9b76bb11b8279fa46fb174c0c053c3f531d5a1b1e7a9b505f1faf4b049cb82",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-15.webp",
+      "bytes": 6912,
+      "sha256": "c37ccc6f5b661760b8ba3c8f6d45a51e1b1d34dd7bd6928b233eb2d130363956",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-18.webp",
+      "bytes": 6170,
+      "sha256": "7600e543f099a6a9c5f3c8b160755bade85365501fb28de1d7391efb9b67d6b9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-22.webp",
+      "bytes": 6304,
+      "sha256": "f45ceb0f44db096ebcf1a6302657832741fb6c14387a3fa73f34f6fcd0083d85",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-27.webp",
+      "bytes": 6400,
+      "sha256": "790f22b767b0cebd42284c0335db960c9daa7aab13a35e8d204f7ba9538de94f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-31.webp",
+      "bytes": 6064,
+      "sha256": "ce09bef922b83efd30d56d0c55c9a94fee098f11d3d3773f99a0731cd1b4ae08",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-35.webp",
+      "bytes": 6040,
+      "sha256": "df846738a68138176c754177b31fbf8f45ff1e528c162c2b00afce4386bac0e0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-39.webp",
+      "bytes": 6328,
+      "sha256": "c78cda64768a97ad26cd4eda56adc4c933fa3e4550ee81bbd914c69d925984de",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/agate/age-45.webp",
+      "bytes": 6490,
+      "sha256": "61a068addaac5d2d58a1b66ca332c93eafeced6c6637ddaea7dc50f2998ad91d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-15.webp",
+      "bytes": 7098,
+      "sha256": "2dd06ffc9de06ebdc19ded49cbd44dee63bc26ab72bfb7e581a3cd1eb74d0372",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-18.webp",
+      "bytes": 6402,
+      "sha256": "0b797273efb42d859065878dd890e7660382421478e7017318b1ffe49fdf93cb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-22.webp",
+      "bytes": 6584,
+      "sha256": "da1ba7dd0e9cf0d8e6d0fd7370e0c198c9cdd10f6eee88bc19e28a0e74a363f7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-27.webp",
+      "bytes": 6832,
+      "sha256": "369a2508dfb642bc10ea140525c8559bc125b29d15d583e5bf4ebbdbd88a6cf0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-31.webp",
+      "bytes": 6846,
+      "sha256": "f7b997d905de5bcc1d5912c3a13cf8f0e58598c4f9c027de2f90394c2e9d94e8",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-35.webp",
+      "bytes": 6686,
+      "sha256": "a55cf34f6e43dd7448cf430fcf93687f5110456d99363e0f199264913e821708",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-39.webp",
+      "bytes": 6656,
+      "sha256": "482b05fc3600d5ef01d0c8f49fe300999da617d1f0e85924f8e5774eb4067246",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/alder/age-45.webp",
+      "bytes": 6210,
+      "sha256": "0d145a9cf28a3d6f84a6edaac5ccc48814bb846210717bdf6d7a0ad617cf5c1c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-15.webp",
+      "bytes": 6498,
+      "sha256": "038fb417d82a116b4dd667925e354c8cb603e68375dd61bb3894d374443dd5ca",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-18.webp",
+      "bytes": 6410,
+      "sha256": "b36d2d3334d379e39e2c2a1391526bbb76b80d07e0afe8c2debd01bbcee917d6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-22.webp",
+      "bytes": 6382,
+      "sha256": "9edef35c5be0cc7c90fdb8d92d8433546f40bb0e63297d72ed7c00ed36c922a6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-27.webp",
+      "bytes": 6364,
+      "sha256": "2c084335a0cd4e1899129bf7243401cc677a958fa8ab32238f3d5705c0290294",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-31.webp",
+      "bytes": 6340,
+      "sha256": "be1345af263c4de345c06920d020205ea5c25fedc9f0ee280cb386a4b9ed3486",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-35.webp",
+      "bytes": 6508,
+      "sha256": "2fd6dc79f9b6c64f966d37f6e759dfb33ee73b77eb57b6c8eaf71313fd9df260",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-39.webp",
+      "bytes": 6512,
+      "sha256": "33872d20ab1643bd4c7b4f19b0ac2dd1a3d808f5a0809b1d6c9a42aa26b38420",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/basalt/age-45.webp",
+      "bytes": 6502,
+      "sha256": "e414bb3303155a221dd728a96c2f8588ca9100fb2eb5bf455ee9d6dd4d1bbf51",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-15.webp",
+      "bytes": 7254,
+      "sha256": "014915ee00e6e3cc942755fc5e837f54b4fc2f88d52571ed79dd87598f77a99b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-18.webp",
+      "bytes": 6798,
+      "sha256": "6a54c3a481e8c8950ef25caa20d2ec3eb0d1f07f2b632e6a8a3ad2d1629b1703",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-22.webp",
+      "bytes": 6280,
+      "sha256": "11316e55b19ae9aa324ea41364f13029caf8f3ebe75da4c171e6fc42d1a085f8",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-27.webp",
+      "bytes": 6512,
+      "sha256": "863100fdd17d98ceedf236d7f37f100262f8af8dc6a702e2b98852786a76bcb5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-31.webp",
+      "bytes": 6548,
+      "sha256": "85653826a14ab18675c59a565eb6d89f6aeff9d065c8ffc0cda82fc0334fc3ff",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-35.webp",
+      "bytes": 6616,
+      "sha256": "bacd1c749fe0916c68ac3e7ac3d253dc085ae278fa2db349d774127442f6786a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-39.webp",
+      "bytes": 6756,
+      "sha256": "4c1afeaa73f51f6f79e37f77a81fe96604bef8c6e3e38bb61258d7fcf1bd1014",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/birch/age-45.webp",
+      "bytes": 7084,
+      "sha256": "fcdab0f054819796f80862bac5b75ad6814f5e63a21f5499f328b2d574f0a16c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-15.webp",
+      "bytes": 6466,
+      "sha256": "6ea264fbbabd759c2263b0f6026da10e7ee38ebd32595725ae8ecca064d7aa5d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-18.webp",
+      "bytes": 6014,
+      "sha256": "5789609e57b5d4c76a662523ed55dcae210ab2442ebe2d7387c8f1847b4908a3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-22.webp",
+      "bytes": 6076,
+      "sha256": "905a1726cf03a6d16babc0e55fba330132c7b67433fb7e91660a414464caf62a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-27.webp",
+      "bytes": 6028,
+      "sha256": "81056330f0f73f24b0e88c00e6eec2e2a1701f04a1c429706277d2ba124b23ec",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-31.webp",
+      "bytes": 6260,
+      "sha256": "5fcb4907f71962430665f32fea44202aebb664436034d368bcfbed5d4b1cff0a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-35.webp",
+      "bytes": 6472,
+      "sha256": "72894d6f3e8a2b261bb8533961f4bdb5cc76f62c7364a6683072c84c20dc1d6f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-39.webp",
+      "bytes": 6366,
+      "sha256": "7a11aae4d496f01dca599ee200efc89f5743272be335604640a77b97c74a2156",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/bracken/age-45.webp",
+      "bytes": 6808,
+      "sha256": "abe2021e32640b5806886bf515e4801c0561d5ce4efaf4d047c63f903dce916f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-15.webp",
+      "bytes": 6762,
+      "sha256": "e4a639416caba72bfab15d227294aec7b381bfe4e4305023db26882307bb7570",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-18.webp",
+      "bytes": 6922,
+      "sha256": "8a7dcd0b0cb2e9c3997da8689ff6f1648fc1aa5fbff16a8513d20cd8803e77f0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-22.webp",
+      "bytes": 7084,
+      "sha256": "42244939ba706c3e521d92be8aec439d6cfe94548ebac9bb5dd1a7ca052e9976",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-27.webp",
+      "bytes": 7372,
+      "sha256": "caccebf22e339d36d67adf3c04868e4ba17931e71dd5cf47cecb9e02f8568e8d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-31.webp",
+      "bytes": 7252,
+      "sha256": "835dc23aa697d557f947445224a299157fb63bc055ff99f2f1cd8fc478f03d46",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-35.webp",
+      "bytes": 6732,
+      "sha256": "25fbf6ef66c2c4e6b4ee6cca4ba2e71b5ce3bcf3eb553bc6175dd8a6c16d47db",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-39.webp",
+      "bytes": 6380,
+      "sha256": "6979e6a0fa5e963b0e58348704ec80e7d2710f3fb7b25e3d5517aafc3511f16f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cairn/age-45.webp",
+      "bytes": 6352,
+      "sha256": "d4547923166824089fb3991437f98dd45c711c595a0ae427310bd6843d71ea43",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-15.webp",
+      "bytes": 7486,
+      "sha256": "7423b49a8b80cdc580c00ade5dc751bd9d4e431462570fc298e950b0d38745ca",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-18.webp",
+      "bytes": 8534,
+      "sha256": "3ae0a6b9b3903d1d343c3dc96539b3c46b659d36c6b0a6fb4a2ed0788cb94be6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-22.webp",
+      "bytes": 6904,
+      "sha256": "1283299d9c63c4591039d8760114f1a5d513a2b2706051fd57b41378a2a2499d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-27.webp",
+      "bytes": 7018,
+      "sha256": "56f8f75c2fdef960d8af3de76a22ce156dd55b4e080963e246eb32fd70b672d2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-31.webp",
+      "bytes": 6934,
+      "sha256": "ab8408059c82404b8023e549091f2d59c288b6bb5f9b023aa3309b851c5ec39a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-35.webp",
+      "bytes": 6972,
+      "sha256": "1d9df02bdc442d52bc2691becad4ff6e9fddf06838775c2d8f4c7bbdbb03c321",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-39.webp",
+      "bytes": 6756,
+      "sha256": "7e97b1a5e0907063e51ad6c9cd188d4c274f17df102b4c3ae6fc8ee0b03c4aba",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cedar/age-45.webp",
+      "bytes": 7296,
+      "sha256": "f31f2ad1a6878dc63f951af41df06116de9cff05f8286a62a942de49031fa0fa",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-15.webp",
+      "bytes": 6574,
+      "sha256": "2f06000b341fd0c9f6bcb698f2b16021dd8450a9f47ec046e0bffb060b1746c9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-18.webp",
+      "bytes": 6386,
+      "sha256": "602d4636ebc96e7e297078207adf3c6704e3b1980dec5ebd6cee29e12b6670be",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-22.webp",
+      "bytes": 6690,
+      "sha256": "08ce1f7f4d2ef9e0a3220da75bd5f9f4f3596e73a4ac7eea3979a4c5ac8ed32d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-27.webp",
+      "bytes": 6668,
+      "sha256": "92d5a0ffdcc370c8f9736d9b6f3cbff84320ea4b55c7a5b439cfcf700eb5ba59",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-31.webp",
+      "bytes": 6448,
+      "sha256": "b4f6e4ff8a02643d13d15dda1916ff267fc36c52f7021a65a15e9895c8684ef6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-35.webp",
+      "bytes": 6674,
+      "sha256": "f20d82253c9ef7301925e3ba2451d5d250b09dccf0af26a3218670b7c88b8cf0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-39.webp",
+      "bytes": 6878,
+      "sha256": "cc12f3be1dd4b6805c92cfbfb1cb92e49cc56589114145be608e48d0ee4a976e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/cloud/age-45.webp",
+      "bytes": 6646,
+      "sha256": "ea8986dd4c8d6aff6eb2cac920d0ef18959dd053a9bebb2b92bd925bf7a1ebc2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-15.webp",
+      "bytes": 7478,
+      "sha256": "b3b41a69c18b2149ddfc28f2024d78fe0926596d4a99343475b9ee19feb2c5be",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-18.webp",
+      "bytes": 7634,
+      "sha256": "9b0cd88bfd0b6bb128b6ae4577ce0abadf20281db24f36d018b66affb6af004f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-22.webp",
+      "bytes": 7768,
+      "sha256": "6c27e21b1589c5f740beb9f5f2b7688ab33def8a892bd97b6330791809ad81f8",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-27.webp",
+      "bytes": 8282,
+      "sha256": "59a1808686fd1db3fe946d2cc28e65ac36e9340bca86a686e8604084a94be569",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-31.webp",
+      "bytes": 8400,
+      "sha256": "702ffabfa7872b348fb42226958523e074807f17796b74851050d63af338b104",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-35.webp",
+      "bytes": 8278,
+      "sha256": "4f5305de60ffba4024582ca907c7538f3133410fc692c4ad03e5b4a588d0ef82",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-39.webp",
+      "bytes": 8186,
+      "sha256": "2bcc5fbd1e23167ede0d970eaae7a31e0e7fa8899dfb9daee6d78ca3f0d92cdb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/copper/age-45.webp",
+      "bytes": 8234,
+      "sha256": "0f6f118af58d513c6ba1aec6741ddc9803215899c8f8ef957b8269a7efb77dea",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-15.webp",
+      "bytes": 5848,
+      "sha256": "7eb150c7cdb25fa002d2a0f1ea9228eda1d84f33a8280702f81fcc83465c269e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-18.webp",
+      "bytes": 5936,
+      "sha256": "c263b2c2317ceffd35df48f75107345f457a04f07d19022a1ba2769849f837af",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-22.webp",
+      "bytes": 5624,
+      "sha256": "2bc9cb39a6f33839b535810e9acb53125bd820211a29fb8241fff2115a5ac4b5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-27.webp",
+      "bytes": 5408,
+      "sha256": "05f0c0b4b16daf32860819259f9a8ca0ac096a62128c8347608499ba58ee3491",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-31.webp",
+      "bytes": 5164,
+      "sha256": "c018f204edb0beddb18b48e79f73eec5b720a381f8dcdf617f3d3f37048e9af9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-35.webp",
+      "bytes": 5672,
+      "sha256": "be2b825be99e102680c213d17bb604d85bd46c1233793347eeba4a96949e1a0d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-39.webp",
+      "bytes": 5774,
+      "sha256": "9f578b3fe95c2f366412f21071b1756ae9d3ee829e5c882ccc2e45783acdfdda",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/drift/age-45.webp",
+      "bytes": 5760,
+      "sha256": "6e7931cc6f474bca92535f2d451afe9ac89cff1370221793c930b906f0ddc845",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-15.webp",
+      "bytes": 7252,
+      "sha256": "66e183d739a36236f1f70e5311c04cac632406a53c21796660b45b82543e415f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-18.webp",
+      "bytes": 6620,
+      "sha256": "ff98d31f44b9756c1c727be17ef74df325903b0461a34ce4162032043b93c927",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-22.webp",
+      "bytes": 6368,
+      "sha256": "2d7f5dde41f3d1e788cdc68916481f5e0d8f8c118d2b3d95a736a47bdb49a02b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-27.webp",
+      "bytes": 6394,
+      "sha256": "eca4e078f11445264a2f7ac370465b6ee047dbe3334cffe1bbee08af0a5c639a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-31.webp",
+      "bytes": 6570,
+      "sha256": "64c19abca4831289f0e0a924d5e351fc02358c929511532ad57038a97bec1ddb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-35.webp",
+      "bytes": 6000,
+      "sha256": "45066179699d94b4e8d9a22d0aef4b67e8fc9a8a27afaa1576c5b19ca7f9a167",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-39.webp",
+      "bytes": 5776,
+      "sha256": "c106fa5c69e4141f7c319382adae11c9442fda6e19ce4d3934a2611c9aef64ea",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/dune/age-45.webp",
+      "bytes": 5946,
+      "sha256": "47c9cb4979c2b1ed749af4663df428ea386288bc5abe3d2cb1d8ddb6680bd286",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-15.webp",
+      "bytes": 5658,
+      "sha256": "5cb22130ded1d0d8a337b73243049f5514a0e880a07fbf6ec9d03398bf58b19b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-18.webp",
+      "bytes": 6440,
+      "sha256": "2dc4b15e8d9db431b3a658c8f1379e4eac76b5f760b8dc65912088ee2979beab",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-22.webp",
+      "bytes": 6972,
+      "sha256": "0c354f6cad5fcf3bfa1eb5f61f28d6036bbe85b729a248a82b47ce37cbb93ef9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-27.webp",
+      "bytes": 7028,
+      "sha256": "e9ba67cc2fa0b49440fa4c3713eda195eec0c08c1be040ec8ed5dd5e29d42809",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-31.webp",
+      "bytes": 6716,
+      "sha256": "3a3bfe8fff4ea33357abb95c203d98ea2fa33cef9e33134ec744260fc5e051c5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-35.webp",
+      "bytes": 6380,
+      "sha256": "1f4f2a1253cd154883978cfbd50d9339200bebcfd0e0288383d68d7ce16b1607",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-39.webp",
+      "bytes": 6404,
+      "sha256": "e651a7332ccb648969769382427484751e3ee141061c13418af923e65a514240",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/eider/age-45.webp",
+      "bytes": 6654,
+      "sha256": "c7c3036f72f804c495c026b3727b59c8279348c834fe36c8dba7646219db1720",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-15.webp",
+      "bytes": 8470,
+      "sha256": "ec35acbb4ed0a6639673d7430d0c6db8742176faa46a34a50e11da81e3e4d159",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-18.webp",
+      "bytes": 7482,
+      "sha256": "6fd06f4014371c336a668ea9124dea12ef3bc6cf0b88196c721d63cca1cbdb99",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-22.webp",
+      "bytes": 6596,
+      "sha256": "ee6dc80fcc7b582378a580029c26dc8044a181ae53271bd7640669175ee99175",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-27.webp",
+      "bytes": 6240,
+      "sha256": "1f842ca721b081c99a43005606ef2fbf10ce35a69b960ca22bc19435323fac29",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-31.webp",
+      "bytes": 6052,
+      "sha256": "91810d75782c04444dc2b4d41f50a67d2dbb5d766b80599b4600b08a454a36b6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-35.webp",
+      "bytes": 5812,
+      "sha256": "b1af28225bea6b0f6bec3ec8ee602e3f215c214132b6bff41c175a3861ff27ea",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-39.webp",
+      "bytes": 5558,
+      "sha256": "6d3fafb073e179bc659f104f66552feeef8bc613547be180cd1abb7af6596364",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/elm/age-45.webp",
+      "bytes": 5790,
+      "sha256": "d69ccc2f74410cea55fe1e9a7c36c1e4ba91e79d2d92680d9f43bf1ba6756015",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-15.webp",
+      "bytes": 6950,
+      "sha256": "b75dc0dd9af818d4c97b2149157aeb6b7a12b84a83793de451f3c45c542bab2f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-18.webp",
+      "bytes": 6568,
+      "sha256": "74568e13f96336e8e9e2aeaa4e5596ea5fd1dd5b606facd2c65363eb83d508a8",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-22.webp",
+      "bytes": 6582,
+      "sha256": "3934303ffc26810b67d1d91befa2516d0868353e7b066953e5c9e6075514c866",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-27.webp",
+      "bytes": 6864,
+      "sha256": "8bf02ee7dd065f2a78cf752a802751cb70ac66766b2dd6a8302b4fec850be4a5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-31.webp",
+      "bytes": 6716,
+      "sha256": "1c53629b89d857d334be6f87cc39f0b01354acce9bdc2093b13750fbb13350f4",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-35.webp",
+      "bytes": 6632,
+      "sha256": "73d809b61b566e2966b46ec81a8134e6f3caa778780f0bf7ca44df8927c7b9f5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-39.webp",
+      "bytes": 6536,
+      "sha256": "51bfd097e216d88273e08bfc9127f8bdf64dc143c781cd953a4113e08c8d15bc",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ember/age-45.webp",
+      "bytes": 6466,
+      "sha256": "db5bb7d190b8f63aded48f167a0456c7b0a533e6a87eee75898b25c4af4f944e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-15.webp",
+      "bytes": 6326,
+      "sha256": "1b35ab4201d0721803897f0584562960d6d4f10350652ffb125f9c4205706dd3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-18.webp",
+      "bytes": 6310,
+      "sha256": "82f741e5a7d21f8d67f27f869fc9cd87b498333303731aa14be1fcecd0f0349e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-22.webp",
+      "bytes": 6378,
+      "sha256": "af2adc91d0b719ee9e7cda1620a79d62866a346f815dea2dce0acee2a7ca4123",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-27.webp",
+      "bytes": 6420,
+      "sha256": "90a22a87c34a50f5ce6fe8ad8a71cf8b2133a0b645441a607d8087d237b77b19",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-31.webp",
+      "bytes": 6528,
+      "sha256": "825deb955c582c222eb7d0613cb33ebad1c1cd0a3f9f5a2030291e31fa0ae410",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-35.webp",
+      "bytes": 6672,
+      "sha256": "a7495873b9199e5f37270a88cf2efec99ae695ef5ae24410704d6e4c8b762121",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-39.webp",
+      "bytes": 6906,
+      "sha256": "835cf739e2f5477ae5784f02e9ee431bfa790030b3ca6ee3a36698be163036be",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/estuary/age-45.webp",
+      "bytes": 6906,
+      "sha256": "f5d0e364fa06f4f3126e46ad0815775c081617c1dff33dbf4f8bd4f4f54ff6e7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-15.webp",
+      "bytes": 7856,
+      "sha256": "2c23c4bb9992fe28f5c7d59f53d7bc00981e48926d7d9b70ecbfa0cb81f5ee03",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-18.webp",
+      "bytes": 7022,
+      "sha256": "fe867b25e906cbb3c002e816f21899c00996a90869ca7e98d53917f0fa1b28af",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-22.webp",
+      "bytes": 6920,
+      "sha256": "9df8fc8dbe6e92b6b0f0f1376967f0a80be9ca4fc00b846e0314bea4353bc028",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-27.webp",
+      "bytes": 7052,
+      "sha256": "dd20668db833a3c99417947cf93544b4ed93e82498132468dcba056c5c708109",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-31.webp",
+      "bytes": 6866,
+      "sha256": "b013ffeeb6fda7e509a3f6ac508622e4ae59531796a794b977142c90e378ce01",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-35.webp",
+      "bytes": 7190,
+      "sha256": "74ef0a16f18fa1064fba1afce4f9f4e23e47aceb8f484b27293db8e372b15c51",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-39.webp",
+      "bytes": 6534,
+      "sha256": "8acd7c68346d360a87f0909c15a5eee9dd99c1cc09de64fe7709f82613c799c2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fawn/age-45.webp",
+      "bytes": 7122,
+      "sha256": "6cde8260aa2a884636cd309fb41fce7593b88319f277cce84ea11221ce548602",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-15.webp",
+      "bytes": 6884,
+      "sha256": "6ddb8ce871c87f2b8143d2a7db2064ce65d6e8e816274c5e48cfb8de95cbfcc7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-18.webp",
+      "bytes": 6762,
+      "sha256": "21b095f57a9134655dadcfee961bb6a76851b8ee78585e1470c80b100f13be1a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-22.webp",
+      "bytes": 7074,
+      "sha256": "9ab2f64e6502adfaaba2718d65ed20e3bd13255d34263a34f50f3e7f4fc856cb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-27.webp",
+      "bytes": 6990,
+      "sha256": "cdb3d9133a1a52fa060ca2b722f2d675ced6273c141264886b75842516a13738",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-31.webp",
+      "bytes": 6964,
+      "sha256": "65bb37e55345ce75864535ccd44316b7fe8776e55cb0b71312d1a0008cfd82a7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-35.webp",
+      "bytes": 7004,
+      "sha256": "b50945386e51f8b67cca687649d423038a487ef1784d910cd3bd95438ab2df05",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-39.webp",
+      "bytes": 7032,
+      "sha256": "7b9c2394d2b1ed233c9b0e01949b52f3d41e70648b4a5e1295b7ea73aee42a40",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/fern/age-45.webp",
+      "bytes": 7190,
+      "sha256": "462d31d4db4b689fda0b3110be795fdf58aa8a1aaa8ec576bee4ac58fdbeed68",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-15.webp",
+      "bytes": 8152,
+      "sha256": "0951640d2087cc1241578930a955043123b5163dce81b6af2203e0c82633f33c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-18.webp",
+      "bytes": 7852,
+      "sha256": "e3be785fb1b4db57949d5eea802f170b53ddcd7181c795d6f82588c29abdbdc2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-22.webp",
+      "bytes": 8028,
+      "sha256": "88d5affd7ca2fd121cd0587a5d75e34d9421ce5ec97c96b624079110019dfeec",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-27.webp",
+      "bytes": 7350,
+      "sha256": "d7ee4ef91db68b772a91ef9e13f37d44c9881bcdfbb30d07f22e92a3be5b4961",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-31.webp",
+      "bytes": 7062,
+      "sha256": "b15f3d7cd908c85c364962c45703092cf3ec78d3096de038662f0e5f5899a851",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-35.webp",
+      "bytes": 7178,
+      "sha256": "6e34a8824cdb243b317dc8e88f9a06db9603f6b2e47d27225a22a2420ce1a24b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-39.webp",
+      "bytes": 7410,
+      "sha256": "12dab9028d97039f7cda7197565a24d83716e7e992ca83040c261334476d0c42",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/flint/age-45.webp",
+      "bytes": 7006,
+      "sha256": "eb0c3733416e8ea1ba114fe7e834cd85c73a1baf8170f54dc8524efd6581bcd6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-15.webp",
+      "bytes": 6918,
+      "sha256": "5353bb67b13e31d433b0f7071f7e15b4a8b879395f26e2630bdb60dc44f54bbd",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-18.webp",
+      "bytes": 7050,
+      "sha256": "ef14b6a5524e53f728d7e1e4e44015dfd0aa33448d0a4763e52c842d49dd0f0c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-22.webp",
+      "bytes": 6756,
+      "sha256": "cf3f776dbb091b852fee72bb6482e5e71c0ea77bcf16c594df12ae89c3fe0831",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-27.webp",
+      "bytes": 6488,
+      "sha256": "1e2c19150f60e8be83371c000b5fe72c4d39c4846e01d311fb47241426b46bff",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-31.webp",
+      "bytes": 6698,
+      "sha256": "2cce55cce7f4416412b2deb1a50ced46a55433c7529a6073b095ef108a8fe167",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-35.webp",
+      "bytes": 6496,
+      "sha256": "080befb47d4e8d52be58d3dd000315c1019b31522b6ca823fba67911240118fa",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-39.webp",
+      "bytes": 6724,
+      "sha256": "fb7089dd19ccbbdfde0c3cd5a358af78f792b07c5cb56c589eca3101d15c06ae",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/frost/age-45.webp",
+      "bytes": 6802,
+      "sha256": "bb3c55a038d474f8e2007e7b34d8a7e78a155d039f948682f80e132b839e8b6a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-15.webp",
+      "bytes": 7438,
+      "sha256": "e7b6a247abb6f4f5229009129a98b1e43d25a455752d378e1116de38236dafc2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-18.webp",
+      "bytes": 7200,
+      "sha256": "b97ad66df75dcd06ddc78cb98f5b62453a963da411fafb21dfc154a452bb4037",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-22.webp",
+      "bytes": 6824,
+      "sha256": "074a232f8f41e8423f90f85f0ee036320457c8ae14f4ef00c1b2c616a943cee6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-27.webp",
+      "bytes": 6888,
+      "sha256": "bb7f19e7e58874b8f7f1f7ed1b60ff987f9f110a91d32f413a7b0f276dbe3311",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-31.webp",
+      "bytes": 6802,
+      "sha256": "da46b8d792c5e4764b94aaa776c40eef1477dde79091f56215c78883add511a2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-35.webp",
+      "bytes": 6784,
+      "sha256": "181e87875e5ac4f006607679155edf98c4d6b9cbd3eac37be937c76e712eef56",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-39.webp",
+      "bytes": 6858,
+      "sha256": "651a3278c68a029635bb771965633cd869e85fd0e9c4a19cb79bffc6fc43db6f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/garnet/age-45.webp",
+      "bytes": 7308,
+      "sha256": "e409f5cd035f1126ce2538f6ee4a22b2d62b4020d3817d8cc6e67bbee332cdeb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-15.webp",
+      "bytes": 8506,
+      "sha256": "cbb70b8a9e051b9ea5ee81857381547ec5598c29dfc3a0ebd521a56c3179245a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-18.webp",
+      "bytes": 8398,
+      "sha256": "b4025cd864c0fbe56e8a2b05499f46c0043a1fd430817da8c41f5b0bfb43d865",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-22.webp",
+      "bytes": 7826,
+      "sha256": "148c8075431b068e193edf717e476d004092249c4acfc25b43dd21b0d22f8d54",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-27.webp",
+      "bytes": 7782,
+      "sha256": "f9f2e569eeb92156f23ddeb1fd9bab9d0f7cb38e6bfb4d60ab473a4992b47b04",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-31.webp",
+      "bytes": 7640,
+      "sha256": "bb24a32e32378ca1c9e5a8eedb422e59d0a5359fd831aea01e8c579acbd2824e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-35.webp",
+      "bytes": 7732,
+      "sha256": "bd82f25a11e9bc310a4b4d589928ab9ece149d29beec0f76dddf569f4b1511cd",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-39.webp",
+      "bytes": 8106,
+      "sha256": "3b39200e91e157dad74a2ec5a150ad185e59e701b3808e357c50af791c3b4ba3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/gorse/age-45.webp",
+      "bytes": 7888,
+      "sha256": "f29f3b9a612aacae028a93063578cdabe57c489326c49cb5c90281dc072e3202",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-15.webp",
+      "bytes": 6398,
+      "sha256": "f7b34b8981a2d093c01dffabdbed416efd3908a7b597e7071fbe94dc613eedea",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-18.webp",
+      "bytes": 6896,
+      "sha256": "1e9fe6fe1fc0e92d87e5cbf490ac9ecba7ab986a0779263361eb51b9860d1f86",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-22.webp",
+      "bytes": 7186,
+      "sha256": "4eef717c3801b3f1d1fe53ce5bc7838a6e1edc9e2b2ab50e4cb4b4e76339a94d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-27.webp",
+      "bytes": 7314,
+      "sha256": "909f131f3fe69cebd0bf030fc448a73e0fb358af14d9f004928a24e6e1f3a0f6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-31.webp",
+      "bytes": 7028,
+      "sha256": "897294b9266bce84664d0b10d79c6b7c7511007fcb5a603cf92799d32a1f1b57",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-35.webp",
+      "bytes": 6990,
+      "sha256": "083aff70a5ad72fb0c4edd0e87fa20c3fbfd70ba4cc7ab6c03151e670576c694",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-39.webp",
+      "bytes": 6802,
+      "sha256": "cc41752d674d68c64b0b79d93a11c2d717c1c7b287c91431b9bb2f62cd3d4d0f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/harbor/age-45.webp",
+      "bytes": 7442,
+      "sha256": "a02b2f6d5fd73151c38919376fd160fe94f2d696f203e4fb6c5e3e50abb1f301",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-15.webp",
+      "bytes": 6900,
+      "sha256": "2dc8571bb432e274c98a4693d1b3abbf0d61abac86bce5909df8863f216081ce",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-18.webp",
+      "bytes": 6908,
+      "sha256": "1dba6b583f9e70ef69ca8d95440eef00c080764221f95a08bfd97707f645d4c3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-22.webp",
+      "bytes": 6866,
+      "sha256": "adfbdef5e41c8c24b20dab780414e362db085705c20091ad2ca3c77c2c840e44",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-27.webp",
+      "bytes": 6876,
+      "sha256": "cbcaaf51b62eef9d93b2d1395bff9d1af8eb21d5ade29daef8d5f3daab51ef0f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-31.webp",
+      "bytes": 6756,
+      "sha256": "aa8e99b3003da0c59d480f0c7d5a8af58b9370bc4f412c02411b3ffe59d42c14",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-35.webp",
+      "bytes": 6824,
+      "sha256": "b167a26891466b51c2d26ba60a643caac84eccae06f47a2aed7642ccd35d98e0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-39.webp",
+      "bytes": 7222,
+      "sha256": "a4cfc880d5166353aace59f6903c9aa55f1883b8b30d94c17e88d7a34395e8a5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/heath/age-45.webp",
+      "bytes": 6960,
+      "sha256": "1a8f30eef9725a96d8022aa790bd84e0183c3ed7a28f74bf242978684551ec1b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-15.webp",
+      "bytes": 6030,
+      "sha256": "03493368d4261ba7ce506a57217e350e3f8e0f96b432f63554c17fb3c1026e29",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-18.webp",
+      "bytes": 6006,
+      "sha256": "b57b2b2072112a9ab724fbbc47a6364d16d92c716d70379b2a718dda72631524",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-22.webp",
+      "bytes": 5996,
+      "sha256": "a8a6f9e0ffa7817fdb2466259da3767dd8adaeb7c325d30e041ab269fb3a090a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-27.webp",
+      "bytes": 6272,
+      "sha256": "154521922f453e73f4f45be55a47de327f11375dde78952b462a29781a4d4b11",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-31.webp",
+      "bytes": 6332,
+      "sha256": "b9935b9d244e44c95f2d9688b99615e94dde7d8b013c4674f27f1e7149271d3a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-35.webp",
+      "bytes": 6312,
+      "sha256": "a03c851496722cd76f66b3ca3567b6c2ada9c140c898b541ea0e276747456385",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-39.webp",
+      "bytes": 6226,
+      "sha256": "e8835d29741cc31d011c76c18041a125e40297ef08b194f51de770a2b96b2553",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/hollow/age-45.webp",
+      "bytes": 6302,
+      "sha256": "737167654fcccccf981d07e22d3702d8ad313a1b6ac7aad78ede6398d8631ed1",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-15.webp",
+      "bytes": 7452,
+      "sha256": "b3cdcd663c1a92c1e86e670154b013bae2ba0f917a2bacc7aa40c7b08fc2e99d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-18.webp",
+      "bytes": 6724,
+      "sha256": "a12d1ce250c1415c770b0dde8a5425bccbd18d7a3eabe51e1ededad13aec551a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-22.webp",
+      "bytes": 6460,
+      "sha256": "37db52dfbccc442986ed3c05da8b54c575e482496573cc71e491f2cf6f13ecef",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-27.webp",
+      "bytes": 6484,
+      "sha256": "30681206661b1df9861ad9975fd8c23d02c8cc09c3d4ca9f880ea889384fc980",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-31.webp",
+      "bytes": 6424,
+      "sha256": "cbceb02c964ad560a91f73852583adec58a9288e81c31b0247d3418f878a356c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-35.webp",
+      "bytes": 6698,
+      "sha256": "f26422a7a9fe5741e87c95d24b767b2dbcaf784729cb25ee8c1ef9c2f2a85fc6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-39.webp",
+      "bytes": 6662,
+      "sha256": "5065a10307459d59fa87880a4c1ce24680701d810ffc54a34c0585338f38166d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ink/age-45.webp",
+      "bytes": 6790,
+      "sha256": "d97a6ef1e296dfc830bf1f388e69ae6cb0e1423c6ca84cfaf46c2fbe1af5c0c7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-15.webp",
+      "bytes": 8684,
+      "sha256": "1ab8c4c250af6537887129058ac1e3bbc52b1bead41b5094ab8c957dec96f55b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-18.webp",
+      "bytes": 7292,
+      "sha256": "56f93dcc32f1fde96ee32f1339fd56f32dab0deaca3f4fb180427f574584a3ce",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-22.webp",
+      "bytes": 6920,
+      "sha256": "8625766bd33bd250e12aadcb7bcca505e9e83c581d38893dc94c4c36224b4bfc",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-27.webp",
+      "bytes": 7198,
+      "sha256": "2d905611b6df6c6d446491f05e46895bd90ad7524109b40200af7683369eb4b6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-31.webp",
+      "bytes": 7342,
+      "sha256": "997179c14891aada52ae9e1e51685e0dfae734bfb2b5043c4f23d9fb731265e2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-35.webp",
+      "bytes": 7616,
+      "sha256": "0811264a95a07db864c6548987131728e4fa33cfcbca26d23c571ed6bb2751bb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-39.webp",
+      "bytes": 7378,
+      "sha256": "5a19ff6dc1c4d7c0c1c224956cc800fb7e9020290636bab4f97516e7e803f855",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/jasper/age-45.webp",
+      "bytes": 7604,
+      "sha256": "3bf99115d8cbc33aaac80bc32c82689b58f84b2dc67a574727c0aa883169cce1",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-15.webp",
+      "bytes": 6748,
+      "sha256": "cdcf3497c8fb88cdce7dfbbe63ae5ef95448376ca8c444cc3efd548609d1e615",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-18.webp",
+      "bytes": 6992,
+      "sha256": "9dd492ec8a2da46e127380f40a1c0e7f98b2b6f413f63758861e51cd466be2c0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-22.webp",
+      "bytes": 7138,
+      "sha256": "db16de538a3359eb72ae7156dd1b32929e5eff51d8c2901820b62f34b8a6d5a1",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-27.webp",
+      "bytes": 6986,
+      "sha256": "2a46f21e3455ea523af186f1edc5cc4b1c0e6f6a07ee89036ca2d9858030b6c5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-31.webp",
+      "bytes": 6944,
+      "sha256": "5083fa5b096229ee3bc5edbca9925b4ada538b14ed6c56102f5acdbb7d228405",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-35.webp",
+      "bytes": 6944,
+      "sha256": "ee5ba868eec044cb488f8825a58b0399702daeedb063c1a44458867d2ab02bc7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-39.webp",
+      "bytes": 6920,
+      "sha256": "b9d623440dfeef4a8b446f83c86c9c83d60fb878e7aef61adb116ea474945741",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/kelp/age-45.webp",
+      "bytes": 7076,
+      "sha256": "751b42a1224666bdaf483f9847417270ecd4a91be120350e62feb406d57ecbf9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-15.webp",
+      "bytes": 9596,
+      "sha256": "3945e410efef5b35a7463578cb1bc5636c7dbcd3f4cb1dbb1107313d71b36230",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-18.webp",
+      "bytes": 9156,
+      "sha256": "d66523416e755c639bb3ddda5a1232bd1892547bb5516f6fe1e4668a7febf3eb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-22.webp",
+      "bytes": 9494,
+      "sha256": "718b7b267408d9b5f754f54647fcfd55133befd753a7d09705aa12ccd0f49562",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-27.webp",
+      "bytes": 9614,
+      "sha256": "947652e52c4e05203c565c13b67092abdb444113b750455d459ad6d3697731a7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-31.webp",
+      "bytes": 8980,
+      "sha256": "603ac09cf94db8a2f254a9845a42735cdfb8f39412aacba69f750c08c25a1778",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-35.webp",
+      "bytes": 8424,
+      "sha256": "3015f54c8aed25388930516dd934c19aa041f304792ad062d8fcdb6a7436d483",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-39.webp",
+      "bytes": 7950,
+      "sha256": "38812cbd0b0de09a005ed9c465611951efa0c3a202cff3241d492bb864b1f710",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/larch/age-45.webp",
+      "bytes": 7742,
+      "sha256": "894f1aef546dd76d6873b35ab9afd3910b83a15c72ac3951a70c8c89fd716319",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-15.webp",
+      "bytes": 7738,
+      "sha256": "407b0be04e613d23b740101bdeb0661c42b61fc9159522998a543daa0fb6ba62",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-18.webp",
+      "bytes": 7350,
+      "sha256": "197d1ed39738ebe00be35da4a637e93c63d0ec87b8370759a60664f0a40ec0cb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-22.webp",
+      "bytes": 7078,
+      "sha256": "102f0fbaf4c8af85493fdb6a74fcee1d10ce38525cccfdf56eca58167b6840b0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-27.webp",
+      "bytes": 7068,
+      "sha256": "12231580ea6d9fe4c07aec4e1c89daf958029a5e311f070026223a141eff32d7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-31.webp",
+      "bytes": 7050,
+      "sha256": "aab56ad792b8d30b6175cafe8a47f89c5a705255390367985cfe5fc8bc9cef41",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-35.webp",
+      "bytes": 6828,
+      "sha256": "f1a91fe7f156da7a976cec0eeb7892b6cc824c27246807287c42c08195c695fe",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-39.webp",
+      "bytes": 7146,
+      "sha256": "0fadd519e8e64127dd8449ddd8f6dd69b1281ab5e460c6341e9da0c083757908",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/linen/age-45.webp",
+      "bytes": 6906,
+      "sha256": "93392cbd781582ab90a650f690658abdeafa77d330613bdebe9a30707298e431",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-15.webp",
+      "bytes": 6248,
+      "sha256": "6b7d10f5417fa52627ce28b9de6bf44d231f2c05682464dba08ff8916c8ee553",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-18.webp",
+      "bytes": 6392,
+      "sha256": "91abec2b5473d4bf9f86a55a2a65eccce7c0e98f27970063e38a626d92abb870",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-22.webp",
+      "bytes": 5986,
+      "sha256": "84c2c00ff46c5d6e7ef6a3b7a919d06271d79626ada607a29a4501454bc98839",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-27.webp",
+      "bytes": 6212,
+      "sha256": "e57e62f434ebd8951daffa9e8bd4bb38c84215b6e1de0e9c66ce3faf901f388c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-31.webp",
+      "bytes": 6216,
+      "sha256": "e601a6fddcbbb06c304ac35bdddf3216a1a02a21304410f921726d7a658522c5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-35.webp",
+      "bytes": 6112,
+      "sha256": "40d717749f874038d6ace4be0ff2b8238fb43043bcd3ff74dac848752b887440",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-39.webp",
+      "bytes": 6236,
+      "sha256": "9d9eaa35eaa7a6e4441405bda73b6d924b3552e59621fc3a0435b9328a41f190",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/marl/age-45.webp",
+      "bytes": 6582,
+      "sha256": "3c12d48ffc85bf6e46c080dff97b107f17bfd4f4753ed9db013f68da391607ea",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-15.webp",
+      "bytes": 8312,
+      "sha256": "376e90c6b33772542dc8ac24de7f15b8a5a9d63b271dc9d3e88e8eb4ee811deb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-18.webp",
+      "bytes": 8248,
+      "sha256": "0f925f4b34230a43e22354dabf3b70ac86b99aa81e9944222ce3ac19fde4d38b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-22.webp",
+      "bytes": 8422,
+      "sha256": "54941e12a7d572abe2bf745424f346aea86094c191e843b26293d479fb80dd2f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-27.webp",
+      "bytes": 7926,
+      "sha256": "f64a1ac125effa54cc3427bbd9450b141cb644e1e49c6061a9635e13691679ae",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-31.webp",
+      "bytes": 7868,
+      "sha256": "633463142260ee59cb66651c474c5452be5050d22c1e4d7363234aefcce39677",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-35.webp",
+      "bytes": 7864,
+      "sha256": "64eedfcea18e7532cc738f907edc405336da272c865a5f16ac50dc4277e18b8a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-39.webp",
+      "bytes": 8042,
+      "sha256": "919619263964bbe3852ca8347a81afc17bd946cc6d3e3ca0b1c3c39242abcc2a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/moss/age-45.webp",
+      "bytes": 7656,
+      "sha256": "f8a1c4f2577cc97e4f0181b1646d7319512c9631735a2a83954650287760ae00",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-15.webp",
+      "bytes": 7014,
+      "sha256": "3a2e58f04ce66c0eadda63e0818deff1d7a8c39e31e7512855f54e8421d92f1c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-18.webp",
+      "bytes": 7006,
+      "sha256": "17546d88a57e7d18719302a04815741a59ce557625d0b57490aee3647f464a38",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-22.webp",
+      "bytes": 6946,
+      "sha256": "e2dd356f28939b71f6f98671389b1744bc50403bb455e96b20c0566b85968a58",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-27.webp",
+      "bytes": 6788,
+      "sha256": "c1a5dc526674250c575c3531a2ab17f62e88045d95a6775321742048d430ab59",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-31.webp",
+      "bytes": 6930,
+      "sha256": "e58aac94fc6fd7536c8691bc3f02113f696e7b41310033a63cf00eac3d3c21a1",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-35.webp",
+      "bytes": 6966,
+      "sha256": "9f11202809ef00cbd899b931eae2f4565fcb1f211bad044173815c1e83521c2f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-39.webp",
+      "bytes": 7050,
+      "sha256": "3c33d75290a1b4de73ca5b70f60c4234778f5746d5a61bd0845c3cf1c067bae3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/nutmeg/age-45.webp",
+      "bytes": 6944,
+      "sha256": "61b9ca7b220f575d51a451f151d9f278e55a80dc2df8f9c7ff661cc81c3c1da7",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-15.webp",
+      "bytes": 5894,
+      "sha256": "960024999a39305d1a07aa35d046de71341f95a127643c0118b3e3463a67c305",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-18.webp",
+      "bytes": 6122,
+      "sha256": "7b5510d76082b40d6cbc9fdbaf04157961e43d722dc9625e78a5fab269d0aaa6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-22.webp",
+      "bytes": 6464,
+      "sha256": "a882cf9b2307940a17ef201a84cc22c569005054addf55e9646ef0454c9840de",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-27.webp",
+      "bytes": 6648,
+      "sha256": "bc4c9e219b322d213167b28b32e9a818c2027ec3211acadb1f624bd1e1d67101",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-31.webp",
+      "bytes": 6686,
+      "sha256": "ce4d19f61bbfc8734e73bf1793b01b1fae04ed96036de2b7d331dbc308859c65",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-35.webp",
+      "bytes": 6636,
+      "sha256": "5f25a12a5e65295ecd73e722f47315e09d910100115d399c0046981ab59cac8a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-39.webp",
+      "bytes": 6762,
+      "sha256": "f98113c0ea3dd3d50bb122757e6cd2f192ec5ebd3a7870bf5ff5b5a038ecb483",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/ochre/age-45.webp",
+      "bytes": 7450,
+      "sha256": "31481825983707cfd67691ca98ff59c4d3a1b15d2c5c2e4b1b83d72bf9ea802f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-15.webp",
+      "bytes": 6052,
+      "sha256": "77df4f557755129cb827aa8817adec2c7124d0284bf2c22450c356c47a737abf",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-18.webp",
+      "bytes": 6064,
+      "sha256": "97f22777b993fac6583f03fc5cccab0f45acc87d3823fc32859d370c8571596f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-22.webp",
+      "bytes": 6044,
+      "sha256": "a1c6f19659dc0a3459edf0d634925be760d6baeab07d25dd0a45d5af3a644245",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-27.webp",
+      "bytes": 6190,
+      "sha256": "9ee0099ddd13be5eddddbb0a33527cf60e1b6931b29be5db7ed922b10166c943",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-31.webp",
+      "bytes": 6418,
+      "sha256": "26ae74a564d011311a9fdc1fadf6723593c9b66d7ac1963af8b51e9146174ee5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-35.webp",
+      "bytes": 6452,
+      "sha256": "cf8f3316cebac94371295e597649ba2a04f6141a8b3b67c72c9fdf350077a729",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-39.webp",
+      "bytes": 6314,
+      "sha256": "d5f155f1cd1f2583d9a2f43a23508c819bea81f98d65604903c8aa135cc3d7bd",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/opal/age-45.webp",
+      "bytes": 7162,
+      "sha256": "f7aa24e913bac3aff130a58ea92fb7f3b468822a2a69ef99f83e04966b5bed8b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-15.webp",
+      "bytes": 9700,
+      "sha256": "0a0abb7a11e46f629cabd568017142343cf39eb26f25422bb4c7007b8232b73b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-18.webp",
+      "bytes": 8436,
+      "sha256": "564cb6d38e3f72c05408de5634d6366b4a9e967af27d2a8968ff447f4a1a235a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-22.webp",
+      "bytes": 7584,
+      "sha256": "fdbb6f1ce33820ee1052b0501ec2df3a261150e332e468a7cb46597b52c00483",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-27.webp",
+      "bytes": 7414,
+      "sha256": "a30d4fbeaf3b557fdba6b8ab8efcc7486a5eb9fd5af840c9bbca2c3342a3c254",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-31.webp",
+      "bytes": 7192,
+      "sha256": "b318ae7a4aa6a109d459e18aeeaa44ca566bdba27076f92de33e44791f89f523",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-35.webp",
+      "bytes": 7358,
+      "sha256": "f246006820c6b75410cbf2a92a58618bb096f588f9926752bd47e345ac796fba",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-39.webp",
+      "bytes": 7142,
+      "sha256": "e8da46f7e9cc8d376c12fcfd41692ffefae78e01a3f9dd950eb5ea1a81433f56",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pebble/age-45.webp",
+      "bytes": 7966,
+      "sha256": "f100ca7ad432f7538c47697e9b835119020cf32179645c0c9cd6fb372e4d4ab9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-15.webp",
+      "bytes": 6418,
+      "sha256": "698f656f160630ba811dfdb8415c5ff31cd0fd0d1c938e9688cad02b75176bda",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-18.webp",
+      "bytes": 6510,
+      "sha256": "997c9989e411ae1fcdc357a38bd52cf16f112314f418e0fd006991a4123874db",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-22.webp",
+      "bytes": 6348,
+      "sha256": "e89a71b951ad915abaab029514fb35975b1d1c11ec904b9d461958cfcf177307",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-27.webp",
+      "bytes": 6338,
+      "sha256": "d2bd1410790c439c63616132b7be4f8dd1a591a4e990dff0550daee537195a72",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-31.webp",
+      "bytes": 6234,
+      "sha256": "f927d0b381a713ed769977c25d0d9256ad177b1a9aacee1e1e3f6755e053593d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-35.webp",
+      "bytes": 6360,
+      "sha256": "42420d45111d647bba97d7f1e59887560eb20e4cc52c7d8d4f16689057d70198",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-39.webp",
+      "bytes": 6382,
+      "sha256": "c19fa2d6470e759b8fa9996d3d8f8c8db7c3999b72e32f40b49282c8422206ce",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/pumice/age-45.webp",
+      "bytes": 6470,
+      "sha256": "c5807dd799eb2ca1957531437198e1e1ca7ddd410e33203013f8d856012c0b10",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-15.webp",
+      "bytes": 8416,
+      "sha256": "7ee43e817486d24ba5b7c9d7682d444b0da1d5665a2d8ec2a96004aa2d65e43d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-18.webp",
+      "bytes": 7226,
+      "sha256": "09ebb0fe5d94b761e6232f944bad812e7de94dc6b1d8116896dfd220417331d0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-22.webp",
+      "bytes": 7674,
+      "sha256": "435511fc564a681b1698ddcf1a9b1ec8b4b758d5d18baf8365695a407754d686",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-27.webp",
+      "bytes": 8056,
+      "sha256": "4e0d2bbfc08d728187ec52e3ca612032a9d65e4d6a27331c56b861a2a333ff33",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-31.webp",
+      "bytes": 7574,
+      "sha256": "a11ee5afa53d887c81769256dd5a81947767f86ae3a909da49becfbe83b05680",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-35.webp",
+      "bytes": 7638,
+      "sha256": "2f2dbf313394a011299e5dabd95888cc27c9c668a100ed28101ef5f1ea86db07",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-39.webp",
+      "bytes": 7754,
+      "sha256": "3080438d875bd1d7e70e5e6a641f1a1158f629c4d5171b6379351df9347d1c4e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/quartz/age-45.webp",
+      "bytes": 7676,
+      "sha256": "123d45a30f594d2eb27cf9d421cb7a2f32acdb4dacd2f742e092640d2fb27f59",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-15.webp",
+      "bytes": 7774,
+      "sha256": "1764198da9549501bd422d1e8d0ab40d22a34669eba0bf5c02ae24cc2cb06713",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-18.webp",
+      "bytes": 7880,
+      "sha256": "bbfbe7cec812660040303fc8fafd739df4e331c2913dd34bbef7382cee44c6f9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-22.webp",
+      "bytes": 6514,
+      "sha256": "4b237daf38e2b5e1572284a10605af098777e20175ce1f7d1809602058602808",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-27.webp",
+      "bytes": 6390,
+      "sha256": "5028bfa28b26e6cca3e813fcf7e2d98b417fb23444d1e5414e4ce05ef6d7abe6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-31.webp",
+      "bytes": 6096,
+      "sha256": "3dff68ed6c697db4fb42b0ea152c765625062b28841ba9a25460add1a47775c0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-35.webp",
+      "bytes": 6370,
+      "sha256": "4ebd33c64ae7fe7e745a1c9cd8455134f0bf58e5ed804160fe2e6d39dd22f7b3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-39.webp",
+      "bytes": 5944,
+      "sha256": "f3d442c832427257263c8ee310f9a4961907d499d36a83f27cf43183658ff214",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/reed/age-45.webp",
+      "bytes": 5824,
+      "sha256": "eb3aa68ca1a500619e5db97bc3bf89af1f3e8579af1ce9ac1885e33f76c1b464",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-15.webp",
+      "bytes": 6730,
+      "sha256": "fb96d09ab544bbc843be79b4b85b889be0c35524bebe928f900cca69d5e82848",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-18.webp",
+      "bytes": 6892,
+      "sha256": "c842263d6472b40b96adecfd12f294f9099a7b2fed9c15300712cb9d581058d2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-22.webp",
+      "bytes": 7070,
+      "sha256": "3344c122f32ab6e742975f2d27cf78765d7e40e4185d3d5104fc3b8546d7d1ab",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-27.webp",
+      "bytes": 7312,
+      "sha256": "8a3f3a93de54ab5fe590491087a169695e97ddfd36295de38dc262082895e299",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-31.webp",
+      "bytes": 7326,
+      "sha256": "a91cbddbb15bfbef70feb2bced8865b97634b6b224183597d81d2962144bc38e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-35.webp",
+      "bytes": 7342,
+      "sha256": "084ba8612af729762ddd479d4f72be100cf7e718f2271d2e697903bc8d91ee2b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-39.webp",
+      "bytes": 7820,
+      "sha256": "cef8b08144d0fd83617697d23bea3f598b6f7875d2001decb4e46245c94a8080",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/river/age-45.webp",
+      "bytes": 7784,
+      "sha256": "dc4e2576c2ffc20f2115555940a9d2486285f240bc1365b999d632936c20b785",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-15.webp",
+      "bytes": 7150,
+      "sha256": "fd661ea1cc6795daac78cfb031a125797dbdc46c37c9022f3698ea941ccc738b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-18.webp",
+      "bytes": 6932,
+      "sha256": "3de16e0bff6444dcad1d35c9c7b2ab6ea9459f9993425ec4bfb5ba43b606968b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-22.webp",
+      "bytes": 7090,
+      "sha256": "f18572d7ff9a872e5c1a32dc09e46a4b86090c8f9acd3ea8e47dfd6fe8fac4dc",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-27.webp",
+      "bytes": 7046,
+      "sha256": "65b10c6da10a4b330667179280219fada1726a6f04ef44b3c734b4bcee14a1ea",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-31.webp",
+      "bytes": 7020,
+      "sha256": "e198a2e6ed6ba69f2a10d8d8d79826b7aebc000e7f9ac46369ee8cc92f6362ea",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-35.webp",
+      "bytes": 7142,
+      "sha256": "f1f6c84115b6c0bc0f220679db0478f02e35a56889d328e1821d2e73203aed1c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-39.webp",
+      "bytes": 7096,
+      "sha256": "1f554c5eda404d45d26811acb965117975bf2e3998872eab64f93b8c01e2848c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/rush/age-45.webp",
+      "bytes": 7518,
+      "sha256": "ee1f40c436ee45674b7557c22f4c159370c77871cbce89c14aacc456eb6dedde",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-15.webp",
+      "bytes": 6830,
+      "sha256": "14874c62bf768bb4fe112dc5407850516f727b98c11a21613e00b9774afcbbc5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-18.webp",
+      "bytes": 6864,
+      "sha256": "a56a67fc3c2bc9bf33a54ca24912ca04affa2995e7964ab0ca4040f9c8122d9a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-22.webp",
+      "bytes": 6404,
+      "sha256": "e9a04cbc635da815702a209d126f123269252f4846c00085191b8592ab13b30a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-27.webp",
+      "bytes": 6448,
+      "sha256": "e3e191a65370d36ef332b176606daac55ed501fc3aae276eb870c3848d20a467",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-31.webp",
+      "bytes": 6264,
+      "sha256": "047dd4123a899b2d981fb4d5dc1461a8a47fbbff142f18fe582d9dc3a43fbb5c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-35.webp",
+      "bytes": 6298,
+      "sha256": "3a18a48c09f43625be6fa08b6563d1465b9893eb4176558d5c843842ff9ac921",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-39.webp",
+      "bytes": 6100,
+      "sha256": "755fb4501decd87976b276634b43afb55aa2a8fe0d8801ed134be2624df5080c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/sable/age-45.webp",
+      "bytes": 5800,
+      "sha256": "5b30c65c5e83e4971a25d9561e1823584a1bef31c8bec74519095647ca160a5a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-15.webp",
+      "bytes": 7682,
+      "sha256": "f2b27bbbeb1ea31708e8ed31e4930e87b584578890e2456ee11bdf3c5ffed4b4",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-18.webp",
+      "bytes": 7476,
+      "sha256": "696760ac40eacaba29ce17a0b65e8ff96706998606afbaaf36b67ca88457ac53",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-22.webp",
+      "bytes": 7500,
+      "sha256": "1807ca6b5e79b5ffc2b25a8b58dfb54ddbe7d5977bed1d6de9507fe75a73658a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-27.webp",
+      "bytes": 7034,
+      "sha256": "3ba2f7aa9157d92e1654bd30aadcd7cc116f4e2d14801398b77a23869af478d0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-31.webp",
+      "bytes": 7078,
+      "sha256": "bebf8c3182842cafcd9c01b3a708b06366c74f4ed91304703d8d8024ba040623",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-35.webp",
+      "bytes": 7062,
+      "sha256": "e5369ceb9eebb16c4fc4eec0129c1c29c72e6294ac0f7c26a7704aa1c023618b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-39.webp",
+      "bytes": 6960,
+      "sha256": "4d2352e483950cd8c918e45cdec55602e6bd5931d73f1e42a097c4a46c459a4a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/saffron/age-45.webp",
+      "bytes": 7304,
+      "sha256": "dc85cbd808f4a0add5804f7a6e7dd7a12f0e6645a21275314f1cf9153c78d764",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-15.webp",
+      "bytes": 6790,
+      "sha256": "4ef9e1edaf64792a9d697d8a17b4ec40ac870ebc72a3a452f508339946bbdf88",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-18.webp",
+      "bytes": 6778,
+      "sha256": "b0b9ceaccab61600e43fde788f1e6eec495261b07ee667f24e4f65eee07b22af",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-22.webp",
+      "bytes": 6562,
+      "sha256": "0f4578c5350bd506b7bd079d8a5943e259e81e3fa199c55d23866e1ad00a85c5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-27.webp",
+      "bytes": 6218,
+      "sha256": "ff2db2e2d345523a1b7dce4fe83dc09c5caf316fcb85830f258daaadeb44ff2a",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-31.webp",
+      "bytes": 6090,
+      "sha256": "6c20b7f86ee7d64bfc10b5bcef04a1e7bf7fa579cceefe32af9abcf54b70d1cd",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-35.webp",
+      "bytes": 6386,
+      "sha256": "01f28d6b6f2ce4f44c9f87c326bc2eb551a09bec145a1107abf64f905b672db5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-39.webp",
+      "bytes": 6570,
+      "sha256": "e7047b3f815efa690fc909ff026738e307b85dfae651dd8b9740b28a9aec4832",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/slate/age-45.webp",
+      "bytes": 7252,
+      "sha256": "fa96f14257318d127fd8e18b84d9de8a357365aa01348d76b4bf2e6f6b7cbbb6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-15.webp",
+      "bytes": 8090,
+      "sha256": "e4ea0e248e4c5327706787616442bb58472d7f249f496e14ce2aedb95b04a3d0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-18.webp",
+      "bytes": 7858,
+      "sha256": "48effdc46cf8dc07965cf246086d681fbd8baeef80f11246d773d5bc4caba8b3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-22.webp",
+      "bytes": 6890,
+      "sha256": "75e3cf9b33f294986d3c3a9463b6033fe4737e8f25df09236c8086443637eb97",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-27.webp",
+      "bytes": 6838,
+      "sha256": "a181dfd7171755d99e63d2b0dd9e86b4c6eb4470ad895b0be72220fd9fb0f53e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-31.webp",
+      "bytes": 6860,
+      "sha256": "58de31e684cb29eaaa8266a5d7866884c7a91e6976437ab194999b9d4dabdbd3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-35.webp",
+      "bytes": 7246,
+      "sha256": "25a16a576d5242f6f91650e0478bd66643474e5b70474a45edec67019c9b1bb0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-39.webp",
+      "bytes": 7134,
+      "sha256": "4e2c9903f4ba6f7d9852c06b7d756c40690d1ac9dea6faf520da7f49d23dab80",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/solstice/age-45.webp",
+      "bytes": 7138,
+      "sha256": "30fd412b5d832f29385d3310a7803ed847b735f559c684f74e48b05e32b6e1f2",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-15.webp",
+      "bytes": 6828,
+      "sha256": "a9f9ab3c5b4dbc85128ee9631585356d4f058882221b3bd5b430d2a01c87430c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-18.webp",
+      "bytes": 6734,
+      "sha256": "218336d697673e5d5ca61bfc85ee3639f54a30af701cb319569cc1effae90b37",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-22.webp",
+      "bytes": 7002,
+      "sha256": "15769625607c990d43edbae9abe54c994dca8c64a872010df34768c82aff180c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-27.webp",
+      "bytes": 6670,
+      "sha256": "57d9b78d4c127bdf89c50b5857089964513e37c2643d7629897498502b46075e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-31.webp",
+      "bytes": 6434,
+      "sha256": "cdd80c45c724d920d1ce2fd0e3a1869402f18961d46f6b018ba32b9aaf89cade",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-35.webp",
+      "bytes": 6354,
+      "sha256": "cb6555a6dd666a0b4cb2422a1e5a07d08cfd2c21dbdac51b83426682acab7c6b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-39.webp",
+      "bytes": 6390,
+      "sha256": "7b7e952635f40baa1664288075254a6f6b0f2d5d6cb29cd3a7fc25fb79063ee5",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/thistle/age-45.webp",
+      "bytes": 7034,
+      "sha256": "72f22ce4fbe67d531c15084262994111d8886e0076d260b7e5d2fda592ad2c85",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-15.webp",
+      "bytes": 6908,
+      "sha256": "96183e13164ca465d60e121f41b7203ffc1f014fc9bd22a15f2be7102304a55f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-18.webp",
+      "bytes": 7000,
+      "sha256": "8157ddda078e7d77c546646576b5903d05cbab366e3efa63f11a057cede63d91",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-22.webp",
+      "bytes": 6630,
+      "sha256": "228b0e5700ccc41d8f9f38c26340695676715d7e6dd8e243f84ab28dfcb03434",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-27.webp",
+      "bytes": 6560,
+      "sha256": "8c51de44c1b8985cbf1b38b3d66f673f9e9d28e6feadda078833799ffdb20575",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-31.webp",
+      "bytes": 6280,
+      "sha256": "690138d4415a30c6019d61833e8c600ba8b9e0e929b7db7eeb7d5c3cc49b3ef4",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-35.webp",
+      "bytes": 6200,
+      "sha256": "3109d33599d441ba100e067b381e574744d6aa86eab6355cc3de19a22f6b541c",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-39.webp",
+      "bytes": 6190,
+      "sha256": "a9b4410d5a9b2fbddddddd42ff8bc22d31d5957c939a97b732daa31cc70552cf",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/tide/age-45.webp",
+      "bytes": 6526,
+      "sha256": "17d518f3e3b7bd3a4f07187825260781f912c587b72a8ddb9c6a097ee734650f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-15.webp",
+      "bytes": 6238,
+      "sha256": "c42d7ff1ff4fbe1afbd113d909cf8594dbe9247a2511cb1fed218ac7f52e8071",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-18.webp",
+      "bytes": 6858,
+      "sha256": "30db67392dfdbcb9c8be7bdf7f9c24a6fe2286c2f2dcf41320547a525fe4a2cc",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-22.webp",
+      "bytes": 6426,
+      "sha256": "d663c6bec0619c343f1420de8a8abb18e7381c3ed5307b28eaf1dfaad5179ee0",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-27.webp",
+      "bytes": 7036,
+      "sha256": "741518a229a5e0e66eb6f3116fbb07e6f6fca31f3df0ab858ab9ac8953d80f8e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-31.webp",
+      "bytes": 6910,
+      "sha256": "1d282855d90a6bc1c9da9d78257713722ccaf250c2224339dbf463168e455074",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-35.webp",
+      "bytes": 7166,
+      "sha256": "96a3f986dff141bb9915d6464631d5260102abc81aca00595f8a745ea1384780",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-39.webp",
+      "bytes": 7250,
+      "sha256": "06c0ba67dbc071796d5d49221363f0c6b8efb8f23e4ce313bd437b15dbeeba0e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/umber/age-45.webp",
+      "bytes": 7490,
+      "sha256": "86fb152652607f46d421dbf12c7037a5e0418eb3da1f640d202618d02fbf3bb3",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-15.webp",
+      "bytes": 6600,
+      "sha256": "98bf99b1cc16be5569d9d734de205c840f23131a3b997640d5f5684210abca30",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-18.webp",
+      "bytes": 7140,
+      "sha256": "a9c3f0949cc2fb9679449ff255584fcf0ff64a8cf4f11a209e398f5067df478b",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-22.webp",
+      "bytes": 7254,
+      "sha256": "c41a0e4bf2b8d9d975f2e52654af2431c3e17cf166f51e64d4a0c54ca43c686f",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-27.webp",
+      "bytes": 7232,
+      "sha256": "e794a46a11ce15d4276841f804183136deb8fc9c20eba5d9c6eb6ded5cdf9ce9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-31.webp",
+      "bytes": 6984,
+      "sha256": "0a6bb5c798645a2d49c190545b0f5bf44c5f58fcdea8cd3a3d400a4966491c42",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-35.webp",
+      "bytes": 7206,
+      "sha256": "1d9a4d56022a96da3e7f82841bf327d6e8b843517cd9f0a850b3ec7253b59514",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-39.webp",
+      "bytes": 7098,
+      "sha256": "3a4b6c5f741952e42ba922efee112c1432d46f6987a99d41375a467234ae72cd",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/violet/age-45.webp",
+      "bytes": 7728,
+      "sha256": "1641741951c468f29d6673405b5028186a28c907ff1d2c9fcf9077e0eb750a96",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-15.webp",
+      "bytes": 6544,
+      "sha256": "538b6d49f50f292b5162ea0c99222d34c7d79d98a535bc99e6cce40903b833ce",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-18.webp",
+      "bytes": 6322,
+      "sha256": "b072c03cfca552e920565f536cb0ded8b69c78831492de198662f7e784f980c6",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-22.webp",
+      "bytes": 5978,
+      "sha256": "22c82bcfca4b3048f974501300fc54e21c16800e3b82f65aba24f9b399099489",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-27.webp",
+      "bytes": 5934,
+      "sha256": "2fd159d11546384b153b25d87f6da0d201d1b840cf5e9c306d5b9cbf76ec4cbd",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-31.webp",
+      "bytes": 5700,
+      "sha256": "a89846da488a5b103fca0d695bb487917a5543e4e43232e9138a764c2975ebc4",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-35.webp",
+      "bytes": 5864,
+      "sha256": "13fd11aa2a33d36e86bc66a053d6de08d54be6254d4047f88e464e07e6b348cf",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-39.webp",
+      "bytes": 6034,
+      "sha256": "f478591e960a298686b34bfa58c15184513883d6aa7b2ba037d2fbfb4473b326",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/willow/age-45.webp",
+      "bytes": 6238,
+      "sha256": "358aa7a2b0afb50e6544fa103b74866f2cc9d7859dfb6618777198c6c7ad9c10",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-15.webp",
+      "bytes": 8100,
+      "sha256": "88cc48b41a3db50e7b9c393b2527dd41e0ac900566052a03830c58b4d6ceded1",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-18.webp",
+      "bytes": 7358,
+      "sha256": "a1f5a787d39363ba83193982f58db1f674e0dd178b22dc8ea46a61aa9ce4dee9",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-22.webp",
+      "bytes": 7298,
+      "sha256": "b02c73e1adde3b9124486acbbab2ad6b39a51560f2efb6396cf4a7572556cc38",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-27.webp",
+      "bytes": 7342,
+      "sha256": "0e5fb3e8f80af18c4dde7bb27a2fae9eaf3b56a31870040b5bb8fdbe8a5ff849",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-31.webp",
+      "bytes": 6740,
+      "sha256": "985ae61440cc19e27a792a10389bfc9d488bfb09074e6ea54c70ac82a5288672",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-35.webp",
+      "bytes": 6808,
+      "sha256": "1bcd0cf8d0bbb1cddaa778a2c7ef9a134a16eb194e92c4df6b5dd089d5251e45",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-39.webp",
+      "bytes": 6628,
+      "sha256": "b1b9d9e1c51d88755daa9d03bf76e1e043e5c1525bdd4c0db8bba6390f400929",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/wren/age-45.webp",
+      "bytes": 6256,
+      "sha256": "987f4541b87d44e472c1f0dec7b7dd4277d5487b7a2d7fe0b207ee449020eefc",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-15.webp",
+      "bytes": 6174,
+      "sha256": "44b3fdb3c4f44222340d9c2c4298a881afa91027f164a19694b6f4e4711c774e",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-18.webp",
+      "bytes": 5968,
+      "sha256": "f6b7e2995c354812ceb46686f8c4c395708f2a8d49275288d0730235babf33eb",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-22.webp",
+      "bytes": 6000,
+      "sha256": "1dbfe662824ed144b636c06b67f2fb23031bd65e3488494b652a8c63df5132db",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-27.webp",
+      "bytes": 6380,
+      "sha256": "7f9d0c7e0cc9929021cb79cabdf4d00261edb376bae7f41c047efab9e9e03021",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-31.webp",
+      "bytes": 6298,
+      "sha256": "25fd4d4463efde6cec07c90fc59942945013df07ff43611b6512fac376909b26",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-35.webp",
+      "bytes": 6226,
+      "sha256": "897fe47c37a5d5832fd21add34b993d57c381b4f5c3755b239ae3fb478e1882d",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-39.webp",
+      "bytes": 6624,
+      "sha256": "73fadbcf886ae394a77697f0eb061d3015796536b8e0be8c1c537454290af847",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
+    },
+    {
+      "path": "public/images/portraits/documentary-v1/yarrow/age-45.webp",
+      "bytes": 7442,
+      "sha256": "31e455d2a3607a784ce73b87124c4bb6bf95f2add492391437b5540b072f9268",
+      "groupId": "openai-documentary-football-art",
+      "rightsStatus": "approved",
+      "evidenceCount": 2
     },
     {
       "path": "public/images/steam/screenshots/01-dashboard.png",

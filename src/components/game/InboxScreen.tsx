@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { canResolveSeasonEvent, getSeasonEventChoiceOptions } from "@/engine/core/seasonEventEffects";
 import { useGameStore } from "@/stores/gameStore";
 import type { GameScreen } from "@/stores/gameStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -42,10 +43,11 @@ import {
   selectLiveInboxActionMessages,
   selectOfferedInboxCareerDecisions,
 } from "@/engine/world/inboxActionAuthority";
-import { ScreenBackground } from "@/components/ui/screen-background";
 import { useShallow } from "zustand/react/shallow";
 import { getActionableGossipItems } from "@/engine/network/gossip";
 import { ConsequenceDecisionCard } from "@/components/game/inbox/ConsequenceDecisionCard";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { collectYouthCasePlayerIds, shouldShowYouthInboxMessage } from "@/engine/youth/youthCaseFocus";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -194,24 +196,6 @@ function sortMessages(messages: InboxMessage[], mode: SortMode): InboxMessage[] 
 function getSeasons(inbox: InboxMessage[]): number[] {
   const seasons = new Set(inbox.map((m) => m.season));
   return Array.from(seasons).sort((a, b) => b - a);
-}
-
-interface InboxThreadSummary {
-  key: string;
-  title: string;
-  subtitle: string;
-  unreadCount: number;
-  actionRequired: boolean;
-  latestMessageId: string;
-  latestSeason: number;
-  latestWeek: number;
-}
-
-function inboxThreadKey(message: InboxMessage): string {
-  if (message.relatedEntityType && message.relatedId) {
-    return `${message.relatedEntityType}:${message.relatedId}`;
-  }
-  return `${message.type}:${message.title}`;
 }
 
 // ─── ConsequenceList (A5) ────────────────────────────────────────────────────
@@ -568,7 +552,13 @@ function MessageItem({
 }: MessageItemProps) {
   const config = getMessageConfig(message.type);
   const Icon = config.icon;
-  const requiresAction = message.actionRequired && !seasonEvent?.resolved;
+  const actionableSeasonEvent = seasonEvent && canResolveSeasonEvent(seasonEvent, currentWeek,
+    useGameStore.getState().gameState?.scout.primarySpecialization);
+  const requiresAction = seasonEvent ? Boolean(actionableSeasonEvent) : message.actionRequired;
+  const displayTitle = seasonEvent && !actionableSeasonEvent
+    ? message.title.replace(/\s+— Decision Required$/, "") : message.title;
+  const displayBody = seasonEvent && !actionableSeasonEvent && !seasonEvent.resolved
+    ? `${seasonEvent.description}. Check your planner for scheduled activities.` : message.body;
   const relatedPlayerId = gossipItem?.playerId
     ?? (message.relatedEntityType === "player" ? message.relatedId : undefined);
   const MessageContainer = isExpanded ? "div" : "button";
@@ -578,18 +568,18 @@ function MessageItem({
         type: "button" as const,
         onClick,
         "aria-expanded": false,
-        "aria-label": `${message.read ? "Read" : "Unread"} message: ${message.title}`,
+        "aria-label": `${message.read ? "Read" : "Unread"} message: ${displayTitle}`,
       };
 
   return (
     <MessageContainer
       {...collapsedMessageProps}
-      className={`w-full rounded-lg border text-left transition ${
-        !message.read
-          ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50"
-          : isExpanded
-            ? "border-zinc-600 bg-[#141414]"
-            : "border-[#27272a] bg-[#141414] hover:border-zinc-600"
+      className={`w-full text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-400 ${
+        isExpanded
+          ? "bg-white/5"
+          : !message.read
+            ? "bg-emerald-500/[0.035] hover:bg-white/5"
+            : "hover:bg-white/5"
       }`}
     >
       <div className="flex items-start gap-3 p-4">
@@ -604,7 +594,7 @@ function MessageItem({
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center justify-between gap-2">
+          <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
             <div className="flex items-center gap-2 min-w-0">
               {!message.read && (
                 <span
@@ -613,14 +603,14 @@ function MessageItem({
                 />
               )}
               <span
-                className={`truncate text-sm font-semibold ${
+                className={`break-words text-sm font-semibold leading-snug ${
                   !message.read ? "text-white" : "text-zinc-300"
                 }`}
               >
-                {message.title}
+                {displayTitle}
               </span>
             </div>
-            <span className="shrink-0 text-xs text-zinc-600">
+            <span className="shrink-0 text-xs text-zinc-400">
               {formatRelativeGameDate(
                 { week: message.week, season: message.season },
                 { week: currentWeek, season: currentSeason },
@@ -643,7 +633,7 @@ function MessageItem({
           {isExpanded ? (
             <>
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
-                {message.body}
+                {displayBody}
               </p>
               {relatedPlayerId && (
                 <div className="mt-3 flex gap-2">
@@ -772,9 +762,9 @@ function MessageItem({
                     <p className="text-xs text-zinc-500">
                       Decision made: {seasonEvent.choices?.[seasonEvent.choiceSelected ?? -1]?.label ?? "Resolved"}
                     </p>
-                  ) : seasonEvent.choices && onResolveSeasonEvent ? (
+                  ) : actionableSeasonEvent && onResolveSeasonEvent ? (
                     <div className="flex flex-wrap gap-2">
-                      {seasonEvent.choices.map((choice, index) => (
+                      {getSeasonEventChoiceOptions(seasonEvent).map(({ choice, index }) => (
                         <Button
                           key={`${seasonEvent.id}-${choice.label}`}
                           size="sm"
@@ -802,7 +792,7 @@ function MessageItem({
                   variant="ghost"
                   className="h-7 px-2 text-xs text-zinc-500 hover:text-white"
                   onClick={onClick}
-                  aria-label={`Collapse message: ${message.title}`}
+                  aria-label={`Collapse message: ${displayTitle}`}
                 >
                   <ChevronDown
                     size={12}
@@ -814,7 +804,7 @@ function MessageItem({
               </div>
             </>
           ) : (
-            <p className="text-xs text-zinc-500 line-clamp-2">{message.body}</p>
+            <p className="line-clamp-2 text-sm leading-relaxed text-zinc-400">{displayBody}</p>
           )}
         </div>
 
@@ -867,7 +857,7 @@ export function InboxScreen() {
       startReport: state.startReport,
     })),
   );
-  const { playSFX } = useAudio();
+  const { playStinger } = useAudio();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // A7: Enhanced filter/sort state
   const [filterCategory, setFilterCategory] = useState<FilterCategory>("all");
@@ -892,8 +882,12 @@ export function InboxScreen() {
       changed = true;
       return { ...message, actionRequired };
     });
-    return changed ? repaired : source;
-  }, [gameState?.inbox, liveInboxActionIds]);
+    const caseIds = IS_YOUTH_EARLY_ACCESS && gameState ? collectYouthCasePlayerIds(gameState) : undefined;
+    const visible = IS_YOUTH_EARLY_ACCESS && gameState
+      ? (changed ? repaired : source).filter((message) => shouldShowYouthInboxMessage(gameState, message, caseIds))
+      : (changed ? repaired : source);
+    return visible;
+  }, [gameState, liveInboxActionIds]);
   const currentWeek = gameState?.currentWeek ?? 1;
   const currentSeason = gameState?.currentSeason ?? 1;
   const seasonLength = gameState
@@ -956,56 +950,6 @@ export function InboxScreen() {
     return counts;
   }, [inbox, seasonFilter]);
 
-  const threadSummaries = useMemo<InboxThreadSummary[]>(() => {
-    const threads = new Map<string, InboxThreadSummary>();
-    for (const message of inbox) {
-      const key = inboxThreadKey(message);
-      const latestIndex = message.season * 100 + message.week;
-      const current = threads.get(key);
-      if (!current || latestIndex > current.latestSeason * 100 + current.latestWeek) {
-        threads.set(key, {
-          key,
-          title: message.title,
-          subtitle: message.relatedEntityType
-            ? `${message.relatedEntityType} thread`
-            : `${message.type} thread`,
-          unreadCount: current?.unreadCount ?? 0,
-          actionRequired: (current?.actionRequired ?? false) || message.actionRequired,
-          latestMessageId: message.id,
-          latestSeason: message.season,
-          latestWeek: message.week,
-        });
-      }
-      if (!message.read) {
-        const entry = threads.get(key);
-        if (entry) entry.unreadCount += 1;
-      }
-      if (message.actionRequired) {
-        const entry = threads.get(key);
-        if (entry) entry.actionRequired = true;
-      }
-    }
-    return [...threads.values()]
-      .sort((left, right) =>
-        right.latestSeason - left.latestSeason
-        || right.latestWeek - left.latestWeek
-        || left.key.localeCompare(right.key),
-      );
-  }, [inbox]);
-
-  const urgentMessages = useMemo(() => {
-    const urgentById = new Map<string, InboxMessage>();
-    for (const message of liveInboxActionMessages) {
-      urgentById.set(message.id, message);
-    }
-    for (const message of inbox) {
-      if (!message.read) {
-        urgentById.set(message.id, message);
-      }
-    }
-    return sortMessages([...urgentById.values()], "newest").slice(0, 4);
-  }, [inbox, liveInboxActionMessages]);
-
   if (!gameState) return null;
 
   // A3: Build a lookup from gossip ID to gossip item for quick access
@@ -1025,7 +969,7 @@ export function InboxScreen() {
     setExpandedId(isExpanding ? message.id : null);
     if (isExpanding && !message.read) {
       markMessageRead(message.id);
-      playSFX(message.type === "jobOffer" ? "job-offer" : "notification");
+      playStinger(message.type === "jobOffer" ? "job-offer" : "notification");
     }
   };
 
@@ -1041,11 +985,11 @@ export function InboxScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6">
-        <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.85} />
+      <div className="relative min-h-full px-4 py-6 sm:px-6 lg:px-8">
+
         <div className="relative z-10">
         {/* ── Header ────────────────────────────────────────────────────── */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Inbox</h1>
             <p className="text-sm text-zinc-400">
@@ -1057,101 +1001,12 @@ export function InboxScreen() {
           {unreadCount > 0 && (
             <button
               onClick={markAllRead}
-              className="text-xs text-zinc-500 hover:text-white transition"
+              className="min-h-11 px-2 text-sm text-zinc-300 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
               aria-label="Mark all messages as read"
             >
               Mark all read
             </button>
           )}
-        </div>
-
-        <div className="mb-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-          <Card className="border-emerald-500/20 bg-zinc-950/85">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Bell size={14} className="text-emerald-300" aria-hidden="true" />
-                Decision queue
-              </CardTitle>
-              <p className="text-xs leading-5 text-zinc-400">
-                The highest-pressure items that can still change outcomes this week.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2.5">
-              {urgentMessages.length > 0 ? (
-                urgentMessages.map((message) => (
-                  <button
-                    key={message.id}
-                    type="button"
-                    onClick={() => handleExpand(message)}
-                    className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-left transition hover:border-zinc-600"
-                    aria-label={`Open message thread ${message.title}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-white">{message.title}</p>
-                      {!message.read && (
-                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                          Unread
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-[11px] text-zinc-500">
-                      {message.type} · S{message.season} W{message.week}
-                    </p>
-                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-400">{message.body}</p>
-                  </button>
-                ))
-              ) : (
-                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-zinc-400">
-                  No urgent inbox items. The archive is quiet for now.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-white/10 bg-black/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Link2 size={14} className="text-blue-300" aria-hidden="true" />
-                Live threads
-              </CardTitle>
-              <p className="text-xs leading-5 text-zinc-400">
-                The current mail stream distilled into ongoing relationship and world threads.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2.5">
-              {threadSummaries.slice(0, 5).map((thread) => {
-                const latestMessage = inbox.find((message) => message.id === thread.latestMessageId);
-                if (!latestMessage) return null;
-                return (
-                  <button
-                    key={thread.key}
-                    type="button"
-                    onClick={() => handleExpand(latestMessage)}
-                    className="w-full rounded-xl border border-white/10 bg-zinc-950/80 px-3 py-2.5 text-left transition hover:border-zinc-600"
-                    aria-label={`Open thread ${thread.title}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-white">{thread.title}</p>
-                      <div className="flex items-center gap-1.5">
-                        {thread.actionRequired && (
-                          <Badge variant="warning" className="text-[10px]">
-                            Action
-                          </Badge>
-                        )}
-                        {thread.unreadCount > 0 && (
-                          <Badge variant="outline" className="border-emerald-500/25 text-[10px] text-emerald-200">
-                            {thread.unreadCount} unread
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <p className="mt-1 text-[11px] text-zinc-500">{thread.subtitle}</p>
-                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-400">{latestMessage.body}</p>
-                  </button>
-                );
-              })}
-            </CardContent>
-          </Card>
         </div>
 
         {activeCareerDecisions.length > 0 && (
@@ -1327,7 +1182,7 @@ export function InboxScreen() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2" role="list" data-tutorial-id="inbox-latest">
+          <div className="divide-y divide-white/10 border-y border-white/10 bg-[var(--surface)]" role="list" data-tutorial-id="inbox-latest">
             {filteredMessages.map((message) => {
               // A3: For gossip messages, look up the associated gossip item
               const relatedGossip =

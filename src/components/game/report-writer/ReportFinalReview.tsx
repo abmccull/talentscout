@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText } from "lucide-react";
+import { Check, FileText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -140,16 +140,16 @@ function CardLike({
       id="report-section-file"
       data-testid="report-final-review"
       data-tutorial-id="report-conviction"
-      className={`scroll-mt-28 rounded-xl border ${qualityScoreBorder(displayQualityScore)} bg-[#10151b]/98 shadow-2xl shadow-black/25 lg:sticky lg:top-20 lg:z-20`}
+      className="dossier-panel scroll-mt-28 lg:sticky lg:top-20 lg:z-20"
     >
       <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
         <div>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              <p className="dossier-eyebrow">
                 Final review
               </p>
-              <h2 className="mt-1 text-xl font-bold text-white">
+              <h2 className="font-editorial mt-1 text-2xl">
                 Check the case, then file it
               </h2>
             </div>
@@ -163,25 +163,25 @@ function CardLike({
           </div>
           {isYouthCase && (
             <dl className="mb-4 grid gap-2 text-xs sm:grid-cols-2">
-              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="border-b border-[var(--border)] py-3">
                 <dt className="text-zinc-400">Club brief</dt>
                 <dd className="mt-1 font-semibold text-white">
                   {activeBriefClubName ?? "No club selected"}
                 </dd>
               </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="border-b border-[var(--border)] py-3">
                 <dt className="text-zinc-400">Recommended action</dt>
                 <dd className="mt-1 font-semibold text-white">
                   {recommendedActionLabel}
                 </dd>
               </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="border-b border-[var(--border)] py-3">
                 <dt className="text-zinc-400">Defended judgments</dt>
                 <dd className="mt-1 font-semibold text-white">
                   {completedJudgmentCount}/{JUDGMENT_CATEGORIES.length}
                 </dd>
               </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="border-b border-[var(--border)] py-3">
                 <dt className="text-zinc-400">Risk posture</dt>
                 <dd className="mt-1 font-semibold text-white">
                   {selectedNoMaterialSignal
@@ -200,7 +200,7 @@ function CardLike({
                 {effectiveSummary
                   || "Complete the evidence judgments above to assemble the recommendation."}
               </p>
-              <p className="mt-3 text-[11px] leading-5 text-zinc-400">
+              <p className="mt-3 text-xs leading-5 text-zinc-400">
                 {youthRecommendationSupportCopy}
               </p>
             </div>
@@ -227,7 +227,7 @@ function CardLike({
           )}
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+        <div className="border-t border-[var(--border)] pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
@@ -262,17 +262,17 @@ function CardLike({
                     />
                     <label
                       htmlFor={`report-conviction-${key}`}
-                      className={`block min-h-12 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-400 ${
+                      className={`block min-h-12 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--ring)] ${
                         isDisabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:border-white/20"
                       } ${
                         conviction === key
                           ? key === "tablePound"
                             ? "border-red-400/60 bg-red-400/10 text-red-200"
-                            : "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
+                            : "border-[var(--primary)] bg-[var(--surface-selected)] text-[var(--foreground)]"
                           : "border-white/10 bg-white/[0.025] text-zinc-300"
                       }`}
                     >
-                      {convictionLabel(key)}
+                      <span className="flex items-center justify-between gap-2">{convictionLabel(key)}{conviction === key && <Check size={14} className="shrink-0" aria-hidden="true" />}</span>
                     </label>
                   </div>
                 );
@@ -285,7 +285,7 @@ function CardLike({
               the evidence deserves that risk.
             </p>
           )}
-          <p className="mt-2 text-[11px] text-zinc-400">
+          <p className="mt-2 text-xs text-zinc-400">
             Table-pounds remaining this season:{" "}
             <span className="font-semibold text-white">{remainingTablePounds}</span>
           </p>

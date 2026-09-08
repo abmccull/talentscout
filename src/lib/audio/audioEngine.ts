@@ -356,6 +356,13 @@ export class AudioEngine {
     }
   }
 
+  resetToDefaults(): void {
+    this.volumes = { ...DEFAULT_VOLUMES };
+    this.applyVolumes();
+    this.persistVolumes();
+    this.notify();
+  }
+
   // ── Crossfade ──────────────────────────────────────────────────────────────
 
   crossfade(

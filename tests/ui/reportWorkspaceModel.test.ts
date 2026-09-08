@@ -28,6 +28,24 @@ function report(id: string, playerId: string, overrides: Partial<ScoutReport> = 
 }
 
 describe("report workspace model", () => {
+  it("does not nudge private pass decisions into a stale marketplace prompt", () => {
+    const passed = report("report-pass", "player-1", { recommendedAction: "pass" });
+    const gameState = {
+      scout: { id: "scout-1", careerPath: "independent" }, reports: { [passed.id]: passed },
+      scoutingCases: {}, reportDeliveries: {}, clubDecisions: {}, youthRecruitmentBriefs: {},
+      clubs: {}, players: { "player-1": { id: "player-1", firstName: "Milo", lastName: "Vale" } },
+      retiredPlayers: {}, unsignedYouth: {}, transferRecords: [],
+    } as unknown as GameState;
+    const model = buildReportWorkspaceViewModel({ gameState, reports: [passed],
+      casesNeedingDelivery: [], awaitingDecisionDeliveries: [], placedCases: [], listingByReportId: {},
+      comparisonReportIds: [], pendingListingReportId: passed.id, staffWorkQueueCount: 0,
+      journalEntryCount: 1, activeListingsCount: 0, pendingBidsCount: 0,
+    });
+    expect(model.featuredArtifact?.recommendedAction).toBe("Pass for now");
+    expect(model.featuredArtifact?.followUp).toContain("New evidence");
+    expect(model.featuredArtifact?.primaryAction.kind).toBe("openReport");
+    expect(model.lanes.flatMap((lane) => lane.items).some((item) => item.action?.kind === "listReport")).toBe(false);
+  });
   it("prioritizes the pending listing artifact and keeps accountability lanes visible", () => {
     const pendingReport = report("report-pending", "player-1", {
       intendedClubId: "club-1",

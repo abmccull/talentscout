@@ -27,7 +27,6 @@ export {
   createAlumniRecord,
   processAlumniWeek,
   calculateLegacyScore,
-  calculateAlumniReputationBonus,
 } from "./alumni";
 
 // Tournament system — named, scheduled, discoverable youth events
@@ -81,3 +80,39 @@ export type {
   YouthEvergreenCaseDefinition,
   YouthEvergreenCaseFamilyId,
 } from "./evergreenCases";
+
+export {
+  collectYouthCasePlayerIds,
+  collectYouthCaseWatchTargetIds,
+  findYouthCaseWatchDay,
+  shouldShowYouthInboxMessage,
+} from "./youthCaseFocus";
+
+export {
+  buildYouthCaseListItem,
+  listYouthCases,
+  rivalHeatFromYouth,
+} from "./youthCaseList";
+export type { YouthCaseListItem, YouthRivalHeat } from "./youthCaseList";
+
+export {
+  buildYouthDeskStakes,
+  deriveYouthFileMoney,
+  deriveYouthReputationLine,
+  listYouthDeskAlumni,
+  shouldShowYouthDeskStakes,
+} from "./youthDeskStakes";
+export type {
+  YouthDeskAlumniItem,
+  YouthDeskStakes,
+  YouthFileMoney,
+} from "./youthDeskStakes";
+
+export {
+  deriveYouthSeasonCaseReview,
+  formatYouthSeasonReviewBody,
+} from "./youthSeasonReview";
+export type {
+  YouthSeasonCaseLine,
+  YouthSeasonCaseReview,
+} from "./youthSeasonReview";

@@ -1,3 +1,4 @@
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 /**
  * Finance, economics, equipment, agency, transfer negotiation, free agent,
  * and player loan actions extracted from gameStore.
@@ -69,6 +70,7 @@ import {
   getTransferContingentReserve,
   recordRetainerDelivery,
   recordConsultingReportDelivery,
+  ensureYouthRetainerBrief,
   selectAgencyOperatingPolicy,
 } from "@/engine/finance";
 import { creditForLoanRepayment } from "@/engine/finance/creditScore";
@@ -384,8 +386,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const signOffSummary = reviewPreview.reviewDebtPenalty > 0
         ? `${reviewPreview.signedOffQualityScore}/100 after ${reviewPreview.reviewDebtPenalty} review-debt points`
         : `${reviewPreview.signedOffQualityScore}/100 with no review debt`;
-      set({
-        gameState: {
+      const nextState = revealGamePortraits({
           ...gameState,
           finances,
           scout: {
@@ -409,8 +410,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
             relatedId: product.playerId,
             relatedEntityType: "player",
           }],
-        },
-      });
+      }, [product.playerId], "tracked");
+      set({ gameState: nextState });
     },
 
     rejectStaffWorkProduct: (workProductId: string) => {
@@ -473,6 +474,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!gameState || !gameState.finances) return;
       const report = gameState.reports[reportId];
       if (!report || report.scoutId !== gameState.scout.id) return;
+      if ((report.recommendedAction as string | undefined) === "pass") return;
       const linked = ensureScoutingCaseForReport(gameState.scoutingCases ?? {}, report);
       const existingListingIds = new Set(
         gameState.finances.reportListings.map((listing) => listing.id),
@@ -521,6 +523,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const listedReport = gameState.reports[listing.reportId];
+      if (!listedReport || (listedReport.recommendedAction as string | undefined) === "pass") return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending") return;
       const buyer = gameState.clubs[bid.clubId];
@@ -622,6 +626,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const listedReport = gameState.reports[listing.reportId];
+      if (!listedReport || (listedReport.recommendedAction as string | undefined) === "pass") return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return;
       const buyer = gameState.clubs[bid.clubId];
@@ -697,12 +703,14 @@ export function createFinanceActions(get: GetState, set: SetState) {
     acceptRetainerContract: (contract: RetainerContract) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
+      const club = gameState.clubs[contract.clubId];
+      if (!club) return;
       // Public actions may receive a negotiated/generated offer or a direct
       // contract assembled by another gameplay system. Anchor either shape to
       // the acceptance date so a missing optional offer timestamp cannot make
       // settlement fall back to an unrelated global week boundary.
       const datedContract: RetainerContract = {
-        ...contract,
+        ...ensureYouthRetainerBrief(contract, club, gameState.players),
         startWeek: contract.startWeek ?? contract.offeredWeek ?? gameState.currentWeek,
         startSeason: contract.startSeason ?? contract.offeredSeason ?? gameState.currentSeason,
       };
@@ -723,12 +731,11 @@ export function createFinanceActions(get: GetState, set: SetState) {
           gameState.currentWeek,
           gameState.currentSeason,
         );
-        set({
-          gameState: {
-            ...gameState,
-            finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
-          },
-        });
+        const nextState = {
+          ...gameState,
+          finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
+        };
+        set({ gameState: nextState });
       }
     },
 
@@ -865,6 +872,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         club,
         pitchType,
         actionSequence,
+        gameState.players,
       );
       if (result.success && result.offeredContract) {
         const financesWithRelationship = ensureClientRelationship(

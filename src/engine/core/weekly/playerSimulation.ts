@@ -1,5 +1,6 @@
 import type { RNG } from "../../rng/index";
 import {
+  applySemanticPlayerDevelopment,
   computeSemanticBreakthrough,
   computeSemanticPlayerDevelopment,
 } from "../../players/development";
@@ -277,7 +278,6 @@ export function processPlayerDevelopment(
 
   for (const player of Object.values(state.players)) {
     if (player.injuryWeeksRemaining > 6) continue;
-    if (player.age > 35) continue;
 
     const environment = evaluatePlayerDevelopmentEnvironment(state, player, {
       index: environmentIndex,
@@ -300,7 +300,7 @@ export function processPlayerDevelopment(
     }
 
     const semanticBreakthrough = computeSemanticBreakthrough(
-      player,
+      hasChanges ? applySemanticPlayerDevelopment(player, result).player : player,
       rng,
       environment.mechanics.breakthroughMultiplier,
     );

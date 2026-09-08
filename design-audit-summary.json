@@ -1,41 +1,35 @@
 {
-  "audit_date": "2026-07-29",
-  "candidate_sha": "a99b5849c8fa0d7efa873ef0124e37c109b093bd",
-  "product": "TalentScout Youth Scout Early Access",
-  "product_type": "Scout-centered football career simulation",
-  "scores": {
-    "overall_design": 8.6,
-    "base_design": 8.7,
-    "system_cohesion": 9.1,
-    "dimensions": {
-      "visual_hierarchy": 9.0,
-      "layout_and_spacing": 8.3,
-      "typography": 8.7,
-      "color_and_contrast": 8.5,
-      "components_and_states": 8.7,
-      "interaction_and_feedback": 8.6,
-      "information_architecture_and_navigation": 9.0,
-      "conversion_or_task_flow_design": 8.8,
-      "accessibility_and_inclusive_ux": 8.8,
-      "imagery_and_iconography": 8.3,
-      "brand_visual_system": 9.0,
-      "emotional_trust_and_polish": 8.7
-    }
+  "status": "final local design audit",
+  "candidate": "See docs/PRODUCTION_READINESS_REPORT.md and evidence/final-source-fingerprint.json; isolated visual rewrite excluded",
+  "baseDesignScore": 6.8,
+  "systemCohesionScore": 6,
+  "overallDesignScore": 6.6,
+  "dimensions": {
+    "visualHierarchy": 7,
+    "layoutAndSpacing": 6,
+    "typography": 6,
+    "colorAndContrast": 6.5,
+    "componentsAndStates": 7.5,
+    "interactionAndFeedback": 7.5,
+    "informationArchitectureAndNavigation": 6,
+    "taskFlow": 8,
+    "accessibilityAndInclusiveUX": 7,
+    "imageryAndIconography": 5.5,
+    "brandVisualSystem": 7,
+    "emotionalTrustAndPolish": 7
   },
-  "caps_applied": [],
-  "fresh_evidence": {
-    "core_workspace_visual": "1/1 passed; 8 desktop/mobile screenshots",
-    "scouting_ecology_visual": "1/1 passed; 6 desktop/mobile screenshots",
-    "academy_case_visual": "1/1 passed; desktop/mobile flow, Axe, and overflow checks",
-    "automated_accessibility": "6/6 passed",
-    "low_end_emulation": "2/2 passed",
-    "packaged_worker": "passed; packaged worker active with zero CSP policy errors"
-  },
-  "top_recommendations": [
-    "Reduce mobile page length and tertiary card density",
-    "Complete manual NVDA and VoiceOver",
-    "Complete moderated usability and late-career density validation",
-    "Reduce the shipping JavaScript bundle"
+  "mandatoryCapsTriggered": [],
+  "additionalCoverageCeiling": null,
+  "finalCandidateRenderedAcceptance": "Shared polish and no-guide recovery verified; physical and human certification remain open",
+  "distinctScopedE2ETestsPassed": 13,
+  "report": "C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/design-audit-report.md",
+  "pending": [
+    "Desk density and repeated priorities",
+    "Secondary guidance footprint",
+    "Portrait/background cohesion",
+    "Human assistive technology and broader large-text review",
+    "Automatic secondary check-ins after first-hour guide opt-out"
   ],
-  "final_judgment": "Strong and distinctive design, not release-certified under the project's strict evidence standard."
+  "evidenceIndex": "C:/Users/hands/OneDrive/Pictures/TalentScout/readiness-20260904/evidence/opening-qa-evidence-index.json",
+  "finalGuideAcceptanceEvidence": "C:/Users/hands/OneDrive/Pictures/TalentScout/readiness-20260904/evidence/final-guide-opening-recheck.json"
 }

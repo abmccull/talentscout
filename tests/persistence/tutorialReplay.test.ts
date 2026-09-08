@@ -1,22 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  getDiscoveryHookMilestoneOrder,
   useTutorialStore,
-  type GuidedMilestoneId,
 } from "@/stores/tutorialStore";
-
-const DISCOVERY_MILESTONES: GuidedMilestoneId[] = [
-  "attendedMatch",
-  "focusedPlayer",
-  "flaggedBreakthrough",
-  "completedMatch",
-  "wroteReport",
-  "submittedReport",
-  "checkedInbox",
-  "openedCalendar",
-  "scheduledActivity",
-  "advancedWeek",
-];
 
 beforeEach(() => {
   useTutorialStore.setState({
@@ -57,7 +44,7 @@ describe("forced guided-session replay", () => {
       currentGuidedTask: "attendedMatch",
     });
 
-    for (const milestone of DISCOVERY_MILESTONES) {
+    for (const milestone of getDiscoveryHookMilestoneOrder()) {
       expect(useTutorialStore.getState().currentGuidedTask).toBe(milestone);
       useTutorialStore.getState().completeMilestone(milestone);
     }
@@ -89,5 +76,23 @@ describe("forced guided-session replay", () => {
     useTutorialStore.getState().skipGuidedSession();
     expect(useTutorialStore.getState().guidedSessionForcedReplay).toBe(false);
     expect(useTutorialStore.getState().guidedSessionCompleted).toBe(true);
+  });
+
+  it("does not graduate a new player when they skip the mentor", () => {
+    useTutorialStore.setState({
+      dismissed: false,
+      guidedSessionActive: true,
+      guidedSessionForcedReplay: false,
+      guidedSessionCompleted: false,
+      currentGuidedTask: "attendedMatch",
+    });
+
+    useTutorialStore.getState().skipGuidedSession();
+
+    expect(useTutorialStore.getState()).toMatchObject({
+      guidedSessionActive: false,
+      currentGuidedTask: null,
+      guidedSessionCompleted: false,
+    });
   });
 });

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { buildVisualEvidenceProvenance } from "../../e2e/helpers/releaseEvidencePath";
+import { buildVisualEvidenceProvenance, fingerprintDirtyVisualEvidence } from "../../e2e/helpers/releaseEvidencePath";
 
 describe("visual evidence provenance paths", () => {
+  it("keeps successive edits to the same dirty paths in different evidence directories", () => {
+    const status = " M screen.tsx\n?? new-screen.tsx\n";
+    const first = fingerprintDirtyVisualEvidence(status, "old contrast", [{ path: "new-screen.tsx", sha256: "first" }]);
+    expect(fingerprintDirtyVisualEvidence(status, "fixed contrast", [{ path: "new-screen.tsx", sha256: "first" }])).not.toBe(first);
+    expect(fingerprintDirtyVisualEvidence(status, "old contrast", [{ path: "new-screen.tsx", sha256: "second" }])).not.toBe(first);
+  });
   it("uses a stable candidate slug for a clean checkout", () => {
     const provenance = buildVisualEvidenceProvenance({
       commitSha: "0123456789abcdef0123456789abcdef01234567",

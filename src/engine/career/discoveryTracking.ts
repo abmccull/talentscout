@@ -1,6 +1,6 @@
 /**
- * Discovery tracking — wonderkid career trajectory recording and prediction
- * accuracy measurement.
+ * Discovery tracking — internal career trajectory recording. Scout accuracy
+ * comes from delayed report validation, never from hidden generation values.
  *
  * All functions are pure: no mutation of inputs, no side effects.
  */
@@ -22,12 +22,6 @@ const WONDERKID_PA_THRESHOLD = 150;
 /** Maximum player age to qualify as a wonderkid at the time of discovery. */
 const WONDERKID_MAX_AGE = 21;
 
-/**
- * The CA boundary used in the accuracy formula to decide whether a player
- * "reached a high ceiling" (i.e. achieved elite-level development).
- */
-const HIGH_CEILING_CA_THRESHOLD = 150;
-
 // ---------------------------------------------------------------------------
 // recordDiscovery
 // ---------------------------------------------------------------------------
@@ -40,7 +34,7 @@ const HIGH_CEILING_CA_THRESHOLD = 150;
  *   - the player's potentialAbility >= 150
  *
  * `initialPA` records the true PA at discovery (the game engine knows it even
- * if the scout does not yet); it is used later for prediction accuracy scoring.
+ * if the scout does not yet). It is diagnostic history, not a scout prediction.
  */
 export function recordDiscovery(
   player: Player,
@@ -97,86 +91,6 @@ export function addSeasonSnapshot(
     ...record,
     careerSnapshots: [...filtered, snapshot],
   };
-}
-
-// ---------------------------------------------------------------------------
-// calculatePredictionAccuracy
-// ---------------------------------------------------------------------------
-
-/**
- * Score the scout's initial assessment against the player's actual development.
- * Returns a value in [0, 100].
- *
- * The scoring tiers are:
- *
- *  1. Scout predicted HIGH ceiling (initialPA >= 150) AND player reached it
- *     (currentAbility >= 150): 90–100
- *
- *  2. Scout predicted HIGH ceiling but player did not reach it: 30–50
- *
- *  3. Scout did NOT predict high ceiling but player exceeded it
- *     (currentAbility >= 150): 10–30
- *
- *  4. General case: 100 - |initialPA - currentAbility| / 2
- *     Clamped to [0, 100].
- *
- * When `initialPA` is absent the function falls back to comparing `initialCA`
- * with `currentAbility` using the general formula.
- */
-export function calculatePredictionAccuracy(
-  record: DiscoveryRecord,
-  player: Player,
-): number {
-  const predictedCeiling = record.initialPA;
-  const currentCA = player.currentAbility;
-
-  const scoutPredictedHighCeiling =
-    predictedCeiling !== undefined && predictedCeiling >= HIGH_CEILING_CA_THRESHOLD;
-  const playerReachedHighCeiling = currentCA >= HIGH_CEILING_CA_THRESHOLD;
-
-  // -------------------------------------------------------------------------
-  // Tier 1 — scout was right about elite potential AND player delivered
-  // -------------------------------------------------------------------------
-  if (scoutPredictedHighCeiling && playerReachedHighCeiling) {
-    if (predictedCeiling === undefined) return 90; // guard; cannot happen here
-    // Finer resolution within 90–100 based on how close prediction was to CA
-    const error = Math.abs(predictedCeiling - currentCA);
-    // error=0 → 100; error=20 → 90; linear interpolation, capped at bounds
-    const score = 100 - error * 0.5;
-    return Math.round(Math.max(90, Math.min(100, score)));
-  }
-
-  // -------------------------------------------------------------------------
-  // Tier 2 — scout predicted elite but player fell short
-  // -------------------------------------------------------------------------
-  if (scoutPredictedHighCeiling && !playerReachedHighCeiling) {
-    // Closer the player got, the higher within [30, 50]
-    const proximity = currentCA / HIGH_CEILING_CA_THRESHOLD; // 0–1
-    const score = 30 + proximity * 20;
-    return Math.round(Math.max(30, Math.min(50, score)));
-  }
-
-  // -------------------------------------------------------------------------
-  // Tier 3 — scout missed it but player exceeded expectations
-  // -------------------------------------------------------------------------
-  if (!scoutPredictedHighCeiling && playerReachedHighCeiling) {
-    // Higher score when the scout at least had a higher initial CA reading
-    const baseCA = record.initialCA;
-    // How close was the initial CA read to the threshold? 0–1
-    const proximity = Math.min(1, baseCA / HIGH_CEILING_CA_THRESHOLD);
-    const score = 10 + proximity * 20;
-    return Math.round(Math.max(10, Math.min(30, score)));
-  }
-
-  // -------------------------------------------------------------------------
-  // General case — neither side involved elite thresholds
-  // Formula: 100 - |predictedCA - currentCA| / 2
-  // Use initialPA when available, otherwise fall back to initialCA.
-  // -------------------------------------------------------------------------
-  const predictedCA = predictedCeiling ?? record.initialCA;
-  const error = Math.abs(predictedCA - currentCA);
-  const score = 100 - error / 2;
-  return Math.round(Math.max(0, Math.min(100, score)));
 }
 
 // ---------------------------------------------------------------------------

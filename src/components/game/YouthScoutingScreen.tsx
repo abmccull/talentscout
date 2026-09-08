@@ -6,6 +6,7 @@ import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -14,9 +15,6 @@ import {
   MapPin,
   School,
   Trophy,
-  Eye,
-  Star,
-  ClipboardList,
   Search,
   Filter,
   ChevronUp,
@@ -28,10 +26,12 @@ import {
 } from "lucide-react";
 import type { UnsignedYouth, SubRegion, Observation, TournamentEvent } from "@/engine/core/types";
 import { getPerceivedAbility, type PerceivedAbility } from "@/engine/scout/perceivedAbility";
-import { MiniStarRange } from "@/components/ui/MiniStarRange";
+import { confidenceLabel } from "./player-profile/playerProfileFormatting";
+import { listYouthCases, type YouthCaseListItem } from "@/engine/youth/youthCaseList";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getCountryDisplayName } from "@/lib/country";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -124,16 +124,12 @@ const VENUES: VenueInfo[] = [
 
 // ─── Table sort types ────────────────────────────────────────────────────────
 
-type YouthSortKey = "name" | "position" | "age" | "nationality" | "value" | "ca" | "pa" | "buzz" | "visibility" | "pipeline";
+type YouthSortKey = "name" | "position" | "age" | "nationality" | "ca" | "pa" | "buzz" | "visibility" | "pipeline";
+
+const YOUTH_TABLE_COLUMNS: [YouthSortKey, string][] = [["name", "Prospect"], ["position", "Position"], ["age", "Age"], ["nationality", "Nationality"], ["ca", "Current read"], ["pa", "Upside read"], ["buzz", "Buzz"], ["visibility", "Visibility"], ["pipeline", "Stage"]];
 type SortDir = "asc" | "desc";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatValue(n: number): string {
-  if (n >= 1_000_000) return `£${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `£${(n / 1_000).toFixed(0)}K`;
-  return `£${n}`;
-}
 
 function familiarityColor(familiarity: number): string {
   if (familiarity > 50) return "bg-emerald-500";
@@ -147,12 +143,6 @@ function familiarityTextColor(familiarity: number): string {
   return "text-red-400";
 }
 
-function buzzColor(buzz: number): string {
-  if (buzz >= 70) return "bg-emerald-500";
-  if (buzz >= 40) return "bg-amber-500";
-  return "bg-zinc-600";
-}
-
 function getPerceivedSortValue(
   perceived: PerceivedAbility | null | undefined,
   mode: "ca" | "pa",
@@ -160,10 +150,6 @@ function getPerceivedSortValue(
   if (!perceived) return -1;
   if (mode === "ca") return (perceived.caLow + perceived.caHigh) / 2;
   return (perceived.paLow + perceived.paHigh) / 2;
-}
-
-function getReadLabel(mode: "ca" | "pa"): string {
-  return mode === "ca" ? "Current Read" : "Upside Read";
 }
 
 function getObservationBadge(observationCount: number): {
@@ -253,10 +239,10 @@ function getPipelineStage(
 }
 
 const PIPELINE_COLORS: Record<PipelineStage, string> = {
-  discovered: "border-zinc-600 bg-zinc-800 text-zinc-400",
-  observed: "border-emerald-500/50 bg-emerald-500/10 text-emerald-400",
-  reported: "border-blue-500/50 bg-blue-500/10 text-blue-400",
-  placed: "border-amber-500/50 bg-amber-500/10 text-amber-400",
+  discovered: "border-[var(--border)] bg-transparent text-zinc-300",
+  observed: "border-[var(--border)] bg-transparent text-[var(--primary)]",
+  reported: "border-[var(--border)] bg-transparent text-zinc-200",
+  placed: "border-[var(--border)] bg-transparent text-[var(--signal-moment)]",
 };
 
 const PIPELINE_LABELS: Record<PipelineStage, string> = {
@@ -275,102 +261,56 @@ interface YouthCardProps {
   reportedIds: Set<string>;
   /** Number of observation sessions this scout has logged for this player. */
   observationCount: number;
+  caseItem?: YouthCaseListItem;
   onClick: () => void;
 }
 
-function YouthCard({
-  youth,
-  perceived,
-  scoutId,
-  reportedIds,
-  observationCount,
-  onClick,
-}: YouthCardProps) {
+function YouthCard({ youth, perceived, scoutId, reportedIds, observationCount, caseItem, onClick }: YouthCardProps) {
   const stage = getPipelineStage(youth, scoutId, reportedIds, observationCount);
-  const scoutCount = youth.discoveredBy.length;
-  const observationBadge = getObservationBadge(observationCount);
-
+  const name = `${youth.player.firstName} ${youth.player.lastName}`;
+  const currentConfidence = perceived ? confidenceLabel(perceived.caConfidence) : undefined;
+  const lastLook = caseItem?.lastLookLabel;
   return (
-    <button
-      onClick={onClick}
-      aria-label={`View profile for ${youth.player.firstName} ${youth.player.lastName}`}
-      className="w-full rounded-lg border border-[#27272a] bg-[#141414] p-4 text-left transition hover:border-zinc-600"
-    >
-      {/* Header */}
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-semibold text-white">
-              {youth.player.firstName} {youth.player.lastName}
-            </p>
-            <Badge className={`shrink-0 text-[10px] ${PIPELINE_COLORS[stage]}`}>
-              {PIPELINE_LABELS[stage]}
-            </Badge>
-            {observationBadge && (
-              <Badge className={`shrink-0 text-[10px] ${observationBadge.className}`}>
-                {observationBadge.label}
-              </Badge>
-            )}
+    <button type="button" onClick={onClick} aria-label={`View profile for ${name}`}
+      className="group w-full border-b border-[var(--border)] py-5 text-left outline-none transition-colors hover:bg-white/[0.025] focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--background)] motion-reduce:transition-none sm:py-6">
+      <div className="flex items-start gap-4">
+        <YouthPortrait playerId={youth.player.id} nationality={youth.player.nationality} age={youth.player.age} size={96} className="shrink-0" alt={name} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-editorial text-2xl leading-tight text-[var(--foreground)]">{name}</p>
+              <p className="mt-2 text-sm text-zinc-300">{youth.player.position} · {youth.player.age} · {youth.player.nationality}</p>
+            </div>
+            <ArrowRight size={17} className="mt-1 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden="true" />
           </div>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {youth.player.nationality} · Age {youth.player.age} ·{" "}
-            {youth.player.position}
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-xs text-zinc-500">Scouts</p>
-          <p className="text-sm font-bold text-white">{scoutCount}</p>
+          <p className="mt-3 text-xs text-zinc-400"><span className="font-medium text-[var(--primary)]">{PIPELINE_LABELS[stage]}</span> · {observationCount} {observationCount === 1 ? "look" : "looks"}{lastLook && lastLook !== "No look yet" ? ` · Last ${lastLook.toLowerCase()}` : ""}</p>
         </div>
       </div>
-
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        <div>
-          <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">{getReadLabel("ca")}</span>
-            <span className="text-zinc-600">
-              {perceived ? `${getPerceivedSortValue(perceived, "ca").toFixed(1)}★` : "Unknown"}
-            </span>
-          </div>
-          <MiniStarRange perceived={perceived} mode="ca" />
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">{getReadLabel("pa")}</span>
-            <span className="text-zinc-600">
-              {perceived ? `${getPerceivedSortValue(perceived, "pa").toFixed(1)}★` : "Unknown"}
-            </span>
-          </div>
-          <MiniStarRange perceived={perceived} mode="pa" />
-        </div>
+      <div className="mt-4">
+        {caseItem ? <>
+          <p className="dossier-eyebrow text-zinc-400">{caseItem.questionLabel}</p>
+          <p className="mt-1.5 text-sm leading-6 text-zinc-200">{caseItem.openQuestion}</p>
+          <p className="mt-2 text-sm leading-6 text-zinc-400"><span className="font-medium text-zinc-300">Next look: </span>{caseItem.nextTest}</p>
+        </> : <p className="text-sm leading-6 text-zinc-300">{observationCount ? "Open the dossier to review the evidence and choose the next test." : "A known name. A first-hand observation is still needed."}</p>}
       </div>
-
-      {/* Buzz level */}
-      <div className="mb-2">
-        <div className="mb-1 flex items-center justify-between text-[10px]">
-          <span className="text-zinc-500">Buzz</span>
-          <span className="text-zinc-400">{youth.buzzLevel}%</span>
-        </div>
-        <Progress
-          value={youth.buzzLevel}
-          className="h-1.5"
-          indicatorClassName={buzzColor(youth.buzzLevel)}
-        />
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/[0.06] pt-3 text-xs text-zinc-400">
+        {perceived ? <>
+          <span><span className="text-zinc-300">Current read </span>{perceived.caLow.toFixed(1)}–{perceived.caHigh.toFixed(1)} / 5 · {currentConfidence?.toLowerCase()} confidence</span>
+          <span><span className="text-zinc-300">Upside </span>{perceived.paLow.toFixed(1)}–{perceived.paHigh.toFixed(1)} / 5 · {confidenceLabel(perceived.paConfidence).toLowerCase()} confidence</span>
+        </> : <span className="text-zinc-300">Ability read still unknown</span>}
+        {caseItem && caseItem.rivalHeat !== "quiet" && <span className="font-medium text-[var(--signal-moment)]">{caseItem.rivalHeatLabel}</span>}
       </div>
-
-      {/* Visibility */}
-      <div>
-        <div className="mb-1 flex items-center justify-between text-[10px]">
-          <span className="text-zinc-500">Visibility</span>
-          <span className="text-zinc-400">{youth.visibility}%</span>
-        </div>
-        <Progress
-          value={youth.visibility}
-          className="h-1.5"
-          indicatorClassName="bg-blue-500"
-        />
-      </div>
+      <p className="mt-2 text-xs leading-5 text-zinc-400">{youth.discoveredBy.length} {youth.discoveredBy.length === 1 ? "scout has" : "scouts have"} found the name · Buzz {youth.buzzLevel}% · Visibility {youth.visibility}%</p>
     </button>
   );
+}
+
+function ProspectEstimate({ perceived, mode }: { perceived: PerceivedAbility | null; mode: "ca" | "pa" }) {
+  if (!perceived) return <span className="text-xs text-zinc-400">Still unknown</span>;
+  const low = mode === "ca" ? perceived.caLow : perceived.paLow;
+  const high = mode === "ca" ? perceived.caHigh : perceived.paHigh;
+  const confidence = mode === "ca" ? perceived.caConfidence : perceived.paConfidence;
+  return <span className="text-sm text-zinc-200">{low.toFixed(1)}–{high.toFixed(1)} / 5<span className="mt-1 block text-xs text-zinc-400">{confidenceLabel(confidence)} confidence</span></span>;
 }
 
 interface VenueCardProps {
@@ -430,6 +370,7 @@ interface UnsignedYouthTabProps {
   filterNationality: string;
   setFilterNationality: (n: string) => void;
   observations: Observation[];
+  caseByPlayerId?: Map<string, YouthCaseListItem>;
 }
 
 function UnsignedYouthTab({
@@ -460,6 +401,7 @@ function UnsignedYouthTab({
   filterNationality,
   setFilterNationality,
   observations,
+  caseByPlayerId,
 }: UnsignedYouthTabProps) {
   const [tableSortKey, setTableSortKey] = useState<YouthSortKey>("buzz");
   const [tableSortDir, setTableSortDir] = useState<SortDir>("desc");
@@ -475,7 +417,7 @@ function UnsignedYouthTab({
   };
 
   const TableSortIcon = ({ col }: { col: YouthSortKey }) => {
-    if (tableSortKey !== col) return <ChevronDown size={12} className="text-zinc-600" />;
+    if (tableSortKey !== col) return <ChevronDown size={12} className="text-zinc-400" />;
     return tableSortDir === "asc" ? (
       <ChevronUp size={12} className="text-emerald-400" />
     ) : (
@@ -485,11 +427,10 @@ function UnsignedYouthTab({
 
   let filtered = youth;
   if (searchQuery) {
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     filtered = filtered.filter(
       (y) =>
-        y.player.firstName.toLowerCase().includes(q) ||
-        y.player.lastName.toLowerCase().includes(q),
+        `${y.player.firstName} ${y.player.lastName}`.toLowerCase().includes(q),
     );
   }
   if (filterCountry) {
@@ -539,7 +480,6 @@ function UnsignedYouthTab({
           case "position": cmp = a.player.position.localeCompare(b.player.position); break;
           case "age": cmp = a.player.age - b.player.age; break;
           case "nationality": cmp = a.player.nationality.localeCompare(b.player.nationality); break;
-          case "value": cmp = a.player.marketValue - b.player.marketValue; break;
           case "ca": {
             const aP = perceivedMap.get(a.player.id);
             const bP = perceivedMap.get(b.player.id);
@@ -574,216 +514,77 @@ function UnsignedYouthTab({
     maxAge,
     filterNationality,
     filterCountry,
-    observedOnly ? "pipeline" : "",
   ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterCountry("");
+    setFilterPosition("");
+    setFilterNationality("");
+    setMinAge("");
+    setMaxAge("");
+  };
 
   return (
     <div>
-      {/* Controls */}
-      <div className="mb-4 rounded-xl border border-white/10 bg-[#11161c]/95 p-3 sm:p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1 min-w-48">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name..."
-              aria-label="Search youth by name"
-              className="min-h-11 w-full rounded-lg border border-[#27272a] bg-[#0a0a0a] py-2 pl-8 pr-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
+      <div className="mb-2" hidden={youth.length === 0}>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="relative min-w-0 sm:min-w-64 sm:flex-1">
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" aria-hidden="true" />
+            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Find a prospect" aria-label="Search youth by name" className="min-h-11 w-full rounded-sm border border-[var(--border)] bg-[var(--surface)] py-2 pl-10 pr-3 text-sm text-[var(--foreground)] placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" />
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowMobileFilters((open) => !open)}
-            aria-expanded={showMobileFilters}
-            aria-controls="youth-advanced-filters"
-            className="flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/5 md:hidden"
-          >
-            <Filter size={15} aria-hidden="true" />
-            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-          </button>
-
-          <div
-            id="youth-advanced-filters"
-            className={`${showMobileFilters ? "flex" : "hidden"} basis-full flex-col gap-3 rounded-lg border border-white/10 bg-black/15 p-3 md:contents`}
-          >
-
-          {/* Position filter */}
-          <select
-            value={filterPosition}
-            onChange={(e) => setFilterPosition(e.target.value)}
-            aria-label="Filter by position"
-            className="min-h-11 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          >
-            <option value="">All Positions</option>
-            {positions.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-
-          {/* Age range */}
-          <div className="flex min-h-11 items-center gap-2">
-            <label className="shrink-0 text-xs text-zinc-400">Age</label>
-            <input
-              type="number"
-              placeholder="Min"
-              value={minAge}
-              onChange={(e) => setMinAge(e.target.value)}
-              min={13}
-              max={21}
-              aria-label="Minimum age"
-              className="min-h-11 w-full min-w-0 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-20"
-            />
-            <span className="text-zinc-600" aria-hidden="true">&ndash;</span>
-            <input
-              type="number"
-              placeholder="Max"
-              value={maxAge}
-              onChange={(e) => setMaxAge(e.target.value)}
-              min={13}
-              max={21}
-              aria-label="Maximum age"
-              className="min-h-11 w-full min-w-0 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-20"
-            />
-          </div>
-
-          {/* Nationality filter */}
-          {nationalities.length > 0 && (
-            <select
-              value={filterNationality}
-              onChange={(e) => setFilterNationality(e.target.value)}
-              aria-label="Filter by nationality"
-              className="min-h-11 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="">All Nationalities</option>
-              {nationalities.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          )}
-
-          {/* Country (region) filter */}
-          {countries.length > 0 && (
-            <select
-              value={filterCountry}
-              onChange={(e) => setFilterCountry(e.target.value)}
-              aria-label="Filter by region"
-              className="min-h-11 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="">All Regions</option>
-              {countries.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          )}
-
-          {/* Observed toggle */}
-          <button
-            onClick={() => setObservedOnly(!observedOnly)}
-            aria-pressed={observedOnly}
-            className={`min-h-11 rounded-lg border px-3 py-2 text-sm transition cursor-pointer ${
-              observedOnly
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                : "border-[#27272a] text-zinc-400 hover:bg-[#1a1a1a] hover:text-white"
-            }`}
-          >
-            <Eye size={12} className="mr-1 inline" />
-            My Pipeline
-          </button>
-          </div>
-
-          {/* View mode toggle */}
-          <div className="ml-auto flex gap-1">
-            <button
-              onClick={() => setViewMode("card")}
-              aria-pressed={viewMode === "card"}
-              aria-label="Card view"
-              className={`flex h-11 w-11 items-center justify-center rounded-lg border transition cursor-pointer ${
-                viewMode === "card"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                  : "border-[#27272a] text-zinc-400 hover:text-white"
-              }`}
-            >
-              <LayoutGrid size={14} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              aria-pressed={viewMode === "list"}
-              aria-label="List view"
-              className={`flex h-11 w-11 items-center justify-center rounded-lg border transition cursor-pointer ${
-                viewMode === "list"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                  : "border-[#27272a] text-zinc-400 hover:text-white"
-              }`}
-            >
-              <List size={14} />
-            </button>
+          <button type="button" onClick={() => setShowMobileFilters((open) => !open)} aria-expanded={showMobileFilters} aria-controls="youth-advanced-filters" className="flex min-h-11 items-center gap-2 rounded-sm border border-[var(--border)] px-3 text-sm text-zinc-300 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"><Filter size={15} aria-hidden="true" />Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}</button>
+          <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto">
+            <button type="button" onClick={() => setObservedOnly(!observedOnly)} aria-pressed={observedOnly} aria-label="My Pipeline" className={`min-h-11 shrink-0 rounded-sm px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${observedOnly ? "bg-[var(--primary)]/15 text-[var(--primary)]" : "text-zinc-300 hover:bg-white/5"}`}>{observedOnly ? "My cases" : "All known names"}</button>
+            <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 sm:flex-none"><span className="sr-only">Sort prospects</span>
+              {viewMode === "card" ? <select value={sort} onChange={(event) => setSort(event.target.value as SortOption)} aria-label="Sort prospects" className="min-h-11 w-full min-w-0 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">{(Object.keys(SORT_LABELS) as SortOption[]).map((option) => <option key={option} value={option}>{SORT_LABELS[option]}</option>)}</select>
+                : <select value={tableSortKey} onChange={(event) => handleTableSort(event.target.value as YouthSortKey)} aria-label="Sort prospects" className="min-h-11 w-full min-w-0 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">{YOUTH_TABLE_COLUMNS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>}
+            </label>
+            {viewMode === "list" && <button type="button" onClick={() => setTableSortDir((direction) => direction === "asc" ? "desc" : "asc")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm text-zinc-300 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" aria-label={`Sort ${tableSortDir === "asc" ? "ascending" : "descending"}; reverse order`}>{tableSortDir === "asc" ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}</button>}
+            <div className="flex shrink-0" role="group" aria-label="Prospect view">
+              <button type="button" onClick={() => setViewMode("card")} aria-pressed={viewMode === "card"} aria-label="Card view" className={`flex h-11 w-11 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${viewMode === "card" ? "bg-[var(--primary)]/15 text-[var(--primary)]" : "text-zinc-400 hover:bg-white/5"}`}><LayoutGrid size={16} aria-hidden="true" /></button>
+              <button type="button" onClick={() => setViewMode("list")} aria-pressed={viewMode === "list"} aria-label="List view" className={`flex h-11 w-11 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] ${viewMode === "list" ? "bg-[var(--primary)]/15 text-[var(--primary)]" : "text-zinc-400 hover:bg-white/5"}`}><List size={16} aria-hidden="true" /></button>
+            </div>
           </div>
         </div>
-
-        {/* Sort buttons (card view only) */}
-        {viewMode === "card" && (
-          <div className={`${showMobileFilters ? "flex" : "hidden"} mt-3 flex-wrap gap-2 border-t border-[#27272a] pt-3 md:flex`}>
-            {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
-              <button
-                key={option}
-                onClick={() => setSort(option)}
-                aria-pressed={sort === option}
-                className={`min-h-11 rounded-lg border px-3 py-2 text-xs transition cursor-pointer ${
-                  sort === option
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                    : "border-[#27272a] text-zinc-400 hover:bg-[#1a1a1a] hover:text-white"
-                }`}
-              >
-                {SORT_LABELS[option]}
-              </button>
-            ))}
+        <div id="youth-advanced-filters" hidden={!showMobileFilters} className="mt-3 border-y border-[var(--border)] py-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="space-y-1.5 text-xs text-zinc-400"><span>Position</span><select value={filterPosition} onChange={(event) => setFilterPosition(event.target.value)} aria-label="Filter by position" className="min-h-11 w-full rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"><option value="">All Positions</option>{positions.map((position) => <option key={position} value={position}>{position}</option>)}</select></label>
+            <fieldset><legend className="mb-1.5 text-xs text-zinc-400">Age range</legend><div className="flex items-center gap-2"><input type="number" min={13} max={21} value={minAge} onChange={(event) => setMinAge(event.target.value)} placeholder="Min" aria-label="Minimum age" className="min-h-11 w-full min-w-0 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" /><span className="text-zinc-400" aria-hidden="true">–</span><input type="number" min={13} max={21} value={maxAge} onChange={(event) => setMaxAge(event.target.value)} placeholder="Max" aria-label="Maximum age" className="min-h-11 w-full min-w-0 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" /></div></fieldset>
+            {nationalities.length > 0 && <label className="space-y-1.5 text-xs text-zinc-400"><span>Nationality</span><select value={filterNationality} onChange={(event) => setFilterNationality(event.target.value)} aria-label="Filter by nationality" className="min-h-11 w-full rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"><option value="">All Nationalities</option>{nationalities.map((nationality) => <option key={nationality} value={nationality}>{nationality}</option>)}</select></label>}
+            {countries.length > 0 && <label className="space-y-1.5 text-xs text-zinc-400"><span>Region</span><select value={filterCountry} onChange={(event) => setFilterCountry(event.target.value)} aria-label="Filter by region" className="min-h-11 w-full rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"><option value="">All Regions</option>{countries.map((country) => <option key={country} value={country}>{getCountryDisplayName(country)}</option>)}</select></label>}
           </div>
-        )}
+          {(activeFilterCount > 0 || searchQuery) && <button type="button" onClick={clearFilters} className="mt-2 min-h-11 rounded-sm px-2 text-sm text-zinc-300 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]">Clear filters</button>}
+        </div>
+        <p className="mt-4 text-xs text-zinc-400" role="status" aria-live="polite">{displayList.length} {displayList.length === 1 ? "prospect" : "prospects"}{observedOnly ? " in your cases" : " known to you"}{searchQuery ? ` matching “${searchQuery}”` : ""} · Estimates follow your evidence</p>
       </div>
 
       {displayList.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <Users size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-            <p className="text-sm font-semibold text-zinc-200">No discovered unsigned prospects match this view.</p>
-            <p className="mt-1 max-w-md text-xs leading-5 text-zinc-400">
-              The world still contains youth talent. Plan a school match, academy visit, tournament, or local scouting trip to bring real names into your pipeline.
-            </p>
-            <Button className="mt-5 min-h-11" onClick={onPlanDiscovery}>
-              <CalendarPlus size={15} className="mr-2" aria-hidden="true" />
-              Plan a discovery week
-            </Button>
-          </CardContent>
-        </Card>
+        <section className="border-b border-[var(--border)] py-10" aria-labelledby="prospect-empty-title">
+          <h2 id="prospect-empty-title" className="font-editorial text-2xl text-[var(--foreground)]">{youth.length ? "No names match this view" : "Your next discovery starts with a match"}</h2>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-400">{youth.length ? "Try another name or widen the filters to revisit the prospects you know." : "Plan a school match, academy visit or local trip. The names you discover will become working cases here."}</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            {youth.length > 0 && <Button variant="outline" className="min-h-11" onClick={() => { clearFilters(); setObservedOnly(false); }}>Show all known names</Button>}
+            <Button className="min-h-11" onClick={onPlanDiscovery}><CalendarPlus size={15} className="mr-2" aria-hidden="true" />Plan a discovery week</Button>
+          </div>
+        </section>
       ) : viewMode === "list" ? (
-        <div className="rounded-lg border border-[#27272a] overflow-hidden">
-          <div className="overflow-x-auto">
+        <div>
+          <div className="md:hidden" data-tutorial-id="youth-pipeline-list">
+            {displayList.map((youth) => <YouthCard key={youth.id} youth={youth} perceived={perceivedMap.get(youth.player.id) ?? null} scoutId={scoutId} reportedIds={reportedIds} observationCount={observationCountByPlayer.get(youth.player.id) ?? 0} caseItem={caseByPlayerId?.get(youth.player.id)} onClick={() => onSelectYouth(youth.player.id)} />)}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#27272a] bg-[#141414] text-left text-xs text-zinc-500">
-                  {([
-                    ["name", "Name"],
-                    ["position", "Pos"],
-                    ["age", "Age"],
-                    ["nationality", "Nat"],
-                    ["value", "Value"],
-                    ["ca", "Read"],
-                    ["pa", "Upside"],
-                    ["buzz", "Buzz"],
-                    ["visibility", "Vis"],
-                    ["pipeline", "Stage"],
-                  ] as [YouthSortKey, string][]).map(([key, label]) => (
+                  {YOUTH_TABLE_COLUMNS.map(([key, label]) => (
                     <th
                       key={key}
-                      className={`px-4 py-3 font-medium ${key === "ca" || key === "pa" ? "w-[104px]" : ""}`}
+                      className={`px-3 py-3 font-medium ${key === "ca" || key === "pa" ? "min-w-[145px]" : key === "name" ? "min-w-[220px]" : ""}`} aria-sort={tableSortKey === key ? tableSortDir === "asc" ? "ascending" : "descending" : "none"}
                     >
                       <button
                         onClick={() => handleTableSort(key)}
-                        className="flex items-center gap-1 hover:text-white transition cursor-pointer"
+                        className="flex min-h-11 items-center gap-1 text-zinc-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
                         aria-label={`Sort by ${label}`}
                       >
                         {label}
@@ -801,62 +602,29 @@ function UnsignedYouthTab({
                     <tr
                       key={y.id}
                       onClick={() => onSelectYouth(y.player.id)}
-                      className="cursor-pointer border-b border-[#27272a] bg-[#0a0a0a] transition hover:bg-[#141414]"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          onSelectYouth(y.player.id);
-                        }
-                      }}
-                      role="button"
-                      aria-label={`View profile for ${y.player.firstName} ${y.player.lastName}`}
+                      className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-white/[0.025] focus-within:bg-white/[0.025]"
                     >
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-white">
-                            {y.player.firstName} {y.player.lastName}
-                          </span>
-                          {observationBadge && (
-                            <Badge className={`text-[10px] ${observationBadge.className}`}>
-                              {observationBadge.label}
-                            </Badge>
-                          )}
-                        </div>
+                        <button type="button" className="flex min-h-11 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" aria-label={`View profile for ${y.player.firstName} ${y.player.lastName}`}>
+                          <YouthPortrait playerId={y.player.id} age={y.player.age} nationality={y.player.nationality} size={48} alt={`${y.player.firstName} ${y.player.lastName}`} className="shrink-0" />
+                          <span><span className="block font-medium text-[var(--foreground)]">{y.player.firstName} {y.player.lastName}</span><span className="mt-1 block text-xs text-zinc-400">{observationBadge?.label ?? "No live look yet"}</span></span>
+                        </button>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline" className="text-[10px]">{y.player.position}</Badge>
+                        <Badge variant="outline" className="text-xs">{y.player.position}</Badge>
                       </td>
                       <td className="px-4 py-3 text-zinc-400">{y.player.age}</td>
                       <td className="px-4 py-3 text-zinc-400">{y.player.nationality}</td>
-                      <td className="px-4 py-3 text-zinc-400">{formatValue(y.player.marketValue)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <MiniStarRange perceived={perceivedMap.get(y.player.id) ?? null} mode="ca" />
+                        <ProspectEstimate perceived={perceivedMap.get(y.player.id) ?? null} mode="ca" />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <MiniStarRange perceived={perceivedMap.get(y.player.id) ?? null} mode="pa" />
+                        <ProspectEstimate perceived={perceivedMap.get(y.player.id) ?? null} mode="pa" />
                       </td>
+                      <td className="px-4 py-3 text-sm tabular-nums text-zinc-300">{y.buzzLevel}%</td>
+                      <td className="px-4 py-3 text-sm tabular-nums text-zinc-300">{y.visibility}%</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
-                            <div
-                              className={`h-full rounded-full ${y.buzzLevel >= 70 ? "bg-emerald-500" : y.buzzLevel >= 40 ? "bg-amber-500" : "bg-zinc-600"}`}
-                              style={{ width: `${y.buzzLevel}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-zinc-400">{y.buzzLevel}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
-                            <div className="h-full rounded-full bg-blue-500" style={{ width: `${y.visibility}%` }} />
-                          </div>
-                          <span className="text-xs text-zinc-400">{y.visibility}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge className={`text-[10px] ${PIPELINE_COLORS[stage]}`}>
+                        <Badge className={`text-xs ${PIPELINE_COLORS[stage]}`}>
                           {PIPELINE_LABELS[stage]}
                         </Badge>
                       </td>
@@ -868,7 +636,7 @@ function UnsignedYouthTab({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" data-tutorial-id="youth-pipeline-list">
+        <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-2 2xl:grid-cols-3" data-tutorial-id="youth-pipeline-list">
           {displayList.map((y) => (
             <YouthCard
               key={y.id}
@@ -877,6 +645,7 @@ function UnsignedYouthTab({
               scoutId={scoutId}
               reportedIds={reportedIds}
               observationCount={observationCountByPlayer.get(y.player.id) ?? 0}
+              caseItem={caseByPlayerId?.get(y.player.id)}
               onClick={() => onSelectYouth(y.player.id)}
             />
           ))}
@@ -1096,7 +865,6 @@ export function YouthScoutingScreen() {
   const [filterNationality, setFilterNationality] = useState("");
 
   if (!gameState) return null;
-
   const { unsignedYouth, subRegions, legacyScore, scout } = gameState;
 
   const allYouthList = Object.values(unsignedYouth);
@@ -1201,106 +969,31 @@ export function YouthScoutingScreen() {
       filterNationality={filterNationality}
       setFilterNationality={setFilterNationality}
       observations={Object.values(gameState.observations)}
+      caseByPlayerId={IS_YOUTH_EARLY_ACCESS
+        ? new Map(listYouthCases(gameState).map((item) => [item.playerId, item]))
+        : undefined}
     />
   );
 
   return (
     <GameLayout>
-      <div className="p-4 sm:p-6 lg:p-8">
-        {/* Header */}
-        <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.12),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-xl shadow-black/20 sm:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="min-h-full bg-[var(--background)] p-4 sm:p-6 lg:p-8">
+        <header className="mb-5 border-b border-[var(--border)] pb-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">Recruitment board</p>
-              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                {IS_YOUTH_EARLY_ACCESS ? "Prospects" : "Youth Scouting"}
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
-                Your working pipeline of leads, repeat observations, placement decisions, and outcomes. Ratings reflect what your evidence can support today, not certainty about a player&apos;s future.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                  {totalYouth} known in current markets
-                </span>
-                <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 font-semibold text-amber-200">
-                  {legacyScore.totalScore} legacy points
-                </span>
-              </div>
+              <p className="dossier-eyebrow text-zinc-400">{IS_YOUTH_EARLY_ACCESS ? "Your working cases" : "Recruitment notebook"}</p>
+              <h1 className="mt-2 font-editorial text-3xl leading-tight text-[var(--foreground)] sm:text-4xl">{IS_YOUTH_EARLY_ACCESS ? "Prospects" : "Youth Scouting"}</h1>
+              {totalYouth > 0 && <p className="mt-2 text-sm leading-6 text-zinc-400">{totalYouth} known names · {discoveredByScout} found by you</p>}
             </div>
-            <Button className="min-h-11 shrink-0" onClick={() => setScreen("calendar")}>
-              <CalendarPlus size={16} className="mr-2" aria-hidden="true" />
-              Plan discovery work
-              <ArrowRight size={15} className="ml-2" aria-hidden="true" />
-            </Button>
+            {totalYouth > 0 && <Button className="min-h-11 gap-2" onClick={() => setScreen("calendar")}><CalendarPlus size={16} aria-hidden="true" />Plan discovery work<ArrowRight size={15} aria-hidden="true" /></Button>}
           </div>
-        </div>
-
-        {/* Summary stats */}
-        <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-zinc-400">My Pipeline</p>
-                  <p className="text-2xl font-bold text-white">{discoveredByScout}</p>
-                </div>
-                <Users size={20} className="text-zinc-600" aria-hidden="true" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-zinc-400">Repeat Looks</p>
-                  <p className="text-2xl font-bold text-emerald-400">
-                    {repeatLookCount}
-                  </p>
-                </div>
-                <Eye size={20} className="text-emerald-600" aria-hidden="true" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-zinc-400">Decisions Ready</p>
-                  <p className="text-2xl font-bold text-blue-400">
-                    {decisionReadyCount}
-                  </p>
-                </div>
-                <ClipboardList size={20} className="text-blue-600" aria-hidden="true" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-zinc-400">Placed</p>
-                  <p className="text-2xl font-bold text-amber-400">
-                    {placedCount}
-                  </p>
-                </div>
-                <ClipboardList size={20} className="text-amber-600" aria-hidden="true" />
-              </div>
-            </CardContent>
-          </Card>
-          {!IS_YOUTH_EARLY_ACCESS && <Card data-tutorial-id="youth-legacy-score">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-zinc-500">Legacy Score</p>
-                  <p className="text-2xl font-bold text-amber-400">
-                    {legacyScore.totalScore}
-                  </p>
-                </div>
-                <Star size={20} className="text-amber-600" aria-hidden="true" />
-              </div>
-            </CardContent>
-          </Card>}
-        </div>
+          <dl hidden={totalYouth === 0} className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <div className="flex flex-row-reverse items-baseline gap-2"><dt className="text-zinc-400">repeat looks</dt><dd className="font-semibold tabular-nums text-[var(--foreground)]">{repeatLookCount}</dd></div>
+            <div className="flex flex-row-reverse items-baseline gap-2"><dt className="text-zinc-400">decisions ready</dt><dd className="font-semibold tabular-nums text-[var(--foreground)]">{decisionReadyCount}</dd></div>
+            <div className="flex flex-row-reverse items-baseline gap-2"><dt className="text-zinc-400">placed</dt><dd className="font-semibold tabular-nums text-[var(--foreground)]">{placedCount}</dd></div>
+            {!IS_YOUTH_EARLY_ACCESS && <div className="flex flex-row-reverse items-baseline gap-2" data-tutorial-id="youth-legacy-score"><dt className="text-zinc-400">legacy score</dt><dd className="font-semibold tabular-nums text-[var(--foreground)]">{legacyScore.totalScore}</dd></div>}
+          </dl>
+        </header>
 
         {IS_YOUTH_EARLY_ACCESS ? (
           <section aria-label="My prospect pipeline">{pipelineContent}</section>

@@ -578,6 +578,7 @@ export function NPCManagementScreen() {
     delegateScouting,
     toggleWatchlist,
     resolveLeadershipResponsibility,
+    setScreen,
   } = useGameStore(
     useShallow((state) => ({
       scout: state.gameState?.scout,
@@ -593,6 +594,7 @@ export function NPCManagementScreen() {
       delegateScouting: state.delegateScouting,
       toggleWatchlist: state.toggleWatchlist,
       resolveLeadershipResponsibility: state.resolveLeadershipResponsibility,
+      setScreen: state.setScreen,
     })),
   );
   const [selectedScoutId, setSelectedScoutId] = useState<string | null>(null);
@@ -681,45 +683,44 @@ export function NPCManagementScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6">
+      <div className="relative min-h-full p-4 sm:p-6">
         <ScreenBackground src="/images/backgrounds/agency-office.png" opacity={0.82} />
         <div className="relative z-10">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">NPC Scout Management</h1>
+          <h1 className="font-editorial text-3xl text-white">Scouting team</h1>
           <p className="text-sm text-zinc-400">
             {isTierEligible
-              ? `${npcScouts.length} scout${npcScouts.length !== 1 ? "s" : ""} in your network${
+              ? `${npcScouts.length} scout${npcScouts.length !== 1 ? "s" : ""} on your team${
                   unreviewedCount > 0
                     ? ` · ${unreviewedCount} unreviewed report${unreviewedCount !== 1 ? "s" : ""}`
                     : ""
                 }${activeDelegations.length > 0 ? ` · ${activeDelegations.length} active delegation${activeDelegations.length !== 1 ? "s" : ""}` : ""}`
-              : "Head of Scouting tier required"}
+              : "Build the judgment to lead a scouting department."}
           </p>
         </div>
 
         {/* Gate: tier < 4 */}
         {!isTierEligible && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Users size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-            <p className="text-sm text-zinc-400">
-              Reach Head of Scouting (Tier 4) to manage NPC scouts
+          <section className="dossier-section max-w-3xl px-5 py-8 sm:px-8 sm:py-10" aria-labelledby="team-unlock">
+            <Users size={24} className="mb-5 text-[var(--accent)]" aria-hidden="true" />
+            <h2 id="team-unlock" className="font-editorial text-2xl text-white">Earn the responsibility to lead.</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">
+              At Head of Scouting (Tier 4), you can assign territories, delegate observations and review your scouts’ reports.
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
-              Current tier: {scout.careerTier} — build your reputation to advance your career.
-            </p>
-          </div>
+            <p className="mt-3 text-sm text-zinc-400">You are currently at Tier {scout.careerTier}. Your Career page shows the path forward.</p>
+            <Button className="mt-6" onClick={() => setScreen("career")}>View career progress</Button>
+          </section>
         )}
 
         {/* Tier 4+ but no scouts yet */}
         {isTierEligible && npcScouts.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Users size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-            <p className="text-sm text-zinc-400">No NPC scouts assigned yet.</p>
-            <p className="mt-1 text-xs text-zinc-600">
-              NPC scouts are allocated as you advance through the game.
-            </p>
-          </div>
+          <section className="dossier-section max-w-3xl px-5 py-8 sm:px-8 sm:py-10" aria-labelledby="team-awaiting-staff">
+            <Users size={24} className="mb-5 text-[var(--accent)]" aria-hidden="true" />
+            <h2 id="team-awaiting-staff" className="font-editorial text-2xl text-white">Your team is still taking shape.</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">No scouts have been assigned to you yet. Their territories, reports and delegated work will appear here when they join.</p>
+            <Button className="mt-6" variant="outline" onClick={() => setScreen("career")}>Back to Career</Button>
+          </section>
         )}
 
         {/* Main content: scouts exist */}

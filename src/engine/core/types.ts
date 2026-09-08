@@ -545,6 +545,8 @@ export interface ScoutReport {
   recruitmentNeed?: string;
   projectedRole?: PlayerRole;
   recommendedAction?: ReportRecommendedAction;
+  /** Immutable player-authored decision, preserved independently of later outcomes. */
+  decisionReceipt?: ScoutingDecisionReceipt;
   riskFactors?: string[];
   riskAssessments?: ReportRiskAssessment[];
   estimatedWeeklyWage?: number;
@@ -749,9 +751,28 @@ export type JudgmentCategory = "potential" | "roleFit" | "characterRisk";
 export type YouthPresentationApproach = "evidenceLed" | "fitLed" | "riskLed";
 
 export type ReportRecommendedAction =
+  | "pass"
   | "monitor"
   | "inviteForTrial"
   | "offerAcademyPlace";
+
+/** A filed judgment is never rewritten when a prospect's career changes. */
+export interface ScoutingDecisionReceipt {
+  id: string;
+  action: ReportRecommendedAction;
+  /** Declared information confidence, independent of acquisition conviction. */
+  confidence?: EvidenceConfidenceBand;
+  week: number;
+  season: number;
+  conviction: ConvictionLevel;
+  intendedClubId?: string;
+  projectedRole?: PlayerRole;
+  potentialRange?: [number, number];
+  evidenceObservationIds: string[];
+  evidenceCardIds: string[];
+  /** Public evidence-backed interpretation at the time of the decision. */
+  summary: string;
+}
 
 export interface ReportCategoryVerdict {
   verdict: string;
@@ -867,7 +888,13 @@ export interface RecommendationReview {
   caseId: string;
   reportId: string;
   playerId: string;
-  clubId: string;
+  /** Private pass decisions have no club audience. */
+  clubId?: string;
+  /** Absent in legacy saves means a canonical placement review. */
+  origin?: "placement" | "decision";
+  decisionKind?: "pass" | "ignored" | "elsewhere";
+  decisionReceiptId?: string;
+  decisionOutcome?: "unresolved" | "progressed" | "setback" | "mixed";
   recruitmentSnapshot?: import("../world/recruitmentIdentity").HistoricalRecruitmentDoctrineSnapshot;
   checkpoint: RecommendationReviewCheckpoint;
   dueWeek: number;
@@ -1024,6 +1051,11 @@ export interface Contact {
   loyalty?: number;
   /** History of interactions for trust/loyalty calculations. */
   interactionHistory?: ContactInteraction[];
+  /** Current-week inquiry choices survive abandoned sessions without replaying consequences. */
+  inquiryDecisions?: {
+    occurredAt: GameDate;
+    resolutions: Record<string, import("../observation/types").DialogueChoiceResolution>;
+  };
   /** Pending gossip items this contact has to share. */
   gossipQueue?: GossipItem[];
   /** IDs of contacts this contact can introduce (referral network). */
@@ -1166,9 +1198,11 @@ export type ScoutingQuestionId =
 /** Football interpretation chosen by the player after seeing a passage. */
 export type EvidenceClassificationId =
   | "technicalExecution"
+  | "decisionMaking"
   | "preReceiveDecision"
   | "offBallMovement"
   | "pressureResponse"
+  | "physicalExecution"
   | "physicalRepeatability"
   | "anomaly"
   | "noConclusion";
@@ -1204,6 +1238,8 @@ export interface ScoutCueFactorBreakdown {
 /** A possible cue during a live session. It never exposes hidden player truth. */
 export interface ScoutCueReading {
   id: string;
+  /** Catalog action that supports this cue; absent in older saved evidence. */
+  actionId?: string;
   sessionId: string;
   momentId: string;
   playerId: string;
@@ -1753,6 +1789,10 @@ export interface InvalidScenarioArchiveEntry {
 }
 
 export interface GameState {
+  /** First-assignment guide choice. Missing in legacy saves; false keeps navigation open. */
+  guidedSessionRequested?: boolean;
+  /** Durable observed-person photo reservations; retained after player history compaction. */
+  playerPortraits?: import("../players/portraits/types").PlayerPortraitState;
   /** The world seed used for deterministic world generation. */
   seed: string;
   /** Immutable, version-pinned identity for this career simulation. */
@@ -2182,6 +2222,11 @@ export interface NewGameConfig {
    * tutorial only for a new profile and otherwise prefers a dynamic prologue.
    */
   openingMode?: "auto" | "tutorial" | "dynamic" | "desk";
+  /**
+   * When the opening is the teaching case, start the mentor hour.
+   * False plays the same assignment with no spotlight or nav lock.
+   */
+  guideFirstHour?: boolean;
 }
 
 // =============================================================================

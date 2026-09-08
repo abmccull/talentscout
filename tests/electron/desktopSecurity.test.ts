@@ -138,6 +138,7 @@ describe("Electron desktop trust boundary", () => {
       "dialog:commitSaveFileTransfer",
       "dialog:finishOpenFileTransfer",
       "dialog:readOpenFileChunk",
+      "game:notifySaveFlushed",
       "steam:abortCloudSaveTransfer",
       "steam:appendCloudSaveChunk",
       "steam:beginCloudLoadTransfer",
@@ -151,6 +152,8 @@ describe("Electron desktop trust boundary", () => {
       "steam:resetAllAchievements",
       "steam:setRichPresence",
       "steam:unlockAchievement",
+      "window:isFullScreen",
+      "window:setFullScreen",
     ]);
     expect(mainSource).not.toMatch(/ipcMain\.handle\("(?:dialog|steam):/);
     expect(mainSource).not.toContain('handleTrustedIpc("steam:setCloudSave"');

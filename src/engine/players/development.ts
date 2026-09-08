@@ -12,6 +12,7 @@ import type {
   DevelopmentProfile,
   Player,
   PlayerAttribute,
+  Position,
 } from "@/engine/core/types";
 import {
   ALL_ATTRIBUTES,
@@ -217,28 +218,117 @@ export function applyDevelopmentAbilityChange(
   return Math.min(boundedNext, growthCeiling);
 }
 
-/** Get the growth/decline multiplier for age and development profile. */
-function developmentMultiplier(
+/**
+ * Realize the proposed attribute and CA changes together. Preserve the existing
+ * routine/breakthrough exchange rates, scaling the attribute budget only when
+ * an attribute boundary or remaining CA capacity limits the proposed change.
+ */
+export function realizePlayerDevelopment(
+  player: Player,
+  proposedChanges: AttributeDeltas,
+  requestedAbilityChange: number,
+): SemanticDevelopmentResult {
+  const changes: AttributeDeltas = {};
+  const onPitch: Array<{ attribute: PlayerAttribute; delta: number; order: number }> = [];
+  let requestedMagnitude = 0;
+  let realizedMagnitude = 0;
+  for (const [attribute, proposed] of Object.entries(proposedChanges) as Array<
+    [PlayerAttribute, number | undefined]
+  >) {
+    if (proposed === undefined || !Number.isFinite(proposed)) continue;
+    const delta = clamp(player.attributes[attribute] + proposed, 1, 20)
+      - player.attributes[attribute];
+    if (ATTRIBUTE_DOMAINS[attribute] === "hidden") {
+      if (delta !== 0) changes[attribute] = delta;
+    } else {
+      requestedMagnitude += Math.abs(proposed);
+      realizedMagnitude += Math.abs(delta);
+      if (delta !== 0) onPitch.push({ attribute, delta, order: onPitch.length });
+    }
+  }
+
+  if (onPitch.length === 0 || requestedAbilityChange === 0) {
+    return { playerId: player.id, changes, abilityChange: 0 };
+  }
+
+  const scaledAbility = Math.sign(requestedAbilityChange) * Math.max(1, Math.round(
+    Math.abs(requestedAbilityChange) * realizedMagnitude / requestedMagnitude,
+  ));
+  const abilityChange = applyDevelopmentAbilityChange(
+    player.currentAbility, player.potentialAbility, scaledAbility,
+  ) - player.currentAbility;
+  if (abilityChange === 0) return { playerId: player.id, changes, abilityChange: 0 };
+
+  const budget = Math.min(realizedMagnitude, Math.max(1, Math.floor(
+    realizedMagnitude * Math.abs(abilityChange / scaledAbility),
+  )));
+  // Largest remainders preserve whole attribute points without systematically
+  // favoring the first chosen attribute when a near-ceiling breakthrough shrinks.
+  const allocated = onPitch.map((entry) => {
+    const exact = Math.abs(entry.delta) * budget / realizedMagnitude;
+    return { ...entry, points: Math.floor(exact), remainder: exact - Math.floor(exact) };
+  });
+  let remaining = budget - allocated.reduce((sum, entry) => sum + entry.points, 0);
+  const ranked = [...allocated].sort((a, b) => b.remainder - a.remainder || a.order - b.order);
+  for (const entry of ranked) {
+    if (remaining <= 0) break;
+    if (entry.points < Math.abs(entry.delta)) {
+      entry.points += 1;
+      remaining -= 1;
+    }
+  }
+  for (const entry of allocated) {
+    if (entry.points > 0) changes[entry.attribute] = Math.sign(entry.delta) * entry.points;
+  }
+  return { playerId: player.id, changes, abilityChange };
+}
+
+export function applySemanticPlayerDevelopment(
+  player: Player,
+  proposed: Pick<SemanticDevelopmentResult, "changes" | "abilityChange">,
+): { player: Player; result: SemanticDevelopmentResult } {
+  const result = realizePlayerDevelopment(player, proposed.changes, proposed.abilityChange);
+  if (Object.keys(result.changes).length === 0 && result.abilityChange === 0) {
+    return { player, result };
+  }
+  const attributes = { ...player.attributes };
+  for (const [attribute, delta] of Object.entries(result.changes) as Array<[PlayerAttribute, number]>) {
+    attributes[attribute] += delta;
+  }
+  return {
+    player: { ...player, attributes, currentAbility: player.currentAbility + result.abilityChange },
+    result,
+  };
+}
+
+type AgeCurve = ReadonlyArray<readonly [age: number, multiplier: number]>;
+const DEVELOPMENT_CURVES: Record<DevelopmentProfile, AgeCurve> = {
+  earlyBloomer: [[14, 1.3], [18, 1.2], [21, 0.75], [24, 0.15], [27, 0], [30, -0.08], [35, -0.25], [40, -0.45]],
+  lateBloomer: [[14, 0.25], [18, 0.35], [21, 0.75], [24, 1], [27, 0.55], [29, 0.15], [31, 0], [35, -0.12], [40, -0.32]],
+  steadyGrower: [[14, 0.85], [18, 0.9], [21, 0.75], [24, 0.5], [27, 0.15], [29, 0], [35, -0.18], [40, -0.38]],
+  volatile: [[14, 0.8], [18, 0.9], [21, 0.7], [25, 0.2], [28, 0], [35, -0.21], [40, -0.4]],
+};
+
+/** Maturation, peak and decline are distinct; a later peak is not slower growth forever. */
+export function getAgeDevelopmentMultiplier(
   age: number,
   profile: DevelopmentProfile,
-  rng: RNG,
+  position: Position,
 ): number {
-  const peakAge: Record<DevelopmentProfile, number> = {
-    earlyBloomer: 22,
-    lateBloomer: 29,
-    steadyGrower: 26,
-    volatile: 25,
-  };
-  const peak = peakAge[profile];
-  const yearsFromPeak = age - peak;
-  let base = yearsFromPeak < 0
-    ? Math.min(1, 0.4 + Math.abs(yearsFromPeak) * 0.08)
-    : -yearsFromPeak * 0.02;
-
-  if (profile === "volatile") base += rng.gaussian(0, 0.4);
-  if (profile === "earlyBloomer") base *= 1.3;
-  if (profile === "lateBloomer") base *= age < peak ? 0.5 : 0.8;
-  return base;
+  const careerAge = position === "GK"
+    ? age - Math.min(3, Math.max(0, age - 20) * 0.375)
+    : age;
+  const curve = DEVELOPMENT_CURVES[profile];
+  if (careerAge <= curve[0][0]) return curve[0][1];
+  for (let index = 1; index < curve.length; index += 1) {
+    const [endAge, end] = curve[index];
+    const [startAge, start] = curve[index - 1];
+    if (careerAge <= endAge) {
+      return start + (end - start) * (careerAge - startAge) / (endAge - startAge);
+    }
+  }
+  const [lastAge, last] = curve[curve.length - 1];
+  return Math.max(-0.6, last - (careerAge - lastAge) * 0.04);
 }
 
 export function computeSemanticPlayerDevelopment(
@@ -247,11 +337,17 @@ export function computeSemanticPlayerDevelopment(
   developmentRateModifier = 1,
   environment?: PlayerDevelopmentMechanics,
 ): SemanticDevelopmentResult {
-  const baseMultiplier = developmentMultiplier(
+  let baseMultiplier = getAgeDevelopmentMultiplier(
     player.age,
     player.developmentProfile,
-    rng,
+    player.position,
   );
+  if (player.developmentProfile === "volatile") {
+    const variation = rng.gaussian(0, 0.4);
+    baseMultiplier = baseMultiplier < 0
+      ? Math.min(0, baseMultiplier + variation)
+      : baseMultiplier + variation;
+  }
   const direction: DevelopmentDirection = baseMultiplier > 0 ? "growth" : "decline";
   const mindset = getDevelopmentMindsetMultiplier(player);
   const mindsetModifier = direction === "growth"
@@ -306,17 +402,7 @@ export function computeSemanticPlayerDevelopment(
   const requestedAbilityChange = changedOnPitchAttribute
     ? direction === "growth" ? 1 : -1
     : 0;
-  const nextAbility = applyDevelopmentAbilityChange(
-    player.currentAbility,
-    player.potentialAbility,
-    requestedAbilityChange,
-  );
-
-  return {
-    playerId: player.id,
-    changes,
-    abilityChange: nextAbility - player.currentAbility,
-  };
+  return realizePlayerDevelopment(player, changes, requestedAbilityChange);
 }
 
 export function computeSemanticBreakthrough(
@@ -349,16 +435,11 @@ export function computeSemanticBreakthrough(
     );
   }
 
-  const nextAbility = applyDevelopmentAbilityChange(
-    player.currentAbility,
-    player.potentialAbility,
-    rng.nextInt(3, 5),
-  );
+  const realized = realizePlayerDevelopment(player, changes, rng.nextInt(3, 5));
+  if (realized.abilityChange === 0) return null;
 
   return {
-    playerId: player.id,
-    changes,
-    abilityChange: nextAbility - player.currentAbility,
-    improvedAttributes: selected,
+    ...realized,
+    improvedAttributes: Object.keys(realized.changes) as PlayerAttribute[],
   };
 }

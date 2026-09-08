@@ -33,8 +33,8 @@ export function ScreenBackground({
         fetchPriority="low"
       />
       <div
-        className="absolute inset-0 bg-[#090b0e]"
-        style={{ opacity }}
+        className="absolute inset-0 bg-[var(--background)]"
+        style={{ opacity: `max(var(--screen-bg-overlay, ${opacity}), ${opacity})` }}
       />
     </div>
   );

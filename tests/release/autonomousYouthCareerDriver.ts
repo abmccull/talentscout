@@ -1,3 +1,4 @@
+import { canResolveSeasonEvent, getSeasonEventChoiceOptions } from "@/engine/core/seasonEventEffects";
 import { canChooseCareerPath } from "@/engine/career/pathChoice";
 import {
   deriveCareerFingerprintAuthority,
@@ -19,11 +20,14 @@ import type {
 import type { DecisionOption, DecisionRecord } from "@/engine/consequences/types";
 import {
   getFreshReportObservationIds,
+  indexLatestPlayerReports,
   selectLatestReportsByCase,
 } from "@/engine/reports/reportAccountability";
 import type { DelegationPolicyId, WeeklyIntentId } from "@/engine/core/weeklyStrategy";
 import { reconcileInboxActionRequirements } from "@/engine/world/inboxActionAuthority";
 import { useGameStore } from "@/stores/gameStore";
+import { getScheduledActivityInstances } from "@/engine/core/calendar";
+import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
 
 const INTENT_ROTATION: WeeklyIntentId[] = [
   "balancedDesk",
@@ -446,6 +450,44 @@ function clearWeekSchedule(): void {
   }
 }
 
+/** Choose from the same academy shortlist the planner shows, using public need. */
+export function chooseAutonomousPlacementDestination(state: GameState, playerId: string): string | undefined {
+  const youth = Object.values(state.unsignedYouth ?? {}).find((entry) =>
+    (entry.player.id === playerId || entry.id === playerId) && !entry.placed && !entry.retired);
+  if (!youth) return undefined;
+  const report = indexLatestPlayerReports(Object.values(state.reports), state.scout.id).get(youth.player.id);
+  if (!report || report.recommendedAction === "pass") return undefined;
+  const eligible = getEligibleClubsForPlacement(youth, Object.values(state.clubs), state.scout, state.leagues,
+    { preferredClubId: report.intendedClubId });
+  // A filed audience is a commitment; do not silently retarget it.
+  if (report.intendedClubId) return eligible.find((club) => club.id === report.intendedClubId)?.id;
+  const needsPosition = (clubId: string) => Object.values(state.youthRecruitmentBriefs ?? {}).some((brief) =>
+    brief.clubId === clubId && brief.status === "open" && brief.maxAge >= youth.player.age
+    && (brief.expiresSeason > state.currentSeason ||
+      (brief.expiresSeason === state.currentSeason && brief.expiresWeek > state.currentWeek))
+    && brief.requiredPositions.some((position) => position === youth.player.position || youth.player.secondaryPositions.includes(position)));
+  // Retain the shortlist's own-club/route ordering inside the need tier.
+  return eligible.find((club) => needsPosition(club.id))?.id ?? eligible[0]?.id;
+}
+
+/** Finish an already selected pitch; never create additional work or add resources. */
+export function completeScheduledPlacementDestinations(): void {
+  const store = useGameStore.getState();
+  const state = store.gameState;
+  if (!state) return;
+  for (const { activity, dayIndex } of getScheduledActivityInstances(state.schedule)) {
+    if (activity.type !== "writePlacementReport" || !activity.targetId || activity.destinationClubId) continue;
+    const destinationClubId = chooseAutonomousPlacementDestination(state, activity.targetId);
+    if (!destinationClubId) continue;
+    store.unscheduleActivity(dayIndex);
+    store.scheduleActivity({ ...activity, destinationClubId }, dayIndex);
+    const placed = useGameStore.getState().gameState?.schedule.activities[dayIndex];
+    if (!placed || placed.instanceId !== activity.instanceId || placed.destinationClubId !== destinationClubId) {
+      throw new Error("Autonomous placement destination could not preserve its scheduled activity");
+    }
+  }
+}
+
 function ensureScheduledWork(): void {
   const store = useGameStore.getState();
   const state = store.gameState;
@@ -639,6 +681,26 @@ function authorReports(telemetry: AutonomousCareerTelemetry): void {
       telemetry.authoredReports += 1;
     }
   }
+}
+
+/** A dedicated case policy can file its chosen target using the same evidence gates and prose. */
+export function authorAutonomousReportForPlayer(
+  playerId: string,
+  telemetry: AutonomousCareerTelemetry,
+): ScoutReport | undefined {
+  const store = useGameStore.getState();
+  const state = store.gameState;
+  if (!state) return undefined;
+  const candidate = getReportCandidates(state).find((entry) => entry.playerId === playerId);
+  if (!candidate) return undefined;
+  const beforeIds = new Set(Object.keys(state.reports));
+  const submission = buildReportSubmission(candidate);
+  store.startReport(candidate.playerId);
+  store.submitReport(submission.conviction, submission.summary, submission.strengths, submission.weaknesses);
+  const filed = Object.values(useGameStore.getState().gameState?.reports ?? {}).find((report) =>
+    report.playerId === playerId && report.scoutId === state.scout.id && !beforeIds.has(report.id));
+  if (filed) telemetry.authoredReports += 1;
+  return filed;
 }
 
 function listingPriceForReport(report: ScoutReport): number {
@@ -844,13 +906,15 @@ function enrollCourseIfAffordable(telemetry: AutonomousCareerTelemetry): void {
 function resolveSeasonEvents(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   for (const event of store.getActiveSeasonEvents()) {
-    if (!event.choices || event.choices.length === 0) continue;
-    const choiceIndex = chooseAutonomousOptionIndex(
-      event.choices,
-      telemetry.chooserProfile,
-    );
-    store.resolveSeasonEvent(event.id, choiceIndex);
-    recordMeaningfulDecision(telemetry, "seasonEventChoices");
+    const state = useGameStore.getState().gameState;
+    if (!state || !canResolveSeasonEvent(event, state.currentWeek, state.scout.primarySpecialization)) continue;
+    const options = getSeasonEventChoiceOptions(event);
+    const selected = options[chooseAutonomousOptionIndex(options.map((option) => option.choice), telemetry.chooserProfile)];
+    store.resolveSeasonEvent(event.id, selected.index);
+    const persisted = useGameStore.getState().gameState?.seasonEvents.find((candidate) => candidate.id === event.id);
+    if (persisted?.resolved && persisted.choiceSelected === selected.index) {
+      recordMeaningfulDecision(telemetry, "seasonEventChoices");
+    }
   }
 }
 
@@ -909,6 +973,7 @@ function diagnosticNow(): number {
 
 export async function driveAutonomousYouthCareerWeek(
   telemetry: AutonomousCareerTelemetry,
+  options: { afterSchedule?: () => void } = {},
 ): Promise<AutonomousCareerWeekTiming> {
   const startedAtMs = diagnosticNow();
   stabilizeAutonomousCareerState(telemetry);
@@ -924,7 +989,11 @@ export async function driveAutonomousYouthCareerWeek(
   store.setWeeklyIntent(chooseWeeklyIntent(state, telemetry));
   store.setDelegationPolicy(chooseDelegationPolicy(state, telemetry));
   store.autoSchedule(buildPriorities(state, telemetry));
+  completeScheduledPlacementDestinations();
   ensureCourseStudyScheduled();
+  // Dedicated bounded scenarios can choose their next legal calendar action;
+  // the ordinary soak uses the unchanged profile schedule and canonical tick.
+  options.afterSchedule?.();
   ensureScheduledWork();
   const scheduledAtMs = diagnosticNow();
 
@@ -998,7 +1067,7 @@ function countUnresolvedActionBacklog(state: GameState): number {
     .filter((message) => message.actionRequired && !message.read)
     .length;
   const seasonEvents = getActiveSeasonEvents(state.seasonEvents, state.currentWeek)
-    .filter((event) => (event.choices?.length ?? 0) > 0)
+    .filter((event) => canResolveSeasonEvent(event, state.currentWeek, state.scout.primarySpecialization))
     .length;
   const narrativeChoices = state.narrativeEvents.filter((event) =>
     !event.acknowledged

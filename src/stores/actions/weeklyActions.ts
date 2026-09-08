@@ -1,3 +1,4 @@
+import { processScoutingDecisionReviews } from "@/engine/youth/decisionReviews";
 /**
  * Weekly cycle, calendar scheduling, match, day simulation, and season
  * transition actions extracted from gameStore.
@@ -11,7 +12,11 @@ import type { GameScreen } from "../gameStoreTypes";
 import { createWeekSimulationActions } from "./weekSimulationActions";
 import { createMatchActions } from "./matchActions";
 import { processWeeklyEconomy } from "./weeklyEconomy";
-import { createAutosaveQueue, scheduleAfterPaint } from "./autosaveQueue";
+import {
+  flushGameplayAutosave,
+  queueGameplayAutosave,
+  snapshotPersistedGameState,
+} from "./persistGameplayAutosave";
 import type {
   GameState,
   Activity,
@@ -152,8 +157,6 @@ import {
 import { createInsightState, accumulateInsight, calculateCapacity, tickCooldown } from "@/engine/insight/insight";
 import { nextGameWeek } from "@/engine/reports/scoutingCases";
 import { deriveScoutingCaseObservationFocus } from "@/engine/reports/caseQuestions";
-import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
-import { persistGameState } from "@/lib/saveProvider";
 import {
   createWeeklyQuickScoutActions,
   isBatchAdvanceInProgress,
@@ -237,31 +240,7 @@ export {
 // ── Module-level state ─────────────────────────────────────────────────────
 // ── Local type alias ───────────────────────────────────────────────────────
 
-interface AutosaveRequest {
-  state: GameState;
-  set: SetState;
-}
-
-const autosaveQueue = createAutosaveQueue<AutosaveRequest>({
-  schedule: scheduleAfterPaint,
-  onRequest: ({ set }) => set({ autosaveError: null }),
-  persist: async ({ state }) => {
-    const provider = await getActiveSaveProvider();
-    await persistGameState(provider, "autosave", state, "Autosave");
-  },
-  onError: (error, { set }) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn("Autosave failed:", error);
-    set({ autosaveError: message });
-  },
-});
-
-export function queueWeeklyAutosave(newState: GameState, set: SetState): void {
-  // A single player command can request both a checkpoint and a final save.
-  // Coalesce those synchronous requests before persistence migration starts,
-  // then defer the structured commit until the completed week can paint first.
-  autosaveQueue.request({ state: newState, set });
-}
+export { queueWeeklyAutosave } from "./persistGameplayAutosave";
 
 
 export interface WeeklyActionRuntime {
@@ -318,15 +297,22 @@ export function createWeeklyActions(
       return;
     }
     const schedule = addActivity(gameState.schedule, effectiveActivity, dayIndex);
+    const nextState = { ...gameState, schedule };
     set({
-      gameState: { ...gameState, schedule },
+      gameState: nextState,
       weekSimulation: null,
     });
+    if (runtime.persistenceEnabled) {
+      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+    }
 
     // Tutorial auto-advance — generic and specialization-specific conditions.
     const tutorial = runtime.getTutorialState();
     tutorial.checkAutoAdvance("activityScheduled");
     tutorial.completeMilestone("scheduledActivity");
+    // Scheduling records progress, but opting out must not reopen onboarding.
+    const automaticGuidance = gameState.guidedSessionRequested !== false
+      || tutorial.guidedSessionForcedReplay;
 
     const YOUTH_ACTIVITIES = new Set([
       "schoolMatch", "grassrootsTournament", "streetFootball",
@@ -336,7 +322,7 @@ export function createWeeklyActions(
       tutorial.checkAutoAdvance("youthActivityScheduled");
       // Contextual trigger: first youth activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("youth", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("youth", hasClub));
     }
 
     const DATA_ACTIVITIES = new Set([
@@ -347,7 +333,7 @@ export function createWeeklyActions(
       tutorial.checkAutoAdvance("dataActivityScheduled");
       // Contextual trigger: first data activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("data", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("data", hasClub));
     }
 
     // Contextual trigger: first opposition analysis → first team onboarding
@@ -356,7 +342,7 @@ export function createWeeklyActions(
     ]);
     if (FT_ACTIVITIES.has(effectiveActivity.type)) {
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
     }
   },
 
@@ -364,10 +350,14 @@ export function createWeeklyActions(
     const { gameState } = get();
     if (!gameState) return;
     const schedule = removeActivity(gameState.schedule, dayIndex);
+    const nextState = { ...gameState, schedule };
     set({
-      gameState: { ...gameState, schedule },
+      gameState: nextState,
       weekSimulation: null,
     });
+    if (runtime.persistenceEnabled) {
+      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+    }
   },
 
   setWeeklyIntent: (intentId: WeeklyIntentId) => {
@@ -435,11 +425,9 @@ export function createWeeklyActions(
     // Checkpoint autosave before processing — if the game crashes during week
     // simulation the player has a save from immediately before.
     if (runtime.persistenceEnabled && !isBatchAdvanceInProgress()) {
-      getActiveSaveProvider()
-        .then((provider) => persistGameState(provider, "autosave", gameState, "Autosave"))
-        .catch((err) => {
-          console.warn("Pre-advance checkpoint autosave failed:", err);
-        });
+      void flushGameplayAutosave(snapshotPersistedGameState(gameState), set).catch((err) => {
+        console.warn("Pre-advance checkpoint autosave failed:", err);
+      });
     }
 
     const simState = get().weekSimulation;
@@ -935,6 +923,7 @@ export function createWeeklyActions(
 
     // Complete due one- and two-season reviews from canonical movement,
     // appearance/rating, and injury history. Hidden ability is never read.
+    stateWithScheduleApplied = processScoutingDecisionReviews(stateWithScheduleApplied);
     let recommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
     let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
@@ -943,7 +932,7 @@ export function createWeeklyActions(
       player: Player;
     }> = [];
     const dueRecommendationReviews = Object.values(recommendationReviews).filter((review) => {
-      if (review.status !== "scheduled") return false;
+      if (review.status !== "scheduled" || review.origin === "decision") return false;
       return stateWithScheduleApplied.currentSeason > review.dueSeason
         || (
           stateWithScheduleApplied.currentSeason === review.dueSeason
@@ -1071,7 +1060,7 @@ export function createWeeklyActions(
         season: stateWithScheduleApplied.currentSeason,
         type: "feedback",
         title: `${review.checkpoint === "oneSeason" ? "One-Season" : "Two-Season"} Recommendation Review`,
-        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} scored ${review.overallScore ?? "unresolved"}/100. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
+        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} ${review.overallScore !== undefined ? `scored ${review.overallScore}/100` : "cannot yet be scored from the recorded outcomes"}. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
         read: false,
         actionRequired: false,
         relatedId: reviewedPlayer.id,
@@ -1456,14 +1445,14 @@ export function createWeeklyActions(
       persistenceEnabled:
         runtime.persistenceEnabled && !isBatchAdvanceInProgress(),
       getTutorialState: runtime.getTutorialState,
-      queueAutosave: queueWeeklyAutosave,
+      queueAutosave: queueGameplayAutosave,
     });
 
   },
 
   // ── Quick Scout Mode (F17) ──────────────────────────────────────────────
   // Quick Scout orchestration stays on the canonical weekly transaction.
-  ...createWeeklyQuickScoutActions(get, set, { queueAutosave: queueWeeklyAutosave }),
+  ...createWeeklyQuickScoutActions(get, set, { queueAutosave: queueGameplayAutosave }),
   ...createWeekSimulationActions(get, set, {
     buildDaySpanInfo,
     buildDayInteraction,

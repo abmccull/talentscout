@@ -41,6 +41,7 @@ import {
 import { scheduleAcademyRecommendationReviews } from "@/engine/youth/recommendationReviews";
 import { resolveUnsignedYouth } from "@/lib/playerResolution";
 import { normalizeCountryKey } from "@/lib/country";
+import { indexLatestPlayerReports } from "@/engine/reports/reportAccountability";
 import {
   ensureScoutingCaseForReport,
   isGameDateDue,
@@ -105,29 +106,9 @@ export function processWeeklyPlacementResolution(
         .filter((report) => report.clubResponse === "pending")
         .map((report) => report.unsignedYouthId),
     );
-    const latestReportByPlayerId = new Map<
-      string,
-      GameState["reports"][string]
-    >();
-    for (const report of Object.values(preparedReports)) {
-      if (report.scoutId !== stateWithScheduleApplied.scout.id) continue;
-      const current = latestReportByPlayerId.get(report.playerId);
-      if (
-        !current
-        || report.submittedSeason > current.submittedSeason
-        || (
-          report.submittedSeason === current.submittedSeason
-          && report.submittedWeek > current.submittedWeek
-        )
-        || (
-          report.submittedSeason === current.submittedSeason
-          && report.submittedWeek === current.submittedWeek
-          && report.id.localeCompare(current.id) > 0
-        )
-      ) {
-        latestReportByPlayerId.set(report.playerId, report);
-      }
-    }
+    const latestReportByPlayerId = indexLatestPlayerReports(
+      Object.values(preparedReports), stateWithScheduleApplied.scout.id,
+    );
     const placementClubs = Object.values(stateWithScheduleApplied.clubs);
     const submissionMessages: InboxMessage[] = [];
     const scheduledPlacementActivities = weekResult.writePlacementReportsExecuted > 0
@@ -146,14 +127,16 @@ export function processWeeklyPlacementResolution(
       if (youthObservations.length === 0) continue;
 
       const sourceReport = latestReportByPlayerId.get(youth.player.id);
-      if (!sourceReport) {
+      if (!sourceReport || sourceReport.recommendedAction === "pass") {
         submissionMessages.push({
           id: `placement-report-required-${youth.id}-${stateWithScheduleApplied.currentSeason}-${stateWithScheduleApplied.currentWeek}`,
           week: stateWithScheduleApplied.currentWeek,
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback",
-          title: "Authored Report Required",
-          body: `Write and submit a scouting report for ${youth.player.firstName} ${youth.player.lastName} before pitching a club. A placement must stand behind a preserved opinion, not just raw observations.`,
+          title: sourceReport?.recommendedAction === "pass" ? "Reconsider before pitching" : "Authored Report Required",
+          body: sourceReport?.recommendedAction === "pass"
+            ? `You passed on ${youth.player.firstName} ${youth.player.lastName}. Gather fresh evidence and file a revised recruitment judgment before pitching a club.`
+            : `Write and submit a scouting report for ${youth.player.firstName} ${youth.player.lastName} before pitching a club. A placement must stand behind a preserved opinion, not just raw observations.`,
           read: false,
           actionRequired: true,
           relatedId: youth.player.id,

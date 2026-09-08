@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
+import { createCareerBalanceDiagnostics } from "./careerBalanceDiagnostics";
+import { collectGameSystemsHealth, GAME_SYSTEMS_CHECKPOINTS, type GameSystemsHealthSnapshot } from "./gameSystemsHealth";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
+import { createSaveEnvelope } from "@/lib/saveEnvelope";
+import type { SaveGameCommit } from "@/lib/db";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import {
   observeWeeklySimulationTelemetry,
@@ -35,9 +39,33 @@ import type {
   AutonomousWorldHealthSnapshot,
 } from "./autonomousYouthCareerDriver";
 
+import {
+  portraitContinuityViolations, portraitRetentionDiagnostic, retainStorageCheckpoint,
+  type RetainedCheckpointReceipt,
+} from "./portraitRetentionDiagnostics";
+
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({
     save: async () => undefined,
+    // Match the current structured provider boundary without claiming durable writes.
+    saveState: async (_slotName: string, rawState: unknown, displayName?: string): Promise<SaveGameCommit> => {
+      const state = rawState as GameState;
+      return {
+        record: {
+          ...createSaveEnvelope(state, state.lastSaved),
+          slot: 0,
+          name: displayName ?? "Autosave",
+          season: state.currentSeason,
+          week: state.currentWeek,
+          scoutName: `${state.scout.firstName} ${state.scout.lastName}`,
+          specialization: state.scout.primarySpecialization,
+          reputation: state.scout.reputation,
+        },
+        wrote: false,
+        payloadBytes: null,
+        archivedBytes: 0,
+      };
+    },
   }),
   isSupabaseCloudSaveActive: async () => false,
 }));
@@ -60,6 +88,11 @@ vi.mock("@/lib/db", () => ({
 const RELEASE_SEED_COUNT = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
 const RELEASE_SEED_START = Number.parseInt(process.env.SOAK_SEED_START ?? "1", 10);
 const RELEASE_SEASON_COUNT = Number.parseInt(process.env.SOAK_SEASONS ?? "30", 10);
+const GAME_SYSTEMS_REQUESTED_CHECKPOINTS = (process.env.SOAK_GAME_SYSTEMS_CHECKPOINTS
+  ?? GAME_SYSTEMS_CHECKPOINTS.join(",")).split(",").map(Number);
+if (GAME_SYSTEMS_REQUESTED_CHECKPOINTS.some((season) => !Number.isInteger(season) || season < 1)) {
+  throw new Error("SOAK_GAME_SYSTEMS_CHECKPOINTS must contain positive integer seasons");
+}
 const OUTPUT_PATH = resolve(
   process.env.SOAK_OUTPUT
     ?? "artifacts/release/generated/long-career-release-summary.json",
@@ -101,6 +134,8 @@ const PROFILE_MATRIX_SEASON_COUNT = Number.parseInt(
   10,
 );
 const PROFILE_MATRIX_ONLY = process.env.SOAK_PROFILE_MATRIX_ONLY === "true";
+const BALANCE_DIAGNOSTICS_ONLY = process.env.SOAK_BALANCE_DIAGNOSTICS_ONLY === "true";
+const YOUTH_CONSEQUENCES_ONLY = process.env.SOAK_YOUTH_CONSEQUENCES_ONLY === "true";
 const PROFILE_MATRIX_OUTPUT_PATH = resolve(
   process.env.SOAK_PROFILE_MATRIX_OUTPUT
     ?? "artifacts/release/generated/long-career-chooser-profile-matrix.json",
@@ -122,6 +157,9 @@ const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
   retiredPlayers: 6 * 1024 * 1024,
   retiredPlayerIds: 512 * 1024,
   unsignedYouth: 12 * 1024 * 1024,
+  // Attribute the immutable ledger explicitly without inventing an unmeasured
+  // tighter limit. The unchanged whole-save 80 MiB / 64x budgets still apply.
+  playerPortraits: MAX_SERIALIZED_BYTES,
 };
 
 interface MemorySample {
@@ -144,6 +182,8 @@ interface RunEvidence {
   worldHistorySeasons: number;
   worldHistoryBytes: number;
   largestCollections: Array<{ key: string; bytes: number }>;
+  storageCheckpoints: RetainedCheckpointReceipt[];
+  portraitDemand: Array<{ season: number } & ReturnType<typeof portraitRetentionDiagnostic>>;
   seasonGrowth: Array<{
     season: number;
     serializedBytes: number;
@@ -174,6 +214,7 @@ interface RunEvidence {
     mean: number;
   };
   worldHealth: AutonomousWorldHealthSnapshot[];
+  gameSystemsHealth: GameSystemsHealthSnapshot[];
   careerTelemetry: AutonomousCareerTelemetry;
   digest: string;
 }
@@ -707,6 +748,7 @@ async function simulateCareer(
   seed: string,
   seasonCount: number,
   chooserProfile: AutonomousCareerChooserProfileId = "commercial",
+  observeBalance?: ReturnType<typeof createCareerBalanceDiagnostics>["observe"],
 ): Promise<RunEvidence> {
   const { useGameStore } = await import("@/stores/gameStore");
   await useGameStore.getState().startNewGame({
@@ -750,8 +792,32 @@ async function simulateCareer(
   const pendingCompactionSamples: SaveRetentionCompactionSample[] = [];
   let latestWeeklyTelemetry: WeeklySimulationTelemetry | undefined;
   const seasonGrowth: RunEvidence["seasonGrowth"] = [];
+  const storageCheckpoints: RetainedCheckpointReceipt[] = [];
+  const portraitDemand: RunEvidence["portraitDemand"] = [{
+    season: initial.currentSeason, ...portraitRetentionDiagnostic(initial),
+  }];
   const worldHealth: RunEvidence["worldHealth"] = [];
+  const gameSystemsHealth: GameSystemsHealthSnapshot[] = [collectGameSystemsHealth(initial, 0)];
+  const captureGameSystemsHealth = async (state: GameState) => {
+    const completedSeasons = state.currentSeason - initial.currentSeason;
+    const snapshot = collectGameSystemsHealth(state, completedSeasons);
+    if (GAME_SYSTEMS_REQUESTED_CHECKPOINTS.includes(completedSeasons)
+      || completedSeasons === seasonCount || snapshot.invariants.violationCount > 0) {
+      gameSystemsHealth.push(snapshot);
+      const directory = process.env.SOAK_GAME_SYSTEMS_DIAGNOSTICS_DIRECTORY;
+      if (directory) {
+        await mkdir(directory, { recursive: true });
+        await writeFile(resolve(directory, `${seed.replace(/[^a-zA-Z0-9_-]/g, "_")}-${chooserProfile}.json`),
+          JSON.stringify({ schemaVersion: 1, seed, chooserProfile, canonicalTicks, gameSystemsHealth }, null, 2), "utf8");
+      }
+    }
+    // Record failures before asserting, so a failed canonical run retains its
+    // football distributions. Balance shapes themselves never become gates.
+    if (!DIAGNOSTIC_ONLY) expect(snapshot.invariants.violationCount,
+      `football state invariants: ${JSON.stringify(snapshot.invariants)}`).toBe(0);
+  };
   const careerTelemetry = createAutonomousCareerTelemetry(chooserProfile);
+  observeBalance?.(initial, careerTelemetry, 0);
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
     compactionSamples.push(sample);
     pendingCompactionSamples.push(sample);
@@ -785,6 +851,8 @@ async function simulateCareer(
         `Seed ${seed} stalled at S${before.currentSeason} W${before.currentWeek}`,
       );
     }
+    const continuity = portraitContinuityViolations(before.playerPortraits, after.playerPortraits);
+    expect(continuity, `seed ${seed} lost a permanent portrait identity`).toEqual([]);
     // Sample the product path after its persistence yield and before the
     // release harness performs several whole-save serialization passes. The
     // worker's V8 ceiling remains the hard guard for spikes between samples.
@@ -795,6 +863,7 @@ async function simulateCareer(
     );
     peakRssBytes = Math.max(peakRssBytes, runtimeMemory.rssBytes);
     canonicalTicks++;
+    observeBalance?.(after, careerTelemetry, canonicalTicks);
     calendarWeeksSpanned += 1;
     weeklyLatency.push(elapsed);
     const matchingWeeklyTelemetry = latestWeeklyTelemetry
@@ -831,7 +900,21 @@ async function simulateCareer(
       stabilizeAutonomousCareerState(careerTelemetry);
       const stabilized = useGameStore.getState().gameState;
       if (!stabilized) throw new Error(`Seed ${seed} lost stabilized state at season boundary`);
+      await captureGameSystemsHealth(stabilized);
       const footprint = assertReleaseInvariants(stabilized, initialBytes);
+      const portraits = portraitRetentionDiagnostic(stabilized);
+      expect(portraits.violations, `seed ${seed} has invalid face ownership`).toEqual([]);
+      portraitDemand.push({ season: stabilized.currentSeason, ...portraits });
+      const completedSeason = stabilized.currentSeason - 1;
+      if (process.env.SOAK_STORAGE_CHECKPOINT_DIRECTORY && [1, 10, 30].includes(completedSeason)) {
+        storageCheckpoints.push(await retainStorageCheckpoint({
+          directory: process.env.SOAK_STORAGE_CHECKPOINT_DIRECTORY,
+          state: stabilized, completedSeason, canonicalTicks,
+          candidateCommitSha: process.env.SOAK_CANDIDATE_SHA ?? "",
+          candidateTreeSha: process.env.SOAK_CANDIDATE_TREE_SHA ?? "",
+          sourceTreeClean: process.env.SOAK_SOURCE_TREE_CLEAN === "true",
+        }));
+      }
       worldHealth.push(collectAutonomousWorldHealth(stabilized, careerTelemetry));
       expect(
         serializedRoundTripDigest(stabilized),
@@ -890,6 +973,8 @@ async function simulateCareer(
       memorySamples.push(afterCollection);
 
     }
+    const observed = useGameStore.getState().gameState;
+    if (observed) observeBalance?.(observed, careerTelemetry, canonicalTicks);
   }
   stopObservingCompaction();
   stopObservingWeeklyTelemetry();
@@ -899,6 +984,7 @@ async function simulateCareer(
   stabilizeAutonomousCareerState(careerTelemetry);
   const stabilizedFinalState = useGameStore.getState().gameState;
   if (!stabilizedFinalState) throw new Error(`Seed ${seed} lost its stabilized final state`);
+  observeBalance?.(stabilizedFinalState, careerTelemetry, canonicalTicks);
   const finalBytes = assertReleaseInvariants(stabilizedFinalState, initialBytes).totalBytes;
   peakBytes = Math.max(peakBytes, finalBytes);
   const history = stabilizedFinalState.worldHistory;
@@ -949,6 +1035,8 @@ async function simulateCareer(
     worldHistoryBytes: Buffer.byteLength(JSON.stringify(history), "utf8"),
     largestCollections: largestCollections(finalState),
     seasonGrowth,
+    storageCheckpoints,
+    portraitDemand,
     compaction: {
       events: compactionSamples.length,
       seasonsWithReduction: new Set(
@@ -977,6 +1065,7 @@ async function simulateCareer(
       mean: round(weeklyLatency.reduce((sum, value) => sum + value, 0) / weeklyLatency.length),
     },
     worldHealth,
+    gameSystemsHealth,
     careerTelemetry,
     digest: finalDigest,
   };
@@ -1010,8 +1099,8 @@ async function simulateChooserProfileMatrix(): Promise<Array<{
   return chooserProfileMatrix;
 }
 
-const canonicalReleaseSoak = PROFILE_MATRIX_ONLY ? it.skip : it;
-const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY ? it : it.skip;
+const canonicalReleaseSoak = PROFILE_MATRIX_ONLY || BALANCE_DIAGNOSTICS_ONLY || YOUTH_CONSEQUENCES_ONLY ? it.skip : it;
+const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY && !BALANCE_DIAGNOSTICS_ONLY && !YOUTH_CONSEQUENCES_ONLY ? it : it.skip;
 
 describe("full canonical-week release soak", () => {
   canonicalReleaseSoak("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
@@ -1053,6 +1142,7 @@ describe("full canonical-week release soak", () => {
         seedCount: RELEASE_SEED_COUNT,
         seasonCount: RELEASE_SEASON_COUNT,
         chooserProfilesExercised: ["commercial"],
+        gameSystemsCheckpoints: GAME_SYSTEMS_REQUESTED_CHECKPOINTS,
         deterministicReplaySeed: seeds[0],
         maxSerializedBytes: MAX_SERIALIZED_BYTES,
         maxGrowthMultiplier: MAX_GROWTH_MULTIPLIER,
@@ -1079,6 +1169,11 @@ describe("full canonical-week release soak", () => {
           (sum, run) => sum + run.compaction.totalRemovedBytes,
           0,
         ),
+        largestPermanentPortraitDemand: Math.max(0, ...runs.flatMap((run) =>
+          run.portraitDemand.map((sample) => sample.seen))),
+        largestPortraitLedgerBytes: Math.max(0, ...runs.flatMap((run) =>
+          run.portraitDemand.map((sample) => sample.ledgerBytes))),
+        simulationPersistence: "mocked; retained inputs require separate browser-provider evidence",
         totalMeaningfulDecisions: runs.reduce(
           (sum, run) => sum + run.careerTelemetry.meaningfulDecisions,
           0,
@@ -1160,4 +1255,48 @@ describe("full canonical-week release soak", () => {
     await writeFile(PROFILE_MATRIX_OUTPUT_PATH, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
     console.info(`LONG_CAREER_CHOOSER_PROFILE_MATRIX ${JSON.stringify(summary.aggregate)}`);
   });
+});
+
+
+const balanceDiagnostic = BALANCE_DIAGNOSTICS_ONLY && !YOUTH_CONSEQUENCES_ONLY ? it : it.skip;
+balanceDiagnostic("records one matched-policy career without changing canonical invariants", async () => {
+  const seed = process.env.SOAK_BALANCE_SEED ?? "";
+  const profile = process.env.SOAK_BALANCE_PROFILE as AutonomousCareerChooserProfileId;
+  const cohort = process.env.SOAK_BALANCE_COHORT;
+  const seasons = Number(process.env.SOAK_BALANCE_SEASONS);
+  const sourceFingerprint = process.env.SOAK_BALANCE_SOURCE_FINGERPRINT;
+  const output = process.env.SOAK_BALANCE_DIAGNOSTICS_OUTPUT;
+  expect(["commercial", "cautious", "aggressive"]).toContain(profile);
+  expect(["discovery", "holdout"]).toContain(cohort);
+  expect([1, 6]).toContain(seasons);
+  expect(seed).toMatch(/^quality-balance-(smoke-)?(discovery|holdout)-v1-\d{2}$/);
+  expect(sourceFingerprint).toMatch(/^[a-f0-9]{64}$/);
+  expect(output).toBeTruthy();
+  const collector = createCareerBalanceDiagnostics();
+  let run: RunEvidence | null = null;
+  const failures: string[] = [];
+  try {
+    run = await simulateCareer(seed, seasons, profile, collector.observe);
+  } catch (error) {
+    failures.push(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+  }
+  const diagnostics = collector.finish();
+  if (diagnostics.finance.nonFiniteTransactionIndices.length) failures.push("non-finite financial transactions observed");
+  if (diagnostics.finance.duplicateTransactionReferences.length) failures.push("duplicate financial transaction references observed");
+  if (diagnostics.consequences.failed.length) failures.push("failed persisted consequences observed");
+  await mkdir(dirname(resolve(output!)), { recursive: true });
+  await writeFile(resolve(output!), `${JSON.stringify({
+    schemaVersion: 1, evidenceKind: "canonical-policy-balance-run", generatedAt: new Date().toISOString(),
+    seed, profile, cohort, seasons, mode: process.env.SOAK_BALANCE_MODE, sourceFingerprint,
+    passed: failures.length === 0, failures, run, diagnostics,
+  }, null, 2)}\n`, "utf8");
+  expect(failures, "Diagnostic retained all original invariant failures").toEqual([]);
+});
+
+const youthConsequenceScenario = YOUTH_CONSEQUENCES_ONLY ? it : it.skip;
+youthConsequenceScenario("closes a bounded real-week placement and private-pass review chain", async () => {
+  const output = process.env.SOAK_YOUTH_CONSEQUENCES_OUTPUT;
+  expect(output, "Use a distinct output path to preserve every scenario result").toBeTruthy();
+  const { runYouthConsequenceScenario } = await import("./youthConsequenceScenario");
+  await runYouthConsequenceScenario(process.env.SOAK_YOUTH_CONSEQUENCES_SEED ?? "youth-consequences-v1-01", output!);
 });

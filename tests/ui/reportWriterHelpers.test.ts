@@ -52,7 +52,7 @@ describe("report writer helpers", () => {
 
   it("builds the youth workflow navigator from status counts and risk blockers", () => {
     const items = buildSectionNavigatorItems({
-      conciseOpeningMode: false,
+      initialAssessmentMode: false,
       isYouthCase: true,
       canSubmit: false,
       reportStatus: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Component, type ReactNode, type ErrorInfo } from "react";
-import { captureException } from "@/lib/sentry";
+import { reportRendererError as captureException } from "@/lib/reportRendererError";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 

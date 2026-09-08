@@ -4,10 +4,20 @@ import { useState, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
 import { useTutorialStore, type TutorialSequenceId } from "@/stores/tutorialStore";
+import { shouldLockGuidedNavigation } from "@/components/game/tutorial/guidedSession";
 import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import {
+  shouldShowYouthInbox,
+  shouldShowYouthWorldCareer,
+} from "@/lib/youthFirstHour";
+import {
+  collectYouthCasePlayerIds,
+  shouldShowYouthInboxMessage,
+} from "@/engine/youth/youthCaseFocus";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 import { getCareerElapsedWeeks } from "@/engine/core/gameDate";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import {
@@ -264,7 +274,13 @@ function getNavLockState(
   return null;
 }
 
-export function GameLayout({ children }: { children: React.ReactNode }) {
+export function GameLayout({
+  children,
+  chrome = "workspace",
+}: {
+  children: React.ReactNode;
+  chrome?: "workspace" | "watch";
+}) {
   const {
     currentScreen,
     setScreen,
@@ -281,6 +297,8 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     effectiveWeek,
     observationCount,
     reportCount,
+    showWorldCareer,
+    showInboxChrome,
     hasScheduledActivity,
     hasAttendedMatch,
     scoutAvatarId,
@@ -296,7 +314,16 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       hasGame: gameState !== null,
       currentWeek: gameState?.currentWeek ?? 0,
       currentSeason: gameState?.currentSeason ?? 0,
-      unreadCount: gameState?.inbox.filter((message) => !message.read).length ?? 0,
+      unreadCount: (() => {
+        const inbox = gameState?.inbox ?? [];
+        if (!IS_YOUTH_EARLY_ACCESS || !gameState) {
+          return inbox.filter((message) => !message.read).length;
+        }
+        const caseIds = collectYouthCasePlayerIds(gameState);
+        return inbox.filter((message) =>
+          !message.read && shouldShowYouthInboxMessage(gameState, message, caseIds),
+        ).length;
+      })(),
       unreviewedNpcReportCount: gameState
         ? Object.values(gameState.npcReports).filter((report) => !report.reviewed).length
         : 0,
@@ -314,6 +341,10 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       reportCount: gameState
         ? selectLatestReportsByCase(Object.values(gameState.reports ?? {})).length
         : 0,
+      showWorldCareer: !IS_YOUTH_EARLY_ACCESS || shouldShowYouthWorldCareer(gameState),
+      showInboxChrome: IS_YOUTH_EARLY_ACCESS
+        ? shouldShowYouthInbox(gameState)
+        : true,
       hasScheduledActivity:
         gameState?.schedule?.activities?.some((activity) => activity != null) ?? false,
       hasAttendedMatch: (gameState?.playedFixtures?.length ?? 0) > 0,
@@ -324,23 +355,35 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     };
   }));
   const { playSFX } = useAudio();
-  const guidedSessionActive = useTutorialStore((state) => state.guidedSessionActive);
+  const guidedSessionInProgress = useTutorialStore((state) => state.guidedSessionActive);
   const currentGuidedTask = useTutorialStore((state) => state.currentGuidedTask);
+  // A stale task absent from this career's mentor catalog cannot lock navigation.
+  const guidedSessionActive = shouldLockGuidedNavigation(guidedSessionInProgress, currentGuidedTask);
 
   // All hooks must be called before any early return
   const [seenNav, setSeenNav] = useState<Set<GameScreen>>(() => loadSeenNav());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarCloseRef = useRef<HTMLButtonElement | null>(null);
   const previousScreenRef = useRef<GameScreen | null>(null);
 
-  // Close sidebar on Escape key
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSidebarOpen(false);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobileViewport(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
   }, []);
+
+  const mobileDrawerOpen = isMobileViewport && sidebarOpen;
+  const mobileDrawerHidden = isMobileViewport && !sidebarOpen;
+  useDialogFocusTrap(sidebarRef, mobileDrawerOpen, {
+    onClose: () => setSidebarOpen(false),
+    initialFocusRef: sidebarCloseRef,
+  });
 
   // Prevent body scroll when sidebar overlay is open on mobile
   useEffect(() => {
@@ -386,10 +429,19 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   };
   const useYouthEarlyAccessNav =
     IS_YOUTH_EARLY_ACCESS && specialization === "youth";
+  const youthWorkspaceItems = showWorldCareer
+    ? YOUTH_WORKSPACE_ITEMS
+    : YOUTH_WORKSPACE_ITEMS.filter(
+        (item) =>
+          item.screen === "dashboard"
+          || item.screen === "calendar"
+          || item.screen === "youthScouting"
+          || item.screen === "reportHistory",
+      );
 
   const isNavScreenVisible = (screen: GameScreen): boolean => {
     if (useYouthEarlyAccessNav) {
-      return YOUTH_WORKSPACE_ITEMS.some((item) => item.screen === screen)
+      return youthWorkspaceItems.some((item) => item.screen === screen)
         || YOUTH_SUPPORT_ITEMS.some((item) => item.screen === screen);
     }
     return getNavVisibility(screen, navCtx);
@@ -404,16 +456,22 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     ),
   })).filter((section) => section.visibleItems.length > 0);
   const showCareerShortcut = isNavScreenVisible("career");
-  const activeNavScreen = useYouthEarlyAccessNav
-    ? getYouthEarlyAccessWorkspaceParent(currentScreen)
-    : currentScreen;
-  const activeWorkspaceLabel = useYouthEarlyAccessNav
-    ? [
-        ...YOUTH_WORKSPACE_ITEMS,
-        ...YOUTH_SUPPORT_ITEMS,
-        { screen: "inbox" as GameScreen, label: "Inbox", icon: Mail },
-      ].find((item) => item.screen === activeNavScreen)?.label ?? "TalentScout"
-    : "TalentScout";
+  const liveLookActive =
+    currentScreen === "observation" || currentScreen === "openingDiscovery";
+  const activeNavScreen = liveLookActive
+    ? null
+    : useYouthEarlyAccessNav
+      ? getYouthEarlyAccessWorkspaceParent(currentScreen)
+      : currentScreen;
+  const activeWorkspaceLabel = liveLookActive
+    ? "Watch"
+    : useYouthEarlyAccessNav
+      ? [
+          ...youthWorkspaceItems,
+          ...YOUTH_SUPPORT_ITEMS,
+          { screen: "inbox" as GameScreen, label: "Inbox", icon: Mail },
+        ].find((item) => item.screen === activeNavScreen)?.label ?? "TalentScout"
+      : "TalentScout";
 
   const guidedNavigationDestination: GameScreen | null =
     currentGuidedTask === "openedCalendar" ? "calendar" : null;
@@ -443,7 +501,8 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     }
 
     // Auto-open screen guide on first click of a newly-visible nav item.
-    if (isFirstVisit) {
+    if (isFirstVisit && (useGameStore.getState().gameState?.guidedSessionRequested !== false
+      || useTutorialStore.getState().guidedSessionForcedReplay)) {
       setTimeout(() => {
         useTutorialStore.getState().recordScreenVisit(screen);
       }, 300);
@@ -465,49 +524,70 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const watchChrome = chrome === "watch";
+  const firstHourFocus = "focus-visible:outline-[color:var(--ring)]";
+  const firstHourSelected = "bg-[color:var(--primary)]/12 font-semibold text-[color:var(--primary)] ring-1 ring-inset ring-[color:var(--primary)]/25";
+  const firstHourMobileActive = "text-[color:var(--primary)]";
+
   return (
     <div className="flex min-h-screen bg-[#090b0e]">
       <a
         href="#game-main"
-        className="fixed left-3 top-3 z-[70] -translate-y-20 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition focus:translate-y-0"
+        className="fixed left-3 top-3 z-[70] -translate-y-20 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition focus:translate-y-0"
       >
         Skip to game content
       </a>
 
+      {watchChrome && (
+        <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center justify-center border-b border-white/10 bg-[#0b0e12]/90 px-3 backdrop-blur">
+          <p className="text-sm font-semibold text-white">Watch</p>
+          <p className="ml-3 text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted-foreground)]">
+            Week {currentWeek} · Season {currentSeason}
+          </p>
+        </header>
+      )}
+
+      {!watchChrome && (
+      <>
       <header className="fixed inset-x-0 top-0 z-30 grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center border-b border-white/10 bg-[#0b0e12]/95 px-2 backdrop-blur md:hidden">
         <div className="flex items-center">
           <button
+            ref={menuButtonRef}
             onClick={() => setSidebarOpen(true)}
             disabled={guidedSessionActive}
             title={guidedSessionActive ? "Finish the highlighted tutorial step first" : undefined}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+            className={`flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 ${firstHourFocus} disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent`}
             aria-label="Open navigation menu"
+            aria-expanded={sidebarOpen}
+            aria-controls="game-nav-sidebar"
           >
             <Menu size={21} aria-hidden="true" />
           </button>
         </div>
         <div className="min-w-0 text-center">
           <p className="truncate text-sm font-semibold text-white">{activeWorkspaceLabel}</p>
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted-foreground)]">
             Week {currentWeek} · Season {currentSeason}
           </p>
         </div>
         <div className="flex items-center justify-end">
           {!guidedSessionActive && <ScreenHelpButton placement="mobileHeader" />}
+          {showInboxChrome && (
           <button
             onClick={() => handleNavClick("inbox")}
             disabled={isGuidedNavigationLocked("inbox")}
             title={isGuidedNavigationLocked("inbox") ? "Finish the highlighted tutorial step first" : undefined}
-            className="relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+            className={`relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 ${firstHourFocus} disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent`}
             aria-label={unreadCount > 0 ? `Open inbox, ${unreadCount} unread` : "Open inbox"}
           >
             <Bell size={20} aria-hidden="true" />
             {unreadCount > 0 && (
-              <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-amber-400 px-1 text-center text-[9px] font-bold leading-4 text-zinc-950">
+              <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-amber-400 px-1 text-center text-eyebrow font-bold leading-4 text-zinc-950">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </button>
+          )}
         </div>
       </header>
 
@@ -521,19 +601,27 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Sidebar — desktop: static, mobile: slide-over overlay */}
-      <aside aria-label="Game navigation" className={`
+      <aside
+        id="game-nav-sidebar"
+        ref={sidebarRef}
+        aria-label="Game navigation"
+        aria-hidden={mobileDrawerHidden || undefined}
+        inert={mobileDrawerHidden || undefined}
+        className={`
         fixed inset-y-0 left-0 z-50 flex w-72 md:w-60 flex-col border-r border-white/10 bg-[#0b0e12]
         transform transition-transform duration-200 ease-in-out
         md:static md:translate-x-0
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        ${mobileDrawerHidden ? "invisible pointer-events-none md:visible md:pointer-events-auto" : ""}
       `}>
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold tracking-tight">
-              Talent<span className="text-emerald-500">Scout</span>
+            <h1 className="font-editorial text-2xl tracking-tight">
+              Talent<span className="text-[var(--primary)]">Scout</span>
             </h1>
             {/* Close button visible only on mobile */}
             <button
+              ref={sidebarCloseRef}
               onClick={() => setSidebarOpen(false)}
               className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white md:hidden"
               aria-label="Close sidebar"
@@ -542,25 +630,25 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
           {useYouthEarlyAccessNav && (
-            <span className="mt-2 inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <span className="mt-2 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-eyebrow font-semibold uppercase tracking-[0.14em] text-amber-200">
               Youth Scout · Early Access
             </span>
           )}
           <p className="mt-2 text-xs text-zinc-400">
             Week {currentWeek} — Season {currentSeason}
           </p>
-          {useYouthEarlyAccessNav && (
+          {useYouthEarlyAccessNav && showInboxChrome && (
             <button
               data-tutorial-id="nav-inbox"
               onClick={() => handleNavClick("inbox")}
               disabled={isGuidedNavigationLocked("inbox")}
               title={isGuidedNavigationLocked("inbox") ? "Finish the highlighted tutorial step first" : undefined}
-              className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm text-zinc-300 transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-white/10 disabled:hover:bg-white/[0.03]"
+              className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm text-zinc-300 transition hover:border-amber-400/30 hover:bg-amber-400/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-white/10 disabled:hover:bg-white/[0.03]"
             >
               <Bell size={16} aria-hidden="true" />
               <span className="flex-1 text-left">Inbox</span>
               {unreadCount > 0 && (
-                <span className="min-w-5 rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-[10px] font-bold text-zinc-950">
+                <span className="min-w-5 rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-eyebrow font-bold text-zinc-950">
                   {unreadCount}
                 </span>
               )}
@@ -571,7 +659,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         {guidedSessionActive && (
           <div
             role="status"
-            className="mx-3 mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-zinc-300"
+            className="mx-3 mt-3 rounded-lg border border-[color:var(--primary)]/20 bg-[color:var(--primary)]/[0.06] px-3 py-2 text-xs leading-5 text-zinc-300"
           >
             {currentGuidedTask === "openedCalendar"
               ? "Planner is highlighted. Open it to continue."
@@ -583,7 +671,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
           {visibleSections.map((section) => (
             <div key={section.label ?? "util"}>
               {section.label && (
-                <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+                <p className="px-3 pb-1 pt-4 text-eyebrow font-semibold uppercase tracking-[0.16em] text-zinc-400">
                   {section.label}
                 </p>
               )}
@@ -608,11 +696,11 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
                     disabled={isLocked}
                     title={lockReason}
                     aria-current={activeNavScreen === screen ? "page" : undefined}
-                    className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                    className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition focus-visible:outline focus-visible:outline-2 ${firstHourFocus} ${
                       isLocked
                         ? "cursor-not-allowed opacity-40 text-zinc-600"
                         : activeNavScreen === screen
-                          ? "bg-emerald-400/12 font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20"
+                          ? firstHourSelected
                           : "cursor-pointer text-zinc-300 hover:bg-white/5 hover:text-white"
                     }`}
                   >
@@ -622,22 +710,22 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
                       <Lock size={12} className="text-zinc-600" aria-hidden="true" />
                     )}
                     {lockState === "preview" && !isNew && (
-                      <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                      <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-eyebrow font-bold text-amber-400">
                         Preview
                       </span>
                     )}
                     {isNew && !isLocked && lockState !== "preview" && (
-                      <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                      <span className="rounded-full bg-[color:var(--success)]/20 px-1.5 py-0.5 text-eyebrow font-bold text-[color:var(--success)]">
                         New
                       </span>
                     )}
                     {screen === "inbox" && !isNew && unreadCount > 0 && (
-                      <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white min-w-[18px] text-center">
+                      <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-eyebrow font-bold text-white min-w-[18px] text-center">
                         {unreadCount}
                       </span>
                     )}
                     {screen === "npcManagement" && !isNew && unreviewedNpcReportCount > 0 && (
-                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                      <span className="rounded-full bg-[color:var(--success)] px-1.5 py-0.5 text-eyebrow font-bold text-[color:var(--success-foreground)]">
                         {unreviewedNpcReportCount}
                       </span>
                     )}
@@ -657,7 +745,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
                 onClick={() => handleNavClick("career")}
                 disabled={isGuidedNavigationLocked("career")}
                 title={isGuidedNavigationLocked("career") ? "Finish the highlighted tutorial step first" : undefined}
-                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-zinc-400 transition hover:bg-white/5 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-zinc-400 transition hover:bg-white/5 hover:text-[color:var(--primary)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
                 aria-label="Open career screen"
               >
                 <ChevronRight size={12} />
@@ -677,11 +765,11 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className="text-zinc-400">Reputation</span>
-            <span className="text-emerald-400">{Math.round(scoutReputation)}</span>
+            <span className="text-[color:var(--success)]">{Math.round(scoutReputation)}</span>
           </div>
           <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
             <div
-              className="h-full rounded-full bg-emerald-500 transition-all"
+              className="h-full rounded-full bg-[color:var(--success)] transition-all"
               style={{ width: `${scoutReputation}%` }}
             />
           </div>
@@ -692,9 +780,11 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       {useYouthEarlyAccessNav && (
         <nav
           aria-label="Youth Scout workspace"
-          className="fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-6 border-t border-white/10 bg-[#0b0e12]/98 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+          className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem+env(safe-area-inset-bottom))] border-t border-white/10 bg-[#0b0e12]/98 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden ${
+            youthWorkspaceItems.length <= 2 ? "grid-cols-2" : youthWorkspaceItems.length <= 4 ? "grid-cols-4" : "grid-cols-6"
+          }`}
         >
-          {YOUTH_WORKSPACE_ITEMS.map(({ screen, label, icon: Icon }) => {
+          {youthWorkspaceItems.map(({ screen, label, icon: Icon }) => {
             const isActive = activeNavScreen === screen;
             const isTutorialLocked = isGuidedNavigationLocked(screen);
             return (
@@ -705,11 +795,11 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
                 disabled={isTutorialLocked}
                 title={isTutorialLocked ? "Finish the highlighted tutorial step first" : undefined}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-[9px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 ${firstHourFocus} ${
                   isTutorialLocked
                     ? "cursor-not-allowed text-zinc-600 opacity-40"
                     : isActive
-                      ? "text-emerald-300"
+                      ? firstHourMobileActive
                       : "text-zinc-400 hover:bg-white/5 hover:text-white"
                 }`}
               >
@@ -720,12 +810,18 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
       )}
+      </>
+      )}
 
       <main
         id="game-main"
         ref={mainRef}
         tabIndex={-1}
-        className={`game-mobile-safe-scroll relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.07),transparent_34%),linear-gradient(180deg,#0b0e12_0%,#090b0e_100%)] pt-14 focus:outline-none md:pt-0 ${useYouthEarlyAccessNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`}
+        className={`relative min-w-0 flex-1 overflow-x-clip lg:overflow-auto bg-[var(--background)] focus:outline-none ${
+          watchChrome
+            ? "pt-12"
+            : `game-mobile-safe-scroll pt-14 md:pt-0 ${useYouthEarlyAccessNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`
+        }`}
       >
         {autosaveError !== null && (
           <div

@@ -1,10 +1,15 @@
 "use client";
 
+import { resolvePlayerDisplayName } from "@/lib/playerResolution";
+
 import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { Button } from "@/components/ui/button";
 import { GameLayout } from "./GameLayout";
+import { PlayerAgeTimeline, selectPlayerAgeTimeline } from "./PlayerAgeTimeline";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PlayerAvatar } from "./PlayerAvatar";
 import {
   Star,
   Trophy,
@@ -12,7 +17,6 @@ import {
   Sparkles,
   ArrowRightLeft,
   Users,
-  TrendingUp,
   ChevronDown,
   ChevronRight,
   Shield,
@@ -55,10 +59,10 @@ const MILESTONE_COLORS: Record<AlumniMilestoneType, string> = {
 };
 
 const MILESTONE_LABELS: Record<AlumniMilestoneType, string> = {
-  firstTeamDebut: "First Team Debut",
-  firstGoal: "First Goal",
+  firstTeamDebut: "First Tracked Senior Appearance",
+  firstGoal: "First Tracked Senior Goal",
   internationalCallUp: "International Call-Up",
-  wonderkidStatus: "Wonderkid Status",
+  wonderkidStatus: "Young-Player Recognition",
   transfer: "Transfer",
 };
 
@@ -97,35 +101,7 @@ const STATUS_LABELS: Record<AlumniStatus, string> = {
   transferred: "Transferred",
 };
 
-const STATUS_COLORS: Record<AlumniStatus, string> = {
-  academy: "bg-blue-900/50 text-blue-300 border-blue-700/50",
-  firstTeam: "bg-emerald-900/50 text-emerald-300 border-emerald-700/50",
-  loaned: "bg-orange-900/50 text-orange-300 border-orange-700/50",
-  released: "bg-red-900/50 text-red-300 border-red-700/50",
-  retired: "bg-zinc-800/50 text-zinc-400 border-zinc-600/50",
-  transferred: "bg-purple-900/50 text-purple-300 border-purple-700/50",
-};
-
 // ─── Sub-components ──────────────────────────────────────────────────────────
-
-interface LegacyStatProps {
-  label: string;
-  value: number | string;
-  icon: React.ElementType;
-  color: string;
-}
-
-function LegacyStat({ label, value, icon: Icon, color }: LegacyStatProps) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-[#27272a] bg-[#141414] p-4">
-      <div>
-        <p className="text-xs text-zinc-500">{label}</p>
-        <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      </div>
-      <Icon size={20} className={color} aria-hidden="true" />
-    </div>
-  );
-}
 
 function SeasonStatsTable({ stats }: { stats: AlumniSeasonStats[] }) {
   if (stats.length === 0) return null;
@@ -135,13 +111,13 @@ function SeasonStatsTable({ stats }: { stats: AlumniSeasonStats[] }) {
 
   return (
     <div className="mt-3">
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
         Season-by-Season Stats
       </p>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]" tabIndex={0} role="region" aria-label="Alumni season statistics">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-[#27272a] text-zinc-500">
+            <tr className="border-b border-[#27272a] text-[var(--muted-foreground)]">
               <th className="pb-1 pr-3 text-left font-medium">Season</th>
               <th className="pb-1 px-2 text-right font-medium">Apps</th>
               <th className="pb-1 px-2 text-right font-medium">Goals</th>
@@ -155,7 +131,7 @@ function SeasonStatsTable({ stats }: { stats: AlumniSeasonStats[] }) {
                 <td className="py-1 pr-3 text-zinc-300">
                   S{s.season}
                   {s.source === "legacyEstimate" && (
-                    <span className="ml-1 text-[9px] uppercase tracking-wide text-amber-400" title="Estimate retained from an older save">
+                    <span className="ml-1 text-xs uppercase tracking-wide text-amber-400" title="Estimate retained from an older save">
                       estimate
                     </span>
                   )}
@@ -182,6 +158,7 @@ interface AlumniCardProps {
   currentClubName: string;
   caseId?: string;
   getCaseTimeline: (caseId: string) => ScoutingCaseTimeline | null;
+  portraitAge?: number;
 }
 
 function AlumniCard({
@@ -191,36 +168,34 @@ function AlumniCard({
   currentClubName,
   caseId,
   getCaseTimeline,
+  portraitAge,
 }: AlumniCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"casebook" | "milestones" | "timeline" | "stats">("milestones");
   const milestoneCount = record.milestones.length;
+  const latestRecordedEvent = record.careerUpdates?.at(-1)?.description ?? record.milestones.at(-1)?.description;
   const status = record.currentStatus ?? "academy";
   const caseTimeline = expanded && activeTab === "casebook" && caseId
     ? getCaseTimeline(caseId)
     : null;
 
   return (
-    <div className="rounded-lg border border-[#27272a] bg-[#141414]">
+    <article className="dossier-section py-2">
       {/* Card header — always visible */}
-      <button
-        onClick={() => setExpanded((prev) => !prev)}
-        aria-expanded={expanded}
-        aria-label={`${expanded ? "Collapse" : "Expand"} alumni record for ${playerName}`}
-        className="flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left"
-      >
+      <div className="flex items-start gap-4 py-5">
+        <PlayerAvatar playerId={record.playerId} atAge={portraitAge} size={88} alt={playerName} className="shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-white">{playerName}</p>
+            <h3 className="font-editorial text-2xl text-[var(--foreground)] sm:text-3xl">{playerName}</h3>
             {/* Status badge */}
             <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[status]}`}
+              className={`inline-flex items-center text-xs font-medium text-[var(--muted-foreground)]`}
             >
               {STATUS_LABELS[status]}
             </span>
             {/* Contact graduated badge */}
             {record.becameContact && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/50 bg-amber-900/50 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)]">
                 <UserCheck size={10} aria-hidden="true" />
                 Contact
               </span>
@@ -228,58 +203,55 @@ function AlumniCard({
             {milestoneCount > 0 && (
               <Badge
                 variant="secondary"
-                className="shrink-0 text-[10px]"
+                className="shrink-0 text-xs"
               >
                 {milestoneCount} milestone{milestoneCount !== 1 ? "s" : ""}
               </Badge>
             )}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-zinc-500">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-[var(--muted-foreground)]">
             <span>Placed at</span>
             <span className="text-zinc-300">{placedClubName}</span>
             {currentClubName !== placedClubName && (
               <>
                 <ArrowRightLeft
                   size={10}
-                  className="text-zinc-600"
+                  className="text-[var(--muted-foreground)]"
                   aria-hidden="true"
                 />
                 <span className="text-zinc-300">{currentClubName}</span>
               </>
             )}
           </div>
-          <p className="mt-0.5 text-[10px] text-zinc-600">
-            Placed S{record.placedSeason} W{record.placedWeek}
+          <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+            Placed Season {record.placedSeason}, Week {record.placedWeek}
           </p>
+          {latestRecordedEvent && <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--foreground)]">{latestRecordedEvent}</p>}
+          <Button variant="outline" className="mt-4 gap-2"
+            onClick={() => setExpanded((prev) => !prev)}
+            aria-expanded={expanded}
+            aria-label={`${expanded ? "Collapse" : "Expand"} alumni record for ${playerName}`}>
+            {expanded ? "Close career record" : "Open career record"}
+            {expanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+          </Button>
         </div>
-        {expanded ? (
-          <ChevronDown
-            size={16}
-            className="shrink-0 text-zinc-500"
-            aria-hidden="true"
-          />
-        ) : (
-          <ChevronRight
-            size={16}
-            className="shrink-0 text-zinc-500"
-            aria-hidden="true"
-          />
-        )}
-      </button>
+      </div>
 
       {/* Expanded content — tabs */}
       {expanded && (
-        <div className="border-t border-[#27272a] px-4 pb-4 pt-3">
+        <div className="border-t border-[var(--border)] pb-6 pt-5">
+          <PlayerAgeTimeline playerId={record.playerId} compact className="mb-5 max-w-md border-b border-[var(--border)] pb-5" />
           {/* Tab navigation */}
           <div className="mb-3 flex flex-wrap gap-1">
             {(["casebook", "milestones", "timeline", "stats"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
+                aria-pressed={activeTab === tab}
+                className={`min-h-11 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                   activeTab === tab
-                    ? "bg-zinc-700 text-white"
-                    : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                    ? "border-[var(--primary)] text-[var(--foreground)]"
+                    : "border-transparent text-[var(--muted-foreground)] hover:bg-[var(--secondary)]"
                 }`}
               >
                 {tab === "casebook"
@@ -297,7 +269,7 @@ function AlumniCard({
             caseTimeline ? (
               <ScoutingCaseTimelineView timeline={caseTimeline} />
             ) : (
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-[var(--muted-foreground)]">
                 This legacy alumni record predates the linked scouting case history.
               </p>
             )
@@ -307,12 +279,12 @@ function AlumniCard({
           {activeTab === "milestones" && (
             <>
               {record.milestones.length === 0 ? (
-                <p className="text-xs text-zinc-500">
-                  No milestones yet. Check back as their career develops.
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  No milestones are retained in this career record.
                 </p>
               ) : (
                 <div className="space-y-2">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                     Career Milestones
                   </p>
                   {record.milestones.map((milestone, idx) => {
@@ -333,7 +305,7 @@ function AlumniCard({
                             <p className={`text-xs font-semibold ${color}`}>
                               {MILESTONE_LABELS[milestone.type]}
                             </p>
-                            <span className="text-[10px] text-zinc-600">
+                            <span className="text-xs text-[var(--muted-foreground)]">
                               S{milestone.season} W{milestone.week}
                             </span>
                           </div>
@@ -353,12 +325,12 @@ function AlumniCard({
           {activeTab === "timeline" && (
             <>
               {(record.careerUpdates ?? []).length === 0 ? (
-                <p className="text-xs text-zinc-500">
-                  No career updates yet. Updates appear as their career develops.
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  No career updates are retained in this record.
                 </p>
               ) : (
                 <div className="relative space-y-0">
-                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                     Career Timeline
                   </p>
                   {/* Vertical timeline line */}
@@ -377,7 +349,7 @@ function AlumniCard({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <Icon size={12} className={`shrink-0 ${color}`} aria-hidden="true" />
-                              <span className="text-[10px] text-zinc-600">
+                              <span className="text-xs text-[var(--muted-foreground)]">
                                 S{update.season} W{update.week}
                               </span>
                             </div>
@@ -398,8 +370,8 @@ function AlumniCard({
           {activeTab === "stats" && (
             <>
               {(record.seasonStats ?? []).length === 0 ? (
-                <p className="text-xs text-zinc-500">
-                  No season data yet. Stats are generated at the end of each season.
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  No season statistics are retained in this record.
                 </p>
               ) : (
                 <SeasonStatsTable stats={record.seasonStats ?? []} />
@@ -408,22 +380,21 @@ function AlumniCard({
           )}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export function AlumniDashboard() {
-  const { gameState } = useGameStore();
+  const { gameState, setScreen } = useGameStore();
 
   if (!gameState) return null;
 
-  const { alumniRecords, legacyScore, players, clubs } = gameState;
+  const { alumniRecords, legacyScore, clubs } = gameState;
 
   const getPlayerName = (playerId: string): string => {
-    const p = players[playerId];
-    return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
+    return resolvePlayerDisplayName(gameState, playerId);
   };
 
   const getClubName = (clubId: string): string => {
@@ -448,89 +419,43 @@ export function AlumniDashboard() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="mx-auto min-h-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">Alumni Dashboard</h1>
+          <p className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--primary)]">The names that stayed with you</p>
+          <h1 className="font-editorial text-3xl text-[var(--foreground)] sm:text-4xl">Alumni</h1>
           <p className="text-sm text-zinc-400">
-            Track the careers of youth you have placed at clubs
+            The careers that began with a chance you helped create.
           </p>
         </div>
 
-        {/* Legacy Score Card */}
-        <div className="mb-8">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <TrendingUp
-                  size={16}
-                  className="text-emerald-400"
-                  aria-hidden="true"
-                />
-                Legacy Score
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Total score — prominent */}
-              <div className="mb-4 flex items-center gap-3">
-                <p className="text-4xl font-bold text-emerald-400">
-                  {legacyScore.totalScore}
-                </p>
-                <p className="text-sm text-zinc-500">total legacy points</p>
-              </div>
-
-              {/* Breakdown */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <LegacyStat
-                  label="Youth Found"
-                  value={legacyScore.youthFound}
-                  icon={Users}
-                  color="text-blue-400"
-                />
-                <LegacyStat
-                  label="First Team Breakthroughs"
-                  value={legacyScore.firstTeamBreakthroughs}
-                  icon={Star}
-                  color="text-amber-400"
-                />
-                <LegacyStat
-                  label="International Caps from Finds"
-                  value={legacyScore.internationalCapsFromFinds}
-                  icon={Globe}
-                  color="text-purple-400"
-                />
-                <LegacyStat
-                  label="Placement Success Rate"
-                  value={`${successRate}%`}
-                  icon={Target}
-                  color="text-cyan-400"
-                />
-              </div>
-
-              {/* Contact graduates summary */}
-              {contactGraduates > 0 && (
-                <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-700/30 bg-amber-900/20 px-3 py-2">
-                  <UserCheck size={14} className="text-amber-400" aria-hidden="true" />
-                  <p className="text-xs text-amber-300">
-                    {contactGraduates} alumni {contactGraduates === 1 ? "has" : "have"} graduated to your contact network
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        {alumniRecords.length > 0 && (
+          <details className="mb-6 border-y border-[var(--border)]">
+            <summary className="min-h-11 cursor-pointer py-4 text-sm text-[var(--muted-foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]">
+              <strong className="text-[var(--foreground)]">{alumniRecords.length} placed career{alumniRecords.length === 1 ? "" : "s"}</strong>
+              {" · "}{legacyScore.totalScore} legacy points · View the record in numbers
+            </summary>
+            <dl className="grid gap-x-8 gap-y-4 border-t border-[var(--border)] py-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div><dt className="text-[var(--muted-foreground)]">Youth found</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{legacyScore.youthFound}</dd></div>
+              <div><dt className="text-[var(--muted-foreground)]">First-team breakthroughs</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{legacyScore.firstTeamBreakthroughs}</dd></div>
+              <div><dt className="text-[var(--muted-foreground)]">Recorded international call-ups</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{legacyScore.internationalCapsFromFinds}</dd></div>
+              <div><dt className="text-[var(--muted-foreground)]">Placement success rate</dt><dd className="mt-1 font-semibold text-[var(--foreground)]">{successRate}%</dd></div>
+            </dl>
+            {contactGraduates > 0 && <p className="pb-4 text-sm text-[var(--muted-foreground)]">{contactGraduates} alumni {contactGraduates === 1 ? "has" : "have"} joined your contact network.</p>}
+          </details>
+        )}
 
         {interventionPortfolio.interventions.length > 0 && (
-          <Card className="mb-8 border-violet-500/25 bg-violet-500/[0.05]" data-testid="career-intervention-portfolio">
+          <Card className="mb-8 rounded-md border-[var(--border)] bg-[var(--card)]" data-testid="career-intervention-portfolio">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Shield size={16} className="text-violet-300" aria-hidden="true" />
+              <CardTitle as="h2" className="flex items-center gap-2 text-sm">
+                <Shield size={16} className="text-[var(--signal-focus)]" aria-hidden="true" />
                 Pathway intervention record
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm leading-6 text-zinc-300">{interventionPortfolio.summary}</p>
-              <p className="mt-1 text-xs leading-5 text-zinc-500">
+              <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
                 These comparisons remember what you chose and what the public career evidence did next. They do not claim your intervention caused the outcome.
               </p>
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -554,7 +479,7 @@ export function AlumniDashboard() {
                     <p className="mt-2 text-xs leading-5 text-zinc-300">
                       You chose “{intervention.optionLabel}.”
                     </p>
-                    <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
                       Environment {intervention.originalEnvironmentScore}/100 → {intervention.currentEnvironmentScore}/100. {intervention.currentEnvironmentSummary}
                     </p>
                   </div>
@@ -566,8 +491,9 @@ export function AlumniDashboard() {
 
         {/* Alumni List */}
         <div data-tutorial-id="alumni-list">
+          {alumniRecords.length > 0 && (
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Alumni</h2>
+            <h2 className="font-editorial text-2xl text-[var(--foreground)]">The careers you helped start</h2>
             <div className="flex items-center gap-2">
               {contactGraduates > 0 && (
                 <Badge variant="outline" className="border-amber-700/50 text-amber-400">
@@ -582,23 +508,22 @@ export function AlumniDashboard() {
             </div>
           </div>
 
+          )}
+
           {alumniRecords.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                <Trophy
-                  size={40}
-                  className="mb-4 text-zinc-700"
-                  aria-hidden="true"
-                />
-                <p className="text-sm text-zinc-500">No youth placed yet.</p>
-                <p className="mt-1 text-xs text-zinc-600">
-                  Discover unsigned youth and recommend them to clubs to build
-                  your legacy.
-                </p>
-              </CardContent>
-            </Card>
+            <section className="dossier-section max-w-3xl px-5 py-8 sm:px-8 sm:py-10" aria-labelledby="alumni-first-chance">
+              <UserCheck size={24} className="mb-5 text-[var(--accent)]" aria-hidden="true" />
+              <h2 id="alumni-first-chance" className="font-editorial text-2xl text-white">A first chance. A career to follow.</h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">
+                No players placed yet. Help an unsigned prospect find a club, then follow their breakthroughs, setbacks and place in the game here.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button onClick={() => setScreen("youthScouting")}>Review prospects</Button>
+                <Button variant="outline" onClick={() => setScreen("career")}>Back to Career</Button>
+              </div>
+            </section>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="divide-y divide-[var(--border)]">
               {alumniRecords.map((record) => (
                 <AlumniCard
                   key={record.id}
@@ -608,6 +533,7 @@ export function AlumniDashboard() {
                   currentClubName={getClubName(record.currentClubId)}
                   caseId={getAlumniCaseId(record)}
                   getCaseTimeline={getCaseTimeline}
+                  portraitAge={selectPlayerAgeTimeline(gameState, record.playerId)?.frames.at(-1)?.age}
                 />
               ))}
             </div>

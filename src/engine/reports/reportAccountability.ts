@@ -20,6 +20,32 @@ function compareReportDate(left: ScoutReport, right: ScoutReport): number {
     || left.id.localeCompare(right.id);
 }
 
+/** The current authored judgment used when a player-targeted pitch is selected. */
+export function indexLatestPlayerReports(
+  reports: Iterable<ScoutReport>,
+  scoutId: string,
+): Map<string, ScoutReport> {
+  const latest = new Map<string, ScoutReport>();
+  // Revision numbers belong to a case; revision 3 of one brief must not
+  // outrank a newly authored, separate brief merely because it is revision 1.
+  const cases = new Map<string, ScoutReport>();
+  for (const report of reports) {
+    if (report.scoutId !== scoutId) continue;
+    const key = getReportCaseKey(report);
+    const current = cases.get(key);
+    // Include passes here: the separate career-credit selector intentionally
+    // excludes them, but a current pitch must honor a withdrawn judgment.
+    if (!current || compareReportDate(report, current) > 0) cases.set(key, report);
+  }
+  for (const report of cases.values()) {
+    const current = latest.get(report.playerId);
+    if (!current || (compareReportCalendarDate(report, current) || report.id.localeCompare(current.id)) > 0) {
+      latest.set(report.playerId, report);
+    }
+  }
+  return latest;
+}
+
 type ReportDate = Pick<ScoutReport, "submittedSeason" | "submittedWeek">;
 
 function compareReportCalendarDate(left: ReportDate, right: ReportDate): number {
@@ -137,6 +163,8 @@ export function selectLatestReportsByCase(
 ): ScoutReport[] {
   const latest = new Map<string, ScoutReport>();
   for (const report of reports) {
+    // A private pass earns no credit and cannot erase an earlier public stake.
+    if (report.recommendedAction === "pass") continue;
     const key = getReportCaseKey(report);
     const current = latest.get(key);
     if (!current || compareReportDate(report, current) > 0) latest.set(key, report);
@@ -157,6 +185,7 @@ export function selectLatestReportsByCaseOpenedInRange(
   const allReports = [...reports];
   const openingByCase = new Map<string, ScoutReport>();
   for (const report of allReports) {
+    if (report.recommendedAction === "pass") continue;
     const key = getReportCaseKey(report);
     const current = openingByCase.get(key);
     if (!current || compareReportDate(report, current) < 0) {
@@ -213,7 +242,7 @@ export function groupReportRevisionsByCase(
  * cases: a transfer is an outcome, not a prerequisite for accountability.
  */
 export function isReportOutcomeValidatable(report: ScoutReport): boolean {
-  return report.attributeAssessments.length > 0;
+  return report.recommendedAction !== "pass" && report.attributeAssessments.length > 0;
 }
 
 /**
@@ -226,7 +255,9 @@ export function selectMatureReportCasesForValidation(
   completedSeason: number,
   scoutId?: string,
 ): ReportRevisionCase[] {
-  return groupReportRevisionsByCase(reports).filter((reportCase) => {
+  return groupReportRevisionsByCase(
+    [...reports].filter((report) => report.recommendedAction !== "pass"),
+  ).filter((reportCase) => {
     const report = reportCase.latestReport;
     return report.postTransferRating === undefined
       && (scoutId === undefined || report.scoutId === scoutId)

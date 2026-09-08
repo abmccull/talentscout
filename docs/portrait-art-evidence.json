@@ -1,0 +1,227 @@
+[
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-01.png",
+    "sha256": "a9d3c019ce968bc99a3eb39591fec72d6b3a1643b37cf3fbb3d16afc213b8fa7",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-02.png",
+    "sha256": "b560ed8fd9635cc4d0d3182b492f1626a9822a27f1ff6f56871ddf017d5af047",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-03.png",
+    "sha256": "8cfbc39a290f723a45bcaed3369d0131576c525f32a11cd5662fbad72fedfb38",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-04.png",
+    "sha256": "32d1abbdb8712d111bf4cfaa1772ae2df506a5617cc9d113add5fbc1099d3338",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-05.png",
+    "sha256": "14e15cfefd80343fb29d049c4ab0b7ce522ce6d5bdd689f5d72fb062671955e8",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-06.png",
+    "sha256": "71a064bb995ebc261c576919516db942609c2a711f979196f7b2530639932745",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-07.png",
+    "sha256": "3b74285770e90d5946294f0f6b49d88c2aca3c06bbb6d3f2c647b95ed85af1c3",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-08.png",
+    "sha256": "43de6cd2741cb317ca8f3c90d52962aa5ca5a9d3bed3396bca4b3f9af181b746",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-09.png",
+    "sha256": "22a31277f7a6ab2fae74a9007f9391b0ae2a21cef08680ca9218a903f055ed40",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-10.png",
+    "sha256": "c806726152e7f37c60e393a92ff11197ff7f1f710e0b1856ed465b636cb445f5",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-11.png",
+    "sha256": "074fcdd32453ea92eb2ce316e01ffd1175b680d7ad252f9f2317217bd51950f8",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-12.png",
+    "sha256": "db73b762b92943dfd16ed6f2c30ce762eebe0ea1348cb40db73a5ca9757f0c0e",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\proposals\\portrait-art\\atlas-13.png",
+    "sha256": "d620ac6187ee8cbd62892c2b276b54b21d4c1559e8de2c183c3f3b29db98544a",
+    "kind": "original atlas"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\heath\\age-15.webp",
+    "sha256": "2dc8571bb432e274c98a4693d1b3abbf0d61abac86bce5909df8863f216081ce",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\violet\\age-15.webp",
+    "sha256": "98bf99b1cc16be5569d9d734de205c840f23131a3b997640d5f5684210abca30",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\heath\\age-22.webp",
+    "sha256": "adfbdef5e41c8c24b20dab780414e362db085705c20091ad2ca3c77c2c840e44",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\violet\\age-22.webp",
+    "sha256": "c41a0e4bf2b8d9d975f2e52654af2431c3e17cf166f51e64d4a0c54ca43c686f",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\heath\\age-35.webp",
+    "sha256": "b167a26891466b51c2d26ba60a643caac84eccae06f47a2aed7642ccd35d98e0",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\violet\\age-35.webp",
+    "sha256": "1d9a4d56022a96da3e7f82841bf327d6e8b843517cd9f0a850b3ec7253b59514",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\estuary\\age-22.webp",
+    "sha256": "af2adc91d0b719ee9e7cda1620a79d62866a346f815dea2dce0acee2a7ca4123",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\yarrow\\age-22.webp",
+    "sha256": "1dbfe662824ed144b636c06b67f2fb23031bd65e3488494b652a8c63df5132db",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\slate\\age-22.webp",
+    "sha256": "0f4578c5350bd506b7bd079d8a5943e259e81e3fa199c55d23866e1ad00a85c5",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\cloud\\age-22.webp",
+    "sha256": "08ce1f7f4d2ef9e0a3220da75bd5f9f4f3596e73a4ac7eea3979a4c5ac8ed32d",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\sable\\age-22.webp",
+    "sha256": "e9a04cbc635da815702a209d126f123269252f4846c00085191b8592ab13b30a",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\slate\\age-35.webp",
+    "sha256": "01f28d6b6f2ce4f44c9f87c326bc2eb551a09bec145a1107abf64f905b672db5",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\cloud\\age-35.webp",
+    "sha256": "f20d82253c9ef7301925e3ba2451d5d250b09dccf0af26a3218670b7c88b8cf0",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\sable\\age-35.webp",
+    "sha256": "3a18a48c09f43625be6fa08b6563d1465b9893eb4176558d5c843842ff9ac921",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\willow\\age-22.webp",
+    "sha256": "22c82bcfca4b3048f974501300fc54e21c16800e3b82f65aba24f9b399099489",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\fawn\\age-22.webp",
+    "sha256": "9df8fc8dbe6e92b6b0f0f1376967f0a80be9ca4fc00b846e0314bea4353bc028",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\agate\\age-22.webp",
+    "sha256": "f45ceb0f44db096ebcf1a6302657832741fb6c14387a3fa73f34f6fcd0083d85",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\flint\\age-15.webp",
+    "sha256": "0951640d2087cc1241578930a955043123b5163dce81b6af2203e0c82633f33c",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\alder\\age-15.webp",
+    "sha256": "2dd06ffc9de06ebdc19ded49cbd44dee63bc26ab72bfb7e581a3cd1eb74d0372",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\cairn\\age-15.webp",
+    "sha256": "e4a639416caba72bfab15d227294aec7b381bfe4e4305023db26882307bb7570",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\flint\\age-22.webp",
+    "sha256": "88d5affd7ca2fd121cd0587a5d75e34d9421ce5ec97c96b624079110019dfeec",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\alder\\age-22.webp",
+    "sha256": "da1ba7dd0e9cf0d8e6d0fd7370e0c198c9cdd10f6eee88bc19e28a0e74a363f7",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\cairn\\age-22.webp",
+    "sha256": "42244939ba706c3e521d92be8aec439d6cfe94548ebac9bb5dd1a7ca052e9976",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\moss\\age-22.webp",
+    "sha256": "54941e12a7d572abe2bf745424f346aea86094c191e843b26293d479fb80dd2f",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\quartz\\age-22.webp",
+    "sha256": "435511fc564a681b1698ddcf1a9b1ec8b4b758d5d18baf8365695a407754d686",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\cairn\\age-18.webp",
+    "sha256": "8a7dcd0b0cb2e9c3997da8689ff6f1648fc1aa5fbff16a8513d20cd8803e77f0",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\larch\\age-18.webp",
+    "sha256": "d66523416e755c639bb3ddda5a1232bd1892547bb5516f6fe1e4668a7febf3eb",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\larch\\age-22.webp",
+    "sha256": "718b7b267408d9b5f754f54647fcfd55133befd753a7d09705aa12ccd0f49562",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\fern\\age-18.webp",
+    "sha256": "21b095f57a9134655dadcfee961bb6a76851b8ee78585e1470c80b100f13be1a",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\fern\\age-22.webp",
+    "sha256": "9ab2f64e6502adfaaba2718d65ed20e3bd13255d34263a34f50f3e7f4fc856cb",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\kelp\\age-45.webp",
+    "sha256": "751b42a1224666bdaf483f9847417270ecd4a91be120350e62feb406d57ecbf9",
+    "kind": "packaged tile"
+  },
+  {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-visual-overhaul\\public\\images\\portraits\\documentary-v1\\thistle\\age-45.webp",
+    "sha256": "72f22ce4fbe67d531c15084262994111d8886e0076d260b7e5d2fda592ad2c85",
+    "kind": "packaged tile"
+  }
+]

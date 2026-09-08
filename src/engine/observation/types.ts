@@ -148,11 +148,8 @@ export interface FocusTokenState {
   total: number;
   /** All active and historical focus allocations in this session. */
   allocations: FocusAllocation[];
-  /**
-   * Tracks how many phases have elapsed since a lens was switched per player.
-   * Key format: `${playerId}:${lensType}`. Used to apply warm-up penalties.
-   */
-  warmupPhases: Record<string, number>;
+  /** Legacy serialized counter; never affected evidence. Ignored on resume. */
+  warmupPhases?: Record<string, number>;
 }
 
 // =============================================================================
@@ -166,6 +163,8 @@ export interface FocusTokenState {
 export interface PlayerMoment {
   /** Unique identifier within the session. */
   id: string;
+  /** Stable action semantics; older saved moments use conservative attribute/context inference. */
+  actionId?: string;
   /** The player this moment belongs to. */
   playerId: string;
   /** Category of action this moment represents. */
@@ -613,6 +612,8 @@ export interface ObservationSession {
   observerContext?: ObservationExperienceSnapshot;
   /** Visible opponent descriptors used to tailor this watch. */
   opponentContext?: ObservationOpponentContext;
+  /** Internal session performance draws; never part of scout knowledge. */
+  performanceOffsets?: Record<string, number>;
   /** Environmental/atmospheric context for this session. */
   venueAtmosphere?: VenueAtmosphere;
   /** Persisted context that explains what this specific watch could reveal. */

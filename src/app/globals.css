@@ -1,37 +1,86 @@
 @import "tailwindcss";
 
 :root {
-  --background: #090b0e;
-  --foreground: #f2f5f7;
-  --card: #11161c;
-  --card-foreground: #f2f5f7;
-  --primary: #34d399;
-  --primary-foreground: #07110d;
-  --secondary: #19232d;
-  --secondary-foreground: #f2f5f7;
-  --muted: #171c22;
-  --muted-foreground: #aeb7c2;
-  --accent: #22c55e;
-  --accent-foreground: #0a0a0a;
-  --destructive: #ef4444;
-  --border: #29313a;
-  --ring: #34d399;
-  --radius: 0.75rem;
+  --background: #101411;
+  --foreground: #f2f0e8;
+  --surface: #181e19;
+  --surface-elevated: #222a23;
+  --surface-interactive: #29342b;
+  --surface-selected: #263d2d;
+  --surface-overlay: #141a16;
+  --card: var(--surface);
+  --card-foreground: var(--foreground);
+  --primary: #b7d6a0;
+  --primary-foreground: #172216;
+  --success: #77ad86;
+  --success-foreground: #e8fff4;
+  --secondary: var(--surface-interactive);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--surface-elevated);
+  --muted-foreground: #b4bbb2;
+  --accent: #ddb777;
+  --accent-foreground: #201b12;
+  --destructive: #a33f35;
+  --border: #354137;
+  --ring: #b7d6a0;
+  --radius: 0.375rem;
+  --text-eyebrow: 0.75rem;
+  --text-meta: 0.8125rem;
+  --text-ui: 0.875rem;
+  --text-body: 1rem;
+  --signal-focus: #9bbccc;
+  --signal-moment: #ddb777;
+  --signal-warn: #ddb777;
+  --signal-danger: #e49a8e;
+  --signal-general: #b4bbb2;
+}
+
+/* Shared football editorial vocabulary. Layout, rather than nested cards,
+   separates the subject, the evidence and the decision. */
+.font-editorial { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.dossier-eyebrow { color: var(--muted-foreground); font-size: .75rem; font-weight: 600; line-height: 1.4; letter-spacing: .14em; text-transform: uppercase; }
+.dossier-section { padding-block: 1.5rem; border-top: 1px solid var(--border); }
+/* Solid reading surfaces keep scene art from competing with evidence and controls. */
+.dossier-panel { background: var(--surface); border-block: 1px solid var(--border); }
+.dossier-choice { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-overlay); color: var(--foreground); }
+.dossier-choice:hover { border-color: var(--primary); }
+.dossier-choice[data-selected="true"] { border-color: var(--primary); background: var(--surface-selected); box-shadow: inset 0 -3px 0 var(--primary); }
+.dossier-choice:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
+.dossier-title { font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.75rem, 2.5vw, 2.5rem); line-height: 1.12; font-weight: 400; letter-spacing: -.025em; }
+.game-workspace { margin-inline: auto; max-width: 1480px; padding: 1.5rem clamp(1rem, 3vw, 3rem) 3rem; }
+.game-workspace :where(h1, h2, h3) { text-wrap: balance; }
+.game-workspace :where(p) { overflow-wrap: break-word; }
+
+@media (max-width: 639px) {
+  .game-workspace { padding-top: .75rem; }
+  #game-main :where(button, [role="button"]) { min-height: 2.75rem; min-width: 2.75rem; }
+  .game-workspace :where(select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"])) { min-height: 2.75rem; }
+}
+
+.text-eyebrow {
+  font-size: var(--text-eyebrow);
+  line-height: 1.25;
+}
+
+.text-meta {
+  font-size: var(--text-meta);
+  line-height: 1.35;
+}
+
+.text-quiet {
+  color: var(--muted-foreground);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  background-image:
-    radial-gradient(circle at 85% -10%, rgba(52, 211, 153, 0.07), transparent 32rem),
-    linear-gradient(180deg, #0b0e12 0%, #090b0e 100%);
-  background-attachment: fixed;
+  background-image: none;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgba(52, 211, 153, 0.28);
+  background: rgba(183, 214, 160, 0.28);
   color: #ffffff;
 }
 
@@ -92,10 +141,57 @@ html.font-small { font-size: 14px; }
 html.font-medium { font-size: 16px; }
 html.font-large { font-size: 18px; }
 
-/* Colorblind SVG filters — applied via SettingsApplier */
-html.cb-protanopia  { filter: url('#protanopia-filter');  }
-html.cb-deuteranopia { filter: url('#deuteranopia-filter'); }
-html.cb-tritanopia  { filter: url('#tritanopia-filter');  }
+html.bg-intensity-low { --screen-bg-overlay: 0.88; }
+html.bg-intensity-medium { --screen-bg-overlay: 0.68; }
+html.bg-intensity-high { --screen-bg-overlay: 0.48; }
+
+html.ui-contrast-high {
+  --foreground: #ffffff;
+  --muted-foreground: #f4f4f5;
+  --border: #e4e4e7;
+  --card: #000000;
+  --secondary: #09090b;
+  --muted: #18181b;
+}
+html.ui-contrast-high body {
+  color: #ffffff;
+  background-image: none;
+}
+html.ui-contrast-high [class*="text-zinc-"],
+html.ui-contrast-high [class*="text-muted"] {
+  color: #f4f4f5 !important;
+}
+html.ui-contrast-high [class*="border-"] {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* Safer palettes — remaps meaning colors. Never simulate a deficiency. */
+html.cb-protanopia,
+html.cb-deuteranopia {
+  --primary: #f0c14b;
+  --accent: #f0c14b;
+  --ring: #f0c14b;
+  --signal-focus: #5b8def;
+  --signal-moment: #f0c14b;
+  --signal-warn: #2aa198;
+  --signal-danger: #c44b6a;
+  --signal-general: #d7dce3;
+}
+html.cb-tritanopia {
+  --signal-focus: #2f9e6b;
+  --signal-moment: #c44b6a;
+  --signal-warn: #d9893b;
+  --signal-danger: #5b8def;
+  --signal-general: #d7dce3;
+}
+
+.signal-focus { color: var(--signal-focus); }
+.signal-moment { color: var(--signal-moment); }
+.signal-warn { color: var(--signal-warn); }
+.signal-danger { color: var(--signal-danger); }
+.signal-general { color: var(--signal-general); }
+.bg-signal-focus { background-color: var(--signal-focus); }
+.bg-signal-moment { background-color: var(--signal-moment); }
 
 /* Reduced motion — collapses all animations/transitions to near-instant */
 html.reduced-motion *,
@@ -116,16 +212,14 @@ html.reduced-motion *::after {
   }
 }
 
-/* Lightweight workspace transition. Keeping this in CSS avoids pulling the
-   animation runtime into /play while preserving the same directional cue. */
+/* Keep the workspace transition opacity-only: a transformed ancestor changes
+   the containing block of fixed navigation and Watch controls, even at 0px. */
 @keyframes game-screen-enter {
   from {
     opacity: 0;
-    transform: translateY(0.625rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -147,6 +241,20 @@ html.reduced-motion .game-screen-enter {
 /* Use .font-handwritten on report titles, handbook headings, etc. */
 .font-handwritten {
   font-family: var(--font-caveat), cursive;
+}
+
+/* Dark notebook — cream paper failed WCAG on white assessment text. */
+.notebook-paper {
+  background-color: #14110c;
+  background-image:
+    linear-gradient(90deg, rgba(212, 168, 67, 0.12) 0, rgba(212, 168, 67, 0.12) 2.75rem, transparent 2.75rem),
+    repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 1.7rem,
+      rgba(240, 235, 227, 0.06) 1.7rem,
+      rgba(240, 235, 227, 0.06) calc(1.7rem + 1px)
+    );
 }
 
 /* Tooltip fade-in */

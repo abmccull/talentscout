@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { Button } from "@/components/ui/button";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -146,7 +147,7 @@ function StatCard({ label, value, subtext, icon, valueClassName = "text-white" }
 // =============================================================================
 
 export function ScoutPerformanceDashboard() {
-  const { gameState } = useGameStore();
+  const { gameState, setScreen } = useGameStore();
 
   const performanceData = useMemo<ScoutPerformanceData | null>(() => {
     if (!gameState) return null;
@@ -157,6 +158,34 @@ export function ScoutPerformanceDashboard() {
 
   const { scout, currentSeason } = gameState;
   const data = performanceData;
+  const hasReportingRecord = data.totalReports > 0
+    || data.totalDiscoveries > 0
+    || Object.keys(gameState.placementReports ?? {}).length > 0
+    || gameState.alumniRecords.length > 0;
+
+  if (!hasReportingRecord) {
+    return (
+      <GameLayout>
+        <div className="min-h-full p-4 sm:p-6">
+          <header className="mb-6">
+            <h1 className="font-editorial text-3xl text-white">Scout Performance</h1>
+            <p className="mt-1 text-sm text-zinc-400">{scout.firstName} {scout.lastName} · {data.tierLabel} · Reputation {data.reputation}/100</p>
+          </header>
+          <section className="dossier-section max-w-3xl px-5 py-8 sm:px-8 sm:py-10" data-tutorial-id="performance-overview" aria-labelledby="performance-first-record">
+            <Target size={24} className="mb-5 text-[var(--accent)]" aria-hidden="true" />
+            <h2 id="performance-first-record" className="font-editorial text-2xl text-white">Your judgment needs a record.</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">
+              There are no reports to assess yet. Watch a prospect and write down your call. Report quality appears here first; accuracy takes time and career evidence.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button onClick={() => setScreen("calendar")}>Plan an observation</Button>
+              <Button variant="outline" onClick={() => setScreen("career")}>Back to Career</Button>
+            </div>
+          </section>
+        </div>
+      </GameLayout>
+    );
+  }
 
   return (
     <GameLayout>
@@ -166,9 +195,9 @@ export function ScoutPerformanceDashboard() {
           <div className="flex items-center gap-3">
             <Activity size={24} className="text-emerald-500" aria-hidden="true" />
             <div>
-              <h1 className="text-2xl font-bold">Scout Performance</h1>
+              <h1 className="font-editorial text-3xl text-white">Scout Performance</h1>
               <p className="text-sm text-zinc-400">
-                {scout.firstName} {scout.lastName} — Career Analytics
+                {scout.firstName} {scout.lastName} · Your record of judgment
               </p>
             </div>
           </div>

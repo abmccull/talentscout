@@ -3,6 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 
 function expectVisibleFocusMatcher() {
   return async (locator: Locator) => {
+    await expect(locator).toBeVisible({ timeout: 5_000 });
     await locator.focus();
     await expect(locator).toBeFocused();
     await expect.poll(
@@ -71,9 +72,9 @@ test.describe("Workspace semantic quality", () => {
     const workspaces = [
       {
         screen: "dashboard",
-        headingName: /^Scouting Desk$/,
-        primaryObject: () => gamePage.page.getByTestId("desk-primary-decision"),
-        action: () => gamePage.page.getByTestId("desk-primary-decision").getByRole("button").first(),
+        headingName: /^The scouting desk$/i,
+        primaryObject: () => gamePage.page.getByRole("region", { name: "Active case", exact: true }),
+        action: () => gamePage.page.getByRole("region", { name: "Active case", exact: true }).getByRole("button", { name: "Open planner", exact: true }),
       },
       {
         screen: "calendar",
@@ -88,7 +89,7 @@ test.describe("Workspace semantic quality", () => {
         // The honest empty archive leads directly back into evidence creation;
         // comparison controls only appear after a professional artifact exists.
         action: () => gamePage.page.getByTestId("reports-command-deck")
-          .getByRole("button", { name: /^Plan the first live look$/i }),
+          .getByRole("button", { name: /^Plan a scouting visit$/i }),
       },
       {
         screen: "career",

@@ -201,18 +201,32 @@ export function deriveClubScoutingBudget(
   );
 }
 
+/** Legacy funding depends on stature, never on depleted cash or missing players. */
+export function deriveAnnualRecruitmentBudget(club: Club): number {
+  if (Number.isFinite(club.annualRecruitmentBudget) && (club.annualRecruitmentBudget ?? -1) >= 0) {
+    return Math.round(club.annualRecruitmentBudget!);
+  }
+  return Math.max(10_000, Math.round(50 * clamp(club.reputation, 1, 100) ** 3));
+}
+
 /**
  * Reapprove every club's annual recruitment envelope from one roster scan.
- * The result is formula-identical to calling both public derivation helpers
- * for each club, but avoids O(clubs * players) work at season rollover.
+ * Vacancies preserve approved wage capacity for replacements. Sporting funding
+ * changes belong to promotion/relegation, not to the surviving payroll size.
  */
 export function reapproveAnnualClubEconomics(
   clubs: Record<string, Club>,
   players: Record<string, Player>,
+  currentSeason?: number,
 ): Record<string, Club> {
   const rosterEconomics = buildClubRosterEconomicsIndex(players);
   const reapproved: Record<string, Club> = {};
   for (const [clubId, club] of Object.entries(clubs)) {
+    const allocateRecruitment = Number.isInteger(currentSeason) && currentSeason! > 0;
+    if (allocateRecruitment && (club.lastRecruitmentAllocation?.season ?? 0) >= currentSeason!) {
+      reapproved[clubId] = club;
+      continue;
+    }
     const roster = rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS;
     const annualScoutingBudget = deriveClubScoutingBudgetFromRoster(club, roster);
     const carryover = Math.min(
@@ -221,9 +235,30 @@ export function reapproveAnnualClubEconomics(
     );
     reapproved[clubId] = {
       ...club,
-      weeklyWageBudget: deriveClubWeeklyWageBudgetFromRoster(club, roster),
+      weeklyWageBudget: Number.isFinite(club.weeklyWageBudget) && (club.weeklyWageBudget ?? 0) > 0
+        ? Math.round(club.weeklyWageBudget!)
+        : deriveClubWeeklyWageBudgetFromRoster(club, roster),
       scoutingBudget: annualScoutingBudget + carryover,
     };
+    if (allocateRecruitment) {
+      const grant = deriveAnnualRecruitmentBudget(club);
+      const previousBalance = club.budget;
+      const recruitmentCarryover = Math.min(Math.round(grant * 0.2), Math.max(0, previousBalance));
+      // The budget represents this season's spending authority. The board
+      // retains excess unspent funds; outstanding debts are never erased.
+      reapproved[clubId] = {
+        ...reapproved[clubId],
+        annualRecruitmentBudget: grant,
+        budget: grant + recruitmentCarryover + Math.min(0, previousBalance),
+        lastRecruitmentAllocation: {
+          season: currentSeason!,
+          grant,
+          carryover: recruitmentCarryover,
+          returned: Math.max(0, previousBalance - recruitmentCarryover),
+          previousBalance,
+        },
+      };
+    }
   }
   return reapproved;
 }
@@ -275,8 +310,7 @@ function normalizeClubEconomicsFromRoster(
     ? Math.round(club.weeklyWageBudget ?? 0)
     : deriveClubWeeklyWageBudgetFromRoster(club, roster);
   const scoutingBudget = Number.isFinite(club.scoutingBudget)
-    && (club.scoutingBudget ?? 0) > 0
-    ? Math.round(club.scoutingBudget ?? 0)
+    ? Math.max(0, Math.round(club.scoutingBudget ?? 0))
     : deriveClubScoutingBudgetFromRoster(club, roster);
   const financialObligations = (club.financialObligations ?? []).map((obligation, index) =>
     normalizeObligation(club.id, obligation, index, currentWeek, currentSeason),

@@ -39,6 +39,8 @@ function club(id: string, budget = 100_000): Club {
     shortName: id.toUpperCase(),
     leagueId: `league-${id}`,
     reputation: 50,
+    // Ownership tests need a funded club; wage scarcity has dedicated regressions.
+    weeklyWageBudget: 50_000,
     budget,
     scoutingPhilosophy: "academyFirst",
     managerId: `manager-${id}`,

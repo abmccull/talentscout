@@ -1,0 +1,224 @@
+{
+  "status": "final-visual-review",
+  "scope": "Independent rendered visual and UX review; no product edits, browser runs, builds or tests executed by this reviewer.",
+  "baseline": {
+    "overall": 49,
+    "base": 50,
+    "systemCohesion": 4.5,
+    "source": "talentscout-visual-overhaul/docs/VISUAL_GAMEPLAY_AUDIT.md"
+  },
+  "final": {
+    "overall": 82,
+    "base": 82.5,
+    "systemCohesion": 8,
+    "formula": "round((mean of 12 dimension scores * 10) * 0.75 + (System Cohesion * 10) * 0.25)",
+    "severeIssueCapsApplied": [],
+    "majorScreenStillObviouslyPrototypeQuality": false
+  },
+  "scores": [
+    {
+      "dimension": "Visual hierarchy",
+      "before": 4.5,
+      "after": 8.5
+    },
+    {
+      "dimension": "Layout and spacing",
+      "before": 5,
+      "after": 8
+    },
+    {
+      "dimension": "Typography",
+      "before": 5.5,
+      "after": 8
+    },
+    {
+      "dimension": "Color and contrast",
+      "before": 6,
+      "after": 8.5
+    },
+    {
+      "dimension": "Components and states",
+      "before": 4.5,
+      "after": 8
+    },
+    {
+      "dimension": "Interaction and feedback",
+      "before": 6,
+      "after": 8
+    },
+    {
+      "dimension": "Information architecture and navigation",
+      "before": 6,
+      "after": 8
+    },
+    {
+      "dimension": "Task-flow design",
+      "before": 5,
+      "after": 8.5
+    },
+    {
+      "dimension": "Accessibility and inclusive UX",
+      "before": 6,
+      "after": 8
+    },
+    {
+      "dimension": "Imagery and iconography",
+      "before": 3,
+      "after": 8.5
+    },
+    {
+      "dimension": "Brand visual system",
+      "before": 4.5,
+      "after": 8.5
+    },
+    {
+      "dimension": "Emotional trust and polish",
+      "before": 4.5,
+      "after": 8.5
+    }
+  ],
+  "personallyViewedUIImageArtifacts": 101,
+  "additionalPortraitArtArtifacts": 45,
+  "evidenceInventory": "final-evidence-inventory.json",
+  "latestAcceptancePasses": [
+    "after-guidance-final",
+    "after-final-secondary-clean",
+    "after-built-accepted"
+  ],
+  "verifiedReadback": {
+    "broad": {
+      "pass": "after-pass3",
+      "viewportCaptures": 208,
+      "states": 52,
+      "workspaceAndSimulationScreens": 29,
+      "overflow": 0,
+      "pageErrors": 0,
+      "axeScans": 24,
+      "oldFailedScans": 8,
+      "note": "Old failing families superseded by targeted a11y-final and roadmap-final."
+    },
+    "guidance": {
+      "viewportCaptures": 72,
+      "recordedChecks": 16,
+      "errors": 0,
+      "overflow": 0,
+      "sourceChanges": 0
+    },
+    "secondary": {
+      "viewportCaptures": 44,
+      "additionalFullPageImages": 22,
+      "axeScans": 22,
+      "axeViolations": 0,
+      "errors": 0,
+      "overflow": 0,
+      "sourceChanges": 0
+    },
+    "built": {
+      "viewportCaptures": 12,
+      "additionalFullPageImages": 6,
+      "axeScans": 6,
+      "axeViolations": 0,
+      "errors": 0,
+      "overflow": 0,
+      "sourceChanges": 0,
+      "trackerPhoneNameLineCount": 1,
+      "actualPlayerFileAction": true
+    },
+    "saveAging": {
+      "viewportCaptures": 24,
+      "recordedChecks": 11,
+      "errors": 0,
+      "sourceChanges": 0,
+      "realPersistentBrowserRestart": true,
+      "twentySeasonCareerNaturallyPlayed": false
+    }
+  },
+  "closedFindings": [
+    "Phone Watch evidence/action hierarchy",
+    "Populated core comparison identity and contrast",
+    "Four screen families' targeted accessibility failures and Roadmap heading order",
+    "Unsolicited week-two mentor surfaces",
+    "Rivals, Career Tracker, Season Awards, Demo End and populated Alumni presentation",
+    "Career consequence presentation",
+    "Phone Tracker name wrapping and action placement",
+    "Planner implementation-language copy",
+    "Observed portrait continuity, exact missing-image fallback and recovery"
+  ],
+  "remaining": [
+    {
+      "severity": "P2",
+      "issue": "Lower-page information density in comparison, World Outlook and Rival relationship details.",
+      "evidence": [
+        "after-pass3/rich-reportComparison-mobile-full.png",
+        "after-pass3/dialog-world-outlook-laptop.png",
+        "after-final-secondary-clean/final-rivals-mobile-full.png"
+      ]
+    },
+    {
+      "severity": "P2",
+      "issue": "Secondary component/type consistency in reflection, advanced report and utility screens.",
+      "evidence": [
+        "after-final-loop-confirmed/05a-reflection-laptop.png",
+        "after-pass3/rich-reportWriter-final-laptop.png",
+        "after-pass3/seed-equipment-laptop.png",
+        "after-pass3/seed-settings-laptop.png"
+      ]
+    },
+    {
+      "severity": "P3",
+      "issue": "Internal-looking territoryReader label in reviewed Hall of Fame image.",
+      "evidence": [
+        "after-pass3/seed-hallOfFame-mobile.png"
+      ]
+    },
+    {
+      "severity": "P2",
+      "kind": "catalog-art-variety-limitation",
+      "issue": "Finite eligible portrait catalog with repeated pose, kit and background.",
+      "producedLineages": 52,
+      "eligibleLineages": 46,
+      "held": [
+        "gorse",
+        "ink",
+        "larch",
+        "copper",
+        "fern",
+        "pebble"
+      ],
+      "additionalSevereHoldRecommended": false
+    }
+  ],
+  "limits": [
+    "Visual scores are editorial judgments, not a test pass percentage or release certification.",
+    "Different capture passes have distinct source fingerprints. Unchanged-source checks apply within each pass; latest targeted states supersede prior images.",
+    "Superseded failed evidence remains recorded, including old mentor images and the initial built harness width assertion.",
+    "Save-aging covers a real browser process restart but synthetic age-35, retirement, pruning and exact 404 fixtures.",
+    "Final exact-source testing and E2E counts belong to the parent integrator; no E2E all-pass claim is made here.",
+    "Normal motion, comprehensive keyboard/screen-reader use, all conditional branches, full seasonal simulation, packaged Electron behavior, performance and human playtesting are not comprehensively covered."
+  ],
+  "artifacts": [
+    "design-audit-report.md",
+    "design-audit-summary.json",
+    "final-evidence-inventory.json",
+    "../../visual-overhaul-20260904/proposals/final-visual-critic/portrait-art-critique.md",
+    "portrait-art-evidence.json"
+  ],
+  "finalMotionDelta": {
+    "runtimeFingerprint": "ff3b1191abd870e43700811e4fad9ace6e3df727e9f2e2bec9ce1f97a56edfe4",
+    "screenFamilies": [
+      "Watch",
+      "Planner",
+      "World",
+      "Week"
+    ],
+    "viewportCount": 5,
+    "axeScans": 20,
+    "axeViolations": 0,
+    "screenshots": 56,
+    "personallyReviewedImages": 26,
+    "scoreChange": 0,
+    "newSevereCap": false,
+    "scope": "Corrected four-family motion and scrolling review; does not independently recertify the entire application.",
+    "report": "../../visual-overhaul-20260904/final-motion-scroll-captures/REPORT.md"
+  }
+}

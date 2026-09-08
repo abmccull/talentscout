@@ -4,6 +4,8 @@
  * Handles screen navigation, selection state, comparison panel,
  * dismiss actions, and other lightweight UI-only actions.
  */
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
+import { queueGameplayAutosave, snapshotPersistedGameState } from "./persistGameplayAutosave";
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
 import type { InboxMessage, Contact, HiddenIntel } from "@/engine/core/types";
@@ -48,7 +50,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
 
     if (gs) {
       const tut = useTutorialStore.getState();
-      tut.recordScreenVisit(resolvedScreen);
+      tut.recordScreenVisit(resolvedScreen, gs.guidedSessionRequested !== false);
       if (resolvedScreen === "dashboard") tut.completeMilestone("viewedDashboard");
       if (resolvedScreen === "calendar") tut.completeMilestone("openedCalendar");
     }
@@ -187,7 +189,16 @@ export function createNavigationActions(get: GetState, set: SetState) {
       set({ comparisonReportIds: [] });
     },
 
-    selectPlayer: (playerId: string | null) => set({ selectedPlayerId: playerId }),
+    selectPlayer: (playerId: string | null) => {
+      const current = get();
+      const nextState = playerId && current.gameState
+        ? revealGamePortraits(current.gameState, [playerId], "selected")
+        : current.gameState;
+      set({ selectedPlayerId: playerId, gameState: nextState });
+      if (nextState && nextState !== current.gameState) {
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+      }
+    },
     selectFixture: (fixtureId: string | null) => set({ selectedFixtureId: fixtureId }),
 
     tapNetworkForPlayer: (playerId: string) => {
@@ -309,7 +320,13 @@ export function createNavigationActions(get: GetState, set: SetState) {
         idx >= 0
           ? gameState.watchlist.filter((id) => id !== canonicalPlayerId)
           : [...gameState.watchlist, canonicalPlayerId];
-      set({ gameState: { ...gameState, watchlist: next } });
+      const nextState = revealGamePortraits(
+        { ...gameState, watchlist: next },
+        idx < 0 ? [canonicalPlayerId] : [],
+        "tracked",
+      );
+      set({ gameState: nextState });
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession), set);
     },
   };
 }

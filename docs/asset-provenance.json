@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "owner-attested-approved",
-  "lastReviewed": "2026-07-13",
+  "status": "legacy-owner-attestation-plus-documented-original-generation",
+  "lastReviewed": "2026-09-04",
   "reviewInstructions": "The release owner attested commercial ownership on 2026-07-13. Re-review any replaced or newly added asset and attach its source evidence before release.",
   "assetGroups": [
     {
@@ -98,6 +98,28 @@
       ],
       "notes": [
         "Keep shapes and marks fictional; add regression review if real club or sponsor marks are introduced."
+      ]
+    },
+    {
+      "id": "openai-documentary-football-art",
+      "paths": [
+        "public/images/portraits/documentary-v1/**/*.webp",
+        "public/images/backgrounds/activities/touchline-documentary.webp"
+      ],
+      "source": [
+        "docs/portraits/production-manifest.json",
+        "scripts/package-portraits.cjs"
+      ],
+      "generator": "OpenAI built-in image generation; project-authored offline Sharp crop and WebP encoding",
+      "rightsStatus": "approved",
+      "evidence": [
+        "docs/portraits/asset-generation-evidence.json",
+        "docs/portraits/ORIGINAL_ART_PROVENANCE.md"
+      ],
+      "notes": [
+        "Original fictional subjects and football environment created for this user-authorized overhaul.",
+        "Approval is based on documented original generation, visual review and provider output-ownership terms; it does not extend the July owner attestation to new assets.",
+        "Six photographic lineages remain excluded from new allocation for art quality/likeness reasons; existing bindings preserve their immutable images."
       ]
     }
   ]

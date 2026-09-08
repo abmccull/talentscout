@@ -1,0 +1,3798 @@
+[
+  {
+    "lineageId": "acorn",
+    "revision": 1,
+    "canonicalFaceSha256": "f33ce66d0e171355197c553ef7f7a017d0547e2a7df6f0da44d0a720a239922c",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "square",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/acorn/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/acorn/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/acorn/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/acorn/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/acorn/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/acorn/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/acorn/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/acorn/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "agate",
+    "revision": 1,
+    "canonicalFaceSha256": "60eca77736ac7f4daed8ebba99f997319e30c5857159a5100d6ecab2d7819fb2",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oblong",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/agate/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/agate/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/agate/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/agate/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/agate/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/agate/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/agate/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/agate/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "alder",
+    "revision": 1,
+    "canonicalFaceSha256": "d8b19db597b5902ebe666a13790188c36a0416b46e69d1871503db67e7f6ca65",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "oval",
+      "eyeShape": "hooded",
+      "eyeColor": "blue",
+      "noseStructure": "straight",
+      "mouthStructure": "narrow",
+      "jawStructure": "angular",
+      "hairColor": "auburn",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/alder/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/alder/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/alder/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/alder/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/alder/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/alder/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/alder/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/alder/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "basalt",
+    "revision": 1,
+    "canonicalFaceSha256": "f9112546c1f7b1a1c134a361674730a491e4bd23ac414bf8ce7bdf84894fc60f",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "oblong",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/basalt/age-15.webp",
+        "width": 218,
+        "height": 231
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/basalt/age-18.webp",
+        "width": 218,
+        "height": 231
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/basalt/age-22.webp",
+        "width": 217,
+        "height": 231
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/basalt/age-27.webp",
+        "width": 218,
+        "height": 231
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/basalt/age-31.webp",
+        "width": 218,
+        "height": 231
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/basalt/age-35.webp",
+        "width": 218,
+        "height": 231
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/basalt/age-39.webp",
+        "width": 217,
+        "height": 231
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/basalt/age-45.webp",
+        "width": 218,
+        "height": 231
+      }
+    ]
+  },
+  {
+    "lineageId": "birch",
+    "revision": 1,
+    "canonicalFaceSha256": "76cc3e5cc9e5fd4a37c4679eac277de7935f87ec279ebb812009d6c16746b298",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "round",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "softBridge",
+      "mouthStructure": "full",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/birch/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/birch/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/birch/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/birch/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/birch/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/birch/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/birch/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/birch/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "bracken",
+    "revision": 1,
+    "canonicalFaceSha256": "70b3d6190162f5b2153a71b6b90e0f3dd786d055f6a428a5d0878d363972e46b",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "square",
+      "eyeShape": "deepSet",
+      "eyeColor": "brown",
+      "noseStructure": "broad",
+      "mouthStructure": "balanced",
+      "jawStructure": "broad",
+      "hairColor": "darkBrown",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/bracken/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/bracken/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/bracken/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/bracken/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/bracken/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/bracken/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/bracken/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/bracken/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "cairn",
+    "revision": 1,
+    "canonicalFaceSha256": "62175a0583fe85dec5aaff49c70dee92427a5d70c6d9ccca0aa9894a2c3677e4",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "oblong",
+      "eyeShape": "deepSet",
+      "eyeColor": "blue",
+      "noseStructure": "broad",
+      "mouthStructure": "narrow",
+      "jawStructure": "broad",
+      "hairColor": "auburn",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/cairn/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/cairn/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/cairn/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/cairn/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/cairn/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/cairn/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/cairn/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/cairn/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "cedar",
+    "revision": 1,
+    "canonicalFaceSha256": "0af814d2983d9060e9332c810e68b2b4d6aa3bae35c818474029f32d8abd521d",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/cedar/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/cedar/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/cedar/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/cedar/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/cedar/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/cedar/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/cedar/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/cedar/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "cloud",
+    "revision": 1,
+    "canonicalFaceSha256": "fce5508b0f6478a79fd764a752e723d75b1e717e3d72cc105c212c0db7c3f460",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "round",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "softBridge",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "black",
+      "hairTexture": "straight",
+      "baselineHairline": "low",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/cloud/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/cloud/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/cloud/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/cloud/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/cloud/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/cloud/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/cloud/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/cloud/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "copper",
+    "revision": 1,
+    "canonicalFaceSha256": "6a6bdf9b4a4629af87a2ce6e52e71fa14e64e5b9ba9b9eef4a494aceec965282",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "square",
+      "eyeShape": "hooded",
+      "eyeColor": "brown",
+      "noseStructure": "broad",
+      "mouthStructure": "narrow",
+      "jawStructure": "broad",
+      "hairColor": "auburn",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "broad",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/copper/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/copper/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/copper/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/copper/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/copper/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/copper/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/copper/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/copper/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "drift",
+    "revision": 1,
+    "canonicalFaceSha256": "9e0f445c3a59019925a81dc315770b6d13146fa1ca387551899df10f326324dc",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "round",
+      "eyeShape": "round",
+      "eyeColor": "brown",
+      "noseStructure": "softBridge",
+      "mouthStructure": "full",
+      "jawStructure": "soft",
+      "hairColor": "black",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/drift/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/drift/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/drift/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/drift/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/drift/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/drift/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/drift/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/drift/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "dune",
+    "revision": 1,
+    "canonicalFaceSha256": "d488c614c809833e2a2f5da6aa25447a6fe0d0f458e26d58f0fceb7a4fb30d7f",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "oblong",
+      "eyeShape": "hooded",
+      "eyeColor": "hazel",
+      "noseStructure": "narrow",
+      "mouthStructure": "narrow",
+      "jawStructure": "tapered",
+      "hairColor": "blond",
+      "hairTexture": "wavy",
+      "baselineHairline": "high",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/dune/age-15.webp",
+        "width": 218,
+        "height": 222
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/dune/age-18.webp",
+        "width": 218,
+        "height": 222
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/dune/age-22.webp",
+        "width": 217,
+        "height": 222
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/dune/age-27.webp",
+        "width": 218,
+        "height": 222
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/dune/age-31.webp",
+        "width": 218,
+        "height": 222
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/dune/age-35.webp",
+        "width": 218,
+        "height": 222
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/dune/age-39.webp",
+        "width": 217,
+        "height": 222
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/dune/age-45.webp",
+        "width": 218,
+        "height": 222
+      }
+    ]
+  },
+  {
+    "lineageId": "eider",
+    "revision": 1,
+    "canonicalFaceSha256": "b43c3603041bfd9382e9a5f50867fc6bbd09e47376bca4e86e1cc7b011ce0085",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "round",
+      "eyeShape": "round",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/eider/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/eider/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/eider/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/eider/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/eider/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/eider/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/eider/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/eider/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "elm",
+    "revision": 1,
+    "canonicalFaceSha256": "623d9e29ec60ad0143f240b8952d439fd56a7fcfdca7c987cb14d0f55d0cd1c5",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oblong",
+      "eyeShape": "round",
+      "eyeColor": "blue",
+      "noseStructure": "narrow",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "brown",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/elm/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/elm/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/elm/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/elm/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/elm/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/elm/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/elm/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/elm/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "ember",
+    "revision": 1,
+    "canonicalFaceSha256": "7494963d6fd003d9e76d43118cb4fe5682e9fb1b073ada6ea936feb4b25cbf3a",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "round",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "softBridge",
+      "mouthStructure": "full",
+      "jawStructure": "broad",
+      "hairColor": "darkBrown",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "broad",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/ember/age-15.webp",
+        "width": 218,
+        "height": 204
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/ember/age-18.webp",
+        "width": 218,
+        "height": 204
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/ember/age-22.webp",
+        "width": 217,
+        "height": 204
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/ember/age-27.webp",
+        "width": 218,
+        "height": 204
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/ember/age-31.webp",
+        "width": 218,
+        "height": 204
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/ember/age-35.webp",
+        "width": 218,
+        "height": 204
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/ember/age-39.webp",
+        "width": 217,
+        "height": 204
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/ember/age-45.webp",
+        "width": 218,
+        "height": 204
+      }
+    ]
+  },
+  {
+    "lineageId": "estuary",
+    "revision": 1,
+    "canonicalFaceSha256": "969ea87dbda9ccb58e3831377433df829a2ebf9d63f0f1c024222cd1cea170dd",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "angular",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/estuary/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/estuary/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/estuary/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/estuary/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/estuary/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/estuary/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/estuary/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/estuary/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "fawn",
+    "revision": 1,
+    "canonicalFaceSha256": "5f1b72cfb23518c78898d6de81e26446883532fc212639ca864b7477ab80e9ae",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "full",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/fawn/age-15.webp",
+        "width": 237,
+        "height": 212
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/fawn/age-18.webp",
+        "width": 249,
+        "height": 212
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/fawn/age-22.webp",
+        "width": 230,
+        "height": 212
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/fawn/age-27.webp",
+        "width": 221,
+        "height": 212
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/fawn/age-31.webp",
+        "width": 213,
+        "height": 212
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/fawn/age-35.webp",
+        "width": 208,
+        "height": 212
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/fawn/age-39.webp",
+        "width": 193,
+        "height": 212
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/fawn/age-45.webp",
+        "width": 191,
+        "height": 212
+      }
+    ]
+  },
+  {
+    "lineageId": "fern",
+    "revision": 1,
+    "canonicalFaceSha256": "873af55624958fe47d8e798b2a0c0033256121410881768bf50f1974b4356b3a",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oblong",
+      "eyeShape": "deepSet",
+      "eyeColor": "brown",
+      "noseStructure": "narrow",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "brown",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/fern/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/fern/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/fern/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/fern/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/fern/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/fern/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/fern/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/fern/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "flint",
+    "revision": 1,
+    "canonicalFaceSha256": "0e84474e194be2bf58ab0c236f861b45983aff93b9560d1d27816519b50301a8",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "square",
+      "eyeShape": "hooded",
+      "eyeColor": "blue",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "broad",
+      "hairColor": "auburn",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/flint/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/flint/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/flint/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/flint/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/flint/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/flint/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/flint/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/flint/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "frost",
+    "revision": 1,
+    "canonicalFaceSha256": "c98ad73b799d76e2d8534ae5b84620ff5d22e1b26d250a2f9cedc8c3bddc5ffc",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "round",
+      "eyeShape": "round",
+      "eyeColor": "green",
+      "noseStructure": "broad",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "blond",
+      "hairTexture": "straight",
+      "baselineHairline": "low",
+      "facialHairTendency": "light",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/frost/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/frost/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/frost/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/frost/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/frost/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/frost/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/frost/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/frost/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "garnet",
+    "revision": 1,
+    "canonicalFaceSha256": "cfba6e5f7266136fe044c4a2a36d248d331964f91043586f55b970b49dfd4e06",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oval",
+      "eyeShape": "round",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/garnet/age-15.webp",
+        "width": 237,
+        "height": 194
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/garnet/age-18.webp",
+        "width": 249,
+        "height": 194
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/garnet/age-22.webp",
+        "width": 230,
+        "height": 194
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/garnet/age-27.webp",
+        "width": 221,
+        "height": 194
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/garnet/age-31.webp",
+        "width": 213,
+        "height": 194
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/garnet/age-35.webp",
+        "width": 208,
+        "height": 194
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/garnet/age-39.webp",
+        "width": 193,
+        "height": 194
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/garnet/age-45.webp",
+        "width": 191,
+        "height": 194
+      }
+    ]
+  },
+  {
+    "lineageId": "gorse",
+    "revision": 1,
+    "canonicalFaceSha256": "35d7f9347b327381a28f1bb22a7098bdd3d614d462e8fba003f79c9a23d8d3e1",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "heart",
+      "eyeShape": "round",
+      "eyeColor": "hazel",
+      "noseStructure": "softBridge",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "auburn",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "lean",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/gorse/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/gorse/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/gorse/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/gorse/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/gorse/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/gorse/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/gorse/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/gorse/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "harbor",
+    "revision": 1,
+    "canonicalFaceSha256": "1d669c04c15aed3e28cc8803dc5bd135f15953412a65cd60ef67ed7cfb49973a",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "round",
+      "eyeShape": "round",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/harbor/age-15.webp",
+        "width": 237,
+        "height": 221
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/harbor/age-18.webp",
+        "width": 249,
+        "height": 221
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/harbor/age-22.webp",
+        "width": 230,
+        "height": 221
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/harbor/age-27.webp",
+        "width": 221,
+        "height": 221
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/harbor/age-31.webp",
+        "width": 213,
+        "height": 221
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/harbor/age-35.webp",
+        "width": 208,
+        "height": 221
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/harbor/age-39.webp",
+        "width": 193,
+        "height": 221
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/harbor/age-45.webp",
+        "width": 191,
+        "height": 221
+      }
+    ]
+  },
+  {
+    "lineageId": "heath",
+    "revision": 1,
+    "canonicalFaceSha256": "670e0880e2527499a3b0252c2d39fbd26fafb5fe84d7956e85c4c2b3e185797c",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "oblong",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/heath/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/heath/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/heath/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/heath/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/heath/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/heath/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/heath/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/heath/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "hollow",
+    "revision": 1,
+    "canonicalFaceSha256": "ae8b575a16889caf133eb7799c91f41a3d5e980073baadc089e76146f9ddb38f",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "heart",
+      "eyeShape": "round",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/hollow/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/hollow/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/hollow/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/hollow/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/hollow/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/hollow/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/hollow/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/hollow/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "ink",
+    "revision": 1,
+    "canonicalFaceSha256": "80d46a55746c8e685bd536e0a8d3ad154080dbf58536674b7e4c094459b92691",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/ink/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/ink/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/ink/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/ink/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/ink/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/ink/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/ink/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/ink/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "jasper",
+    "revision": 1,
+    "canonicalFaceSha256": "365544e82dc6b76d8af42cce349d6a79949b2645d9bdb67d3a43f007420999b1",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "full",
+      "jawStructure": "angular",
+      "hairColor": "darkBrown",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/jasper/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/jasper/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/jasper/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/jasper/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/jasper/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/jasper/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/jasper/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/jasper/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "kelp",
+    "revision": 1,
+    "canonicalFaceSha256": "7cb23d71b13249794f0176feebd3f03f7fac6670a2779db879ace59df67032bf",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "oblong",
+      "eyeShape": "hooded",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "high",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/kelp/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/kelp/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/kelp/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/kelp/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/kelp/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/kelp/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/kelp/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/kelp/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "larch",
+    "revision": 1,
+    "canonicalFaceSha256": "fc78284f80ac481eed810eb1ff863bb7b2d1cbe7f97b48716fd501acb3d28015",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oblong",
+      "eyeShape": "round",
+      "eyeColor": "brown",
+      "noseStructure": "narrow",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "brown",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/larch/age-15.webp",
+        "width": 237,
+        "height": 244
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/larch/age-18.webp",
+        "width": 249,
+        "height": 244
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/larch/age-22.webp",
+        "width": 230,
+        "height": 244
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/larch/age-27.webp",
+        "width": 221,
+        "height": 244
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/larch/age-31.webp",
+        "width": 213,
+        "height": 244
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/larch/age-35.webp",
+        "width": 208,
+        "height": 244
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/larch/age-39.webp",
+        "width": 193,
+        "height": 244
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/larch/age-45.webp",
+        "width": 191,
+        "height": 244
+      }
+    ]
+  },
+  {
+    "lineageId": "linen",
+    "revision": 1,
+    "canonicalFaceSha256": "471e7f3424b7ab6ea9df8f59a8afd4696f7ace96cb35b0f5f6bcad8f9dfd15dc",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "round",
+      "eyeShape": "round",
+      "eyeColor": "hazel",
+      "noseStructure": "softBridge",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBlond",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/linen/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/linen/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/linen/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/linen/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/linen/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/linen/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/linen/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/linen/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "marl",
+    "revision": 1,
+    "canonicalFaceSha256": "10e700da20d5d87231ab54f88f191f3e87b8248c403b1f709f90921df7ce9949",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/marl/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/marl/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/marl/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/marl/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/marl/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/marl/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/marl/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/marl/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "moss",
+    "revision": 1,
+    "canonicalFaceSha256": "c653bad0c72c6f904de0ca90dda52191c7009fc7746617b17b0da74b4a5a4b13",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oblong",
+      "eyeShape": "round",
+      "eyeColor": "hazel",
+      "noseStructure": "narrow",
+      "mouthStructure": "narrow",
+      "jawStructure": "tapered",
+      "hairColor": "darkBrown",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/moss/age-15.webp",
+        "width": 218,
+        "height": 232
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/moss/age-18.webp",
+        "width": 218,
+        "height": 232
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/moss/age-22.webp",
+        "width": 217,
+        "height": 232
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/moss/age-27.webp",
+        "width": 218,
+        "height": 232
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/moss/age-31.webp",
+        "width": 218,
+        "height": 232
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/moss/age-35.webp",
+        "width": 218,
+        "height": 232
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/moss/age-39.webp",
+        "width": 217,
+        "height": 232
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/moss/age-45.webp",
+        "width": 218,
+        "height": 232
+      }
+    ]
+  },
+  {
+    "lineageId": "nutmeg",
+    "revision": 1,
+    "canonicalFaceSha256": "d8e8c699bfd671ca051ae9eca2dd8bf97a9732d98966759ae34039f0c82be8d8",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "softBridge",
+      "mouthStructure": "full",
+      "jawStructure": "soft",
+      "hairColor": "auburn",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/nutmeg/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "ochre",
+    "revision": 1,
+    "canonicalFaceSha256": "beec5fdafaa224b72faf29b4f82bebe7a351d40eaa2483c8c7c0b1c21001b283",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "square",
+      "eyeShape": "deepSet",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "dense",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/ochre/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/ochre/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/ochre/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/ochre/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/ochre/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/ochre/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/ochre/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/ochre/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "opal",
+    "revision": 1,
+    "canonicalFaceSha256": "40ef84c959f36c66f67e44c754036bf227fe076055a1adb1d256f53f3503dd85",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "high",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/opal/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/opal/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/opal/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/opal/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/opal/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/opal/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/opal/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/opal/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "pebble",
+    "revision": 1,
+    "canonicalFaceSha256": "744890d1228e4357633f9d8d5a6a187fb35971ea3a5b139964a09c23edfa7098",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "round",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "softBridge",
+      "mouthStructure": "full",
+      "jawStructure": "soft",
+      "hairColor": "brown",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/pebble/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/pebble/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/pebble/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/pebble/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/pebble/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/pebble/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/pebble/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/pebble/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "pumice",
+    "revision": 1,
+    "canonicalFaceSha256": "52b8b6137b172f6fec9e9f1b47fc76aaa8b8c138dae62d47ada55886ee03b831",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "oblong",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/pumice/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/pumice/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/pumice/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/pumice/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/pumice/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/pumice/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/pumice/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/pumice/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "quartz",
+    "revision": 1,
+    "canonicalFaceSha256": "9aadf99ddee33b801787d292d0138b62eaa1d10aaca9e900ce693cb60e875606",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "oval",
+      "eyeShape": "round",
+      "eyeColor": "brown",
+      "noseStructure": "narrow",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/quartz/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/quartz/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/quartz/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/quartz/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/quartz/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/quartz/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/quartz/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/quartz/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "reed",
+    "revision": 1,
+    "canonicalFaceSha256": "3fac88a4ba3d6c78b621ef2f91e4f72b364b8d60a35998422ef93557aae158dd",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "oval",
+      "eyeShape": "round",
+      "eyeColor": "blue",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "darkBlond",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/reed/age-15.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/reed/age-18.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/reed/age-22.webp",
+        "width": 217,
+        "height": 214
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/reed/age-27.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/reed/age-31.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/reed/age-35.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/reed/age-39.webp",
+        "width": 217,
+        "height": 214
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/reed/age-45.webp",
+        "width": 218,
+        "height": 214
+      }
+    ]
+  },
+  {
+    "lineageId": "river",
+    "revision": 1,
+    "canonicalFaceSha256": "1c4b583422c00e2b25fa09c49baedab636d9beb076c630ec084b0481d0eb9247",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "heart",
+      "eyeShape": "round",
+      "eyeColor": "brown",
+      "noseStructure": "narrow",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/river/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/river/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/river/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/river/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/river/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/river/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/river/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/river/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "rush",
+    "revision": 1,
+    "canonicalFaceSha256": "2e86e0e6b7cd5b7be13ffb85c45c659053520fd36d41ef10b6cb31815484be50",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "square",
+      "eyeShape": "deepSet",
+      "eyeColor": "blue",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "angular",
+      "hairColor": "darkBlond",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/rush/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/rush/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/rush/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/rush/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/rush/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/rush/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/rush/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/rush/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "sable",
+    "revision": 1,
+    "canonicalFaceSha256": "4ce6cfca4db58eacc6572b5433e1d299cee67878c84eb92387caecb24a064903",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "black",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/sable/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/sable/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/sable/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/sable/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/sable/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/sable/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/sable/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/sable/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "saffron",
+    "revision": 1,
+    "canonicalFaceSha256": "12fae5138f01be41e0c28e9c6f46a7971482c98e6063746ba33bee000d2ae463",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oblong",
+      "eyeShape": "round",
+      "eyeColor": "brown",
+      "noseStructure": "narrow",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/saffron/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/saffron/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/saffron/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/saffron/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/saffron/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/saffron/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/saffron/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/saffron/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "slate",
+    "revision": 1,
+    "canonicalFaceSha256": "312e3ef2218d5aa52216a043db94fa854f235ce999fddca73eaacf5a018ad86f",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/slate/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/slate/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/slate/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/slate/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/slate/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/slate/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/slate/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/slate/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "solstice",
+    "revision": 1,
+    "canonicalFaceSha256": "ba0bea64b289fe5e6b5f396a18a39ef7d3dcd1bde0a80fe010eea811857b5d3a",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oblong",
+      "eyeShape": "hooded",
+      "eyeColor": "hazel",
+      "noseStructure": "straight",
+      "mouthStructure": "narrow",
+      "jawStructure": "tapered",
+      "hairColor": "brown",
+      "hairTexture": "straight",
+      "baselineHairline": "high",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/solstice/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/solstice/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/solstice/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/solstice/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/solstice/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/solstice/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/solstice/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/solstice/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "thistle",
+    "revision": 1,
+    "canonicalFaceSha256": "4635a4db84ff87694630dcfb2f22a98eda6a080eded3186450748828a310372e",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "round",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "softBridge",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "brown",
+      "hairTexture": "straight",
+      "baselineHairline": "low",
+      "facialHairTendency": "light",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/thistle/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/thistle/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/thistle/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/thistle/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/thistle/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/thistle/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/thistle/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/thistle/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "tide",
+    "revision": 1,
+    "canonicalFaceSha256": "f4311fdf97f86b5eacffd63b3bb0c0876bec62e7f51778cf3aa6461a3ad0d00f",
+    "anchors": {
+      "skinTone": "deep",
+      "faceShape": "round",
+      "eyeShape": "round",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/tide/age-15.webp",
+        "width": 218,
+        "height": 212
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/tide/age-18.webp",
+        "width": 218,
+        "height": 212
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/tide/age-22.webp",
+        "width": 217,
+        "height": 212
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/tide/age-27.webp",
+        "width": 218,
+        "height": 212
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/tide/age-31.webp",
+        "width": 218,
+        "height": 212
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/tide/age-35.webp",
+        "width": 218,
+        "height": 212
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/tide/age-39.webp",
+        "width": 217,
+        "height": 212
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/tide/age-45.webp",
+        "width": 218,
+        "height": 212
+      }
+    ]
+  },
+  {
+    "lineageId": "umber",
+    "revision": 1,
+    "canonicalFaceSha256": "38b9ab667269bc28d3f26cbdff3dfc93d36628aa8add37c30271f1be55c51098",
+    "anchors": {
+      "skinTone": "tan",
+      "faceShape": "square",
+      "eyeShape": "deepSet",
+      "eyeColor": "brown",
+      "noseStructure": "broad",
+      "mouthStructure": "balanced",
+      "jawStructure": "broad",
+      "hairColor": "black",
+      "hairTexture": "wavy",
+      "baselineHairline": "even",
+      "facialHairTendency": "dense",
+      "build": "broad",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/umber/age-15.webp",
+        "width": 218,
+        "height": 213
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/umber/age-18.webp",
+        "width": 218,
+        "height": 213
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/umber/age-22.webp",
+        "width": 217,
+        "height": 213
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/umber/age-27.webp",
+        "width": 218,
+        "height": 213
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/umber/age-31.webp",
+        "width": 218,
+        "height": 213
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/umber/age-35.webp",
+        "width": 218,
+        "height": 213
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/umber/age-39.webp",
+        "width": 217,
+        "height": 213
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/umber/age-45.webp",
+        "width": 218,
+        "height": 213
+      }
+    ]
+  },
+  {
+    "lineageId": "violet",
+    "revision": 1,
+    "canonicalFaceSha256": "a5cbe482b2425e10aa57af7cbc57e1ca9f641ece801566a20a7eeaa1cff0067e",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "heart",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/violet/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/violet/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/violet/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/violet/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/violet/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/violet/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/violet/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/violet/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "willow",
+    "revision": 1,
+    "canonicalFaceSha256": "821575683cea427c5cebf550bcda2581aa0a5bb5e514672a55c5f406a1240a2a",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oblong",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "black",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/willow/age-15.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/willow/age-18.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/willow/age-22.webp",
+        "width": 217,
+        "height": 214
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/willow/age-27.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/willow/age-31.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/willow/age-35.webp",
+        "width": 218,
+        "height": 214
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/willow/age-39.webp",
+        "width": 217,
+        "height": 214
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/willow/age-45.webp",
+        "width": 218,
+        "height": 214
+      }
+    ]
+  },
+  {
+    "lineageId": "wren",
+    "revision": 1,
+    "canonicalFaceSha256": "daccaefafd2a7ff6655e38422580e04574491df2dd080600d364eceedfe4d80e",
+    "anchors": {
+      "skinTone": "veryLight",
+      "faceShape": "heart",
+      "eyeShape": "round",
+      "eyeColor": "blue",
+      "noseStructure": "softBridge",
+      "mouthStructure": "balanced",
+      "jawStructure": "tapered",
+      "hairColor": "blond",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "lean",
+      "distinctiveFeature": "freckles",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/wren/age-15.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/wren/age-18.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/wren/age-22.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/wren/age-27.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/wren/age-31.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/wren/age-35.webp",
+        "width": 218,
+        "height": 218
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/wren/age-39.webp",
+        "width": 217,
+        "height": 218
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/wren/age-45.webp",
+        "width": 218,
+        "height": 218
+      }
+    ]
+  },
+  {
+    "lineageId": "yarrow",
+    "revision": 1,
+    "canonicalFaceSha256": "a2bb5c61c360bbb7d2edd321ba33a929c357909189baf68e4722841cc5c50c41",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "angular",
+      "hairColor": "black",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "dense",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "documentary-v1",
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/documentary-v1/yarrow/age-15.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/documentary-v1/yarrow/age-18.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/documentary-v1/yarrow/age-22.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/documentary-v1/yarrow/age-27.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/documentary-v1/yarrow/age-31.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/documentary-v1/yarrow/age-35.webp",
+        "width": 218,
+        "height": 217
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/documentary-v1/yarrow/age-39.webp",
+        "width": 217,
+        "height": 217
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/documentary-v1/yarrow/age-45.webp",
+        "width": 218,
+        "height": 217
+      }
+    ]
+  }
+]

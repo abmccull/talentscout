@@ -13,6 +13,18 @@ interface ElectronAPI {
     saveFile: (data: string, filename: string) => Promise<boolean>;
     openFile: () => Promise<string | null>;
   };
+  window?: {
+    setFullScreen: (enabled: boolean) => Promise<boolean>;
+    isFullScreen: () => Promise<boolean>;
+    onFullScreenChange: (listener: (enabled: boolean) => void) => () => void;
+  };
+  game?: {
+    onFlushSaveRequest: (listener: (requestId: number) => void) => () => void;
+    notifySaveFlushed: (result: {
+      requestId: number;
+      status: "saved" | "failed";
+    }) => Promise<{ ok: boolean }>;
+  };
 }
 
 declare global {

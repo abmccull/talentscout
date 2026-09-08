@@ -10,6 +10,9 @@ import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence"
 
 const evidenceDir = getVisualEvidenceDirectory("interactivity-audit");
 
+// A missing or closed control should fail promptly even in a long capture journey.
+test.use({ actionTimeout: 10_000 });
+
 const viewports = [
   { name: "desktop" as const, width: 1440, height: 900 },
   { name: "mobile" as const, width: 390, height: 844 },
@@ -96,6 +99,10 @@ async function captureSurfaceBoth(
     await dismissAchievement(gamePage);
     const surface = gamePage.page.getByTestId(testId).first();
     await expect(surface).toBeVisible();
+    if (await surface.evaluate((element) => element instanceof HTMLDetailsElement && !element.open)) {
+      await surface.locator(":scope > summary").click();
+      await expect(surface).toHaveAttribute("open", "");
+    }
     await surface.scrollIntoViewIfNeeded();
     await gamePage.page.waitForTimeout(250);
     await surface.screenshot({
@@ -109,6 +116,8 @@ async function expectNoVisualOverlap(
   second: Locator,
   label: string,
 ) {
+  await expect(first, `${label}: first surface is not visible`).toBeVisible({ timeout: 5_000 });
+  await expect(second, `${label}: second surface is not visible`).toBeVisible({ timeout: 5_000 });
   const [firstBox, secondBox] = await Promise.all([
     first.boundingBox(),
     second.boundingBox(),
@@ -390,7 +399,7 @@ test.describe("Interactivity audit rendered evidence", () => {
         );
         await expectNoVisualOverlap(
           assignmentPanel,
-          gamePage.page.getByRole("button", { name: /Browse countries/i }),
+          gamePage.page.getByRole("button", { name: /^Choose a scouting destination/i }),
           "mobile country browser and assignment panel",
         );
       }
@@ -510,6 +519,12 @@ test.describe("Interactivity audit rendered evidence", () => {
     });
     await careerInventory.locator("summary").click();
     await expect(careerInventory).toHaveAttribute("open", "");
+    const clubPolitics = gamePage.page.locator("details").filter({
+      has: gamePage.page.locator("summary").filter({ hasText: "Club politics" }),
+    });
+    await clubPolitics.locator("summary").click();
+    await expect(clubPolitics).toHaveAttribute("open", "");
+    await expect(gamePage.page.getByRole("radio", { name: /Challenge professionally/i })).toBeVisible();
     await captureBoth(gamePage, "09d-career-politics", {
       fullPage: true,
       axe: true,
@@ -756,7 +771,13 @@ test.describe("Interactivity audit rendered evidence", () => {
       assertResponsiveWidth: true,
     });
     await gamePage.page.getByRole("tab", { name: /^Development/ }).click();
+    const developmentEnvironment = gamePage.page.getByTestId("development-environment");
+    await expect(developmentEnvironment).toContainText("They do not predict the player's ceiling.");
+    await expect(developmentEnvironment.getByRole("heading", { name: "What to check next" })).toBeVisible();
     await captureSurfaceBoth(gamePage, "12a-development-environment", "development-environment");
+    await developmentEnvironment.locator("summary").click();
+    await expect(developmentEnvironment.locator("details")).toHaveAttribute("open", "");
+    await captureSurfaceBoth(gamePage, "12a-development-factors", "development-environment");
     await gamePage.page.getByRole("tab", { name: /^Evidence/ }).click();
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText("Morgan Vale");
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText(/conflict/i);
@@ -771,7 +792,8 @@ test.describe("Interactivity audit rendered evidence", () => {
       axe: true,
       assertResponsiveWidth: true,
     });
-    await gamePage.page.getByText("Brief, fit, and professional context", { exact: true }).click();
+    await gamePage.page.getByRole("tab", { name: /^Build the case\b/ }).click();
+    await expect(gamePage.page.locator("#report-section-brief")).toHaveAttribute("open", "");
     await captureSurfaceBoth(
       gamePage,
       "13b-report-presentation-room",
@@ -782,14 +804,9 @@ test.describe("Interactivity audit rendered evidence", () => {
     await captureBoth(gamePage, "14-observation-setup", { axe: true });
     await gamePage.page.setViewportSize({ width: 1440, height: 900 });
     await gamePage.page.getByRole("button", { name: /^Begin Observation$/ }).click();
-    const focusButton = gamePage.page.locator('button[aria-label^="Add focus to "]').first();
-    if (await focusButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await focusButton.click();
-      await gamePage.page
-        .getByRole("button", { name: /^Use technical lens for /i })
-        .first()
-        .click();
-    }
+    const focusButton = gamePage.page.getByRole("button", { name: /^Use technical lens for /i }).first();
+    await expect(focusButton).toBeVisible();
+    await focusButton.click();
     const flagMoment = gamePage.page.getByRole("button", { name: /^Flag this moment$/ }).first();
     if (await flagMoment.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await flagMoment.click();
@@ -823,16 +840,16 @@ test.describe("Interactivity audit rendered evidence", () => {
       ) {
         await strategicChoice.click();
       }
-      const reflection = gamePage.page.getByRole("button", { name: /^Go to Reflection$/ });
+      const reflection = gamePage.page.getByRole("button", { name: /^(Go to reflection|Reflect on the watch|Reflect)$/i });
       if (await reflection.isVisible({ timeout: 250 }).catch(() => false)) {
         await reflection.click();
         reachedReflection = true;
         break;
       }
-      const next = gamePage.page.getByRole("button", { name: /^Next Phase$/ });
-      if (await next.isVisible({ timeout: 250 }).catch(() => false)) {
-        await next.click();
-      }
+      const next = gamePage.page.getByRole("button", { name: /^Next phase$/i });
+      await expect(next, `Passage ${phase + 1} must expose its next decision`).toBeVisible();
+      await expect(next).toBeEnabled();
+      await next.click();
       await gamePage.page.waitForTimeout(100);
     }
     expect(reachedReflection, "Visual evidence journey never reached reflection").toBe(true);

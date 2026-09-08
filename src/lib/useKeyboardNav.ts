@@ -120,6 +120,11 @@ export function useKeyboardNav(): void {
           e.preventDefault();
           return;
         }
+        if (currentScreen === "settings" && !useGameStore.getState().gameState) {
+          e.preventDefault();
+          setScreen("mainMenu");
+          return;
+        }
         if (ESCAPE_TO_DASHBOARD_SCREENS.has(currentScreen)) {
           e.preventDefault();
           setScreen("dashboard");
@@ -153,6 +158,11 @@ export function useKeyboardNav(): void {
       }
 
       if (key === "?") {
+        if (currentScreen === "mainMenu") {
+          e.preventDefault();
+          setScreen("settings");
+          return;
+        }
         if (
           !NON_GAME_SCREENS.has(currentScreen) &&
           isVisibleShortcutTarget("settings")

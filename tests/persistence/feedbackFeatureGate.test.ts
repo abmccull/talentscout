@@ -4,6 +4,10 @@ const feedbackBoundary = vi.hoisted(() => ({
   insert: vi.fn(),
 }));
 
+vi.mock("@/lib/supabaseConfiguration", () => ({
+  SUPABASE_CONFIGURED: true,
+}));
+
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     from: vi.fn(() => ({ insert: feedbackBoundary.insert })),

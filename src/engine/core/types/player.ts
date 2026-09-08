@@ -351,6 +351,7 @@ export type WonderkidTier =
   | "journeyman";
 
 export interface Player {
+  visualIdentity?: import("../../players/portraits/types").PlayerVisualIdentity;
   id: string;
   firstName: string;
   lastName: string;

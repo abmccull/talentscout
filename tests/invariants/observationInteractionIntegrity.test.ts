@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { GameState, Scout } from "@/engine/core/types";
 import {
@@ -17,6 +17,12 @@ import { createRNG } from "@/engine/rng";
 import { createObservationActions } from "@/stores/actions/observationActions";
 import type { GetState, SetState } from "@/stores/actions/types";
 import type { GameStoreState } from "@/stores/gameStore";
+import { restoreInquiryDecisions } from "@/engine/observation/inquiryConsequences";
+
+vi.mock("@/stores/actions/persistGameplayAutosave", () => ({
+  queueGameplayAutosave: vi.fn(),
+  snapshotPersistedGameState: (state: GameState) => state,
+}));
 
 function activeSession(mode: "investigation" | "analysis"): ObservationSession {
   const activityType = mode === "investigation" ? "followUpSession" : "databaseQuery";
@@ -145,6 +151,69 @@ function observationStore(
 }
 
 describe("observation interaction integrity", () => {
+  it.each([
+    ["safe", 4],
+    ["bold", -3],
+  ] as const)("keeps the %s inquiry consequence and answer locked after abandoning and reloading", (optionId, delta) => {
+    const original = {
+      ...activeSession("investigation"),
+      activityInstanceId: "inquiry-slot-1",
+      sourceRelationshipScore: 50,
+    };
+    const gameState = {
+      seed: "inquiry-retry",
+      currentWeek: 8,
+      currentSeason: 2,
+      scout: {
+        primarySpecialization: "youth",
+        attributes: { intuition: 10 },
+        fatigue: 0,
+        insightState: insightState(),
+      },
+      contacts: {
+        "contact-1": {
+          id: "contact-1", name: "Casey Coach", type: "academyCoach",
+          organization: "North Academy", relationship: 50, reliability: 70,
+          knownPlayerIds: ["player-1"],
+        },
+      },
+      players: {}, unsignedYouth: {}, observations: {}, reflectionJournal: {},
+      gutFeelings: [], completedInteractiveSessions: [],
+    } as unknown as GameState;
+    const first = observationStore(original, gameState);
+    first.actions.selectDialogueOption("node-1", optionId);
+    first.actions.endObservationSession();
+
+    expect(first.getStore().activeSession).toBeNull();
+    expect(first.getStore().gameState?.completedInteractiveSessions).toEqual([]);
+    expect(first.getStore().gameState?.scout.fatigue).toBe(0);
+    expect(first.getStore().gameState?.scout.insightState?.points).toBe(0);
+    const loaded = JSON.parse(JSON.stringify(first.getStore().gameState)) as GameState;
+    expect(loaded.contacts["contact-1"].relationship).toBe(50 + delta);
+
+    const resumed = restoreInquiryDecisions(original, loaded.contacts["contact-1"]);
+    expect(resumed.phases[0].selectedDialogueOptionIds?.["node-1"]).toBe(optionId);
+    expect(restoreInquiryDecisions(resumed, loaded.contacts["contact-1"])).toBe(resumed);
+    const retry = observationStore(original, loaded);
+    retry.actions.selectDialogueOption("node-1", optionId === "safe" ? "bold" : "safe");
+    retry.actions.selectDialogueOption("node-1", optionId);
+    expect(retry.getStore().gameState?.contacts["contact-1"].relationship).toBe(50 + delta);
+    expect(retry.getStore().activeSession?.phases[0].selectedDialogueOptionIds?.["node-1"]).toBe(optionId);
+
+    const distinctActivity = observationStore({
+      ...original, activityInstanceId: "inquiry-slot-2",
+    }, loaded);
+    distinctActivity.actions.selectDialogueOption("node-1", "safe");
+    expect(distinctActivity.getStore().gameState?.contacts["contact-1"].relationship).toBe(54 + delta);
+
+    const nextWeek = observationStore({
+      ...original, startedAtWeek: 9,
+    }, { ...loaded, currentWeek: 9 });
+    nextWeek.actions.selectDialogueOption("node-1", "safe");
+    expect(nextWeek.getStore().gameState?.contacts["contact-1"].relationship).toBe(54 + delta);
+    expect(Object.keys(nextWeek.getStore().gameState!.contacts["contact-1"].inquiryDecisions!.resolutions)).toHaveLength(1);
+  });
+
   it("locks a dialogue option, snapshots the bounded applied relationship, and rewards once", () => {
     const original = activeSession("investigation");
     const selected = resolveDialogueOptionSelection(original, "node-1", "safe");

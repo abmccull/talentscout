@@ -331,7 +331,7 @@
 			}
 			"desc"
 			{
-				"english"		"Discover a wonderkid."
+				"english"		"Back a discovery before a successful run of performances."
 			}
 		}
 		"hidden"		"0"
@@ -391,11 +391,11 @@
 		{
 			"name"
 			{
-				"english"		"Once in a Generation"
+				"english"		"Career Maker"
 			}
 			"desc"
 			{
-				"english"		"Discover a generational talent."
+				"english"		"Back a discovery before two standout seasons."
 			}
 		}
 		"hidden"		"0"

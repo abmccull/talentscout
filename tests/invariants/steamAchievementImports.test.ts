@@ -4,6 +4,8 @@ import {
   renderSteamAchievementImportVdf,
 } from "../../scripts/lib/steamAchievementImports.mjs";
 
+const normalizeLineEndings = (value: string): string => value.replace(/\r\n/g, "\n");
+
 describe("Steam achievement import scope", () => {
   it("keeps the audited Steam scope aligned with the reserved runtime IDs", () => {
     const report = auditSteamAchievementImports();
@@ -22,11 +24,19 @@ describe("Steam achievement import scope", () => {
 
   it("renders both checked-in Steam import files deterministically", () => {
     const report = auditSteamAchievementImports();
+    if (
+      report.currentFullGameImportSource === null ||
+      report.currentYouthImportSource === null
+    ) {
+      throw new Error("Checked-in Steam achievement import files are required.");
+    }
 
-    expect(report.generatedFullGameImportVdf).toBe(
-      report.currentFullGameImportSource,
+    expect(normalizeLineEndings(report.generatedFullGameImportVdf)).toBe(
+      normalizeLineEndings(report.currentFullGameImportSource),
     );
-    expect(report.generatedYouthImportVdf).toBe(report.currentYouthImportSource);
+    expect(normalizeLineEndings(report.generatedYouthImportVdf)).toBe(
+      normalizeLineEndings(report.currentYouthImportSource),
+    );
     expect(renderSteamAchievementImportVdf(report.fullGameEntries)).toBe(
       report.generatedFullGameImportVdf,
     );
