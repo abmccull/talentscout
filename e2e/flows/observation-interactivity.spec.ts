@@ -430,6 +430,12 @@ test.describe("normal-motion mobile workspace anchoring", () => {
   }
 
   async function scrollContent(page: Page, screen: Locator) {
+    // Mobile watch layouts scroll the document while chrome stays fixed. Reset
+    // both scroll owners so the helper always starts from a known top edge.
+    await page.evaluate(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      document.querySelector("#game-main")?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
     const beforeTop = await screen.evaluate((element) => element.getBoundingClientRect().top);
     await page.mouse.move(195, 360);
     await page.mouse.wheel(0, 600);
