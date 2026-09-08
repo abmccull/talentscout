@@ -9,6 +9,7 @@ import type {
   ScoutReport,
 } from "@/engine/core/types";
 import { createTransferDestinationIndex, selectOpportunityDrivenTransfers } from "@/engine/core/gameLoop";
+import { COMPETITIVE_ROSTER_OUTFLOW_FLOOR } from "@/engine/match/eligibleRoster";
 import { createRNG } from "@/engine/rng";
 
 const REPORT: ScoutReport = {
@@ -96,12 +97,41 @@ function createState(overrides: {
     injuryHistory: { injuries: [], totalWeeksInjured: 0, recurringInjuries: [] },
   } as unknown as Player;
 
+  // Source squad needs outflow-floor headroom so READY sale guards do not
+  // block the opportunity-driven transfer under test.
+  const sourceDepth = Object.fromEntries(
+    Array.from({ length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR }, (_, index) => {
+      const id = `source-depth-${index}`;
+      return [
+        id,
+        {
+          id,
+          firstName: "Depth",
+          lastName: `${index}`,
+          age: 24,
+          position: index === 0 ? "GK" : "CM",
+          clubId: "club-source",
+          contractClubId: "club-source",
+          contractExpiry: 4,
+          currentAbility: 95,
+          potentialAbility: 100,
+          marketValue: 400_000,
+          wage: 3_000,
+          morale: 6,
+          form: 6,
+          attributes: {} as Player["attributes"],
+          injuryHistory: { injuries: [], totalWeeksInjured: 0, recurringInjuries: [] },
+        } as unknown as Player,
+      ];
+    }),
+  );
+
   return {
     seed: "opportunity-driven-transfer-test",
     currentWeek: 6,
     currentSeason: 1,
     scout: { id: "scout-1" },
-    players: { [player.id]: player },
+    players: { [player.id]: player, ...sourceDepth },
     clubs: {
       "club-source": {
         id: "club-source",
@@ -113,7 +143,7 @@ function createState(overrides: {
         budget: 8_000_000,
         leagueId: "league-source",
         managerId: "manager-source",
-        playerIds: [player.id],
+        playerIds: [player.id, ...Object.keys(sourceDepth)],
         academyPlayerIds: [],
       },
       "club-target": {

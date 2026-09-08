@@ -4,6 +4,7 @@ import {
   calculateContractRenewalChance,
   processContractExpiries,
 } from "@/engine/freeAgents/expiry";
+import { COMPETITIVE_REGISTERED_FLOOR } from "@/engine/match/eligibleRoster";
 
 function club(playerIds: string[]): Club {
   return {
@@ -33,6 +34,27 @@ function player(overrides: Partial<Player>): Player {
     morale: 7,
     ...overrides,
   } as Player;
+}
+
+/** Depth cover so release/refusal paths are not forced by the XI floor. */
+function depthSquad(clubId: string, count = COMPETITIVE_REGISTERED_FLOOR): Record<string, Player> {
+  return Object.fromEntries(
+    Array.from({ length: count }, (_, index) => {
+      const id = `depth-${index}`;
+      return [
+        id,
+        player({
+          id,
+          position: index === 0 ? "GK" : "CM",
+          clubId,
+          contractClubId: clubId,
+          contractExpiry: 5,
+          currentAbility: 90,
+          wage: 800,
+        }),
+      ];
+    }),
+  );
 }
 
 describe("contract renewal decisions", () => {
@@ -75,6 +97,7 @@ describe("contract renewal decisions", () => {
   });
 
   it("requires the player to accept a renewal, even when the club wants one", () => {
+    const depth = depthSquad("club");
     const candidate = player({
       position: "CAM",
       currentAbility: 130,
@@ -92,13 +115,16 @@ describe("contract renewal decisions", () => {
       },
     });
     const expiringClub = {
-      ...club(["target"]),
+      ...club(["target", ...Object.keys(depth)]),
       reputation: 80,
     };
     const state = {
       currentWeek: 38,
       currentSeason: 3,
-      players: { target: { ...candidate, clubId: "club", contractClubId: "club" } },
+      players: {
+        target: { ...candidate, clubId: "club", contractClubId: "club" },
+        ...depth,
+      },
       clubs: { club: expiringClub },
       leagues: { league: { id: "league", country: "England" } },
       fixtures: {},
