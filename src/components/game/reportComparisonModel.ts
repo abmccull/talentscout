@@ -7,6 +7,7 @@ import type {
   ScoutReport,
 } from "@/engine/core/types";
 import { compareReports } from "@/engine/reports/comparison";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
 
 const JUDGMENT_CATEGORIES: JudgmentCategory[] = ["potential", "roleFit", "characterRisk"];
 
@@ -76,6 +77,14 @@ interface BuildReportComparisonViewModelInput {
   clubs: Record<string, Club> | undefined;
 }
 
+/** Keep report identities intact when prospects are unsigned or careers are archived. */
+export function resolveReportComparisonPlayers(
+  reports: Pick<ScoutReport, "playerId">[],
+  state: Parameters<typeof resolvePlayerEntity>[0],
+): Array<Player | undefined> {
+  return reports.map((report) => resolvePlayerEntity(state, report.playerId)?.player);
+}
+
 export function buildReportComparisonViewModel({
   reports,
   players,
@@ -106,10 +115,10 @@ export function buildReportComparisonViewModel({
 
   const legacyHeading = mode === "legacy"
     ? "Attribute comparison"
-    : "Legacy attribute lens";
+    : "Earlier attribute estimates";
   const legacyExplanation = mode === "legacy"
-    ? "These reports were authored through the older attribute-estimate workflow, so numeric overlays remain the primary comparison lens."
-    : "Use this as backward-compatible context only. Structured judgments above remain the authoritative comparison for authored scouting opinions.";
+    ? "Compare the attribute estimates recorded in each report, including their uncertainty."
+    : "Use these earlier estimates to support the recommendations and evidence above.";
 
   return {
     mode,
@@ -126,26 +135,26 @@ export function buildReportComparisonViewModel({
 function buildHeadline(mode: ReportComparisonMode): string {
   switch (mode) {
     case "structured":
-      return "Comparing authored judgments, confidence, evidence breadth, and recruitment context.";
+      return "Compare the recommendation, the evidence behind it, and what remains uncertain.";
     case "mixed":
-      return "Comparing authored judgments where they exist, while keeping legacy numeric notes in a clearly separate lane.";
+      return "Compare the recommendations first, then review any earlier attribute estimates.";
     case "legacy":
     default:
-      return "Comparing legacy attribute-era reports side by side.";
+      return "Compare your recorded attribute estimates side by side.";
   }
 }
 
 function buildExplanation(mode: ReportComparisonMode, allHaveLegacyAttributes: boolean): string {
   switch (mode) {
     case "structured":
-      return "These reports were filed through the structured evidence workflow. The comparison prioritizes what was actually argued, what remains unknown, and what each recommendation asked a club to do.";
+      return "Start with the case each scout made: the observed evidence, the unknowns, and the action recommended to the club.";
     case "mixed":
       return allHaveLegacyAttributes
-        ? "Not every report expresses judgment the same way. Structured verdicts are compared directly above, and any numeric attribute overlay below is supplemental rather than authoritative."
-        : "Not every report expresses judgment the same way. Structured verdicts are compared directly above, and numeric attribute overlays are hidden because they would create a false equivalence.";
+        ? "These reports record different kinds of evidence. Compare their recommendations above and use the shared attribute estimates as supporting context."
+        : "These reports record different kinds of evidence. They do not share enough observed attributes for a fair numeric comparison.";
     case "legacy":
     default:
-      return "These reports rely on attribute assessments and generated strengths or weaknesses. Numeric comparison remains appropriate because every selected report shares the same legacy format.";
+      return "All selected reports include attribute estimates. Compare their strengths, concerns and uncertainty before choosing the next step.";
   }
 }
 

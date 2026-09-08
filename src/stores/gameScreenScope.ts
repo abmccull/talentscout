@@ -71,6 +71,7 @@ export const YOUTH_EARLY_ACCESS_SCREEN_SCOPE = {
   settings: {
     access: "support",
     workspaceParent: "settings",
+    availableWithoutCareer: true,
     navigation: { group: "support", label: "Settings", order: 2 },
   },
   inbox: { access: "detail", workspaceParent: "inbox" },

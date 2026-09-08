@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useGameStore } from "@/stores/gameStore";
+import { canResolveSeasonEvent, getSeasonEventChoiceOptions, getSupportedSeasonEventEffects, getActiveSeasonEventDisplayEffects } from "@/engine/core/seasonEventEffects";
 import type {
   SeasonEvent,
   SeasonEventType,
   SeasonEventEffect,
-  SeasonEventEffectType,
 } from "@/engine/core/types";
 import {
   getSeasonSegmentWidthPercent,
@@ -63,29 +64,12 @@ const EVENT_TYPE_TEXT_COLORS: Record<SeasonEventType, string> = {
   europeanQuarterFinals: "text-blue-400",
 };
 
-/** Human-readable labels for effect types. */
-const EFFECT_TYPE_LABELS: Record<SeasonEventEffectType, string> = {
-  transferPriceModifier: "Transfer Prices",
-  scoutingCostModifier: "Scouting Cost",
-  fatigueModifier: "Fatigue",
-  reputationBonus: "Reputation",
-  youthIntake: "Youth Prospects",
-  playerAvailability: "Availability",
-  injuryRiskModifier: "Injury Risk",
-  attributeRevealBonus: "Reveal Quality",
-};
-
-/** Badge color for each effect type. */
-const EFFECT_TYPE_BADGE_COLORS: Record<SeasonEventEffectType, string> = {
-  transferPriceModifier: "bg-emerald-900/60 text-emerald-300 border-emerald-700/50",
-  scoutingCostModifier: "bg-sky-900/60 text-sky-300 border-sky-700/50",
+/** Only effects with an authoritative weekly consumer are presented. */
+const EFFECT_TYPE_LABELS = { fatigueModifier: "Scout fatigue", reputationBonus: "Reputation" } as const;
+const EFFECT_TYPE_BADGE_COLORS = {
   fatigueModifier: "bg-orange-900/60 text-orange-300 border-orange-700/50",
   reputationBonus: "bg-purple-900/60 text-purple-300 border-purple-700/50",
-  youthIntake: "bg-pink-900/60 text-pink-300 border-pink-700/50",
-  playerAvailability: "bg-red-900/60 text-red-300 border-red-700/50",
-  injuryRiskModifier: "bg-red-900/60 text-red-300 border-red-700/50",
-  attributeRevealBonus: "bg-cyan-900/60 text-cyan-300 border-cyan-700/50",
-};
+} as const;
 
 // =============================================================================
 // PROPS
@@ -107,16 +91,8 @@ interface SeasonTimelineProps {
  * Positive modifiers show +, negative show -.
  */
 function formatEffectValue(effect: SeasonEventEffect): string {
-  const val = effect.value;
-  if (
-    effect.type === "reputationBonus" ||
-    effect.type === "youthIntake"
-  ) {
-    return val > 0 ? `+${val}` : `${val}`;
-  }
-  // Percentage-based modifiers
-  const pct = Math.round(val * 100);
-  return pct > 0 ? `+${pct}%` : `${pct}%`;
+  const points = effect.type === "fatigueModifier" ? Math.round(effect.value * 10) : effect.value;
+  return `${points > 0 ? "+" : ""}${points} / week`;
 }
 
 // =============================================================================
@@ -125,6 +101,7 @@ function formatEffectValue(effect: SeasonEventEffect): string {
 
 /** Compact badge showing a single effect. */
 function EffectBadge({ effect }: { effect: SeasonEventEffect }) {
+  if (effect.type !== "reputationBonus" && effect.type !== "fatigueModifier") return null;
   const label = EFFECT_TYPE_LABELS[effect.type];
   const colorClass = EFFECT_TYPE_BADGE_COLORS[effect.type];
   const valueStr = formatEffectValue(effect);
@@ -167,7 +144,7 @@ function ChoiceModal({
         <p className="mb-4 text-xs text-zinc-400">{event.description}</p>
 
         <div className="space-y-3">
-          {event.choices.map((choice, idx) => (
+          {getSeasonEventChoiceOptions(event).map(({ choice, index: idx }) => (
             <button
               key={idx}
               onClick={() => onChoose(idx)}
@@ -180,7 +157,7 @@ function ChoiceModal({
                 {choice.description}
               </div>
               <div className="flex flex-wrap gap-1">
-                {choice.effects.map((eff, effIdx) => (
+                {getSupportedSeasonEventEffects(choice.effects).map((eff, effIdx) => (
                   <EffectBadge key={effIdx} effect={eff} />
                 ))}
               </div>
@@ -210,6 +187,9 @@ export function SeasonTimeline({
   onResolveEvent,
 }: SeasonTimelineProps) {
   const [choiceEvent, setChoiceEvent] = useState<SeasonEvent | null>(null);
+  const specialization = useGameStore((state) => state.gameState?.scout.primarySpecialization);
+  const activeEffects = getActiveSeasonEventDisplayEffects(seasonEvents.filter((event) =>
+    event.startWeek <= currentWeek && currentWeek <= event.endWeek));
 
   if (seasonEvents.length === 0) return null;
 
@@ -288,7 +268,7 @@ export function SeasonTimeline({
             const textColorClass = EVENT_TYPE_TEXT_COLORS[event.type];
             const dotColorClass = EVENT_TYPE_COLORS[event.type];
             const hasUnresolvedChoice =
-              isActive && event.choices && event.choices.length > 0 && !event.resolved;
+              canResolveSeasonEvent(event, currentWeek, specialization);
 
             return (
               <div
@@ -331,36 +311,13 @@ export function SeasonTimeline({
         </div>
 
         {/* Active effect badges */}
-        {seasonEvents.some(
-          (e) =>
-            e.startWeek <= currentWeek &&
-            currentWeek <= e.endWeek &&
-            e.effects &&
-            e.effects.length > 0,
-        ) && (
+        {activeEffects.length > 0 && (
           <div className="mt-3 border-t border-zinc-800 pt-2">
             <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               Active Effects
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {seasonEvents
-                .filter(
-                  (e) =>
-                    e.startWeek <= currentWeek &&
-                    currentWeek <= e.endWeek,
-                )
-                .flatMap((e) => {
-                  // Show choice effects if resolved, otherwise base effects
-                  const effects =
-                    e.resolved &&
-                    e.choiceSelected !== undefined &&
-                    e.choices?.[e.choiceSelected]
-                      ? e.choices[e.choiceSelected].effects
-                      : e.effects ?? [];
-                  return effects.map((eff, idx) => (
-                    <EffectBadge key={`${e.id}-${idx}`} effect={eff} />
-                  ));
-                })}
+              {activeEffects.map((effect) => <EffectBadge key={effect.type} effect={effect} />)}
             </div>
           </div>
         )}

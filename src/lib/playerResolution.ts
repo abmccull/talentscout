@@ -103,3 +103,10 @@ export function getResolvedContactIntel(
 
   return [...deduped.values()];
 }
+
+/** Historical naming never invents a replacement person after record pruning. */
+export function resolvePlayerDisplayName(state: GameState, entityId: string): string {
+  const player = resolvePlayerEntity(state, entityId)?.player;
+  return player ? `${player.firstName} ${player.lastName}`
+    : state.playerPortraits?.reservations["person:v1:" + entityId]?.displayName ?? "Unknown Player";
+}

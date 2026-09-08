@@ -4,6 +4,7 @@ import {
   assessTransferPlayerWillingness,
   assessTransferRegistrationFit,
   proposeTransferAgreement,
+  proposeTransferTerms,
 } from "@/engine/transfers";
 
 function league(id: string, country: string, clubIds: string[]): League {
@@ -105,6 +106,23 @@ function stateFor(playerRecord: Player, clubs: Record<string, Club>, leagues: Re
 }
 
 describe("transfer agreement engine", () => {
+  it("applies the willingness wage modifier at its actual threshold, not any nonzero value", () => {
+    const leagues = { england: league("england", "England", ["seller", "buyer"]) };
+    const clubs = { seller: club("seller", "england", 58, ["target"]), buyer: club("buyer", "england", 66, []) };
+    const termsAt = (willingness: number | undefined) => {
+      const target = player("target", "seller", "CM", {
+        personalityProfile: willingness === undefined ? undefined : {
+          archetype: "loyal", traits: [], transferWillingness: willingness,
+          dressingRoomImpact: 2, formVolatility: 0.2, bigMatchModifier: 0,
+          hiddenUntilRevealed: true, revealedTraits: [],
+        },
+      });
+      return proposeTransferTerms({ player: target, sellingClub: clubs.seller, buyingClub: clubs.buyer, state: stateFor(target, clubs, leagues) });
+    };
+    expect(termsAt(0.15).wage).toBe(termsAt(0).wage);
+    expect(termsAt(0.74).wage).toBe(termsAt(undefined).wage);
+    expect(termsAt(0.75).wage).toBeGreaterThan(termsAt(0.74).wage);
+  });
   it("proposes viable senior terms when the club, route, and player all align", () => {
     const target = player("target", "seller", "CM");
     const leagues = {

@@ -5,7 +5,7 @@ import { useGameStore } from "@/stores/gameStore";
 import { useTutorialStore, resolveOnboardingSequence } from "@/stores/tutorialStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
-import { Globe2, MapPin, Wallet, Plane, Search, X } from "lucide-react";
+import { Globe2, MapPin, Wallet, Plane, Search, X, ChevronDown } from "lucide-react";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
 import type { CountryReputation, InternationalAssignment, TravelBooking, TravelPosture } from "@/engine/core/types";
 import {
@@ -63,14 +63,13 @@ function getCountryMeta(key: string): { name: string; leagueCount: number; clubC
 
 function LocationHUD({ location, week }: { location: string; week: number }) {
   return (
-    <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md">
-      <MapPin size={14} className="text-blue-400" />
-      <span className="text-xs text-zinc-300">
-        Currently in: <span className="font-semibold text-white">{location}</span>
-      </span>
-      <span className="text-zinc-600">·</span>
-      <span className="text-xs text-zinc-400">Week {week}</span>
-    </div>
+    <header className="absolute left-3 top-3 z-20 max-w-[calc(100%-8rem)] text-white">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-300">Scouting world · Week {week}</p>
+      <h1 className="mt-0.5 flex items-center gap-1.5 font-editorial text-[22px] leading-6">
+        <MapPin size={14} className="shrink-0 text-[var(--accent)]" aria-hidden="true" />
+        <span className="truncate">{location}</span>
+      </h1>
+    </header>
   );
 }
 
@@ -87,9 +86,9 @@ function BudgetHUD({ balance }: { balance: number }) {
         : "text-white";
 
   return (
-    <div className="absolute top-3 right-3 z-20 flex items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md">
-      <Wallet size={14} className="text-emerald-400" />
-      <span className={`text-sm font-semibold ${color}`}>
+    <div className="absolute top-3 right-3 z-20 flex min-h-11 items-center gap-2 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+      <Wallet size={14} className="text-zinc-300" aria-hidden="true" />
+      <span className={`text-sm font-semibold tabular-nums ${color}`} aria-label={`Available funds: £${balance.toLocaleString()}`}>
         £{balance.toLocaleString()}
       </span>
     </div>
@@ -110,21 +109,22 @@ const LEGEND_ITEMS = [
 
 function LegendHUD() {
   return (
-    <div
-      className="absolute bottom-3 left-3 z-20 max-w-[18rem] rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md"
-      role="group"
+    <details
+      className="group absolute bottom-3 left-3 z-20 max-h-[65%] max-w-[18rem] overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface)] px-3"
       aria-label="World map legend"
       title={worldTermSummary()}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
+      <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">Map key &amp; local knowledge<ChevronDown size={14} className="ml-2 transition group-open:rotate-180" aria-hidden="true" /></summary>
+      <div className="border-t border-[var(--border)] pb-3 pt-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-300">
         {WORLD_TERMS.familiarity.label} marker tiers
       </p>
-      <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
+      <p className="mt-1 text-xs leading-relaxed text-zinc-300">
         Personal credibility shown by the ring color. {WORLD_TERMS.regionalKnowledge.label} uses the purple badge. {WORLD_TERMS.operationalPresence.label} lives in the dossier and country browser, not as a separate map tier.
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {LEGEND_ITEMS.map(({ color, label }) => (
-          <span key={label} className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+          <span key={label} className="flex items-center gap-1.5 text-xs text-zinc-300">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: color }}
@@ -133,7 +133,7 @@ function LegendHUD() {
             {label}
           </span>
         ))}
-        <span className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+        <span className="flex items-center gap-1.5 text-xs text-zinc-300">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full border-2 border-amber-500 bg-zinc-800"
             aria-hidden="true"
@@ -141,18 +141,19 @@ function LegendHUD() {
           Current
         </span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-400">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-300">
         <span className="flex items-center gap-1.5">
           <span className="inline-flex h-3 w-3 items-center justify-center rounded-[3px] bg-violet-500 text-[8px] font-semibold text-white" aria-hidden="true">
             2
           </span>
           {WORLD_TERMS.regionalKnowledge.label} band
         </span>
-        <span className="text-zinc-500">
+        <span className="text-zinc-300">
           {WORLD_TERMS.operationalPresence.label}: open the dossier
         </span>
       </div>
-    </div>
+      </div>
+    </details>
   );
 }
 
@@ -271,11 +272,11 @@ function CountryBrowser({
         aria-expanded={open}
         aria-controls="country-browser"
         onClick={() => setOpen((value) => !value)}
-        className="absolute right-3 top-[7.75rem] z-30 flex min-h-11 items-center gap-2 rounded-lg border border-blue-500/35 bg-zinc-950/90 px-3 py-2 text-xs font-semibold text-blue-100 shadow-lg backdrop-blur-md transition hover:border-blue-300/65 hover:bg-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
+        className="absolute inset-x-3 top-[7.75rem] z-30 flex min-h-11 items-center justify-center gap-2 rounded border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-foreground)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] md:left-auto"
       >
         <Globe2 size={16} aria-hidden="true" />
-        Browse countries
-        <span className="rounded-full bg-blue-400/15 px-1.5 py-0.5 text-[10px] text-blue-100">
+        Choose a scouting destination
+        <span className="border-l border-black/20 pl-2 text-xs tabular-nums">
           {countries.filter((country) => country.travelEligible).length}
         </span>
       </button>
@@ -288,14 +289,14 @@ function CountryBrowser({
           aria-labelledby="country-browser-title"
           aria-describedby="country-browser-description"
           data-testid="country-browser"
-          className="absolute inset-x-3 bottom-3 top-[10.75rem] z-40 flex flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950/95 shadow-2xl backdrop-blur-xl md:inset-x-auto md:right-3 md:top-[10.75rem] md:w-[min(348px,calc(100%-1.5rem))]"
+          className="absolute inset-x-3 bottom-3 top-[10.75rem] z-40 flex flex-col overflow-hidden rounded border border-[var(--border)] bg-[var(--surface)] shadow-xl md:inset-x-auto md:right-3 md:top-[10.75rem] md:w-[min(380px,calc(100%-1.5rem))]"
         >
           <div className="flex items-start justify-between gap-3 border-b border-zinc-800 px-4 py-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-300">
                 World access
               </p>
-              <h2 id="country-browser-title" className="mt-1 text-base font-semibold text-white">
+              <h2 id="country-browser-title" className="mt-1 font-editorial text-2xl text-white">
                 Browse active countries
               </h2>
               <p id="country-browser-description" className="mt-1 text-xs leading-relaxed text-zinc-400">
@@ -329,7 +330,7 @@ function CountryBrowser({
             </p>
           </div>
 
-          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" aria-label="Active scouting destinations">
+          <ul className="min-h-0 flex-1 divide-y divide-[var(--border)] overflow-y-auto" aria-label="Active scouting destinations">
             {visibleCountries.map((country) => {
               const countryName = getCountryMeta(country.countryKey).name;
               const continent = CONTINENT_NAMES[getContinentId(country.countryKey)] ?? "Other regions";
@@ -347,13 +348,13 @@ function CountryBrowser({
                       setOpen(false);
                       onOpenCountry(country.countryKey, dossierTrigger);
                     }}
-                    className="min-h-14 w-full rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2.5 text-left transition hover:border-blue-400/55 hover:bg-blue-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
+                    className="min-h-14 w-full px-4 py-3 text-left transition hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)]"
                     aria-label={`${countryName}, ${contentTierLabel}, ${WORLD_TERMS.regionalKnowledge.shortLabel.toLowerCase()} ${knowledge} of 100, ${WORLD_TERMS.operationalPresence.shortLabel.toLowerCase()} ${presenceScores[country.countryKey] ?? 0} of 100. Open country dossier.`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-zinc-100">{countryName}</p>
-                        <p className="mt-0.5 text-[10px] text-zinc-500">{continent} · {countryCoverageSummary(country)}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-300">{continent} · {countryCoverageSummary(country)}</p>
                       </div>
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
                         country.contentTier === "fullWorld"
@@ -395,7 +396,7 @@ function BookingBanner({ booking, homeName }: { booking: TravelBooking; homeName
   const destName = getCountryMeta(booking.destinationCountry).name;
   const isAbroad = booking.isAbroad;
   return (
-    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-lg border border-blue-500/30 bg-zinc-900/80 px-4 py-2 backdrop-blur-md">
+    <div className="absolute inset-x-3 bottom-16 z-20 flex flex-wrap items-center gap-2 rounded border border-[var(--border)] bg-[var(--surface)] px-4 py-3 md:inset-x-auto md:bottom-3 md:left-1/2 md:-translate-x-1/2">
       <Plane size={14} className="text-blue-400" />
       <span className="text-xs text-zinc-300">
         {isAbroad ? (
@@ -457,7 +458,7 @@ function AssignmentObjectives({
           );
         })}
       </ul>
-      <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+      <p className="mt-2 text-xs leading-relaxed text-quiet">
         Graded at return. Waiting or travel alone earns no assignment reward.
       </p>
     </div>
@@ -488,21 +489,24 @@ function AssignmentPanel({
   onReviewAssignment: (assignmentId: string) => void;
 }) {
   return (
-    <div
+    <details
+      open={assignments.length > 0 || activeAssignment !== null}
       data-testid="international-assignment-panel"
-      className="absolute left-3 top-[11.25rem] z-20 max-h-[calc(100%-17rem)] w-[min(320px,calc(100%-1.5rem))] overflow-y-auto rounded-xl border border-zinc-700/50 bg-zinc-950/85 p-4 backdrop-blur-md md:top-16 md:max-h-[calc(100%-5.5rem)]"
+      className="group absolute left-3 top-[11.25rem] z-20 max-h-[calc(100%-17rem)] w-[min(340px,calc(100%-1.5rem))] overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface)] p-3 lg:top-16 lg:max-h-[calc(100%-5.5rem)]"
     >
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <summary className="flex min-h-11 cursor-pointer items-start justify-between gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Assignments</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-300">Assignments</p>
           <h2 className="mt-1 text-sm font-semibold text-white">
-            {assignments.length > 0 ? `${assignments.length} available this week` : "No live assignments"}
+            {activeAssignment ? "Your current assignment" : assignments.length > 0 ? `${assignments.length} available this week` : "No current assignment"}
           </h2>
         </div>
-        <div className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2 py-1 text-[10px] text-zinc-400">
+        <div className="flex items-center gap-2 text-xs text-zinc-300">
           W{currentWeek} · S{currentSeason}
+          <ChevronDown size={14} className="transition group-open:rotate-180" aria-hidden="true" />
         </div>
-      </div>
+      </summary>
+      <div className="mt-3 border-t border-[var(--border)] pt-3">
 
       {activeAssignment && (
         <div className="mb-3 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
@@ -516,7 +520,7 @@ function AssignmentPanel({
       )}
 
       {assignments.length === 0 ? (
-        <p className="text-xs leading-relaxed text-zinc-500">
+        <p className="text-xs leading-relaxed text-zinc-300">
           {canAcceptAssignments
             ? "No international assignments are live right now. New opportunities refresh periodically as your network grows."
             : "Assignments unlock at career tier 3 and pause while you are actively abroad."}
@@ -532,12 +536,12 @@ function AssignmentPanel({
               return (
             <div
               key={assignment.id}
-              className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3"
+              className="border-b border-[var(--border)] py-3 last:border-b-0"
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium text-white">{getCountryMeta(assignment.country).name}</p>
-                  <p className="text-[11px] text-zinc-500">{assignment.region} · {assignmentTypeLabel(assignment.type)}</p>
+                  <p className="text-[11px] text-zinc-300">{assignment.region} · {assignmentTypeLabel(assignment.type)}</p>
                 </div>
                 <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
                   Up to +{assignment.reputationReward} rep
@@ -545,12 +549,12 @@ function AssignmentPanel({
               </div>
               <p className="text-xs leading-relaxed text-zinc-400">{assignment.description}</p>
               <AssignmentObjectives assignment={assignment} />
-              <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] text-zinc-500">
+                  <p className="text-[11px] text-zinc-300">
                     {assignment.duration === 1 ? "1 week" : `${assignment.duration} weeks`} on site
                   </p>
-                  <p className="text-[10px] text-zinc-600">Base travel £{travelCost.toLocaleString()}</p>
+                  <p className="text-[10px] text-zinc-400">Base travel £{travelCost.toLocaleString()}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -567,7 +571,7 @@ function AssignmentPanel({
                     className={`min-h-11 rounded-md px-3 py-2 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
                       canAcceptAssignments
                         ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/15"
-                        : "cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-600"
+                        : "cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-400"
                     }`}
                   >
                     {canAcceptAssignments ? "Review trip" : "Unavailable"}
@@ -587,7 +591,8 @@ function AssignmentPanel({
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </details>
   );
 }
 
@@ -1011,7 +1016,7 @@ export function InternationalScreen() {
     <GameLayout>
       <div
         ref={containerRef}
-        className="relative h-full w-full overflow-hidden bg-[#0a0a0a]"
+        className="relative h-full w-full overflow-hidden bg-[var(--background)]"
         onPointerDownCapture={(event) => {
           const target = event.target instanceof Element
             ? event.target.closest('[role="button"]')
@@ -1052,7 +1057,7 @@ export function InternationalScreen() {
           aria-expanded={worldOutlookOpen}
           aria-controls="world-outlook-drawer"
           onClick={() => setWorldOutlookOpen(true)}
-          className="absolute left-3 top-16 z-30 flex min-h-11 items-center gap-2 rounded-lg border border-emerald-500/35 bg-zinc-950/90 px-3 py-2 text-xs font-semibold text-emerald-100 shadow-lg backdrop-blur-md transition hover:border-emerald-300/65 hover:bg-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 md:left-auto md:right-[10.5rem]"
+          className="absolute left-3 top-16 z-30 flex min-h-11 items-center gap-2 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:bg-[var(--surface-interactive)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] md:left-auto md:right-[10.5rem]"
           data-testid="open-world-outlook"
         >
           <Globe2 size={16} aria-hidden="true" />

@@ -20,6 +20,7 @@ import type {
 } from "@/engine/core/types";
 import { normalizeCountryKey } from "@/lib/country";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
+import { calculatePlayerWeeklyWage } from "@/engine/finance/wages";
 
 // =============================================================================
 // HELPERS
@@ -115,7 +116,7 @@ export function generatePlacementReport(
  *   age 14–15 → "academyIntake"
  *   age 16+   → "youthContract"
  *
- * Wage is calculated as: Math.round(currentAbility * 50)
+ * Wage follows the destination club's ability/reputation market context.
  * Contract expiry: report.season + 3
  */
 export function processPlacementOutcome(
@@ -150,7 +151,7 @@ export function processPlacementOutcome(
     clubId: club.id,
     contractClubId: club.id,
     contractExpiry: report.season + 3,
-    wage: Math.round(youth.player.currentAbility * 50),
+    wage: Math.max(100, calculatePlayerWeeklyWage(youth.player.currentAbility, club.reputation)),
   };
 
   // Mark youth as placed

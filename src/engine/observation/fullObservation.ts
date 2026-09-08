@@ -13,7 +13,7 @@
 import type { RNG } from "@/engine/rng";
 import type { Player } from "@/engine/core/types";
 import type { ObservationSession, SessionPhase } from "@/engine/observation/types";
-import { generateMoments } from "@/engine/observation/moments";
+import { generateMoments, sampleSessionPerformance } from "@/engine/observation/moments";
 import {
   createVenueAtmosphere,
   generateAtmosphereEvent,
@@ -73,22 +73,22 @@ export const VENUE_DESCRIPTIONS: Record<
   schoolMatch: {
     early: [
       "The school match kicks off on a well-kept grass pitch. The PE teacher blows the whistle and both sides fan out instinctively — no preamble, just football.",
-      "Bright afternoon light on a compact school ground. The whistle blows sharply and the teams get straight to business. Formation is loose, but enthusiasm is high.",
+      "The whistle cuts across the compact school ground. The teams spread out and the first exchanges begin.",
       "The pitch is short by senior standards but it compresses the action nicely. An early scramble in midfield sets the tone — physical, direct, and eager.",
       "A thin scatter of spectators gathers along the near touchline. Kick-off is brisk. The players are competing hard already — there is something to prove here.",
     ],
     mid: [
-      "Play settles into a rhythm. The better-organised side controls possession in tidy triangles while the other defends with numbers and energy.",
-      "The match has found its shape now. Individual quality is starting to separate itself from the collective effort — the patterns are becoming readable.",
-      "A lull in the scoring opens up space for proper observation. Players are moving more freely and the game reads more naturally from the touchline.",
-      "Midway through. Tiredness hasn't arrived yet but legs are beginning to carry the weight of the tempo. Pressing intensity has dropped slightly for both sides.",
-      "The better players are beginning to drift into the pockets where the game lives. Their movement is starting to stand out from the surrounding noise.",
+      "Play settles into a rhythm. Watch how each side uses the space around midfield.",
+      "The match has found its shape. Repeated passages may help put an earlier impression in context.",
+      "The next passage offers another observation. Choose a player to follow rather than assuming the whole picture is clear.",
+      "Midway through. Keep earlier workload in mind as you watch pressing and recovery.",
+      "Midfield pockets offer another place to focus. Watch the movement before deciding whether it creates a useful option.",
     ],
     late: [
-      "Final minutes. Both teams pushing for a result — the urgency strips away the careful touches and reveals who still has the legs and the will.",
-      "Late in the match, gaps appear everywhere. The players who can exploit them under tired legs are making themselves known.",
-      "Closing stages. The fitness differential is deciding the shape of the game now. Character is on full display — who is still running, who has quietly stopped.",
-      "Last ten minutes. The score doesn't matter as much as the attitude. A couple of players here are still working as hard as they did in the opening minute.",
+      "Final minutes. The closing exchanges offer another chance to watch decisions and recovery runs.",
+      "Late in the match, space opens between the lines. Following one runner may mean missing another.",
+      "Closing stages. Watch the next effort or response to a setback; one passage cannot settle a judgment about character.",
+      "The match approaches its end. Compare a late effort with an earlier passage before judging whether it forms a pattern.",
     ],
   },
 
@@ -96,20 +96,20 @@ export const VENUE_DESCRIPTIONS: Record<
     early: [
       "The street game gets going on a concrete court. No referee, no rules, just skill — the first few minutes set the terms by which everyone else plays.",
       "Impromptu sides picked in seconds and the game is live immediately. The concrete surface punishes loose touches and rewards confidence on the ball.",
-      "Evening light and a makeshift pitch. The game explodes into life as soon as the ball drops — nobody is easing in here.",
-      "A cage game with traffic noise as the backdrop. The walls come into play immediately — the better players are already reading the angles.",
+      "A makeshift pitch and a quick start. The game gets moving as soon as the ball drops.",
+      "A cage game with traffic noise as the backdrop. The walls bring different passing angles into play.",
       "Hard surface, no lines, no authority. The opening minutes are a negotiation of respect — who takes control of the ball, who takes control of the space.",
     ],
     mid: [
-      "The game flows freely. Players swap positions, try tricks, take risks — there is no tactical briefing here, only instinct and personality.",
-      "Skill moves that would never appear in a structured match are on show now. The freedom of the format is drawing out something unfiltered and real.",
+      "The game flows freely. Players swap positions, try tricks, and take risks without a formal tactical briefing.",
+      "The open format leaves room for improvisation. An action here may need testing again in a structured match.",
       "The middle stretch of the game has a looseness to it. Arguments flare and die in seconds. Everything is improvised, everything is alive.",
       "Individual battles are developing all over the court. The competitive spirit is intense even without a referee or a whistle to enforce anything.",
     ],
     late: [
-      "The sun is setting. Last few plays before darkness calls time on the session — the best players here always seem to save something for the finish.",
-      "Fading light but the intensity hasn't dropped. The final exchanges are fierce. These players are competing for something only they can articulate.",
-      "The game winds down naturally as the light goes. What remains is the memory of who was outstanding — the one or two who made this pitch feel small.",
+      "The session is nearing its end. A few exchanges remain to revisit an earlier impression.",
+      "The final exchanges continue around the court. Choose a player or action to follow before the game stops.",
+      "The game winds down naturally. Keep the passages you could follow and leave the unclear ones open.",
       "Last act of the session. No formal end — someone will call time and the ball will stop. Until then, the game belongs to whoever wants it most.",
     ],
   },
@@ -118,21 +118,21 @@ export const VENUE_DESCRIPTIONS: Record<
     early: [
       "First match of the tournament begins. Parents line the touchline with barely contained energy. The pitch is uneven but nobody is treating it that way.",
       "The opening game of the day. Teams warmed up and ready — coaches with clipboards, players in matching kits that look brand new. Kickoff is decisive.",
-      "Tournament morning, first fixture. The dew is still on the grass. Both sides are fresh and nervy — the early exchanges are careful and exploratory.",
+      "The tournament gets underway. Both sides gather for the opening fixture before spreading out across the pitch.",
       "The day's first whistle. Multiple pitches running simultaneously, each with its own small crowd. The noise builds as the session finds its rhythm.",
       "First game of the competition. Goals have been promised by every manager. Both sides are earnest and direct — they play the way they've been coached.",
     ],
     mid: [
-      "Second match of the tournament. The stronger players are beginning to stand out from the group — the accumulated evidence is becoming easier to read.",
-      "Midway through the day's programme. Fatigue is beginning to show for some. The players who recover quickly between games are making a note of themselves.",
-      "After the first few games the tournament takes shape. The teams at the top of the group know each other now. Individual quality is finding space in the familiarity.",
-      "The day is in full swing. The pitch is worn and the crowd has moved around. Players who began nervously have found their confidence — the real performances are arriving.",
-      "Group stage continues. The competition level has lifted as the day progresses. The gap between the top players and the average ones is widening with each game.",
+      "The tournament continues. A new game offers a chance to test whether an earlier observation repeats.",
+      "Midway through the programme. Watch recovery between efforts without assuming why a player slows down.",
+      "After the first games, the tournament has a familiar rhythm. Keep the level of opposition in mind as you compare passages.",
+      "The day is in full swing. Players move between games, giving you another context in which to revisit an early impression.",
+      "Group play continues. Different opponents may challenge the same player in different ways.",
     ],
     late: [
-      "Tournament final. The pressure is on, and composure separates the talented from the merely athletic — the last game of the day reveals everything.",
-      "Knockout stages. The margin for error has gone. Players who've been competent throughout are suddenly facing the true test of whether they can produce when it matters.",
-      "Final game of the day. Everyone is tired but the better players are hiding it well. The quality of decision-making under fatigue is the most honest signal left.",
+      "The final stretch of the tournament adds another competitive setting. Reactions here can add evidence, but cannot reveal everything about a player.",
+      "The tournament reaches its closing fixtures. Look for a repeatable response without treating one game as a final verdict.",
+      "Final game of the day. Watch decisions after repeated efforts, and keep earlier workload in mind.",
       "Semi-final of the tournament. Tactics tighten, ambitions narrow, and the individual moments carry more weight than at any other point in the day.",
     ],
   },
@@ -142,14 +142,14 @@ export const VENUE_DESCRIPTIONS: Record<
       "The academy coaches set up structured drills. Players are numbered, assessed systematically — watched in a way that makes the back of the neck tingle.",
       "Trial day begins with passing drills in grid patterns. The coaches move between stations with clipboards and quiet authority. No one is comfortable yet.",
       "Warm-up complete, first drill underway. Players are already watching each other from the corners of their eyes. The assessment has begun even if no one has said so.",
-      "Structured opening session. Possession exercises designed to expose first touch, weight of pass, and willingness to receive under pressure. The environment is controlled and revealing.",
+      "Structured opening session. Possession exercises offer a chance to watch first touch, weight of pass, and receiving options.",
     ],
     mid: [
-      "Small-sided game begins. Now the real test — can they translate drill performance into match intelligence? Several players look completely different in the open game.",
+      "A small-sided game begins. It offers a different setting in which to test an impression from the drills.",
       "The session moves into applied work. Rondos and small-sided games with positional tasks. Players are being asked to think and play simultaneously.",
-      "Tactical exercises with pressing triggers and positional rules. The players who understand what's being asked of them are standing out immediately.",
-      "The afternoon session shifts to match-realistic scenarios. The coaches are watching movement patterns off the ball more than anything else — that's where the decisions live.",
-      "Position-specific work reveals understanding. Who tracks, who presses, who finds the pocket — the coaches are building a picture with each repetition.",
+      "Tactical exercises with pressing triggers and positional rules. Watch how players respond to the instructions.",
+      "The session shifts to match-like scenarios. Off-ball movement offers another question to follow.",
+      "Position-specific work continues. Tracking, pressing, and finding space each offer a different focus for observation.",
     ],
     late: [
       "Full scrimmage. The coaches are watching closely. This is where careers can change — unstructured football after a long structured day strips everything back.",
@@ -162,22 +162,22 @@ export const VENUE_DESCRIPTIONS: Record<
   youthFestival: {
     early: [
       "Teams from multiple nations warm up on adjacent pitches. The atmosphere is electric for these young players — languages mixing, scouts everywhere, high stakes.",
-      "Festival morning. Opening fixtures across the complex. The air is thick with anticipation. For many of these players, this is the biggest stage they've stood on.",
+      "The festival opens across the complex. Players gather for fixtures against unfamiliar opponents.",
       "Group stage opens. International opposition reveals different styles immediately — the directness of one school colliding with the possession habits of another.",
       "The festival kicks off with a full slate of group games. Parents in national colours line every pitch. The noise level from the start is unlike any club match.",
     ],
     mid: [
       "Second round of group games. International opposition reveals different styles — different rhythms, different physical profiles, different readings of space.",
-      "The festival has settled into its structure. Standout players are already being talked about in clusters near the touchline. The scouting community is paying attention.",
-      "Group stage progressing. The better teams have identified the key players and begun to shape their tactics around them. The competition has become genuinely interesting.",
-      "Midway through the group stages. Some players are handling the international environment brilliantly — elevated, sharper, more present than in any domestic setting.",
-      "The afternoon fixtures begin. The surface has taken a beating but the players are still flying. The quality on display varies wildly from pitch to pitch.",
+      "The festival has settled into its schedule. Scouts compare notes near the touchline as another game begins.",
+      "Group play continues. Watch how players respond as opponents contest different areas of the pitch.",
+      "Midway through group play. The unfamiliar opposition offers another context in which to test your impressions.",
+      "Another round of fixtures begins. Moving between pitches brings a fresh set of opponents to consider.",
     ],
     late: [
-      "The pressure of knockout rounds brings out true character — who rises to international competition and who retreats to what is safe and familiar.",
+      "The closing rounds offer a different competitive setting. Observe responses to setbacks without assuming they reveal a fixed character trait.",
       "Semi-final stage. Players who've been reliable across the group games now face the sharpest opponents of the tournament. Everything they have is needed now.",
       "Festival final. The largest crowd of the day is gathered. Scouts have reorganised their position to get the best view. What follows will be remembered.",
-      "Final day of the competition. Results have shaped the draw and now the bracket is set. The players left standing are the ones who wanted this most.",
+      "Final day of the competition. Reaching this stage supplies context; it does not settle an individual player assessment.",
     ],
   },
 
@@ -185,21 +185,21 @@ export const VENUE_DESCRIPTIONS: Record<
     early: [
       "Kick-off. The stadium hum lifts instantly and the first phase sets the contest's terms — physicality, tempo, and the first signals about which players will dominate.",
       "Opening minutes of a professional fixture. Both sides are measured, feeling out the opponent. The crowd is alert. The game hasn't found its speed yet.",
-      "Early exchanges in a compact, high-tempo match. The pitch is excellent. The standard is clear from the first three passes — this is serious football.",
+      "Early exchanges in a professional fixture. Use the opening passages to establish a reference point for this opposition.",
       "The first phase of what looks like a hard-fought professional match. Intensity is high from the opening whistle. Early pressure is being applied immediately.",
     ],
     mid: [
-      "The match has found its shape. Both teams are settled. The patterns are repeatable and observable — the tactical picture is becoming clear.",
-      "Midway point. The contest has opened up and players are making more decisive runs. This is when individual quality separates itself from collective structure.",
-      "A relatively open period in the match. The transitions are sharp and revealing. Wide areas are being exploited for the first time.",
-      "Late in the first half. The match is in its most legible phase — the shape is set, the personnel are positioned, and the picture is clean from the touchline.",
+      "The match has found its shape. Repeated passages may help test the tactical picture you are building.",
+      "Midway point. Follow a player through the next passage and compare the action with what you have already seen.",
+      "An open period offers different transitions to follow. Decide which movement deserves your attention.",
+      "The match continues. Check one tactical action closely instead of assuming the phase is easy to read.",
       "Opening phase of the second half. The substitute has changed the tactical flow. New match dynamics are settling in.",
     ],
     late: [
-      "Final minutes. The result is still in the balance. Tired legs and tactical substitutions are compressing the game — the players who still look fresh are answering the biggest question.",
-      "Closing stages of a professional fixture. The match is still competitive. The level of intensity from the individuals who are still pressing is remarkable.",
-      "Late pressure from the trailing side. Defensive blocks and transitional runs are creating the clearest physical and mental signals of the match.",
-      "The clock runs down. Injury time approaches. The players who are still driving — still working — are the ones worth the flight back for.",
+      "Final minutes. Another passage remains to check effort, decision-making, or recovery against the earlier evidence.",
+      "Closing stages of a professional fixture. Late efforts offer another observation, with workload and role still relevant.",
+      "Late in the match. Defensive positioning and transition runs offer competing questions to follow.",
+      "The clock runs down. Choose one final action to follow before deciding what still needs another look.",
     ],
   },
 
@@ -207,19 +207,19 @@ export const VENUE_DESCRIPTIONS: Record<
     early: [
       "The reserve fixture kicks off on a sparse ground. A few coaches and scouts ring the pitch. The players know what this game means to their careers.",
       "Opening minutes of a reserve match. The standard is uneven but the stakes for individuals are high — this group is competing for a handful of first-team openings.",
-      "Early phase of a quiet reserve fixture. The silence makes the good moments easier to pick out. Every mistake is audible from here.",
-      "Reserve game starts. Both squads are a mix of developing youngsters and first-team fringe players. The quality differential within each team is visible from the opening phase.",
+      "Early phase of a quiet reserve fixture. A smaller crowd offers a different setting, but attention still has to be directed.",
+      "Reserve game starts. Developing youngsters and first-team fringe players share the pitch; their situations may differ.",
     ],
     mid: [
-      "The reserve match has found a rhythm. The better players are beginning to control the game's tempo. The gap between the ready and the not-quite-ready is expanding.",
-      "Second half of the reserve fixture. The players who were strongest in the first half are consolidating that impression. A couple of others are still fighting to change the narrative.",
-      "Midway through the game. Fatigue is not yet a factor. The tactics are clear and simple. What's left is just individual quality — how well can each player play?",
-      "A quiet stretch in the reserve match. The ball moves at a deliberate pace. In this stillness, small decisions become visible in a way they can't at higher intensity.",
+      "The reserve match has found a rhythm. Compare the next passage with an earlier observation before deciding what it means.",
+      "The reserve fixture continues. A later passage may support or challenge the impression made earlier.",
+      "Midway through the game. Keep the tactical task and opposition in mind as you follow individual actions.",
+      "A quiet stretch in the reserve match. Follow a small decision and keep its context alongside the observation.",
     ],
     late: [
-      "Final phase of the reserve game. Players who have had a strong match are beginning to look for the moment that cements it.",
-      "Closing stages. The fitness work that was done in pre-season is separating the players who are training-ground-ready from those who are match-ready.",
-      "Last few minutes of the reserve fixture. The substitutes have had their time. The original starters who are still on are answering the question of durability.",
+      "Final phase of the reserve game. The remaining exchanges offer one more chance to test an impression.",
+      "Closing stages. Watch recovery and repeated effort while leaving training history and fitness causes open.",
+      "Last few minutes of the reserve fixture. Keep earlier workload in mind when comparing late efforts.",
       "The reserve match winds down. The full-timers ring the pitch still. This was a long 90 minutes for the players who needed to impress — and they know it.",
     ],
   },
@@ -227,21 +227,21 @@ export const VENUE_DESCRIPTIONS: Record<
   trialMatch: {
     early: [
       "The trial match kicks off with a knowledgeable audience. Every player knows a professional career may hinge on the next 90 minutes. The opening exchanges reflect that weight.",
-      "High-stakes trial fixture. Kick-off is clean and both sides start with purpose. The players who look most comfortable right now — despite everything riding on this — are the interesting ones.",
-      "Trial game begins. The scouts are positioned around the ground. The pressure is physical — you can feel it in the over-tight touches of the opening minutes.",
-      "Opening exchanges of a trial match. Several players are already carrying the visible weight of the occasion. The first few who shed it and just play are worth watching closely.",
+      "The trial fixture begins. Follow a player through the opening exchanges before drawing conclusions about the response to the occasion.",
+      "The trial game begins with scouts positioned around the ground. Watch an opening touch without assuming how the occasion affects it.",
+      "Opening exchanges of a trial match. The setting may affect how players respond; the actions still need to be observed.",
     ],
     mid: [
-      "The trial has found its competitive level. Players who started nervously are now beginning to play. The ones who were composed from the start are consolidating.",
-      "Midway through the trial match. The chaos of the first half has settled. Individual moments are carrying more interpretive weight now that the nerves have been worked off.",
-      "Second phase of the trial. Tactics have emerged. The players who've adapted to the team shape fastest are distinguishing themselves from those still looking for instruction.",
-      "The trial match is in its most readable phase. Players have settled and the personal stakes are being expressed through the football rather than around it.",
+      "The trial continues. Revisit an early impression as the players become familiar with the session.",
+      "Midway through the trial match. A fresh passage offers a chance to revisit an early impression.",
+      "The trial moves on. Watch how players respond to the team shape and any instructions they receive.",
+      "The trial continues. Keep the personal stakes in mind while separating what you saw from what you inferred.",
     ],
     late: [
-      "Closing stages. A handful of players are still pushing — driving for the ball, pressing for the loose touch — with everything already decided. That says more than any drill.",
-      "Final phase of the trial. The players who've impressed throughout are trying to ensure the impression holds. The ones who haven't are making their last push.",
-      "Late in the trial match. The coaches have been taking notes all game. The players who still look fresh and competitive in these final minutes have made a compelling case.",
-      "Last minutes of a trial fixture. Fatigue is visible across the pitch but one or two players are still running at the pace they set in the first minute. That matters.",
+      "Closing stages. Follow an effort or a response to a loose ball; compare it with earlier evidence before drawing a broader conclusion.",
+      "Final phase of the trial. Keep an earlier impression open to challenge through the remaining exchanges.",
+      "Late in the trial match. A closing effort adds evidence, but it cannot make the whole case on its own.",
+      "Last minutes of the trial fixture. A late run adds another observation, with earlier workload still relevant.",
     ],
   },
 
@@ -249,42 +249,42 @@ export const VENUE_DESCRIPTIONS: Record<
     early: [
       "Opening phase of an unfamiliar fixture at the start of a wider scouting mission. The environment is new — the notes, the expectations, and the eye are all adjusting.",
       "The scouting mission begins. First game of a multi-fixture assignment. The opposition is unknown but that uncertainty is part of the observation value.",
-      "Kick-off in a venue that required a long journey to reach. The unfamiliarity keeps the eye sharper — every detail feels novel and worth recording.",
+      "Kick-off at an unfamiliar venue. Establish a reference point before deciding which details deserve further attention.",
       "Early stages of a scouting mission match. The pitch, the crowd, and the quality all need assessing before a frame of reference is established. That process starts now.",
     ],
     mid: [
-      "The match is in full flow. Patterns are becoming readable across the pitch. The specific targets are beginning to stand out from the surrounding picture.",
-      "The game continues at an unfamiliar pace. The scouting mission is producing a richer picture than expected — one or two players here are operating at an unexpected level.",
-      "Mid-phase of the mission fixture. The wider context of the league is becoming clearer through the match. The standard here will calibrate everything that follows this week.",
-      "The match's tactical shape is now clear. The observations being gathered will feed into a wider report. Individual standouts are now the priority.",
+      "The match is in full flow. Decide which target or action to follow through the next passage.",
+      "The game continues at an unfamiliar pace. The next passage may add evidence or leave the question open.",
+      "Mid-phase of the mission fixture. This match adds a reference point for the league; it cannot establish the whole standard by itself.",
+      "The mission fixture continues. Follow an unresolved question that could help the wider report.",
     ],
     late: [
-      "Late in the match at the end of a long scouting mission. The target is still producing — that durability and quality across a full game is exactly what the report needed.",
-      "Closing phase of the mission fixture. The standard here has become clear. The targets identified in the early phase have either grown or diminished during the full picture.",
+      "Late in the mission fixture. A further look may support or challenge what you saw earlier in the match.",
+      "Closing phase of the mission fixture. Review the passages you could follow and identify what remains uncertain.",
       "Final stretch. The scouting mission reaches its most decisive phase. The impressions gathered here will frame the recommendation that goes back to the club.",
-      "Last minutes of the final fixture on this mission. The full picture is assembling. The journey was worth it if the analysis confirms what the eye has been suggesting.",
+      "Last minutes of the mission fixture. Keep what you observed separate from what the report still needs to establish.",
     ],
   },
 
   trainingVisit: {
     early: [
-      "Training session begins with a warm-up and passing drills. No audience, no pressure — the movements are habitual and honest. This is what the player actually does.",
+      "Training begins with a warm-up and passing drills. The format offers another view of habits to compare with match evidence.",
       "The training visit opens with rondos and short passing sequences. The coaching staff is involved but not intrusive. The players are working and talking freely.",
-      "Early phase of a training observation. The warm-up is professional and purposeful. The way a player approaches these invisible minutes says a great deal.",
-      "The session starts with positional shape and activation drills. Technical habits that are invisible in matches are appearing clearly here — there is no adrenaline to compensate.",
+      "Early phase of a training observation. Watch the warm-up as context without treating it as a complete picture of the player.",
+      "The session starts with positional shape and activation drills. Follow a specific action to see what this setting can add.",
     ],
     mid: [
-      "The session moves to tactical exercises. Position-specific work reveals understanding — who positions intelligently when the ball is on the other side, who drifts and disconnects.",
-      "Applied tactical phase of the training session. Pressing shapes and defensive compactness are being drilled. The players who understand the detail without needing it repeated are the ones to follow.",
-      "The session's technical work has given way to competitive scenarios. The transition between drill habits and match habits is the most revealing part of any training observation.",
-      "Game-realistic exercises underway. The intensity has risen and the patterns are being stress-tested. A couple of players are working above the level of the session.",
-      "Mid-session phase. Complex positional tasks on a tight pitch. The players who don't need the coach to set them right after each repetition are quickly identifiable.",
+      "The session moves to tactical exercises. Position-specific work offers questions about movement when the ball is elsewhere.",
+      "Applied tactical work continues. Pressing shapes and defensive compactness provide different tasks to follow.",
+      "Technical work gives way to competitive scenarios. Compare an action across the two settings before assuming it will transfer.",
+      "Game-like exercises are underway. Watch how a player approaches the next task without assuming the drill reflects match ability.",
+      "Mid-session phase. Positional tasks on a tight pitch offer another chance to observe responses to instruction.",
     ],
     late: [
-      "The session finishes with a small-sided game. The tactical and technical work of the session feeds directly into this — who has absorbed the session's lessons is now clear.",
-      "Final phase of the training visit: a live practice game. The freedom of the format after a structured session draws out personality and improvisation in equal measure.",
-      "Closing part of the session. A competitive small-sided game to finish. Players are competing hard despite the late stage of the day — the workrate standard here is high.",
-      "End of the training session. The small-sided game that closes the day is as revealing as any fixture. The players who sustain their standard all the way to the final whistle are noted.",
+      "The session finishes with a small-sided game. Watch whether anything from the earlier drills appears in this different setting.",
+      "Final phase of the training visit: a live practice game. Reactions and improvisation here may need another context before supporting a broader claim.",
+      "Closing part of the session. A small-sided game provides a final opportunity to follow effort or movement.",
+      "Training draws to a close. Retain the actions you could follow and note which questions still need match evidence.",
     ],
   },
 };
@@ -300,40 +300,40 @@ export const VENUE_DESCRIPTIONS: Record<
  */
 const GENERIC_MATCH_DESCRIPTIONS: Record<number, string[]> = {
   0: [
-    "Kick-off. Both sides feel each other out with probing passes and high defensive lines. The opening moves are revealing in their own careful way.",
-    "The match starts briskly. High press from both teams in the first minutes — the physical and mental signals are unusually clear this early.",
+    "Kick-off. Use the opening exchanges to find a player or action worth following.",
+    "The match starts briskly. Decide which physical action or decision to watch through the early exchanges.",
     "Opening exchanges. The tempo is high from the first whistle. Early ball movement patterns suggest which side has prepared for this specific opponent.",
     "Kick-off and the game is immediately competitive. Both managers have set up to be difficult rather than expressive — the opening phase is attritional.",
   ],
   15: [
-    "Quarter of the game complete. The pressing traps have settled and both teams are beginning to play through the lines. The picture is clarifying.",
+    "Quarter of the game complete. Compare another passage with the picture you began building at kick-off.",
     "Fifteen minutes in. The first phase of sustained possession for either side has established which midfield is controlling the tempo.",
     "The match has passed its cautious opening. Players are now competing for the ball with conviction rather than consideration.",
     "After a tentative start, the game has found its pace. A cleaner phase now — the transitions are sharp and the individual battles are being decided.",
   ],
   30: [
-    "The game's tactical spine is now visible. Both managers are operating the shapes they drilled in the week — the test is whether the players execute them under pressure.",
-    "Half-hour in. The match is in its deepest phase of structure before the half-time adjustments. Patterns are reliable and readable from the touchline.",
+    "The game approaches the half-hour. Watch how a player carries out a tactical task rather than assuming the plan is fully understood.",
+    "Half-hour in. Another passage offers a chance to check whether an earlier pattern repeats.",
     "Thirty minutes. One side is beginning to control possession more consistently. The better-organised unit is starting to squeeze the space.",
-    "The game is approaching the final stretch of the first half. Both sides are still competitive but the balance of quality is starting to tilt one way.",
+    "The game approaches the final stretch of the first half. Keep individual observations in the context of the surrounding play.",
   ],
   45: [
     "Second half begins. Both managers have spoken — formations tightened or released based on what the first half showed. The new phase is starting with visible intent.",
     "The restart after half-time brings a change in tempo. Fresh legs are making more ground than tired ones did in the dying minutes of the first half.",
-    "Second half kick-off. One substitution from each bench has changed the shape slightly. The early second-half period reveals which team has the more adaptable plan.",
+    "Second-half kick-off. Use the restart to test whether an earlier observation holds in the next passage.",
     "The match continues into its second half. One team's approach has adjusted sharply from the break — it will be interesting to see how long the new structure holds.",
   ],
   60: [
-    "An hour of football. The physical peaks have passed and tactical intelligence is carrying the teams forward. Decision-making speed is the metric now.",
-    "Sixty minutes in. The scoreline matters here — the team that needs a goal is taking risks. Those risks are creating the most legible attacking moments of the match.",
-    "The game enters its most interpretively rich phase. Tiredness is bringing honesty to every action — the technically sound players are maintaining their level while others decline.",
+    "An hour of football. Decision-making and recovery offer different questions to follow at this stage.",
+    "Sixty minutes in. Keep the match situation in mind when interpreting an attacking risk.",
+    "The game continues into its later stages. Watch changes in execution without assuming fatigue explains every action.",
     "One hour gone. The substitutes are having their impact across the pitch. The tactical adjustments are reshaping the game into something different from its first-half form.",
   ],
   75: [
-    "Final fifteen minutes. The result is approaching its conclusion. The players who are still pressing, still defending with sharpness — they are answering the biggest question of the evening.",
+    "Final fifteen minutes. Follow a closing effort or decision before deciding what still needs another look.",
     "With time running out, the game is being decided by individual moments. The space that is appearing on both flanks is being exploited by whoever has the fastest reading.",
-    "Late in the match. Fatigue is tangible on both sides but a handful of players are still driving the tempo. Those are the ones worth the journey to see.",
-    "Closing stages. The game is in its final phase. The players who've maintained their level — technical quality, pressing intensity, positional discipline — all the way through are standing out.",
+    "Late in the match. A further observation may strengthen an impression or leave another question unresolved.",
+    "Closing stages. Compare the remaining passages with earlier evidence without assuming that a pattern is already established.",
   ],
 };
 
@@ -469,6 +469,7 @@ export function populateFullObservationPhases(
     ...player,
     naturalRole: player.naturalRole ?? playerProfiles?.[player.playerId]?.naturalRole,
   }));
+  const performanceOffsets = sampleSessionPerformance(rng, contextualPlayers, playerProfiles);
 
   const populatedPhases: SessionPhase[] = session.phases.map((phase) => {
     // 1. Generate player moments for this phase.
@@ -482,6 +483,7 @@ export function populateFullObservationPhases(
       playerProfiles,
       session.situation,
       session.opponentContext,
+      performanceOffsets,
     );
 
     // 2. Generate a narrative description for this phase.
@@ -524,6 +526,7 @@ export function populateFullObservationPhases(
     ...session,
     phases: populatedPhases,
     players: contextualPlayers,
+    performanceOffsets,
     venueAtmosphere: atmosphere,
     situation,
     questionOptions: targetPlayer

@@ -26,14 +26,20 @@ export async function dismissCareerMomentOverlays(
 ): Promise<void> {
   for (let index = 0; index < maxAcknowledgements; index++) {
     const overlay = page.getByTestId("career-moment-overlay");
-    if (!(await overlay.isVisible({ timeout: 500 }).catch(() => false))) return;
+    // A consequence can mount one frame after a summary closes. Wait for its
+    // actual UI briefly rather than treating an immediate absence as settled.
+    const appeared = await overlay.waitFor({ state: "visible", timeout: 500 })
+      .then(() => true).catch(() => false);
+    if (!appeared) return;
     await overlay.getByRole("button", { name: "Continue", exact: true }).click();
     await page.waitForTimeout(100);
   }
 
-  throw new Error(
-    `Career moment queue did not drain after ${maxAcknowledgements} acknowledgements`,
-  );
+  if (await page.getByTestId("career-moment-overlay").isVisible()) {
+    throw new Error(
+      `Career moment queue did not drain after ${maxAcknowledgements} acknowledgements`,
+    );
+  }
 }
 
 export class GamePage {
@@ -67,12 +73,12 @@ export class GamePage {
   }
 
   private async resolveWeekSimulationInteraction(): Promise<boolean> {
-    const choiceRegion = this.page.getByRole("region", { name: "Day interaction choice" });
+    const choiceRegion = this.page.getByRole("region", { name: "Your call", exact: true });
     if (!(await choiceRegion.isVisible({ timeout: 1_000 }).catch(() => false))) {
       return true;
     }
 
-    const selectedChoice = choiceRegion.getByText(/^Selected:/);
+    const selectedChoice = choiceRegion.getByText(/^Approach locked:/);
     if (await selectedChoice.isVisible({ timeout: 250 }).catch(() => false)) {
       return true;
     }
@@ -346,9 +352,16 @@ export class GamePage {
       await emptyDayAdvance.click();
     }
 
+    // Opening-week and user-enabled confirmations follow the empty-day guard.
+    // Exercise the actual confirmation instead of bypassing it through state.
+    const confirmation = this.page.getByRole("dialog", { name: "Advance this week?" });
+    if (await confirmation.isVisible()) {
+      await confirmation.getByRole("button", { name: "Advance week", exact: true }).click();
+    }
+
     await this.waitForScreen("weekSimulation", 10_000);
 
-    const settlementDeadline = Date.now() + 30_000;
+    let settlementDeadline = Date.now() + 30_000;
     while (Date.now() < settlementDeadline) {
       // Milestones can replace the final simulation controls with a week-summary
       // and celebration stack. These are acknowledgement dialogs, not gameplay
@@ -369,9 +382,13 @@ export class GamePage {
           continue;
         }
         if (launchResult === "clicked") {
+          const liveSessionStartedAt = Date.now();
           await this.waitForScreen("observation", 10_000);
           await this.completeObservationViaUI();
           await this.waitForScreen("weekSimulation", 10_000);
+          // Watching and reflecting are player activity, not stalled weekly
+          // settlement. Keep their time outside this bounded settlement wait.
+          settlementDeadline += Date.now() - liveSessionStartedAt;
           continue;
         }
       }
@@ -418,6 +435,7 @@ export class GamePage {
     // turn, then clear it so the caller receives an actually interactive screen.
     await this.page.waitForTimeout(250);
     await this.dismissBlockingDialogs();
+    await dismissCareerMomentOverlays(this.page, 5);
 
     const finalScreen = await this.getCurrentScreen();
     if (finalScreen !== "calendar") {
@@ -499,20 +517,36 @@ export class GamePage {
       state: "visible",
       timeout: 15_000,
     });
+    const fileTheName = this.page.getByRole("button", { name: /^File the name$/ });
+    if (await fileTheName.isVisible({ timeout: 500 }).catch(() => false)) {
+      if (shouldSubmit) await fileTheName.click();
+      return;
+    }
     const fileInitialAssessment = this.page.getByRole("button", { name: /^File initial assessment$/ });
     if (await fileInitialAssessment.isVisible({ timeout: 500 }).catch(() => false)) {
+      await this.page.getByRole("button", { name: /^Evidence\b/ }).click();
       await this.page.getByRole("group", { name: "Saved evidence" }).getByRole("radio").first().locator("..").click();
+      await this.page.getByRole("button", { name: /^Suggests\b/ }).click();
       await this.page.getByRole("group", { name: "What it suggests" }).getByRole("radio").first().locator("..").click();
+      await this.page.getByRole("button", { name: /^Untested\b/ }).click();
       await this.page.getByRole("group", { name: "What remains untested" }).getByRole("radio").first().locator("..").click();
+      await this.page.getByRole("button", { name: /^Next action\b/ }).click();
       await this.page.getByRole("group", { name: "Next test" }).getByRole("radio").first().locator("..").click();
       const recommendationName = conviction === "note"
-        ? /^Monitor\b/
+        ? /^Keep private\b/i
         : conviction === "recommend"
-          ? /^Invite for trial\b/i
-          : /^Offer academy place\b/i;
+          ? /^Test in harder context\b/i
+          : /^Escalate now\b/i;
       await this.page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: recommendationName }).locator("..").click();
+      await this.page.getByRole("button", { name: /^Next action\b/ }).click();
+      await expect(this.page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: recommendationName })).toBeChecked();
+      await this.page.getByRole("button", { name: /^Confidence\b/ }).click();
       const confidenceName = conviction === "note" ? /^Tentative\b/i : conviction === "recommend" ? /^Working\b/i : /^Supported\b/i;
-      await this.page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: confidenceName }).locator("..").click();
+      const confidence = this.page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: confidenceName });
+      await confidence.locator("..").click();
+      // The shared accordion keeps one native radio group per decision.
+      // Verify the real checked input, not only selected card styling.
+      await expect(confidence).toBeChecked();
       if (shouldSubmit) await fileInitialAssessment.click();
       return;
     }
@@ -620,23 +654,9 @@ export class GamePage {
     await beginObservation.waitFor({ state: "visible", timeout: 10_000 });
     await beginObservation.click();
 
-    const focusButton = this.page.locator('button[aria-label^="Add focus to "]').first();
-    if (await focusButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await focusButton.click();
-      const technicalLens = this.page
-        .getByRole("button", { name: /^Use technical lens for /i })
-        .first();
-      if (await technicalLens.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        await technicalLens.click();
-      } else {
-        await this.page.keyboard.press("Escape");
-      }
-    }
-
-    const flagMoment = this.page.getByRole("button", { name: /^Flag this moment$/ }).first();
-    if (await flagMoment.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await flagMoment.click();
-      await this.page.getByRole("button", { name: /^Promising$/ }).click();
+    const technicalLens = this.page.getByRole("button", { name: /^Use technical lens for / }).first();
+    if (await technicalLens.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await technicalLens.click();
     }
 
     let reachedReflection = false;
@@ -645,6 +665,13 @@ export class GamePage {
       // phase transition. Keep gameplay assertions independent from tutorial
       // pointer interception at every interaction boundary.
       await dismissTutorials(this.page);
+      // The authored standout appears after advancing. Flag it in the phase
+      // where it is visible before trying a button gated on that decision.
+      const flagMoment = this.page.getByRole("button", { name: /^Flag (standout|this) moment$/ }).first();
+      if (await flagMoment.isVisible({ timeout: 300 }).catch(() => false)) {
+        await flagMoment.click();
+        await this.page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').first().click();
+      }
       const halftimeApproach = this.page.getByRole("button", { name: /^Confirm the first read\b/ });
       if (
         await halftimeApproach.isVisible({ timeout: 300 }).catch(() => false)
@@ -662,14 +689,14 @@ export class GamePage {
       ) {
         await strategicChoice.click();
       }
-      const reflection = this.page.getByRole("button", { name: /^Go to Reflection$/ });
+      const reflection = this.page.getByRole("button", { name: /^(Go to Reflection|Reflect on the watch|Reflect)$/i });
       if (await reflection.isVisible({ timeout: 500 }).catch(() => false)) {
         await reflection.click();
         reachedReflection = true;
         break;
       }
 
-      const nextPhase = this.page.getByRole("button", { name: /^Next Phase$/ });
+      const nextPhase = this.page.getByRole("button", { name: /^Next Phase$/i });
       if (await nextPhase.isVisible({ timeout: 500 }).catch(() => false)) {
         await nextPhase.click();
         await this.page.waitForTimeout(100);

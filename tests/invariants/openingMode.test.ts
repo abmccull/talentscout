@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveCareerOpeningMode } from "@/engine/youth/openingMode";
+import { resolveCareerOpeningMode, shouldStartYouthGuidedHour } from "@/engine/youth/openingMode";
 
 describe("career opening mode", () => {
   it("teaches a new youth player once and gives veterans a dynamic prologue", () => {
@@ -47,5 +47,13 @@ describe("career opening mode", () => {
       tutorialCompleted: false,
       tutorialsDismissed: false,
     })).toBe("desk");
+  });
+
+  it("starts the mentor hour only when the teaching case is on and the player asked for it", () => {
+    expect(shouldStartYouthGuidedHour({ openingMode: "tutorial" })).toBe(true);
+    expect(shouldStartYouthGuidedHour({ openingMode: "tutorial", guideFirstHour: true })).toBe(true);
+    expect(shouldStartYouthGuidedHour({ openingMode: "tutorial", guideFirstHour: false })).toBe(false);
+    expect(shouldStartYouthGuidedHour({ openingMode: "desk", guideFirstHour: true })).toBe(false);
+    expect(shouldStartYouthGuidedHour({ openingMode: "dynamic", guideFirstHour: true })).toBe(false);
   });
 });

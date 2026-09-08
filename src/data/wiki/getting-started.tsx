@@ -22,51 +22,43 @@ export const gettingStartedArticles: WikiArticle[] = [
     category: "getting-started",
     order: 0,
     summary:
-      "Week-by-week rhythm: plan your calendar, observe players, file reports, and build your name.",
+      "The week is a case: spend time, see something, file a judgment, and live with what follows.",
     searchText:
-      "TalentScout runs on a week-by-week calendar. Plan scarce time, gather evidence in different contexts, form a judgment, and file a distinct scouting case. Deliver the recommendation, then live with club decisions and long-term player outcomes. Revisions require new evidence and do not inflate your body of work.",
+      "TalentScout is a week-by-week scout career. Spend scarce time on a case, see the player in a real context, file a judgment the world can hold you to, then live with money, reputation, and the kid's career. Youth Scout uses Desk, Planner, Prospects, Reports, World, and Career. Revisions need new evidence.",
     content: (
       <SectionBlock>
         <Para>
-          TalentScout runs on a week-by-week calendar. Each week you plan your
-          schedule, advance time, and watch the results unfold. The weekly
-          rhythm is:
+          Every week is the same four verbs. Youth Scout is the first mode;
+          later modes ask a different question with the same rooms.
         </Para>
         <NumberedList
           items={[
             <>
-              <span className="font-medium text-zinc-200">
-                Schedule activities
-              </span>{" "}
-              — fill your 7 day-slots with matches, video sessions, network
-              meetings, study, and more.
+              <span className="font-medium text-zinc-200">Spend time</span>{" "}
+              — Planner is a scarce week. Book the second look, the school
+              match, or the parent meeting. Empty days create no evidence.
             </>,
             <>
-              <span className="font-medium text-zinc-200">Attend matches</span>{" "}
-              — observe players live during match phases, applying focus lenses
-              to gather attribute readings.
+              <span className="font-medium text-zinc-200">See something</span>{" "}
+              — Watch uses phases, focus, lenses, flags, and reflection. One
+              look is a lead. A new context tests the hypothesis.
             </>,
             <>
-              <span className="font-medium text-zinc-200">
-                Observe players
-              </span>{" "}
-              — each observation builds a confidence interval around a
-              player&apos;s true attributes.
+              <span className="font-medium text-zinc-200">File a judgment</span>{" "}
+              — The report is the call the club, family, and rivals can hold
+              you to. Stars on a card are not the file.
             </>,
             <>
-              <span className="font-medium text-zinc-200">Write reports</span>{" "}
-              — compile your observations into a formal report with a conviction
-              level.
-            </>,
-            <>
-              <span className="font-medium text-zinc-200">
-                Submit and live with the call
-              </span>{" "}
-              — open a distinct evidence-backed case, deliver it to a decision-maker,
-              and build lasting reputation from what happens next.
+              <span className="font-medium text-zinc-200">Live with it</span>{" "}
+              — Placement, money on that file, reputation, and alumni years
+              later all come from the names you stood behind.
             </>,
           ]}
         />
+        <Para>
+          Desk keeps the open case in front of you. Prospects is the case
+          list. World and Career stay on the same names after week one.
+        </Para>
       </SectionBlock>
     ),
     related: [

@@ -408,6 +408,16 @@ async function runWorker(seedIndex, suffix = "run") {
             SOAK_OUTPUT: temporaryWorkerOutput,
             SOAK_WORKER_MODE: "true",
             SOAK_DIAGNOSTIC_ONLY: "false",
+            SOAK_BALANCE_DIAGNOSTICS_ONLY: "false",
+            SOAK_CANDIDATE_SHA: currentHeadSha,
+            SOAK_CANDIDATE_TREE_SHA: currentTreeSha,
+            SOAK_SOURCE_TREE_CLEAN: String(sourceTreeClean),
+            // One declared reference seed supplies authentic S1/S10/S30 saves.
+            // Every seed still records portrait demand and continuity diagnostics.
+            // Replay has its own path and cannot overwrite the accepted inputs.
+            SOAK_STORAGE_CHECKPOINT_DIRECTORY: seedIndex === seedStart
+              ? resolve(workerDirectory, "storage-inputs", currentHeadSha, `seed-${seedIndex}-${suffix}`)
+              : "",
           },
           stdio: ["ignore", "pipe", "pipe"],
         },

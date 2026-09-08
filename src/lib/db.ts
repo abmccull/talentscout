@@ -1,3 +1,4 @@
+import { migratePlayerChronology } from "@/lib/migrations/playerChronology";
 /**
  * IndexedDB persistence layer using Dexie.js.
  *
@@ -1730,7 +1731,7 @@ export function migrateSaveState(raw: unknown): GameState {
     state.finances = reconcileFinancialLedger(state.finances);
   }
 
-  const migrated = applyGameplaySaveMigrations(state);
+  const migrated = applyGameplaySaveMigrations(migratePlayerChronology(state));
   migrated.dashboardState = cleanupDashboardState(
     migrateDashboardState(migrated.dashboardState),
   );

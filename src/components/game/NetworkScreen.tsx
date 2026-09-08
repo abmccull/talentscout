@@ -39,7 +39,6 @@ import {
 } from "@/engine/network/contacts";
 import { gameWeeksBetween, isGameDateAtOrAfter } from "@/engine/core/gameDate";
 import { RNG } from "@/engine/rng";
-import { ScreenBackground } from "@/components/ui/screen-background";
 import {
   buildContactRelationshipPosition,
   buildStoryThread,
@@ -55,23 +54,23 @@ const CONTACT_TYPE_CONFIG: Record<
   ContactType,
   { label: string; icon: React.ElementType; color: string }
 > = {
-  agent: { label: "Agent", icon: UserCheck, color: "text-blue-400" },
-  scout: { label: "Scout", icon: Eye, color: "text-emerald-400" },
-  clubStaff: { label: "Club Staff", icon: Users, color: "text-purple-400" },
-  journalist: { label: "Journalist", icon: Newspaper, color: "text-amber-400" },
-  academyCoach: { label: "Academy Coach", icon: GraduationCap, color: "text-pink-400" },
-  sportingDirector: { label: "Sporting Director", icon: Users, color: "text-indigo-400" },
-  grassrootsOrganizer: { label: "Grassroots Organizer", icon: Users, color: "text-green-400" },
-  schoolCoach: { label: "School Coach", icon: GraduationCap, color: "text-lime-400" },
-  youthAgent: { label: "Youth Agent", icon: UserCheck, color: "text-cyan-400" },
-  academyDirector: { label: "Academy Director", icon: GraduationCap, color: "text-rose-400" },
-  localScout: { label: "Local Scout", icon: Eye, color: "text-teal-400" },
+  agent: { label: "Agent", icon: UserCheck, color: "text-[var(--muted-foreground)]" },
+  scout: { label: "Scout", icon: Eye, color: "text-[var(--muted-foreground)]" },
+  clubStaff: { label: "Club Staff", icon: Users, color: "text-[var(--muted-foreground)]" },
+  journalist: { label: "Journalist", icon: Newspaper, color: "text-[var(--muted-foreground)]" },
+  academyCoach: { label: "Academy Coach", icon: GraduationCap, color: "text-[var(--muted-foreground)]" },
+  sportingDirector: { label: "Sporting Director", icon: Users, color: "text-[var(--muted-foreground)]" },
+  grassrootsOrganizer: { label: "Grassroots Organizer", icon: Users, color: "text-[var(--muted-foreground)]" },
+  schoolCoach: { label: "School Coach", icon: GraduationCap, color: "text-[var(--muted-foreground)]" },
+  youthAgent: { label: "Youth Agent", icon: UserCheck, color: "text-[var(--muted-foreground)]" },
+  academyDirector: { label: "Academy Director", icon: GraduationCap, color: "text-[var(--muted-foreground)]" },
+  localScout: { label: "Local Scout", icon: Eye, color: "text-[var(--muted-foreground)]" },
 };
 
 /** Color classes for specialization bonus badges. */
 const SPECIALIZATION_BADGE_COLORS: Partial<Record<ContactType, string>> = {
   agent: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  clubStaff: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  clubStaff: "bg-[var(--surface)] text-[var(--signal-focus)] border-[var(--border)]",
   journalist: "bg-amber-500/20 text-amber-300 border-amber-500/30",
   scout: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
 };
@@ -107,9 +106,18 @@ function trustLabel(trust: number): string {
 
 function betrayalRiskLabel(risk: number): { label: string; color: string } {
   if (risk >= 0.3) return { label: "High Risk", color: "text-red-400" };
-  if (risk >= 0.15) return { label: "Moderate Risk", color: "text-amber-400" };
+  if (risk >= 0.15) return { label: "Moderate Risk", color: "text-[var(--muted-foreground)]" };
   if (risk >= 0.05) return { label: "Low Risk", color: "text-zinc-400" };
-  return { label: "Safe", color: "text-emerald-400" };
+  return { label: "Safe", color: "text-[var(--muted-foreground)]" };
+}
+
+function relationshipStanceTone(stance: RelationshipPosition["stance"]): string {
+  switch (stance) {
+    case "adversarial": return "border-[var(--border)] bg-transparent text-[var(--signal-danger)]";
+    case "strained": return "border-amber-400/35 bg-amber-500/10 text-amber-200";
+    case "conditional": return "border-zinc-400/30 text-zinc-200";
+    default: return "border-emerald-400/30 text-emerald-200";
+  }
 }
 
 function formatGameDate(date: GameDate): string {
@@ -208,7 +216,7 @@ function ContactDetail({ contact, accessAgreement, position, identity, knownPlay
   const isRelationshipFading = contact.relationship < 30 && !isDormant;
 
   return (
-    <Card className={isDormant ? "border-red-500/20" : "border-emerald-500/20"}>
+    <Card className={isDormant || position.stance === "adversarial" ? "border-red-400/30" : "border-[var(--border)]"}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
@@ -226,7 +234,7 @@ function ContactDetail({ contact, accessAgreement, position, identity, knownPlay
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2" aria-label="Relationship position">
-          <Badge variant="outline" className="border-emerald-500/25 text-[10px] capitalize text-emerald-200">
+          <Badge variant="outline" className={`text-xs capitalize ${relationshipStanceTone(position.stance)}`}>
             {position.stance.replace(/([a-z])([A-Z])/g, "$1 $2")}
           </Badge>
           {position.leverageScore > 0 && (
@@ -346,7 +354,7 @@ function ContactDetail({ contact, accessAgreement, position, identity, knownPlay
           <Progress
             value={contact.reliability}
             max={100}
-            indicatorClassName="bg-purple-500"
+            indicatorClassName="bg-[var(--signal-focus)]"
           />
         </div>
 
@@ -628,85 +636,6 @@ interface ContactThreadPreview {
   whyNow: string;
 }
 
-function ActiveThreadRail({
-  previews,
-  selectedContactId,
-  onSelect,
-}: {
-  previews: ContactThreadPreview[];
-  selectedContactId: string | null;
-  onSelect: (contactId: string) => void;
-}) {
-  if (previews.length === 0) return null;
-
-  return (
-    <Card className="border-emerald-500/20 bg-zinc-950/85">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <MessageCircle size={14} className="text-emerald-300" aria-hidden="true" />
-          Active threads
-        </CardTitle>
-        <p className="text-xs leading-5 text-zinc-400">
-          The relationships most likely to change your access, leverage, or risk this week.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {previews.map((preview) => {
-          const latest = preview.thread.entries[0];
-          const isSelected = selectedContactId === preview.contact.id;
-          return (
-            <button
-              key={preview.contact.id}
-              type="button"
-              onClick={() => onSelect(preview.contact.id)}
-              className={`w-full rounded-xl border p-3 text-left transition ${
-                isSelected
-                  ? "border-emerald-400/40 bg-emerald-500/10"
-                  : "border-white/10 bg-black/20 hover:border-zinc-500"
-              }`}
-              aria-pressed={isSelected}
-              aria-label={`Open thread with ${preview.contact.name}`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-white">{preview.contact.name}</p>
-                  <p className="text-[11px] text-zinc-300">
-                    {CONTACT_TYPE_CONFIG[preview.contact.type].label} at {preview.contact.organization}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant="outline" className="border-emerald-500/25 text-[10px] capitalize text-emerald-200">
-                    {preview.position.stance.replace(/([a-z])([A-Z])/g, "$1 $2")}
-                  </Badge>
-                  {preview.accessAgreement && (
-                    <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-200">
-                      Early access
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-zinc-300">{preview.whyNow}</p>
-              {latest && (
-                <div className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-white/10 bg-zinc-900/70 px-2.5 py-2">
-                  <div className="min-w-0">
-                    <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${storyEntryTone(latest)}`}>
-                      {storyEntryLabel(latest)}
-                    </p>
-                    <p className="mt-1 text-[11px] leading-5 text-zinc-400">{latest.title}</p>
-                  </div>
-                  <span className="shrink-0 text-[10px] font-mono text-zinc-300">
-                    S{latest.season} W{latest.week}
-                  </span>
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
-}
-
 function NetworkPressurePanel({
   contacts,
   previews,
@@ -720,47 +649,12 @@ function NetworkPressurePanel({
   const dormantContacts = contacts.filter((contact) => contact.dormant === true).length;
 
   return (
-    <Card className="border-white/10 bg-black/20">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Shield size={14} className="text-blue-300" aria-hidden="true" />
-          Network pressure
-        </CardTitle>
-        <p className="text-xs leading-5 text-zinc-400">
-          Network quality matters as much as network size.
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-zinc-950/80 p-3">
-          <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-300">Exclusive sources</p>
-          <p className="mt-1 text-2xl font-semibold text-white">{exclusiveSources}</p>
-          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
-            Sources currently protecting access for you.
-          </p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-zinc-950/80 p-3">
-          <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-300">Leverage live</p>
-          <p className="mt-1 text-2xl font-semibold text-white">{leveragePositions}</p>
-          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
-            Threads carrying active obligations or reciprocity.
-          </p>
-        </div>
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-          <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">Threatened lines</p>
-          <p className="mt-1 text-2xl font-semibold text-white">{pressureThreads}</p>
-          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
-            Relationships likely to create conflict, scrutiny, or betrayal pressure.
-          </p>
-        </div>
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
-          <p className="text-[10px] uppercase tracking-[0.16em] text-red-200">Dormant lines</p>
-          <p className="mt-1 text-2xl font-semibold text-white">{dormantContacts}</p>
-          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
-            Contacts no longer giving useful access unless you repair them.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <dl className="flex flex-wrap gap-x-6 gap-y-3 border-y border-[var(--border)] py-4 text-sm" aria-label="Network overview">
+      <div className="flex items-baseline gap-2"><dt className="text-zinc-300">Exclusive sources</dt><dd className="font-semibold text-white">{exclusiveSources}</dd></div>
+      <div className="flex items-baseline gap-2"><dt className="text-zinc-300">Open leverage</dt><dd className="font-semibold text-white">{leveragePositions}</dd></div>
+      <div className="flex items-baseline gap-2"><dt className="text-zinc-300">Under pressure</dt><dd className={pressureThreads > 0 ? "font-semibold text-amber-200" : "font-semibold text-white"}>{pressureThreads}</dd></div>
+      <div className="flex items-baseline gap-2"><dt className="text-zinc-300">Dormant contacts</dt><dd className={dormantContacts > 0 ? "font-semibold text-red-200" : "font-semibold text-white"}>{dormantContacts}</dd></div>
+    </dl>
   );
 }
 
@@ -1047,12 +941,12 @@ export function NetworkScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6">
-        <ScreenBackground src="/images/backgrounds/network-lounge.png" opacity={0.82} />
+      <div className="relative game-workspace min-h-full">
         <div className="relative z-10">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">Network</h1>
-          <div className="flex items-center gap-4 text-sm text-zinc-400">
+          <p className="dossier-eyebrow mb-2">People &amp; access</p>
+          <h1 className="dossier-title mb-2">Your network</h1>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-300">
             <span>
               {contacts.length} contact{contacts.length !== 1 ? "s" : ""} in your network
             </span>
@@ -1075,26 +969,16 @@ export function NetworkScreen() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
-              <div data-tutorial-id="network-intel">
-                <ActiveThreadRail
-                  previews={contactThreadPreviews.slice(0, 4)}
-                  selectedContactId={selectedContactId}
-                  onSelect={setSelectedContactId}
-                />
-              </div>
-              <NetworkPressurePanel contacts={contacts} previews={contactThreadPreviews} />
-            </div>
-
-            {/* Gossip Feed — full-width intelligence summary */}
-            <div data-tutorial-id="network-intel">
-              <GossipFeedPanel contacts={contacts} currentDate={currentDate} />
-            </div>
+            <NetworkPressurePanel contacts={contacts} previews={contactThreadPreviews} />
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               {/* Contact list */}
               <div className={selectedContact ? "lg:col-span-2" : "lg:col-span-3"} data-tutorial-id="network-contacts">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="text-lg font-medium">Contacts</h2>
+                  <p className="text-sm text-zinc-300">Choose a source to review intelligence or arrange a meeting.</p>
+                </div>
+                <div className="divide-y divide-[var(--border)] border-y border-[var(--border)] bg-[var(--surface)]">
                   {contacts.map((contact) => {
                     const config = CONTACT_TYPE_CONFIG[contact.type];
                     const Icon = config.icon;
@@ -1120,22 +1004,23 @@ export function NetworkScreen() {
                     return (
                       <button
                         key={contact.id}
+                        type="button"
                         ref={(node) => {
                           contactCardRefs.current[contact.id] = node;
                         }}
                         onClick={() => setSelectedContactId(isSelected ? null : contact.id)}
                         aria-pressed={isSelected}
                         aria-label={`View contact: ${contact.name}`}
-                        className={`rounded-lg border p-4 text-left transition ${
+                        className={`w-full p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] sm:p-5 ${
                           isSelected
-                            ? "border-emerald-500/50 bg-emerald-500/5"
-                            : "border-[#27272a] bg-[#141414] hover:border-zinc-500"
+                            ? "bg-[var(--surface-selected)] shadow-[inset_3px_0_0_var(--accent)]"
+                            : "hover:bg-white/5"
                         }`}
                       >
-                        <div className="mb-3 flex items-center justify-between">
+                        <div className="mb-2 flex items-start justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <Icon size={16} className={config.color} aria-hidden="true" />
-                            <span className="font-medium text-white">{contact.name}</span>
+                            <span className="text-lg font-medium leading-snug text-white">{contact.name}</span>
                           </div>
                           <div className="flex items-center gap-1">
                             {bRisk >= 0.15 && (
@@ -1159,12 +1044,10 @@ export function NetworkScreen() {
                             />
                           </div>
                         </div>
-                        <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
-                          <Badge variant="outline" className="text-[10px]">
-                            {config.label}
-                          </Badge>
+                        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-zinc-300">
+                          <span className="text-zinc-200">{config.label}</span>
                           {threadPreview && (
-                            <Badge variant="outline" className="border-emerald-500/20 text-[10px] capitalize text-emerald-200">
+                            <Badge variant="outline" className={`text-xs capitalize ${relationshipStanceTone(threadPreview.position.stance)}`}>
                               {threadPreview.position.stance.replace(/([a-z])([A-Z])/g, "$1 $2")}
                             </Badge>
                           )}
@@ -1174,41 +1057,28 @@ export function NetworkScreen() {
                           )}
                         </div>
                         {threadPreview && (
-                          <p className="mb-3 text-[11px] leading-5 text-zinc-300">
+                          <p className="mb-3 text-sm leading-relaxed text-zinc-300">
                             {threadPreview.whyNow}
                           </p>
                         )}
 
-                        {/* Relationship bar */}
-                        <div className="mb-2">
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="text-zinc-300">Relationship</span>
-                            <span className="text-white">{contact.relationship}/100</span>
+                        {threadPreview?.thread.entries[0] && (
+                          <p className="mb-3 text-xs leading-relaxed text-zinc-300">
+                            <span className={storyEntryTone(threadPreview.thread.entries[0])}>{storyEntryLabel(threadPreview.thread.entries[0])}</span>
+                            {" · "}{threadPreview.thread.entries[0].title}
+                            {" · S"}{threadPreview.thread.entries[0].season}{" W"}{threadPreview.thread.entries[0].week}
+                          </p>
+                        )}
+                        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                          <div className="flex items-baseline gap-2">
+                            <dt className="text-zinc-300">Relationship</dt>
+                            <dd className="text-white">{relationshipLabel(contact.relationship)} <span className="ml-1 text-zinc-300">{contact.relationship}/100</span></dd>
                           </div>
-                          <Progress
-                            value={contact.relationship}
-                            max={100}
-                            className="h-1.5"
-                            indicatorClassName={relationshipColor(contact.relationship)}
-                          />
-                        </div>
-
-                        {/* Trust bar */}
-                        <div>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="text-zinc-300 flex items-center gap-1">
-                              <Shield size={9} aria-hidden="true" />
-                              Trust
-                            </span>
-                            <span className="text-white">{trust}/100</span>
+                          <div className="flex items-baseline gap-2">
+                            <dt className="text-zinc-300">Trust</dt>
+                            <dd className="text-white">{trustLabel(trust)} <span className="ml-1 text-zinc-300">{trust}/100</span></dd>
                           </div>
-                          <Progress
-                            value={trust}
-                            max={100}
-                            className="h-1.5"
-                            indicatorClassName={trustColor(trust)}
-                          />
-                        </div>
+                        </dl>
 
                         {/* Status indicators */}
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1234,7 +1104,7 @@ export function NetworkScreen() {
                             </span>
                           )}
                           {gossipCount > 0 && (
-                            <span className="flex items-center gap-1 text-xs text-purple-400">
+                            <span className="flex items-center gap-1 text-xs text-[var(--signal-focus)]">
                               <MessageCircle size={11} aria-hidden="true" />
                               {gossipCount} gossip
                             </span>
@@ -1259,7 +1129,7 @@ export function NetworkScreen() {
 
               {/* Detail panel */}
               {selectedContact && (
-                <div data-tutorial-id="network-meet">
+                <div className="lg:sticky lg:top-6 lg:self-start" data-tutorial-id="network-meet">
                   <ContactDetail
                     contact={selectedContact}
                     accessAgreement={activeAccessByContact.get(selectedContact.id)}
@@ -1275,6 +1145,10 @@ export function NetworkScreen() {
                 </div>
               )}
             </div>
+
+            <section className="dossier-section" data-tutorial-id="network-intel" aria-label="Intelligence from your contacts">
+              <GossipFeedPanel contacts={contacts} currentDate={currentDate} />
+            </section>
           </div>
         )}
         </div>

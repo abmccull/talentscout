@@ -72,7 +72,7 @@ function ScopeNotice({
   body: string;
 }) {
   return (
-    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+    <div className="border-l-2 border-[var(--signal-moment)] py-2 pl-4">
       <p className="text-sm font-semibold text-amber-200">{title}</p>
       <p className="mt-1 text-xs leading-relaxed text-zinc-300">{body}</p>
     </div>
@@ -219,15 +219,15 @@ export function WikiScreen() {
           </div>
         )}
 
-        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto bg-zinc-950">
+        <div ref={mainRef} className="min-w-0 flex-1 overflow-y-auto bg-[var(--background)]">
           <div className="p-4 sm:p-6">
             <div className="mb-4 flex items-center gap-3 lg:hidden">
               <button
                 onClick={() => setMobileDrawerOpen(true)}
-                className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 transition hover:bg-zinc-800"
+                className="flex min-h-11 items-center justify-center gap-2 rounded-sm border border-zinc-800 px-3 text-sm text-zinc-300 transition hover:bg-zinc-800"
                 aria-label="Open handbook navigation"
               >
-                <Menu size={16} />
+                <Menu size={16} aria-hidden="true" /><span>Topics</span>
               </button>
               <div className="relative flex-1">
                 <input
@@ -291,7 +291,7 @@ export function WikiScreen() {
               />
             )}
           </div>
-        </main>
+        </div>
       </div>
     </GameLayout>
   );
@@ -315,17 +315,14 @@ function IndexPage({
           <Book size={18} className="text-emerald-400" aria-hidden="true" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-zinc-100">Scout Handbook</h1>
+          <h1 className="font-editorial text-3xl text-zinc-100">Scout Handbook</h1>
           <p className="text-sm text-zinc-400">
             Youth Scout Early Access reference for the systems you can use right now.
           </p>
         </div>
       </div>
 
-      <ScopeNotice
-        title="Build-aware handbook"
-        body="This view covers the complete Youth Scout career, including reports, world travel, relationships, equipment, training, agency growth, and regional offices. Other scouting specializations, first-team match control, and transfer negotiations remain held back."
-      />
+      <details className="border-b border-[var(--border)] pb-3"><summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-300">What this handbook covers</summary><p className="text-sm leading-6 text-zinc-400">Youth scouting, reports, travel, relationships, equipment, training and agency growth. Other specializations, first-team match control and transfer negotiations are planned for later.</p></details>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {categories.map((category) => {
@@ -335,7 +332,7 @@ function IndexPage({
             <button
               key={category.slug}
               onClick={() => onNavigate({ mode: "category", category: category.slug })}
-              className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 text-left transition hover:border-zinc-700 hover:bg-zinc-800/50"
+              className="rounded-sm border-b border-zinc-800 bg-[var(--surface)] p-4 text-left transition hover:border-zinc-700 hover:bg-zinc-800/50"
             >
               <div className="mb-2 flex items-center gap-2">
                 <CategoryIcon
@@ -350,7 +347,7 @@ function IndexPage({
               <p className="mb-2 text-xs leading-relaxed text-zinc-400">
                 {category.description}
               </p>
-              <p className="text-[11px] text-zinc-500">
+              <p className="text-xs text-[var(--muted-foreground)]">
                 {articleCount} article{articleCount === 1 ? "" : "s"}
               </p>
             </button>
@@ -360,19 +357,19 @@ function IndexPage({
 
       {comingLaterCategories.length > 0 && (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
             Coming later
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {comingLaterCategories.map((category) => (
               <div
                 key={category.slug}
-                className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3"
+                className="rounded-xl border border-zinc-800 bg-[var(--background)]/50 p-3"
               >
                 <p className="text-sm font-semibold text-zinc-200">
                   {category.title}
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
                   {category.description}
                 </p>
               </div>

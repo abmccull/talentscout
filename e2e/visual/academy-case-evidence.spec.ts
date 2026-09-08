@@ -176,7 +176,11 @@ test.describe("Academy case rendered evidence", () => {
 
       await gamePage.setScreen("dashboard");
       await expect(gamePage.page.getByRole("heading", { name: "Scouting Desk" })).toBeVisible();
-      await expect(gamePage.page.getByText(/this brief weights/i).first()).toBeVisible();
+      const caseProgression = gamePage.page.getByTestId("case-progression-disclosure");
+      if (viewport.name === "mobile") {
+        await caseProgression.locator("summary").click();
+      }
+      await expect(caseProgression.getByText(/this brief weights/i)).toBeVisible();
       await dismissAchievements(gamePage);
       await capture(gamePage, viewport.name, "desk");
       await capture(gamePage, viewport.name, "desk", true);
@@ -201,8 +205,25 @@ test.describe("Academy case rendered evidence", () => {
       await capture(gamePage, viewport.name, "report-writer");
       await capture(gamePage, viewport.name, "report-writer", true);
       await assertRenderedIntegrity(gamePage, `${viewport.name} recruitment report writer`);
+      if (viewport.name === "mobile") {
+        const judgmentDisclosure = gamePage.page
+          .getByTestId("report-judgment-potential");
+        await judgmentDisclosure.locator("summary").click();
+        const developmentPotential = judgmentDisclosure.getByRole("group", {
+          name: "Development potential",
+          exact: true,
+        });
+        await expect(
+          developmentPotential.getByRole("radio", { name: "Make a claim", exact: true }),
+        ).toBeVisible();
+      }
     }
 
+    await gamePage.page.setViewportSize({ width: 1440, height: 900 });
+    await expect(gamePage.page.getByRole("group", {
+      name: "Development potential",
+      exact: true,
+    })).toBeVisible();
     await gamePage.submitCurrentReportViaUI("strongRecommend");
     await gamePage.waitForScreen("reportHistory");
     await dismissAchievements(gamePage);

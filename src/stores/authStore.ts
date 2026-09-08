@@ -16,8 +16,7 @@ import { create } from "zustand";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import {
   clearSupabaseAuthSessionStorage,
-  supabase,
-} from "@/lib/supabase";
+} from "@/lib/supabaseConfiguration";
 import {
   BETA_CLOUD_SAVES_ENABLED,
   BETA_CLOUD_SAVES_MESSAGE,
@@ -245,35 +244,41 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Restore persisted cloud-save preference first (synchronous).
     set({ cloudSaveEnabled: readCloudSavePref() });
 
-    // When Supabase is not configured (no env vars), skip auth entirely
-    // so the game works in offline / Steam mode.
-    if (!supabase) {
-      set({ isLoading: false });
-      return;
-    }
+    // Disabled cloud builds return above without downloading its SDK.
+    void import("@/lib/supabase").then(({ supabase }) => {
+      // When Supabase is not configured (no env vars), skip auth entirely
+      // so the game works in offline / Steam mode.
+      if (!supabase) {
+        set({ isLoading: false });
+        return;
+      }
 
-    // 1. Restore any existing session (e.g. from a previous page load).
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      get()._applySession(session);
-      set({ isLoading: false });
+      // 1. Restore any existing session (e.g. from a previous page load).
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        get()._applySession(session);
+        set({ isLoading: false });
+      }).catch(() => {
+        set({ isLoading: false });
+      });
+
+      // 2. Register the real-time auth state listener (once only).
+      if (listenerRegistered) return;
+      listenerRegistered = true;
+
+      supabase.auth.onAuthStateChange(
+        (event: AuthChangeEvent, session: Session | null) => {
+          if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+            get()._applySession(session);
+          } else if (event === "SIGNED_OUT") {
+            get()._applySession(null);
+          }
+          // INITIAL_SESSION is handled by getSession() above; ignore here.
+        },
+      );
     }).catch(() => {
       set({ isLoading: false });
+      console.warn("Cloud authentication could not initialize; local saves remain available.");
     });
-
-    // 2. Register the real-time auth state listener (once only).
-    if (listenerRegistered) return;
-    listenerRegistered = true;
-
-    supabase.auth.onAuthStateChange(
-      (event: AuthChangeEvent, session: Session | null) => {
-        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-          get()._applySession(session);
-        } else if (event === "SIGNED_OUT") {
-          get()._applySession(null);
-        }
-        // INITIAL_SESSION is handled by getSession() above; ignore here.
-      },
-    );
   },
 
   // -------------------------------------------------------------------------
@@ -282,6 +287,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signInWithEmail: async (email, password) => {
     if (!BETA_CLOUD_SAVES_ENABLED) throw new Error(BETA_CLOUD_SAVES_MESSAGE);
+    const { supabase } = await import("@/lib/supabase");
     if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -297,6 +303,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signUpWithEmail: async (email, password) => {
     if (!BETA_CLOUD_SAVES_ENABLED) throw new Error(BETA_CLOUD_SAVES_MESSAGE);
+    const { supabase } = await import("@/lib/supabase");
     if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
@@ -308,6 +315,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signInWithOAuth: async (provider) => {
     if (!BETA_CLOUD_SAVES_ENABLED) throw new Error(BETA_CLOUD_SAVES_MESSAGE);
+    const { supabase } = await import("@/lib/supabase");
     if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signInWithOAuth({ provider });
     if (error) throw new Error(error.message);
@@ -324,6 +332,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       get()._applySession(null);
       return;
     }
+    const { supabase } = await import("@/lib/supabase");
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) throw new Error(error.message);

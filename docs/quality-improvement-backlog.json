@@ -1,0 +1,1169 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-09-04T19:47:40.673739-06:00",
+  "deliverable": "Implementation and evidence plan; no new product score awarded",
+  "scope": "Offline Youth Scout Early Access; combined visual checkout; local candidate, not a published release",
+  "baseline": {
+    "assessedRuntime": "ff3b1191abd870e43700811e4fad9ace6e3df727e9f2e2bec9ce1f97a56edfe4",
+    "productScoreUnrounded": 84.71875,
+    "productScoreRounded": 85,
+    "designScoreUnrounded": 81.5625,
+    "designScoreRounded": 82,
+    "categories": [
+      {
+        "name": "Gameplay correctness and depth",
+        "weight": 25,
+        "rating": 8.5,
+        "deduction": "Strong exercised scout loop and economic safeguards; long-run balance, repetition and human engagement on the combined build are not fully established.",
+        "earnedPoints": 21.25,
+        "deductedPoints": 3.75
+      },
+      {
+        "name": "Persistence and recovery",
+        "weight": 25,
+        "rating": 9.0,
+        "deduction": "Adversarial save tests and exact normal-Electron restart passed, including portraits. Physical interruption, disk-full and very large combined-build saves are still unproven.",
+        "earnedPoints": 22.5,
+        "deductedPoints": 2.5
+      },
+      {
+        "name": "Visual design, usability and accessibility",
+        "weight": 30,
+        "rating": 8.15625,
+        "deduction": "Dense comparisons/World details, secondary component inconsistency and finite photographic variety remain; see the complete design scorecard.",
+        "earnedPoints": 24.46875,
+        "deductedPoints": 5.53125
+      },
+      {
+        "name": "Performance",
+        "weight": 10,
+        "rating": 8.0,
+        "deduction": "Unchanged bundle/runtime guards pass. Entry JavaScript remains close to its budget, and emulation does not establish minimum physical hardware performance.",
+        "earnedPoints": 8.0,
+        "deductedPoints": 2.0
+      },
+      {
+        "name": "Security and build quality",
+        "weight": 10,
+        "rating": 8.5,
+        "deduction": "Fresh dependency audit is clean; preserved privacy/isolation and pack validation are sound in the scoped review. Real provider ingestion and exhaustive security certification remain open.",
+        "earnedPoints": 8.5,
+        "deductedPoints": 1.5
+      }
+    ],
+    "design": {
+      "dimensions": [
+        {
+          "name": "Visual hierarchy",
+          "rating": 8.5,
+          "basis": "The subject, evidence and next action lead Watch and the initial report; the Desk still repeats planning priority."
+        },
+        {
+          "name": "Layout and spacing",
+          "rating": 8.0,
+          "basis": "Phone report choices and player strips are usable; corrected tablet World/Week layouts preserve reading width. Long comparisons still require substantial scrolling."
+        },
+        {
+          "name": "Typography",
+          "rating": 8.0,
+          "basis": "Editorial person/chapter headings give the game a recognizable voice; secondary utility titles and small annotations remain uneven."
+        },
+        {
+          "name": "Color and contrast",
+          "rating": 8.5,
+          "basis": "Warm dark surfaces and pale green primary actions are readable. Some older teal/amber utility treatments remain separate; targeted contrast checks passed."
+        },
+        {
+          "name": "Components and states",
+          "rating": 8.0,
+          "basis": "A single report accordion, real native choices and predictable empty/fallback states work across sizes. Older professional reports and settings retain more nested surfaces."
+        },
+        {
+          "name": "Interaction and feedback",
+          "rating": 8.0,
+          "basis": "Report readiness, saved confirmation, real outcomes and manual help are clear. The normal-motion fixed-control bug found here is closed on the final export."
+        },
+        {
+          "name": "Information architecture and navigation",
+          "rating": 8.0,
+          "basis": "Six workspaces and named person/case actions support the scout loop. Secondary destinations and lower-page information still require learning."
+        },
+        {
+          "name": "Task-flow design",
+          "rating": 8.5,
+          "basis": "The opening connects observation, interpretation, a club/private decision, filing and a planned next look. Desktop/phone report state persists through resizing."
+        },
+        {
+          "name": "Accessibility and inclusive UX",
+          "rating": 8.0,
+          "basis": "Native radios, keyboard checks, targeted Axe scans and both motion preferences have execution evidence. Comprehensive human assistive-technology coverage remains open."
+        },
+        {
+          "name": "Imagery and iconography",
+          "rating": 8.5,
+          "basis": "Photographic faces and touchline imagery make people and place believable; pose/kit/background variety and the 46-person allocation limit remain weaknesses."
+        },
+        {
+          "name": "Brand visual system",
+          "rating": 8.5,
+          "basis": "The scouting journal direction is consistent across the main loop. The older sidebar mark, scout avatar and some utility controls remain outliers."
+        },
+        {
+          "name": "Emotional trust and polish",
+          "rating": 8.0,
+          "basis": "Perceived uncertainty and retained named/aged identities support believable career stories. Repetition and uneven secondary polish hold this below the strongest commercial games."
+        }
+      ],
+      "base": 8.208333333333334,
+      "cohesion": 8.0,
+      "weighted": 8.15625,
+      "scoreOutOf100": 82,
+      "formula": "75% of twelve-dimension mean +25% cohesion",
+      "capsApplied": []
+    },
+    "status": "Historical assessed baseline; live Planner repair postdates it"
+  },
+  "target": {
+    "minimumCategoryAndDimensionRating": 9.5,
+    "productScore": 95,
+    "aspiration": 100,
+    "pointsAwardedForPlanning": 0,
+    "releaseGatesRemainSeparate": true
+  },
+  "workItems": [
+    {
+      "id": "W00",
+      "title": "Close the newly reproduced Week 1 Planner failure",
+      "phase": 0,
+      "priority": "P1",
+      "owner": "Current Planner repair task",
+      "dependencies": [],
+      "status": "Complete for the focused repair: 28 unit tests and 9 browser checks passed; preview updated; root independently matched declared runtime and normal-export hashes. Full candidate certification remains W12-W17.",
+      "addresses": [
+        "CURRENT-01",
+        "D06",
+        "D08",
+        "Q-GAME"
+      ],
+      "actions": [
+        "Keep valid engine-gated activity choices reachable from every enabled Choose work action at phone and desktop sizes.",
+        "Make the Week 1 explanation agree with actual availability; distinguish genuinely unavailable work with a visible reason.",
+        "Keep a previously skipped guide disabled when booking youth activities; the owner regression found another onboarding trigger during verification."
+      ],
+      "acceptance": [
+        "Actual fresh post-report Week 1 career: choose valid work at 390px and 1280px, book Tuesday/Wednesday, preserve Monday follow-up, verify persisted booking after reload.",
+        "No regression to the guided/unguided opening, existing booking removal, availability gates, or blocked-day behavior.",
+        "Choosing Skip guide remains effective after actual youth activity booking, reload and subsequent week advancement; manual help remains available."
+      ],
+      "evidence": [
+        "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\week-one-planner-fix\\acceptance.json",
+        "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\quality-plan-20260904\\planner-followup-readback.json"
+      ],
+      "effort": "Existing focused repair; finish before other changes"
+    },
+    {
+      "id": "W01",
+      "title": "Preserve and integrate one development baseline",
+      "phase": 0,
+      "priority": "P1",
+      "owner": "Lead engineer",
+      "dependencies": [
+        "W00"
+      ],
+      "status": "Completed development baseline; release certification separate",
+      "addresses": [
+        "R01",
+        "Q-SEC"
+      ],
+      "actions": [
+        "Preserve both working trees, their uncommitted changes and artifact manifests in recoverable checkpoints.",
+        "Review and integrate the accepted readiness repairs, visual overhaul and Planner correction into the intended canonical development branch without replacing unrelated work.",
+        "Record source commit/tree and a baseline run. Use isolated branches for the next changes; do not call this an accepted final release candidate."
+      ],
+      "acceptance": [
+        "Recoverable pre-integration checkpoints exist; reviewed change inventory accounts for every integrated path.",
+        "One unambiguous development commit/tree passes normal and instrumented builds plus core regression checks; normal output has no test bridge."
+      ],
+      "evidence": [
+        "Checkpoint refs/patch manifests, reviewed diff, exact commit/tree, baseline test and export records"
+      ],
+      "effort": "1-2 engineering days; longer if conflicts reveal divergent work"
+    },
+    {
+      "id": "W02",
+      "title": "Finish the shared visual and interaction system",
+      "phase": 1,
+      "priority": "P2",
+      "owner": "UI engineer with design review",
+      "dependencies": [
+        "W01"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-DESIGN",
+        "D02",
+        "D03",
+        "D04",
+        "D05",
+        "D06",
+        "D09",
+        "D11",
+        "D12",
+        "COHESION",
+        "F03",
+        "F05"
+      ],
+      "actions": [
+        "Inventory the remaining utility, Reflection, professional report, Settings, sidebar mark and scout-avatar differences; align their typography, spacing, surfaces, status colors and focus treatment with the scouting-journal system.",
+        "Use shared semantic tokens and existing primitives before individual screen overrides. Reduce nested framing where it repeats grouping.",
+        "Replace internal persona/attribute/country labels through display mappings while preserving saved identifiers and perceived-evidence semantics."
+      ],
+      "acceptance": [
+        "All named surfaces use the documented grammar; no unexplained competing primary-button, heading, status or form style remains.",
+        "Text contrast, focus, native control semantics, missing/empty/loading/error states and non-color state cues pass checks.",
+        "The Hall label reads Territory Reader; old saves and persona IDs remain unchanged.",
+        "Desktop/phone review includes both normal and reduced motion; fixed/sticky controls remain usable while scrolling."
+      ],
+      "evidence": [
+        "Updated design-system inventory and before/after representative captures; semantic/keyboard/Axe checks"
+      ],
+      "effort": "3-5 engineering/design days"
+    },
+    {
+      "id": "W03",
+      "title": "Make the Desk present one clear next decision",
+      "phase": 1,
+      "priority": "P2",
+      "owner": "UI and gameplay engineer",
+      "dependencies": [
+        "W01",
+        "W02"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-DESIGN",
+        "D01",
+        "D06",
+        "D07",
+        "D08",
+        "D12",
+        "COHESION",
+        "F02"
+      ],
+      "actions": [
+        "Derive the leading action from current case state: observe, interpret, file, review a booked look, resolve a response, or recover.",
+        "Make the weekly diary add an independent time/conflict decision instead of repeating the active case's objective.",
+        "Preserve access to secondary work through concise disclosure and a predictable return path.",
+        "Deduplicate by objective identity, not merely by destination: different urgent tasks may legitimately share the Planner route."
+      ],
+      "acceptance": [
+        "No two visible primary actions ask for the same immediate case step.",
+        "A booked observation is represented accurately; stale or already-completed actions cannot lead the Desk.",
+        "Fresh, blocked, failed, successful, advanced and restored careers all present a meaningful next action and explanation."
+      ],
+      "evidence": [
+        "State-based action matrix and rendered checks; uncoached pilot participants identify the next action"
+      ],
+      "effort": "1-3 engineering days"
+    },
+    {
+      "id": "W04",
+      "title": "Reduce comparison and World detail density",
+      "phase": 1,
+      "priority": "P2",
+      "owner": "UI engineer with design review",
+      "dependencies": [
+        "W02"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-DESIGN",
+        "D01",
+        "D02",
+        "D05",
+        "D07",
+        "D08",
+        "D12",
+        "COHESION",
+        "F01"
+      ],
+      "actions": [
+        "Give Report Comparison one leading conclusion, the meaningful evidence differences and the next scouting decision.",
+        "Restructure World Outlook around current pressure/opportunity and its consequence; move reference metrics into optional details.",
+        "Preserve all existing evidence, uncertainty, history and expert detail without repeating the same claim in prose, cards and tables."
+      ],
+      "acceptance": [
+        "At the standard phone width the first viewport identifies the decision, relevant difference and next action; detailed evidence remains reachable.",
+        "The same fact is not restated in multiple adjacent presentations without adding information.",
+        "Rich, sparse, legacy, contradictory and missing-data cases retain accurate meaning and keyboard/touch access.",
+        "Proposed fixture target: at 390 x 844 the reviewed rich comparison is at most 1,600px unexpanded, with every unique detail accessible through a named disclosure. This is a fixture budget, not permission to truncate information."
+      ],
+      "evidence": [
+        "Rich/sparse before-after captures, information-preservation checks and pilot comprehension notes"
+      ],
+      "effort": "2-4 engineering/design days"
+    },
+    {
+      "id": "W05",
+      "title": "Expand portrait variety to measured career demand",
+      "phase": 2,
+      "priority": "P2",
+      "owner": "Art reviewer and portrait systems engineer",
+      "dependencies": [
+        "W01",
+        "W08"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-DESIGN",
+        "Q-SAVE",
+        "D10",
+        "D11",
+        "D12",
+        "COHESION",
+        "F04"
+      ],
+      "actions": [
+        "Use W08's instrumentation to measure unique domain-visible people, allocation demand, pack exhaustion and retained ownership during representative careers before choosing a new pack size.",
+        "Create reviewed lineages with distinct face, pose, kit/background and believable eight-stage aging; size the eligible pool to maximum measured permanent reservations across the 20 x 30 cohort plus 20% reserve, then validate the final pack in W12.",
+        "Retain the finite offline pack and stable initials beyond coverage. Preserve existing bindings, tombstones, source provenance and missing-image behavior."
+      ],
+      "acceptance": [
+        "No eligible person in the declared representative test cohort falls back solely because the pack is exhausted; the cohort and reserve are documented. This is not unlimited photography or proof for unseen seeds.",
+        "No existing or retired person's face is reassigned; age lookup, reload, pruning and pack-revision tests preserve identity.",
+        "Every new asset passes age-set, dimensions, hash, review, provenance and packaging checks; images remain outside the initial JavaScript payload.",
+        "Fallback after deliberately exhausted capacity is coherent and never silently reuses another person's face."
+      ],
+      "evidence": [
+        "Demand/allocation report, reviewed contact sheets, new asset manifest, identity/save tests"
+      ],
+      "effort": "1-3 engineering days plus art batches; batch count depends on measured demand and review"
+    },
+    {
+      "id": "W06",
+      "title": "Close automated accessibility and responsive-state gaps",
+      "phase": 2,
+      "priority": "P1",
+      "owner": "QA and UI engineer",
+      "dependencies": [
+        "W02",
+        "W03",
+        "W04"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-DESIGN",
+        "D02",
+        "D04",
+        "D05",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "COHESION"
+      ],
+      "actions": [
+        "Extend coverage to all shipping routes and critical dialogs, controls, errors, empty/loading states and report/save transitions.",
+        "Test 390, 768, 834, 1366 and 1920px, keyboard-only use, zoom/reflow, and both motion settings.",
+        "Retain true rendered focus, scroll and choice behavior; do not replace failing interactions with forced clicks or state clearing."
+      ],
+      "acceptance": [
+        "Zero unresolved blocking accessibility defects; every actionable control has a readable name, reachable focus and meaningful disabled/error behavior.",
+        "No horizontal clipping, lost footer/header/navigation, obscured primary action or lost report choice after resizing on covered states.",
+        "Every uncovered route/state is listed and assigned rather than silently counted as passed.",
+        "Measure body text at least 4.5:1 and large text/control contrast at least 3:1 on actual backgrounds; target authored touch controls at 44 x 44px; verify 320px reflow and 200% text sizing without losing a task."
+      ],
+      "evidence": [
+        "Route/state coverage matrix, Axe/keyboard logs, motion/scroll geometry and screenshots"
+      ],
+      "effort": "2-4 QA/engineering days, overlapping UI work"
+    },
+    {
+      "id": "W07",
+      "title": "Improve career balance, repetition and meaningful consequences",
+      "phase": 2,
+      "priority": "P1",
+      "owner": "Gameplay engineer with game-design review",
+      "dependencies": [
+        "W01"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-GAME",
+        "D08",
+        "D12"
+      ],
+      "actions": [
+        "Instrument decision density, quiet streaks, report outcomes, finances, relationships, rival pressure, career branching and repeated story text using the existing simulation boundaries.",
+        "Compare ordinary policy-driven strategies and holdout seeds; keep sampled replayability proxies separate from evidence about player choice or optimal strategy.",
+        "Tune only observed weak spots: repetitive unresolved prompts, predictable dominant actions, consequence gaps, recovery dead ends and indistinguishable careers. Preserve uncertainty and scout judgment."
+      ],
+      "acceptance": [
+        "Existing numeric replayability, economics, youth-career, determinism and opportunity/consequence gates pass without relaxed thresholds.",
+        "No reproducible unbounded reward, report-sale, budget or relationship exploit; finite budgets and consequences survive reload.",
+        "Documented holdout strategies remain viable without one trivial policy dominating all goals; failures drive specific rule/content changes.",
+        "Human paired-career evidence later confirms differences and meaningful choices; simulation statistics alone do not close engagement."
+      ],
+      "evidence": [
+        "Strategy/seed protocol, distributions and counterexamples, scoped regression tests, pilot and final paired-career studies"
+      ],
+      "effort": "3-7 engineering/design days plus pilot feedback; additional tuning depends on findings"
+    },
+    {
+      "id": "W08",
+      "title": "Prove real save recovery and long-career identity retention",
+      "phase": 2,
+      "priority": "P1",
+      "owner": "Persistence and desktop engineer",
+      "dependencies": [
+        "W01"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-SAVE",
+        "Q-GAME",
+        "R02",
+        "R06"
+      ],
+      "actions": [
+        "Add domain-visible portrait exposure, exhaustion and footprint measurements to the existing driver and retention report; use season 1/10/30 checkpoint fixtures for demand and save tests.",
+        "Add real save-provider checkpoints and fresh-process reload to the long-career protocol; keep pure simulation soaks clearly labeled where persistence is mocked.",
+        "Exercise interruption during save, quit failure/timeout/retry, rapid saves, cross-career replacement, corrupted latest slot, migration, quota/disk-full and backup recovery in isolated disposable profiles.",
+        "Extend portrait exposure/ownership assertions across save, load, aging, pruning, career retirement, allocator exhaustion and pack revisions."
+      ],
+      "acceptance": [
+        "Recovery yields a complete old or new valid save, never a mixed/rolled-back/cross-career record; errors and recovery choices remain visible.",
+        "No lost portrait ownership, face reassignment, missing historical identity or silent record loss at retained checkpoints.",
+        "Preserve existing 80 MiB maximum serialized size, 64x growth and retention budgets; exact packaged interruption tests close physical-runtime gaps later.",
+        "Unrecoverable injected damage is reported accurately with a tested recovery path; do not promise recovery from total physical loss without a backup."
+      ],
+      "evidence": [
+        "Fault matrix, provider read-backs and hashes, clean-process reload records, long-save and portrait invariants"
+      ],
+      "effort": "3-6 engineering/QA days"
+    },
+    {
+      "id": "W09",
+      "title": "Create performance headroom without delaying core actions",
+      "phase": 2,
+      "priority": "P2",
+      "owner": "Performance engineer",
+      "dependencies": [
+        "W01"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-PERF",
+        "D06",
+        "R05"
+      ],
+      "actions": [
+        "Profile the eager game-store/domain dependency graph; screens are already lazily loaded, so do not prescribe redundant route splits.",
+        "Remove unnecessary eager code/data, repeated ledger copies and oversized worker payloads only where measurement identifies a bottleneck.",
+        "Keep image assets lazy/local, preserve portrait ownership, and check ordinary and late-career performance after changes."
+      ],
+      "acceptance": [
+        "Existing 1,205,862-byte entry-bundle cap remains unchanged. Proposed first stretch is at least 10% headroom: no more than 1,085,275 gzip bytes; 15% headroom is optional only if runtime stays healthy.",
+        "Current emulated limits remain: cold load 15s, navigation p95 2.5s, ordinary week 6s, rollover 15s, renderer JS heap 536,870,912 bytes, DOM 18,000.",
+        "Repeated uncontended measurements show no material regression; physical total-process and late-save limits are closed by W16.",
+        "Measure cumulative transferred code and latency through the first Watch, report, filing and restart; moving bytes into an unmeasured interaction is not a performance improvement."
+      ],
+      "evidence": [
+        "Bundle/module attribution, before-after runtime samples, unchanged guard results and physical device evidence later"
+      ],
+      "effort": "2-4 engineering days; profile before committing to an optimization"
+    },
+    {
+      "id": "W10",
+      "title": "Harden release evidence transport and refresh security scope",
+      "phase": 2,
+      "priority": "P1",
+      "owner": "Release and security engineer",
+      "dependencies": [
+        "W01"
+      ],
+      "status": "In progress; see execution tracker for scoped verification",
+      "addresses": [
+        "Q-SEC",
+        "R01",
+        "R02",
+        "R03"
+      ],
+      "actions": [
+        "Round-trip the ordinary 20x30 aggregate, raw shards and candidate-core evidence through Package Accepted Candidate into the strict certification inputs.",
+        "Make the distinction between local validation and tag/publish mutations explicit; the current certification workflow can bind a tag even when publishing flags are false.",
+        "Freeze and bind the release-control workflow revision across package and certification; verify candidate/source/control SHAs independently.",
+        "Refresh stale security/telemetry/dependency documentation from current source and retain the new art's separate provenance. Do not manufacture attestations or extend old exceptions to new candidates.",
+        "Add an enforceable candidate/package-bound real Sentry receipt control to the existing provider requirement; distinguish Steam-native cloud conflict tests from disabled Supabase account cloud features.",
+        "Verify all referenced asset evidence files and hashes, current Steam store/achievement assets, applicable rights review and release/recovery runbooks; retain old attestations as historical."
+      ],
+      "acceptance": [
+        "Fixture-based bundle round-trip passes strict validation; missing/duplicate/mismatched source, package, aggregate, shard or workflow identity fails visibly.",
+        "A validation-only path has no tag/upload/publication mutation; promotion paths enumerate exact external changes and authoritative read-backs.",
+        "Scoped Electron isolation, IPC/save boundaries, local portrait paths, disabled online gates and sanitized telemetry checks pass; dependency and asset audits meet existing policy.",
+        "Security and asset statements name the actual reviewed scope and evidence date; real provider receipt remains W14.",
+        "Strict validation rejects missing or wrong-candidate provider receipts; actual Steam cloud conflict tests remain required while disabled optional account features stay off."
+      ],
+      "evidence": [
+        "Workflow/script changes and negative contract tests, security review, lockfile audit and provenance read-back"
+      ],
+      "effort": "2-4 engineering/review days"
+    },
+    {
+      "id": "W11",
+      "title": "Use an early human pilot to drive the last product changes",
+      "phase": 3,
+      "priority": "P1",
+      "owner": "Independent facilitator and design/gameplay reviewers",
+      "dependencies": [
+        "W03",
+        "W04",
+        "W06",
+        "W07"
+      ],
+      "status": "Planned; participants needed",
+      "addresses": [
+        "Q-GAME",
+        "Q-DESIGN",
+        "D01",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D12",
+        "COHESION",
+        "R04"
+      ],
+      "actions": [
+        "Proposed formative cohort: 10 first-time and 5 returning players, separate from final certification participants. This is a quality target, not an invented release minimum.",
+        "Run formative uncoached opening, report revision, planning conflict, setback/recovery and paired-career sessions before the final candidate freeze.",
+        "Record confusion, assistance, repeated prompts, weak consequences and emotional attachment by participant segment.",
+        "Fix repeated serious issues and retest with fresh people; reserve a separate independent group for formal certification."
+      ],
+      "acceptance": [
+        "Every observed repeated P0/P1 issue is resolved and retested; no developer narration is needed to manufacture comprehension or drama.",
+        "The main decision and its consequence are understood; the two careers create concrete differences people can explain.",
+        "Pilot evidence is explicitly formative and does not substitute for W15's exact-package studies.",
+        "Proposed formative targets: 9 of 10 first-time users finish the opening and identify the next action unaided; 4 of 5 returning players recover their case and explain a past consequence within 2 minutes. Record all contrary feedback."
+      ],
+      "evidence": [
+        "Consent-based anonymized session notes, issue/retest log, seed/order records and focused changes"
+      ],
+      "effort": "1-2 weeks of recruitment/sessions overlapping engineering; iteration time depends on findings"
+    },
+    {
+      "id": "W12",
+      "title": "Freeze and certify one clean source candidate",
+      "phase": 4,
+      "priority": "P1",
+      "owner": "Lead engineer and CI",
+      "dependencies": [
+        "W00",
+        "W01",
+        "W05",
+        "W06",
+        "W07",
+        "W08",
+        "W09",
+        "W10",
+        "W11"
+      ],
+      "status": "Planned",
+      "addresses": [
+        "Q-GAME",
+        "Q-SAVE",
+        "Q-PERF",
+        "Q-SEC",
+        "R01",
+        "R06"
+      ],
+      "actions": [
+        "Commit the complete accepted source and freeze both candidate and release-control revisions. Run the full source workflow on a clean install.",
+        "Execute all 20 unique seeded careers through 30 full canonical seasons, every weekly tick and the final season boundary, with deterministic replay and the added portrait/real-provider checks.",
+        "Preserve raw shards, failures, checkpoints, aggregate and accepted source run identity. Measure a representative diagnostic first to size concurrency and forecast runtime without claiming it as certification."
+      ],
+      "acceptance": [
+        "Clean candidate commit/tree and passing accepted source workflow are bound; full units, architecture, coverage, builds, bundle, core/opening/organic/accessibility/performance and asset gates pass.",
+        "All20 unique seeds complete 30 seasons plus final boundary with matching replay and unchanged timing/retention/memory limits; no omitted failed seed or imported historical timing exception.",
+        "Any source fix creates a new candidate and invalidates affected prior certification; completed unrelated diagnostic evidence remains historical."
+      ],
+      "evidence": [
+        "Accepted source run, clean commit/tree/control SHA, candidate-core evidence, raw 20 shards, strict aggregate and new persistence/portrait checkpoint records"
+      ],
+      "effort": "1-3 coordination/QA days plus measured soak wall time; failures may require another candidate"
+    },
+    {
+      "id": "W13",
+      "title": "Build signed packages and verify the declared platform matrix",
+      "phase": 5,
+      "priority": "P1",
+      "owner": "Desktop/release engineer and platform testers",
+      "dependencies": [
+        "W12"
+      ],
+      "status": "Planned; signing/platform inputs needed",
+      "addresses": [
+        "Q-SAVE",
+        "Q-SEC",
+        "R02"
+      ],
+      "actions": [
+        "Use Package Accepted Candidate with the accepted source identity and required signing/SDK inputs.",
+        "Verify actual declared Windows/macOS/Linux distributables and architectures, signatures/notarization, slim runtime, install/restart/uninstall/offline and recovery behavior.",
+        "Reuse these exact package bytes for every subsequent hardware, human and provider check.",
+        "Resolve architecture explicitly before store claims: Windows x64 NSIS; macOS arm64 DMG and ZIP, with x64 separately required if declared; Linux x64 AppImage and DEB. A host-default build or depot name does not prove universal binaries."
+      ],
+      "acceptance": [
+        "Every required package/sidecar/depot entry has a verified hash and candidate/source/control binding; signatures and notarization pass where required.",
+        "The local platform controls pass, including real save/restart, isolated profile interruption and storage failures; no E2E bridge or development-server dependency. Live Steam matrix controls remain pending W14; R02 closes only after those also pass.",
+        "No test artifact or rebuilt package is substituted for the approved bytes."
+      ],
+      "evidence": [
+        "Package manifest and SHA256 inventory, signing/notarization read-backs and exact-platform runtime results"
+      ],
+      "effort": "2-5 engineering/QA days after access is available; certificate/account waits are external"
+    },
+    {
+      "id": "W14",
+      "title": "Verify real Steam and sanitized crash-provider receipt",
+      "phase": 5,
+      "priority": "P1",
+      "owner": "Release engineer and account owner",
+      "dependencies": [
+        "W13"
+      ],
+      "status": "Planned; real platform/provider access needed",
+      "addresses": [
+        "Q-SEC",
+        "R03",
+        "R02"
+      ],
+      "actions": [
+        "Run the documented actual Steam service/achievement/reconnect/offline cases enabled for this release.",
+        "Send the sanctioned nonpersonal crash diagnostic from the exact candidate to its configured project and read back provider acceptance with release/build identity.",
+        "Keep optional account cloud saves and rankings disabled; validate those boundaries without activating future services.",
+        "Exercise Steam-native cloud queue, reconnect and conflicting-device save cases as required by the package protocol; disabled Supabase account features do not waive them."
+      ],
+      "acceptance": [
+        "Actual platform outcomes and external identifiers are recorded; simulated unavailable Steam is not counted as a live-service pass.",
+        "Provider receipt is tied to the exact candidate and contains the expected sanitized envelope with no save, personal or secret payload.",
+        "Any required account/configuration problem remains visibly open until authoritative read-back succeeds."
+      ],
+      "evidence": [
+        "Steam runtime records and achievement read-backs; actual sanitized provider event/release receipt"
+      ],
+      "effort": "1-2 engineering/QA days after access; provider configuration can extend elapsed time"
+    },
+    {
+      "id": "W15",
+      "title": "Complete independent human accessibility and product certification",
+      "phase": 5,
+      "priority": "P1",
+      "owner": "Independent facilitator, assistive-technology users and participants",
+      "dependencies": [
+        "W13"
+      ],
+      "status": "Planned; independent participants needed",
+      "addresses": [
+        "Q-GAME",
+        "Q-DESIGN",
+        "D01",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D12",
+        "COHESION",
+        "R04"
+      ],
+      "actions": [
+        "Run NVDA/VoiceOver protocols against the exact package, including all required control/task records.",
+        "Run the existing 12-person usability study with 6 genre-experienced and 6 newcomer participants, separate from contributors/coached formative participants.",
+        "Run the separate 6-person paired-career study, counterbalanced across 2 careers on the same package and different seeds. Preserve consent and anonymized evidence."
+      ],
+      "acceptance": [
+        "Existing usability gates pass: at least 90% unaided evidence-to-report; separately, at least 85% correct club-response explanation and at least 85% correct delayed-consequence explanation; 10 of 12 discovery stories; median SUS 85; no repeated P0 or repeated P1 after retest.",
+        "At least 5 of 6 paired-career participants describe concrete differences without suggested answers; all required perception prompts are recorded.",
+        "Every required assistive-technology and human attestation control is actually completed and candidate/package-bound. A failed gate triggers repair and a new candidate where needed.",
+        "For a high-score stretch, aim for median SUS 90 and no recurring moderate comprehension issues; these supplement rather than replace existing gates."
+      ],
+      "evidence": [
+        "Anonymized raw notes/timings/SUS calculations and retests, seed-order records, AT recordings/notes and independently signed candidate-bound attestations"
+      ],
+      "effort": "2-3 weeks of recruitment and sessions, potentially overlapping W13-W16"
+    },
+    {
+      "id": "W16",
+      "title": "Prove physical minimum-hardware and late-save performance",
+      "phase": 5,
+      "priority": "P1",
+      "owner": "Hardware QA tester",
+      "dependencies": [
+        "W13"
+      ],
+      "status": "Planned; declared physical devices needed",
+      "addresses": [
+        "Q-PERF",
+        "Q-SAVE",
+        "R05"
+      ],
+      "actions": [
+        "Run the declared physical minimum protocols on the exact packages for every shipping platform/architecture, including the 4 GB class and required late-career/30-season archive. Recommended-device testing is optional additional characterization.",
+        "Measure cold load, navigation, normal week, season rollover, save/load, scrolling/input and total application process-tree memory.",
+        "Retain environmental conditions and repeated samples; do not substitute emulation or renderer-only heap for physical results."
+      ],
+      "acceptance": [
+        "Every current physical-hardware protocol budget and required device/OS record passes without changed limits.",
+        "No out-of-memory failure, unusable long save, unresponsive primary action or identity corruption on the retained archive.",
+        "Results identify device, OS, package hash, save fixture, timing method and all relevant processes.",
+        "Preserve physical limits: menu p95 12s; new career 15s; current save 8s; 30-season save 15s; actions 500ms; week 5s; rollover 15s; process tree 1.25GiB steady/1.75GiB peak; final-loop growth 20%; sustained 30fps; visible progress for tasks over 5s."
+      ],
+      "evidence": [
+        "Physical run logs, package/save hashes, process-tree memory and timing records, hardware attestations"
+      ],
+      "effort": "2-4 QA days after devices and final packages are available"
+    },
+    {
+      "id": "W17",
+      "title": "Independently rescore and close the release decision",
+      "phase": 6,
+      "priority": "P1",
+      "owner": "Lead reviewer plus independent design/engineering reviewers; release owner",
+      "dependencies": [
+        "W12",
+        "W13",
+        "W14",
+        "W15",
+        "W16"
+      ],
+      "status": "Planned",
+      "addresses": [
+        "Q-GAME",
+        "Q-SAVE",
+        "Q-DESIGN",
+        "Q-PERF",
+        "Q-SEC",
+        "D01",
+        "D02",
+        "D03",
+        "D04",
+        "D05",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D10",
+        "D11",
+        "D12",
+        "COHESION",
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06"
+      ],
+      "actions": [
+        "Rerun the same weighted rubric and all 12 design dimensions plus cohesion on the exact accepted candidate. Retain reviewer disagreements and evidence limits.",
+        "Run strict artifact and release-evidence validation using actual independent certification records; show each gate individually.",
+        "If any material weakness remains, assign a specific residual work card and repeat only affected work plus required candidate validation. Publication is a separate explicit release-owner action."
+      ],
+      "acceptance": [
+        "No score increases merely because work was scheduled, a test was weakened or a missing gate was relabeled. No unresolved P0/P1 or severe design cap remains.",
+        "Aim for every product category and design dimension/cohesion at least 9.5/10 (95+ overall); pursue 10 only when independent evidence/review supports no material remaining weakness in the assessed scope.",
+        "Every mandatory gate is passed against the same candidate/package/control revisions. Reviewers and the release owner can trace each conclusion to actual evidence.",
+        "The final report either justifies 100 or explains the smallest remaining deductions and exact next actions; never force a perfect score."
+      ],
+      "evidence": [
+        "Fresh weighted scorecard/design audit, residual-issues register, strict validation output, explicit release-owner decision"
+      ],
+      "effort": "1-2 review days per accepted candidate; further work depends on findings"
+    }
+  ],
+  "coverage": {
+    "Q-GAME": [
+      "W00",
+      "W07",
+      "W08",
+      "W11",
+      "W12",
+      "W15",
+      "W17"
+    ],
+    "Q-SAVE": [
+      "W05",
+      "W08",
+      "W12",
+      "W13",
+      "W16",
+      "W17"
+    ],
+    "Q-DESIGN": [
+      "W02",
+      "W03",
+      "W04",
+      "W05",
+      "W06",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "Q-PERF": [
+      "W09",
+      "W12",
+      "W16",
+      "W17"
+    ],
+    "Q-SEC": [
+      "W01",
+      "W10",
+      "W12",
+      "W13",
+      "W14",
+      "W17"
+    ],
+    "D01": [
+      "W03",
+      "W04",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "D02": [
+      "W02",
+      "W04",
+      "W06",
+      "W17"
+    ],
+    "D03": [
+      "W02",
+      "W17"
+    ],
+    "D04": [
+      "W02",
+      "W06",
+      "W17"
+    ],
+    "D05": [
+      "W02",
+      "W04",
+      "W06",
+      "W17"
+    ],
+    "D06": [
+      "W00",
+      "W02",
+      "W03",
+      "W06",
+      "W09",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "D07": [
+      "W03",
+      "W04",
+      "W06",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "D08": [
+      "W00",
+      "W03",
+      "W04",
+      "W06",
+      "W07",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "D09": [
+      "W02",
+      "W06",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "D10": [
+      "W05",
+      "W17"
+    ],
+    "D11": [
+      "W02",
+      "W05",
+      "W17"
+    ],
+    "D12": [
+      "W02",
+      "W03",
+      "W04",
+      "W05",
+      "W07",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "COHESION": [
+      "W02",
+      "W03",
+      "W04",
+      "W05",
+      "W06",
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "F01": [
+      "W04"
+    ],
+    "F02": [
+      "W03"
+    ],
+    "F03": [
+      "W02"
+    ],
+    "F04": [
+      "W05"
+    ],
+    "F05": [
+      "W02"
+    ],
+    "R01": [
+      "W01",
+      "W10",
+      "W12",
+      "W17"
+    ],
+    "R02": [
+      "W08",
+      "W10",
+      "W13",
+      "W14",
+      "W17"
+    ],
+    "R03": [
+      "W10",
+      "W14",
+      "W17"
+    ],
+    "R04": [
+      "W11",
+      "W15",
+      "W17"
+    ],
+    "R05": [
+      "W09",
+      "W16",
+      "W17"
+    ],
+    "R06": [
+      "W08",
+      "W12",
+      "W17"
+    ],
+    "CURRENT-01": [
+      "W00"
+    ]
+  },
+  "preserve": [
+    {
+      "id": "INV-01",
+      "behavior": "Normal-motion Watch and navigation remain viewport-anchored; no retained transform containing block.",
+      "work": [
+        "W02",
+        "W06",
+        "W12"
+      ]
+    },
+    {
+      "id": "INV-02",
+      "behavior": "World and Week remain usable at 768/834px; weekly controls stick through initial, middle and end scroll.",
+      "work": [
+        "W04",
+        "W06",
+        "W12"
+      ]
+    },
+    {
+      "id": "INV-03",
+      "behavior": "Report radio choices, draft and filing survive resizing and navigation; no forced clicks or injected style fixes.",
+      "work": [
+        "W02",
+        "W06",
+        "W12"
+      ]
+    },
+    {
+      "id": "INV-04",
+      "behavior": "A skipped guide stays off across every automatic trigger; manual help remains available.",
+      "work": [
+        "W00",
+        "W03",
+        "W06",
+        "W12"
+      ]
+    },
+    {
+      "id": "INV-05",
+      "behavior": "Bid acceptance happens exactly once, club budgets stay finite, rewards survive reload, and level-up may correctly leave zero remainder XP.",
+      "work": [
+        "W07",
+        "W08",
+        "W12"
+      ]
+    },
+    {
+      "id": "INV-06",
+      "behavior": "End-of-season dialogs are handled through visible controls before retirement and legacy assertions; no timeout/threshold weakening.",
+      "work": [
+        "W07",
+        "W12"
+      ]
+    },
+    {
+      "id": "INV-07",
+      "behavior": "Save/quit interleavings and exact clean-process restart preserve game data and portrait ownership.",
+      "work": [
+        "W08",
+        "W12",
+        "W13"
+      ]
+    },
+    {
+      "id": "INV-08",
+      "behavior": "Perceived uncertainty is preserved; hidden true ability is never substituted for evidence in player decisions.",
+      "work": [
+        "W03",
+        "W04",
+        "W07",
+        "W12"
+      ]
+    },
+    {
+      "id": "INV-09",
+      "behavior": "Shipping output contains no test-state bridge; Electron isolation, import boundaries and telemetry sanitation remain enforced.",
+      "work": [
+        "W01",
+        "W10",
+        "W12",
+        "W13",
+        "W14"
+      ]
+    },
+    {
+      "id": "INV-10",
+      "behavior": "Optional Supabase account cloud/rankings stay disabled; Steam-native cloud still receives its required package tests.",
+      "work": [
+        "W10",
+        "W13",
+        "W14"
+      ]
+    }
+  ],
+  "externalInputs": [
+    "Signing credentials/accounts and agreed package architectures",
+    "Licensed Steam test accounts, two-device access and private SDK configuration",
+    "Configured Sentry project and sanctioned nonpersonal diagnostic access",
+    "Independent human participants and NVDA/VoiceOver capability",
+    "Physical declared minimum/recommended devices",
+    "Reviewed art batches and any required recruitment/art spending"
+  ],
+  "publicationStatus": "No publication, tagging, provider mutation or paid action performed by this planning task",
+  "completedFollowups": [
+    {
+      "verifiedAt": "2026-09-04T19:47:09.478529-06:00",
+      "scope": "Read-back of owner receipt/logs plus independent comparison of declared runtime/export files; root did not rerun browser tests.",
+      "ownerAcceptance": {
+        "createdAt": "2026-09-04T19:45:56.890252-06:00",
+        "status": "passed",
+        "runtimeFingerprint": "1b0f4b179cd73f7e50c23f3f2eaf773994ded2f5f8dc5770e38e2c5094a11597",
+        "exportFingerprint": "820fb7a5aabbc9967079cb055ab23ca2e8e15b6345c0bef45a03142c3790292c",
+        "changedRuntimePaths": [
+          "src/components/game/CalendarScreen.tsx",
+          "src/stores/actions/weeklyActions.ts"
+        ],
+        "unit": {
+          "passed": 28,
+          "files": 3,
+          "log": "targeted-unit.log"
+        },
+        "browser": {
+          "passed": 9,
+          "retries": 0,
+          "duration": "2.8m",
+          "log": "verified-e2e.log",
+          "coverage": [
+            "real Week1 phone work sheet",
+            "real desktop School Match booking Tue/Wed",
+            "exact Monday follow-up and filed report retained",
+            "real IndexedDB autosave",
+            "Week2 advance and reload",
+            "guide opt-out and explicit manual help",
+            "observation refresh-resume",
+            "guided opening",
+            "desktop and mobile accessibility"
+          ]
+        },
+        "builds": {
+          "normal": "passed",
+          "e2e": "passed",
+          "normalBundleGzipBytes": 1196598,
+          "e2eBundleGzipBytes": 1196653,
+          "unchangedBudget": 1205862,
+          "normalHasTestBridge": false
+        },
+        "actualUserPreview": {
+          "url": "http://localhost:3105/play",
+          "surface": "Codex in-app browser tab3",
+          "reloadedViaUI": true,
+          "continuedExistingCareerViaUI": true,
+          "scout": "Alex Morgan",
+          "week": 1,
+          "season": 1,
+          "committedDays": 1,
+          "openDays": 6,
+          "monday": "Daniel Sterling follow-up",
+          "opportunityCount": 12,
+          "chooseWorkResult": "Scrolled to visible work choices after actual Tuesday click",
+          "extraWorkBookedInUserSave": false,
+          "weekAdvancedInUserSave": false
+        },
+        "historicalFailuresPreserved": [
+          "targeted-e2e.log",
+          "test-results/",
+          "guidance-before-fix.log"
+        ],
+        "migrationRequired": false
+      },
+      "checks": [
+        {
+          "manifest": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\week-one-planner-fix\\verified-runtime-fingerprint.json",
+          "filesChecked": 1355,
+          "mismatches": [],
+          "computedFingerprint": "1b0f4b179cd73f7e50c23f3f2eaf773994ded2f5f8dc5770e38e2c5094a11597",
+          "expectedFingerprint": "1b0f4b179cd73f7e50c23f3f2eaf773994ded2f5f8dc5770e38e2c5094a11597",
+          "passed": true
+        },
+        {
+          "manifest": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\week-one-planner-fix\\verified-normal-export.json",
+          "filesChecked": 721,
+          "mismatches": [],
+          "computedFingerprint": "820fb7a5aabbc9967079cb055ab23ca2e8e15b6345c0bef45a03142c3790292c",
+          "expectedFingerprint": "820fb7a5aabbc9967079cb055ab23ca2e8e15b6345c0bef45a03142c3790292c",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "receiptSha256": "c98f701cb56adfbd443057bb324e8edc0b30ed796f4c6b6a7c85142a90033bf5"
+    }
+  ],
+  "execution": {
+    "checkout": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout-quality",
+    "branch": "codex/quality-implementation-20260904",
+    "integratedBaseline": "a246a48fee373f406a8ffa2c80bbac5f1b69ce38",
+    "evidenceDirectory": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\quality-implementation-20260904",
+    "tracker": "docs/QUALITY_IMPLEMENTATION.md",
+    "newScoreAwarded": false
+  }
+}

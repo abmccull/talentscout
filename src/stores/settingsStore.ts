@@ -13,8 +13,11 @@ import { create } from "zustand";
 // ---------------------------------------------------------------------------
 
 export interface AppSettings {
-  // Display
+  // Display / graphics
   fontSize: "small" | "medium" | "large";
+  backgroundIntensity: "low" | "medium" | "high";
+  uiContrast: "standard" | "high";
+  preferFullscreen: boolean;
 
   // Accessibility
   colorblindMode: "none" | "protanopia" | "deuteranopia" | "tritanopia";
@@ -27,11 +30,8 @@ export interface AppSettings {
   autoOpenCareerDefiningMoments: boolean;
 
   // Gameplay
-  autoAdvanceSpeed: "slow" | "normal" | "fast";
+  autoPlayWeekSimulation: boolean;
   confirmBeforeAdvance: boolean;
-
-  // Notifications
-  notificationLevel: "all" | "important" | "critical";
 }
 
 export interface SettingsState extends AppSettings {
@@ -45,16 +45,18 @@ export interface SettingsState extends AppSettings {
 
 const STORAGE_KEY = "talentscout_settings";
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: "medium",
+  backgroundIntensity: "medium",
+  uiContrast: "standard",
+  preferFullscreen: false,
   colorblindMode: "none",
   reducedMotion: false,
   cinematicMoments: "full",
   emotionalAudioCues: true,
   autoOpenCareerDefiningMoments: true,
-  autoAdvanceSpeed: "normal",
+  autoPlayWeekSimulation: false,
   confirmBeforeAdvance: false,
-  notificationLevel: "all",
 };
 
 // ---------------------------------------------------------------------------
@@ -78,6 +80,20 @@ function readPersisted(): AppSettings {
         parsed.fontSize === "large"
           ? parsed.fontSize
           : DEFAULT_SETTINGS.fontSize,
+      backgroundIntensity:
+        parsed.backgroundIntensity === "low" ||
+        parsed.backgroundIntensity === "medium" ||
+        parsed.backgroundIntensity === "high"
+          ? parsed.backgroundIntensity
+          : DEFAULT_SETTINGS.backgroundIntensity,
+      uiContrast:
+        parsed.uiContrast === "standard" || parsed.uiContrast === "high"
+          ? parsed.uiContrast
+          : DEFAULT_SETTINGS.uiContrast,
+      preferFullscreen:
+        typeof parsed.preferFullscreen === "boolean"
+          ? parsed.preferFullscreen
+          : DEFAULT_SETTINGS.preferFullscreen,
       colorblindMode:
         parsed.colorblindMode === "none" ||
         parsed.colorblindMode === "protanopia" ||
@@ -103,22 +119,14 @@ function readPersisted(): AppSettings {
         typeof parsed.autoOpenCareerDefiningMoments === "boolean"
           ? parsed.autoOpenCareerDefiningMoments
           : DEFAULT_SETTINGS.autoOpenCareerDefiningMoments,
-      autoAdvanceSpeed:
-        parsed.autoAdvanceSpeed === "slow" ||
-        parsed.autoAdvanceSpeed === "normal" ||
-        parsed.autoAdvanceSpeed === "fast"
-          ? parsed.autoAdvanceSpeed
-          : DEFAULT_SETTINGS.autoAdvanceSpeed,
+      autoPlayWeekSimulation:
+        typeof parsed.autoPlayWeekSimulation === "boolean"
+          ? parsed.autoPlayWeekSimulation
+          : DEFAULT_SETTINGS.autoPlayWeekSimulation,
       confirmBeforeAdvance:
         typeof parsed.confirmBeforeAdvance === "boolean"
           ? parsed.confirmBeforeAdvance
           : DEFAULT_SETTINGS.confirmBeforeAdvance,
-      notificationLevel:
-        parsed.notificationLevel === "all" ||
-        parsed.notificationLevel === "important" ||
-        parsed.notificationLevel === "critical"
-          ? parsed.notificationLevel
-          : DEFAULT_SETTINGS.notificationLevel,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

@@ -3,43 +3,48 @@
 import { useEffect, useRef, useState } from "react";
 import { useAchievementStore } from "@/stores/achievementStore";
 import { ACHIEVEMENTS } from "@/lib/achievements";
+import { achievementPresentation } from "@/lib/achievementPresentation";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isAchievementAvailableForBuild } from "@/stores/gameScreenScope";
+import { Medal } from "lucide-react";
+
 
 const AUTO_DISMISS_MS = 3600;
 
 interface ToastContentProps {
   achievementIds: string[];
   onDismiss: () => void;
+  dismissMs: number;
 }
 
 function ToastCard({
   achievementIds,
   onDismiss,
+  dismissMs,
 }: ToastContentProps) {
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { playSFX } = useAudio();
+  const { playStinger } = useAudio();
 
   const achievements = achievementIds
     .map((id) => ACHIEVEMENTS.find((achievement) => achievement.id === id))
     .filter((achievement): achievement is (typeof ACHIEVEMENTS)[number] => achievement !== undefined);
   const achievement = achievements[0];
-  const visibleAchievements = achievements.slice(0, 3);
+  const visibleAchievements = achievements.slice(0, 1);
   const hiddenAchievementCount = Math.max(0, achievements.length - visibleAchievements.length);
 
   useEffect(() => {
-    playSFX("achievement");
+    playStinger("achievement");
     const id = window.requestAnimationFrame(() => setVisible(true));
     return () => window.cancelAnimationFrame(id);
-  }, [playSFX]);
+  }, [playStinger]);
 
   useEffect(() => {
-    timerRef.current = setTimeout(onDismiss, AUTO_DISMISS_MS);
+    timerRef.current = setTimeout(onDismiss, dismissMs);
     return () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
     };
-  }, [onDismiss]);
+  }, [dismissMs, onDismiss]);
 
   if (!achievement) return null;
 
@@ -48,19 +53,19 @@ function ToastCard({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-label={`Achievements unlocked: ${achievements.map((item) => item.name).join(", ")}`}
+      aria-label={`Achievements unlocked: ${achievements.map((item) => achievementPresentation(item).name).join(", ")}`}
       style={{
-        transform: visible ? "translateY(0)" : "translateY(-12px)",
+        transform: visible ? "translateY(0)" : "translateY(12px)",
         transition: "transform 220ms ease-out",
       }}
-      className="pointer-events-none w-[min(22rem,calc(100vw-1rem))] rounded-2xl border border-zinc-700/80 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur"
+      className="pointer-events-none w-[min(22rem,calc(100vw-1rem))] rounded-md border border-zinc-700/80 bg-[var(--surface)] p-3 shadow-lg motion-reduce:!transform-none motion-reduce:!transition-none"
     >
       <div className="mb-2 flex items-start gap-2">
         <span
           className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-base"
           aria-hidden="true"
         >
-          {achievement.icon}
+          <Medal size={18} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -77,7 +82,7 @@ function ToastCard({
             className="mt-1 space-y-0.5 text-sm font-bold text-white"
             aria-label="Unlocked achievements"
           >
-            {visibleAchievements.map((item) => <li key={item.id}>{item.name}</li>)}
+            {visibleAchievements.map((item) => <li key={item.id}>{achievementPresentation(item).name}</li>)}
             {hiddenAchievementCount > 0 && (
               <li className="pt-0.5 text-xs font-medium text-zinc-300">
                 +{hiddenAchievementCount} more recorded in Career
@@ -103,7 +108,7 @@ function ToastCard({
 
       {achievements.length === 1 && (
         <p className="hidden text-xs leading-relaxed text-zinc-300 sm:block">
-          {achievement.description}
+          {achievementPresentation(achievement).description}
         </p>
       )}
 
@@ -114,7 +119,7 @@ function ToastCard({
         <div
           className="h-full rounded-full bg-emerald-500"
           style={{
-            animation: `shrink ${AUTO_DISMISS_MS}ms linear forwards`,
+            animation: `shrink ${dismissMs}ms linear forwards`,
           }}
         />
       </div>
@@ -126,10 +131,9 @@ export function AchievementToast() {
   const pendingToasts = useAchievementStore((s) => s.pendingToasts);
   const dismissAllToasts = useAchievementStore((s) => s.dismissAllToasts);
 
-  const availablePendingToasts = pendingToasts.filter(
-    isAchievementAvailableForBuild,
-  );
+  const availablePendingToasts = pendingToasts.filter(isAchievementAvailableForBuild);
   const currentId = availablePendingToasts[0] ?? null;
+  const dismissMs = AUTO_DISMISS_MS;
 
   if (!currentId) return null;
 
@@ -143,7 +147,7 @@ export function AchievementToast() {
       `}</style>
 
       <div
-        className="pointer-events-none fixed left-1/2 top-20 z-40 flex -translate-x-1/2 flex-col items-center gap-3 px-2 sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:translate-x-0 sm:items-end"
+        className="pointer-events-none fixed left-1/2 bottom-20 z-40 flex -translate-x-1/2 flex-col items-center gap-3 px-2 sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:translate-x-0 sm:items-end"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -151,6 +155,7 @@ export function AchievementToast() {
           key={availablePendingToasts.join("|")}
           achievementIds={availablePendingToasts}
           onDismiss={dismissAllToasts}
+          dismissMs={dismissMs}
         />
       </div>
     </>

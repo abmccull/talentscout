@@ -2,6 +2,7 @@
 
 import { useGameStore } from "@/stores/gameStore";
 import { Button } from "@/components/ui/button";
+import { ArrowUpRight, ChevronDown } from "lucide-react";
 
 /**
  * Shown when the player reaches the demo season limit.
@@ -12,58 +13,22 @@ export function DemoEndScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#0a0a0a] to-[#0f1a0f] px-6">
-      <div className="w-full max-w-lg text-center">
-        <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
-          <svg
-            className="h-8 w-8 text-emerald-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"
-            />
-          </svg>
-        </div>
-
-        <h1 className="mb-3 text-3xl font-bold text-white">
+    <main className="flex min-h-screen items-center bg-[var(--background)] px-5 py-10 text-[var(--foreground)] sm:px-10 sm:py-16">
+      <div className="mx-auto w-full max-w-2xl">
+        <p className="dossier-eyebrow">Youth Scout · Two seasons complete</p>
+        <h1 className="mt-4 max-w-xl font-editorial text-4xl leading-tight tracking-tight sm:text-5xl">
           You&apos;ve completed the demo
         </h1>
-        <p className="mb-8 text-zinc-400">
+        <p className="mt-5 max-w-xl text-base leading-7 text-[var(--muted-foreground)]">
           You&apos;ve reached the two-season demo limit. Continue in Youth Scout
           Early Access with unlimited seasons and the scouting systems
           available today.
         </p>
 
-        <div className="mb-8 grid grid-cols-2 gap-3 text-left">
-          {[
-            "A Youth Scout career from local observer to recruitment leader",
-            "Unlimited seasons of career progression",
-            "Live, video, training, and tournament observation contexts",
-            "Evidence-led reports, club pitches, and youth placements",
-            "Rival scouts competing for prospects and influence",
-            "Regional knowledge, travel, and international assignments",
-            "Career setbacks, recovery, and leadership responsibilities",
-            "Alumni tracking and long-term recommendation accountability",
-          ].map((feature) => (
-            <div
-              key={feature}
-              className="flex items-start gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3"
-            >
-              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-              <span className="text-sm text-zinc-300">{feature}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex flex-col gap-3">
+        <div className="mt-7 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <Button
             size="lg"
-            className="w-full bg-emerald-600 text-base hover:bg-emerald-500"
+            className="gap-2"
             onClick={() => {
               window.open(
                 "https://store.steampowered.com/app/4455570",
@@ -73,17 +38,41 @@ export function DemoEndScreen() {
             }}
           >
             Get Youth Scout Early Access
+            <ArrowUpRight aria-hidden="true" size={18} />
           </Button>
           <Button
             variant="outline"
             size="lg"
-            className="w-full text-base"
             onClick={() => setScreen("mainMenu")}
           >
             Return to Menu
           </Button>
         </div>
+        <p className="mt-3 text-xs leading-5 text-[var(--muted-foreground)]">
+          Opens the Steam store in a new window.
+        </p>
+
+        <details className="group mt-9 border-y border-[var(--border)]">
+          <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 py-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+            <h2 className="font-editorial text-xl sm:text-2xl">Included in Early Access</h2>
+            <ChevronDown aria-hidden="true" size={18} className="shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+          </summary>
+          <ul className="list-disc space-y-3 pb-6 pl-5 pt-2 text-sm leading-6 text-[var(--muted-foreground)] marker:text-[var(--primary)]">
+            {[
+              "A Youth Scout career from local observer to recruitment leader",
+              "Unlimited seasons of career progression",
+              "Live, video, training, and tournament observation contexts",
+              "Evidence-led reports, club pitches, and youth placements",
+              "Rival scouts competing for prospects and influence",
+              "Regional knowledge, travel, and international assignments",
+              "Career setbacks, recovery, and leadership responsibilities",
+              "Alumni tracking and long-term recommendation accountability",
+            ].map((feature) => (
+              <li key={feature}>{feature}</li>
+            ))}
+          </ul>
+        </details>
       </div>
-    </div>
+    </main>
   );
 }

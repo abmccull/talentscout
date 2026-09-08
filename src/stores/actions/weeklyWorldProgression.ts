@@ -8,6 +8,7 @@ import { processNPCDelegations } from "@/engine/core/quickScout";
 import { recordWeeklyStrategyOutcome } from "@/engine/core/weeklyStrategy";
 import type { RNG } from "@/engine/rng";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
+import { repairCompetitiveRosterGaps } from "@/engine/freeAgents/emergencyRestock";
 import { processInternationalTravelLifecycle } from "./weeklySimulationSupport";
 import { processWeeklyConsequenceLifecycle } from "./weeklyNarrativeConsequences";
 import { emitProfessionalCaseCallbacks } from "./weeklyProfessionalCaseCallbacks";
@@ -32,6 +33,9 @@ export function processWeeklyWorldProgression(
   const synchronized = synchronizeInternationalAssignmentProgress(input.state);
   const tick = processWeeklyTick(synchronized, input.rng);
   let state = advanceWeek(synchronized, tick);
+  // Close residual XI/GK gaps that only become visible after lifecycle apply
+  // (loan returns, rejected claims, season-end settlement interactions).
+  state = repairCompetitiveRosterGaps(state, input.rng);
   state = processNPCDelegations(state, input.rng).state;
   state = processInternationalTravelLifecycle(state);
   state = {

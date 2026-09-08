@@ -223,6 +223,8 @@ export interface GameStoreState {
   saveSyncStatus: PersistentCloudSyncStatus;
   isSaving: boolean;
   isLoadingSave: boolean;
+  /** Transient owner of a slot load, recovery restore, or conflict resolution. */
+  activeSaveLoadId: number | null;
   saveConflict: SaveConflictState | null;
   isResolvingSaveConflict: boolean;
   autosaveError: string | null;
@@ -248,6 +250,7 @@ export interface GameStoreState {
   startNewGame: (config: NewGameConfig) => Promise<void>;
   loadGame: (state: unknown) => void;
   saveGame: () => GameState | null;
+  flushGameplaySave: () => Promise<void>;
 
   saveToSlot: (slot: number, name: string) => Promise<void>;
   loadFromSlot: (slot: number) => Promise<void>;
@@ -267,6 +270,8 @@ export interface GameStoreState {
   advanceWeek: () => void;
   advanceWeekAsync: () => Promise<void>;
   isAdvancingWeek: boolean;
+  /** Transient invocation ownership; never included in persisted GameState. */
+  activeWeeklyTransactionId: number | null;
   lastWeeklyExecutionRoute: "worker" | "main-thread-fallback" | null;
   lastWeeklyWorkerTelemetry: WeeklyWorkerTelemetry | null;
   weeklyTransactionError: string | null;

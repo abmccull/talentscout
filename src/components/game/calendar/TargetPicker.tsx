@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { TargetOption } from "@/engine/core/types";
 import { Search, User, Users, Star, Eye, X, ChevronRight } from "lucide-react";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 
 interface TargetPickerProps {
   targets: TargetOption[];
@@ -19,10 +20,10 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
   const overlayRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus search input on mount
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useDialogFocusTrap(overlayRef, true, {
+    onClose,
+    initialFocusRef: inputRef,
+  });
 
   // Close on click outside
   useEffect(() => {
@@ -33,15 +34,6 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [onClose]);
-
-  // Close on Escape
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
   const filtered = targets.filter((t) =>
@@ -61,13 +53,13 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
     <div
       ref={overlayRef}
       role="dialog"
-      aria-modal={inline ? "true" : "false"}
+      aria-modal="true"
       aria-label={dialogLabel}
       className={`${inline ? "relative" : "absolute left-0 right-0 top-full mt-1"} z-50 rounded-lg border border-[#27272a] bg-[#0a0a0a] shadow-xl shadow-black/50`}
     >
       {/* Search bar */}
       <div className="flex items-center gap-2 border-b border-[#27272a] px-3 py-2">
-        <Search size={12} className="text-zinc-500 shrink-0" />
+        <Search size={12} className="text-quiet shrink-0" />
         <input
           ref={inputRef}
           type="text"
@@ -80,7 +72,7 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
         <button
           onClick={onClose}
           aria-label={`Close ${dialogLabel.toLowerCase()}`}
-          className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-[#27272a] hover:text-zinc-300"
+          className="shrink-0 rounded p-0.5 text-quiet hover:bg-[#27272a] hover:text-zinc-300"
         >
           <X size={12} />
         </button>
@@ -89,7 +81,7 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
       {/* Target list */}
       <div className="max-h-48 overflow-y-auto">
         {filtered.length === 0 && (
-          <div className="px-3 py-3 text-center text-[11px] text-zinc-600">
+          <div className="px-3 py-3 text-center text-meta text-quiet">
             No matches found
           </div>
         )}
@@ -116,44 +108,44 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
 function PlayerRow({ target }: { target: TargetOption }) {
   return (
     <>
-      <User size={12} className="shrink-0 text-zinc-500" />
+      <User size={12} className="shrink-0 text-quiet" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-[11px] font-medium text-zinc-200">
+          <span className="truncate text-meta font-medium text-zinc-200">
             {target.name}
           </span>
           {target.position && (
-            <span className="shrink-0 rounded bg-[#27272a] px-1 py-px text-[9px] font-medium text-zinc-400">
+            <span className="shrink-0 rounded bg-[#27272a] px-1 py-px text-eyebrow font-medium text-zinc-400">
               {target.position}
             </span>
           )}
           {target.age != null && (
-            <span className="shrink-0 text-[9px] text-zinc-500">
+            <span className="shrink-0 text-eyebrow text-quiet">
               {target.age}y
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           {target.caStars != null && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] text-zinc-400">
+            <span className="inline-flex items-center gap-0.5 text-eyebrow text-zinc-400">
               <Star size={8} className="text-amber-400" />
               {target.caStars.toFixed(1)}
             </span>
           )}
           {target.paStars && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] text-zinc-400">
+            <span className="inline-flex items-center gap-0.5 text-eyebrow text-zinc-400">
               PA {target.paStars[0].toFixed(1)}-{target.paStars[1].toFixed(1)}
             </span>
           )}
           {target.observations != null && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] text-zinc-500">
+            <span className="inline-flex items-center gap-0.5 text-eyebrow text-quiet">
               <Eye size={8} />
               {target.observations}
             </span>
           )}
         </div>
         {target.description && (
-          <p className="mt-1 text-[9px] text-emerald-300/80">
+          <p className="mt-1 text-eyebrow text-emerald-300/80">
             {target.description}
           </p>
         )}
@@ -165,26 +157,26 @@ function PlayerRow({ target }: { target: TargetOption }) {
 function ContactRow({ target }: { target: TargetOption }) {
   return (
     <>
-      <Users size={12} className="shrink-0 text-zinc-500" />
+      <Users size={12} className="shrink-0 text-quiet" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-[11px] font-medium text-zinc-200">
+          <span className="truncate text-meta font-medium text-zinc-200">
             {target.name}
           </span>
           {target.contactType && (
-            <span className="shrink-0 rounded bg-[#27272a] px-1 py-px text-[9px] font-medium text-zinc-400">
+            <span className="shrink-0 rounded bg-[#27272a] px-1 py-px text-eyebrow font-medium text-zinc-400">
               {target.contactType}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           {target.organization && (
-            <span className="text-[9px] text-zinc-500 truncate">
+            <span className="text-eyebrow text-quiet truncate">
               {target.organization}
             </span>
           )}
           {target.relationship != null && (
-            <span className="shrink-0 text-[9px] text-zinc-500">
+            <span className="shrink-0 text-eyebrow text-quiet">
               Trust {target.relationship}
             </span>
           )}
@@ -197,13 +189,13 @@ function ContactRow({ target }: { target: TargetOption }) {
 function OptionRow({ target }: { target: TargetOption }) {
   return (
     <>
-      <ChevronRight size={12} className="shrink-0 text-zinc-500" />
+      <ChevronRight size={12} className="shrink-0 text-quiet" />
       <div className="min-w-0 flex-1">
-        <span className="truncate text-[11px] font-medium text-zinc-200">
+        <span className="truncate text-meta font-medium text-zinc-200">
           {target.name}
         </span>
         {target.description && (
-          <p className="text-[9px] text-zinc-500 mt-0.5">
+          <p className="text-eyebrow text-quiet mt-0.5">
             {target.description}
           </p>
         )}

@@ -46,19 +46,8 @@ export function processWeeklyPostTickSystems(
     };
   }
 
-  if (input.alumniMilestones && input.alumniMilestones.length > 0) {
-    const messages: InboxMessage[] = input.alumniMilestones.map((milestone, index) => ({
-      id: `msg_alumni_${milestone.type}_s${state.currentSeason}w${state.currentWeek}_${index}`,
-      week: state.currentWeek,
-      season: state.currentSeason,
-      type: "event",
-      title: `Alumni Milestone: ${milestone.type.replace(/([A-Z])/g, " $1").trim()}`,
-      body: milestone.description,
-      read: false,
-      actionRequired: false,
-    }));
-    state = { ...state, inbox: [...state.inbox, ...messages] };
-  }
+  // gameLoop already emits and applies the authoritative alumni messages.
+  // Do not reconstruct them here (which duplicated both tick and reload feedback).
 
   const decayWarnings: InboxMessage[] = [];
   for (const [contactId, contact] of Object.entries(state.contacts)) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useGameStore } from "@/stores/gameStore";
+import { getFreshReportObservationIds } from "@/engine/reports/reportAccountability";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,9 @@ import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { hasObservableRecurringInjuryConcern } from "@/engine/scout/playerFacingIntel";
 import { Tooltip } from "@/components/ui/tooltip";
-import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
+import { PlayerAgeTimeline } from "./PlayerAgeTimeline";
 import { ClubCrest } from "@/components/game/ClubCrest";
-import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { ACTIVITY_SLOT_COSTS } from "@/engine/core/calendar";
 import { canAddActivity } from "@/engine/core/calendar";
@@ -75,6 +76,7 @@ import {
   RetirementOutlookCard,
 } from "@/components/game/player-profile/PlayerProfileHistoryCards";
 import { PlayerProfileTabBar } from "@/components/game/player-profile/PlayerProfileTabBar";
+import { PlayerDevelopmentEnvironmentCard } from "@/components/game/player-profile/PlayerDevelopmentEnvironmentCard";
 import {
   FormIndicator,
   ReliabilityDots,
@@ -427,8 +429,12 @@ export function PlayerProfile() {
     if ((right.submittedSeason ?? 0) !== (left.submittedSeason ?? 0)) {
       return (right.submittedSeason ?? 0) - (left.submittedSeason ?? 0);
     }
-    return (right.submittedWeek ?? 0) - (left.submittedWeek ?? 0);
+    return (right.submittedWeek ?? 0) - (left.submittedWeek ?? 0)
+      || (right.revision ?? 1) - (left.revision ?? 1);
   })[0];
+  const latestIsPass = String(latestReport?.recommendedAction) === "pass";
+  const passHasFreshEvidence = latestIsPass
+    && getFreshReportObservationIds(observations, latestReport).length > 0;
   const relevantBriefs = unsignedYouthRecord
     ? Object.values(gameState.youthRecruitmentBriefs)
         .filter((brief) =>
@@ -531,7 +537,9 @@ export function PlayerProfile() {
   const evidenceSignals =
     observations.length + dossierEntries.length + dossierInboxIntel.length + contactIntel.length;
   const nextDecision =
-    observations.length === 0
+    latestIsPass
+      ? passHasFreshEvidence ? "Review the new evidence before revising your pass." : "Your pass is recorded."
+      : observations.length === 0
       ? "Get a live view before you commit."
       : reports.length === 0 && needsReportableYouthEvidence
       ? "Return with one question to answer."
@@ -540,17 +548,21 @@ export function PlayerProfile() {
       : foreignYouthCountry && !unsignedYouthRecord?.placed
       ? `Travel to ${getCountryDisplayName(foreignYouthCountry)} before escalating.`
       : unsignedYouthRecord && !unsignedYouthRecord.placed
-      ? "Decide if this prospect is ready for placement."
+      ? activeCaseQuestion?.prompt ?? "Test your report before recommending a placement."
       : "Choose the most useful follow-up.";
   const nextDecisionReason =
-    observations.length === 0
+    latestIsPass
+      ? passHasFreshEvidence
+        ? "A new observation can change the question. Revise the report before pitching a placement."
+        : "Reopen this case when fresh evidence changes the question; no placement is being recommended."
+      : observations.length === 0
       ? "You still need first-hand evidence."
       : reports.length === 0 && needsReportableYouthEvidence
       ? "The existing view did not leave a classified cue you can defend. Plan a focused observation and save the moment that answers your question."
       : reports.length === 0
       ? `${observations.length} observation${observations.length === 1 ? "" : "s"} and ${reportableEvidenceCount} saved cue${reportableEvidenceCount === 1 ? "" : "s"} are ready to become a report.`
       : unsignedYouthRecord && !unsignedYouthRecord.placed
-      ? "Placement is the next professional call in this youth dossier."
+      ? "Another focused look can strengthen the case before you put your name behind a placement."
       : unansweredAttributes.length > 0
       ? `${unansweredAttributes.length} attribute${unansweredAttributes.length === 1 ? "" : "s"} still need clarity.`
       : "The dossier is broad enough to decide whether to press or pause.";
@@ -564,7 +576,7 @@ export function PlayerProfile() {
 
   return (
     <GameLayout>
-      <div className="p-4 pb-32 sm:p-6 sm:pb-8 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
+      <div className="game-workspace [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         {/* Back button */}
         <button
           onClick={() => setScreen(specialization === "youth" ? "youthScouting" : "playerDatabase")}
@@ -576,19 +588,21 @@ export function PlayerProfile() {
         </button>
 
         {/* Header */}
-        <div className="mb-5 flex flex-col gap-5 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 xl:flex-row xl:items-start xl:justify-between sm:p-6">
-          <div className="flex flex-col items-start gap-4 sm:flex-row">
-            <PlayerAvatar
+        <div className="mb-5 border-b border-[var(--border)] pb-5">
+          <div className="flex items-start gap-4 sm:gap-7">
+            <YouthPortrait
               playerId={player.id}
               nationality={player.nationality}
+              age={player.age}
               size={96}
+              className="shrink-0 !rounded-sm !ring-0 sm:!h-44 sm:!w-44"
             />
             <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              <p className="dossier-eyebrow mb-2">
                 {identityLabel}
               </p>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                <h1 className="font-editorial text-2xl leading-tight text-[var(--foreground)] sm:text-[2.75rem]">
                   {player.firstName} {player.lastName}
                 </h1>
                 <button
@@ -609,13 +623,13 @@ export function PlayerProfile() {
               <div className="mt-1 flex items-center gap-2 flex-wrap">
                 <Badge variant="secondary">{player.position}</Badge>
                 {player.injured && player.currentInjury && (
-                  <Badge variant="destructive" className="text-[10px]">
+                  <Badge variant="destructive" className="text-xs">
                     <HeartPulse size={10} className="mr-1" />
                     Injured — {player.currentInjury.weeksRemaining}w
                   </Badge>
                 )}
                 {!player.injured && recurringInjuryConcern && (
-                  <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px]">
+                  <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-xs">
                     Recurring Injury History
                   </Badge>
                 )}
@@ -661,12 +675,26 @@ export function PlayerProfile() {
               </div>
             </div>
         </div>
-          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap xl:max-w-xl xl:justify-end [&>button]:min-h-11 [&>button]:w-full sm:[&>button]:w-auto">
+          <section className="mt-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" aria-label="Current scouting judgment">
+            <div>
+              <p className="dossier-eyebrow">Your current read</p>
+              <h2 className="mt-2 text-xl font-medium">{nextDecision}</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-quiet">{nextDecisionReason}</p>
+              <p className="mt-3 text-meta text-quiet">{observations.length} live {observations.length === 1 ? "view" : "views"} · {reportableEvidenceCount} saved {reportableEvidenceCount === 1 ? "cue" : "cues"} · {reports.length} filed {reports.length === 1 ? "report" : "reports"}{aggregatedAbility ? ` · ${confidenceLabel(aggregatedAbility.caConfidence)} confidence` : " · Still unknown"}</p>
+            </div>
+            {!isRetired && <Button onClick={() => canStartReport && reports.length === 0 ? startReport(canonicalPlayerId) : setScreen("calendar")}>
+              {canStartReport && reports.length === 0 ? "Write the report" : observations.length === 0 ? "Plan first observation" : "Plan next observation"}
+              <ChevronRight size={16} aria-hidden="true" />
+            </Button>}
+          </section>
+          <details className="mt-3 text-sm text-quiet">
+            <summary className="min-h-11 cursor-pointer py-3">Player actions & contacts</summary>
+            <div className="flex flex-wrap gap-2 pb-2">
             <Button
               onClick={() => startReport(canonicalPlayerId)}
               disabled={!canStartReport}
               title={needsReportableYouthEvidence ? "Complete a focused observation and save at least one classified cue first." : undefined}
-              className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-40 min-h-12 !w-auto shadow-2xl shadow-black/50 sm:static sm:z-auto sm:min-h-10 sm:!w-auto sm:shadow-none"
+              variant="outline"
             >
               <FileText size={14} className="mr-2" />
               {needsReportableYouthEvidence ? "Build report evidence first" : "Write Report"}
@@ -818,10 +846,11 @@ export function PlayerProfile() {
                 </Button>
               </>
             )}
-          </div>
+            </div>
+          </details>
         </div>
 
-        <div className="sticky top-2 z-20">
+        <div className="sticky top-0 z-20">
           <PlayerProfileTabBar
             activeTab={activeTab}
             onChange={setActiveTab}
@@ -836,53 +865,13 @@ export function PlayerProfile() {
             aria-labelledby="player-profile-tab-decision"
             className="space-y-5"
           >
-        <Card className="mb-5 overflow-hidden border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.1),transparent_42%),rgba(17,22,28,0.96)]">
-          <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Next scouting decision</p>
-              <h2 className="mt-2 text-xl font-bold text-white sm:text-2xl">{nextDecision}</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">{nextDecisionReason}</p>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                  {observations.length} live view{observations.length === 1 ? "" : "s"}
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                  {evidenceSignals} evidence signal{evidenceSignals === 1 ? "" : "s"}
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                  {reports.length} filed report{reports.length === 1 ? "" : "s"}
-                </span>
-              </div>
-            </div>
-            <Button
-              className="min-h-11 w-full lg:w-auto"
-              onClick={() => {
-                if (canStartReport && reports.length === 0) {
-                  startReport(canonicalPlayerId);
-                  return;
-                }
-                setScreen("calendar");
-              }}
-            >
-              {observations.length === 0
-                ? "Plan first observation"
-                : needsReportableYouthEvidence
-                  ? "Plan focused observation"
-                : reports.length === 0
-                  ? "Write the report"
-                  : "Plan next action"}
-              <ChevronRight size={16} className="ml-2" aria-hidden="true" />
-            </Button>
-          </CardContent>
-        </Card>
-
         {unsignedYouthRecord && !unsignedYouthRecord.placed && (
           <section className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]" aria-label="Academy case evidence">
-            <Card className="border-sky-400/20 bg-[#111820]/95">
+            <Card className="border-sky-400/20 bg-[var(--surface)]">
               <CardHeader className="p-5 pb-3">
                 <CardTitle className="flex items-center gap-2 text-base text-white">
                   <ClipboardList size={17} className="text-sky-300" aria-hidden="true" />
-                  Brief fit and opportunity cost
+                  Recruitment fit
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 p-5 pt-1">
@@ -891,17 +880,17 @@ export function PlayerProfile() {
                 ) : relevantBriefs.slice(0, 2).map((brief) => {
                   const mobility = mobilityByBriefId.get(brief.id);
                   return (
-                  <div key={brief.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div key={brief.id} className="rounded-md border border-white/10 bg-black/20 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">{gameState.clubs[brief.clubId]?.name ?? "Academy client"}</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-300">{gameState.clubs[brief.clubId]?.name ?? "Academy client"}</p>
                         <p className="mt-1 font-semibold text-white">{brief.requiredPositions.join("/")} · {brief.preferredRole ? formatAttribute(brief.preferredRole) : "Open role"}</p>
                       </div>
-                      <Badge variant={brief.competitionPressure >= 70 ? "warning" : "outline"} className="text-[10px]">
+                      <Badge variant={brief.competitionPressure >= 70 ? "warning" : "outline"} className="text-xs">
                         {brief.competitionPressure}/100 pressure
                       </Badge>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-zinc-300">
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-300">
                       <span className="rounded-full border border-white/10 px-2 py-1">Due S{brief.expiresSeason} W{brief.expiresWeek}</span>
                       <span className="rounded-full border border-white/10 px-2 py-1">£{brief.weeklyWageBudget.toLocaleString()}/wk</span>
                       <span className="rounded-full border border-white/10 px-2 py-1 capitalize">{brief.riskTolerance} risk</span>
@@ -919,7 +908,7 @@ export function PlayerProfile() {
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                               Mobility and registration
                             </p>
                             <p className="mt-1 text-xs font-semibold text-white">
@@ -928,7 +917,7 @@ export function PlayerProfile() {
                           </div>
                           <Badge
                             variant={mobility.status === "blocked" ? "destructive" : mobility.status === "conditional" ? "warning" : "success"}
-                            className="text-[10px] capitalize"
+                            className="text-xs capitalize"
                           >
                             {mobility.status} · risk {mobility.overallRiskScore}/100
                           </Badge>
@@ -944,7 +933,7 @@ export function PlayerProfile() {
                             {mobility.visibleReasons.slice(0, 3).map((reason) => (
                               <li key={reason} className="flex gap-2">
                                 <span className="text-sky-300" aria-hidden="true">•</span>
-                                <span>{reason}</span>
+                                <span>{reason.replace(/\bhidden\b/g, "character").replace("Adds an independent evidence family.", "Adds a different source to your assessment.").replace("Adds an unseen observation context.", "Shows the player in a setting you have not studied.")}</span>
                               </li>
                             ))}
                           </ul>
@@ -953,7 +942,7 @@ export function PlayerProfile() {
                               Next step: {mobility.suggestedMitigationActions[0]}
                             </p>
                           )}
-                          <p className="mt-2 text-[10px] leading-4 text-zinc-500">
+                          <p className="mt-2 text-xs leading-4 text-zinc-500">
                             {mobility.modelNotice}
                           </p>
                         </details>
@@ -965,11 +954,11 @@ export function PlayerProfile() {
               </CardContent>
             </Card>
 
-            <Card className="border-violet-400/20 bg-[#15131d]/95">
+            <Card className="border-[var(--border)] bg-[var(--surface)]">
               <CardHeader className="p-5 pb-3">
                 <CardTitle className="flex items-center gap-2 text-base text-white">
-                  <Target size={17} className="text-violet-300" aria-hidden="true" />
-                  Highest-value next evidence
+                  <Target size={17} className="text-[var(--signal-focus)]" aria-hidden="true" />
+                  What to test next
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-1">
@@ -978,7 +967,7 @@ export function PlayerProfile() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-lg font-bold text-white">{formatAttribute(nextObservationContext.context)}</p>
-                        <p className="mt-1 text-xs text-zinc-400">{nextObservationContext.sourceFamily} evidence family</p>
+                        <p className="mt-1 text-xs text-zinc-400">{nextObservationContext.sourceFamily === "relationship" ? "A personal source" : `${nextObservationContext.sourceFamily} evidence`}</p>
                       </div>
                       <Badge variant={nextObservationContext.gainBand === "high" ? "success" : nextObservationContext.gainBand === "medium" ? "warning" : "outline"}>
                         {evidenceOpportunityLabel(nextObservationContext.gainBand)}
@@ -986,10 +975,10 @@ export function PlayerProfile() {
                     </div>
                     <ul className="mt-4 space-y-2 text-xs leading-5 text-zinc-300">
                       {nextObservationContext.reasons.slice(0, 3).map((reason) => (
-                        <li key={reason} className="flex gap-2"><span className="text-violet-300">•</span><span>{reason}</span></li>
+                        <li key={reason} className="flex gap-2"><span className="text-[var(--signal-focus)]">•</span><span>{reason.replace(/\bhidden\b/g, "character").replace("Adds an independent evidence family.", "Adds a different source to your assessment.").replace("Adds an unseen observation context.", "Shows the player in a setting you have not studied.")}</span></li>
                       ))}
                     </ul>
-                    <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-zinc-400">
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-400">
                       <span>{latestHypotheses.length} preserved hypothes{latestHypotheses.length === 1 ? "is" : "es"}</span>
                       <span>·</span>
                       <span>{nextObservationContext.sameContextIndependentSources} prior independent source{nextObservationContext.sameContextIndependentSources === 1 ? "" : "s"} in this context</span>
@@ -1006,7 +995,7 @@ export function PlayerProfile() {
                 <CardContent className="p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300">Contested prospect</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-300">Contested prospect</p>
                       <h3 className="mt-1 text-base font-bold text-white">Other scouts are building their own case</h3>
                     </div>
                     <Badge variant="destructive">{trackingYouthRivals.length} rival{trackingYouthRivals.length === 1 ? "" : "s"}</Badge>
@@ -1016,7 +1005,7 @@ export function PlayerProfile() {
                       <div key={rival.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-white">{rival.name}</p>
-                          <Badge variant={band === "imminent" ? "destructive" : band === "contested" ? "warning" : "outline"} className="text-[10px]">{band}</Badge>
+                          <Badge variant={band === "imminent" ? "destructive" : band === "contested" ? "warning" : "outline"} className="text-xs">{band}</Badge>
                         </div>
                         <p className="mt-1 text-xs text-zinc-400">{gameState.clubs[rival.clubId]?.name ?? "Rival organization"} · Pressure {pressure}/100</p>
                       </div>
@@ -1027,7 +1016,7 @@ export function PlayerProfile() {
             )}
           </section>
         )}
-            <details className="group rounded-2xl border border-white/10 bg-[#10151b]/90">
+            <details className="group rounded-md border border-white/10 bg-[#10151b]/90">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 [&::-webkit-details-marker]:hidden">
                 <span>Case reasoning and callbacks</span>
                 <span className="text-xs font-normal text-zinc-400 group-open:hidden">Open expert detail</span>
@@ -1072,13 +1061,13 @@ export function PlayerProfile() {
             </div>
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-              <Card className="border-emerald-400/20 bg-[#111820]/95">
+              <Card className="border-emerald-400/20 bg-[var(--surface)]">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base text-white">Decision focus</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">Central question</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">Central question</p>
                     <p className="mt-2 text-sm leading-6 text-zinc-200">
                       {caseQuestionSnapshot?.centralQuestion ?? nextDecision}
                     </p>
@@ -1086,10 +1075,10 @@ export function PlayerProfile() {
                   {caseQuestionSnapshot?.activeQuestions.length ? (
                     <div className="space-y-3">
                       {caseQuestionSnapshot.activeQuestions.slice(0, 2).map((question) => (
-                        <div key={question.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                        <div key={question.id} className="rounded-md border border-white/10 bg-black/20 p-4">
                           <div className="flex items-center justify-between gap-3">
                             <p className="text-sm font-semibold text-white">{question.prompt}</p>
-                            <Badge variant="outline" className="text-[10px] capitalize">
+                            <Badge variant="outline" className="text-xs capitalize">
                               {question.family}
                             </Badge>
                           </div>
@@ -1099,7 +1088,7 @@ export function PlayerProfile() {
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">
+                    <div className="rounded-md border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">
                       No formal scouting case is driving this profile yet. The next step is still to preserve a changed-context judgment.
                     </div>
                   )}
@@ -1121,7 +1110,7 @@ export function PlayerProfile() {
                 </CardContent>
               </Card>
 
-              <Card className="border-violet-400/20 bg-[#15131d]/95">
+              <Card className="border-[var(--border)] bg-[var(--surface)]">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base text-white">Best next evidence</CardTitle>
                 </CardHeader>
@@ -1129,7 +1118,7 @@ export function PlayerProfile() {
                   {recommendedCaseContexts.length > 0 ? (
                     <>
                       {recommendedCaseContexts.map((entry) => (
-                        <div key={entry.context} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                        <div key={entry.context} className="rounded-md border border-white/10 bg-black/20 p-4">
                           <div className="flex items-center justify-between gap-3">
                             <p className="text-sm font-semibold text-white">{formatAttribute(entry.context)}</p>
                             <Badge variant={entry.score >= 78 ? "success" : entry.score >= 52 ? "warning" : "outline"}>
@@ -1145,7 +1134,7 @@ export function PlayerProfile() {
                       ))}
                     </>
                   ) : nextObservationContext ? (
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="rounded-md border border-white/10 bg-black/20 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-semibold text-white">{formatAttribute(nextObservationContext.context)}</p>
                         <Badge variant={nextObservationContext.gainBand === "high" ? "success" : nextObservationContext.gainBand === "medium" ? "warning" : "outline"}>
@@ -1154,18 +1143,18 @@ export function PlayerProfile() {
                       </div>
                       <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-400">
                         {nextObservationContext.reasons.slice(0, 3).map((reason) => (
-                          <li key={reason} className="flex gap-2"><span className="text-violet-300">•</span><span>{reason}</span></li>
+                          <li key={reason} className="flex gap-2"><span className="text-[var(--signal-focus)]">•</span><span>{reason.replace(/\bhidden\b/g, "character").replace("Adds an independent evidence family.", "Adds a different source to your assessment.").replace("Adds an unseen observation context.", "Shows the player in a setting you have not studied.")}</span></li>
                         ))}
                       </ul>
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">
+                    <div className="rounded-md border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">
                       No additional context currently outranks the existing file.
                     </div>
                   )}
                   {(caseQuestionSnapshot?.callbacks.length ?? 0) > 0 && (
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Recent callbacks</p>
+                    <div className="rounded-md border border-white/10 bg-black/20 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">Recent callbacks</p>
                       <div className="mt-3 space-y-2">
                         {caseQuestionSnapshot?.callbacks.slice(0, 3).map((callback) => (
                           <div key={callback.id}>
@@ -1190,6 +1179,9 @@ export function PlayerProfile() {
             role="tabpanel"
             aria-labelledby="player-profile-tab-development"
           >
+            {developmentEnvironment && (
+              <PlayerDevelopmentEnvironmentCard environment={developmentEnvironment} />
+            )}
         {/* Overview */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card>
@@ -1344,7 +1336,7 @@ export function PlayerProfile() {
                   {foreignYouthCountry ? " — you will need to travel there to scout in person." : "."}
                 </p>
 
-                {!unsignedYouthRecord.placed && latestReport && (
+                {!unsignedYouthRecord.placed && latestReport && !latestIsPass && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -1414,7 +1406,7 @@ export function PlayerProfile() {
                   size="lg"
                 />
                 {aggregatedAbility.caConfidence < 0.5 && (
-                  <p className="mt-2 text-[10px] text-zinc-500">
+                  <p className="mt-2 text-xs text-zinc-500">
                     More observations will narrow this range
                   </p>
                 )}
@@ -1437,7 +1429,7 @@ export function PlayerProfile() {
                 />
                 {player.age <= 21 &&
                   aggregatedAbility.paHigh - aggregatedAbility.paLow > 1.0 && (
-                    <p className="mt-2 text-[10px] text-zinc-500">
+                    <p className="mt-2 text-xs text-zinc-500">
                       More observations will narrow this range
                     </p>
                   )}
@@ -1487,7 +1479,7 @@ export function PlayerProfile() {
                             ...current,
                             [domain]: !showUnknown,
                           }))}
-                          className="text-[11px] font-medium text-zinc-400 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                          className="text-xs font-medium text-zinc-400 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
                         >
                           {showUnknown
                             ? `Hide ${unknownSummary.hiddenCount} unknown`
@@ -1523,7 +1515,7 @@ export function PlayerProfile() {
                                     : reading.perceivedValue}
                                 </span>
                               </AttributeValueTooltip>
-                              <span className="w-6 shrink-0 text-right text-[10px] text-zinc-500" title={`${reading.observationCount} observation${reading.observationCount !== 1 ? "s" : ""}`}>
+                              <span className="w-6 shrink-0 text-right text-xs text-zinc-500" title={`${reading.observationCount} observation${reading.observationCount !== 1 ? "s" : ""}`}>
                                 {reading.observationCount}x
                               </span>
                             </>
@@ -1538,7 +1530,7 @@ export function PlayerProfile() {
                       ))}
                     </div>
                     {!showUnknown && unknownSummary.hiddenCount > 0 && (
-                      <p className="mt-3 text-[11px] leading-5 text-zinc-500">
+                      <p className="mt-3 text-xs leading-5 text-zinc-500">
                         Hidden by default: {unknownSummary.hiddenLabels.slice(0, 4).join(", ")}
                         {unknownSummary.hiddenLabels.length > 4 ? ` and ${unknownSummary.hiddenLabels.length - 4} more.` : "."}
                       </p>
@@ -1558,106 +1550,35 @@ export function PlayerProfile() {
               </div>
             )}
 
-            {/* Personality Profile */}
-            {player.personalityProfile && (
-              <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
-                  Character Profile
-                </h2>
-                <Card>
-                  <CardContent className="px-4 pb-4 pt-4">
-                    {player.personalityProfile.hiddenUntilRevealed ? (
-                      <div className="text-center py-2">
-                        <p className="text-xs text-zinc-500">
-                          Character type not yet identified. Continue observing to uncover their personality.
-                        </p>
-                        {player.personalityProfile.revealedTraits.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2 justify-center">
-                            {player.personalityProfile.revealedTraits.map((trait) => (
-                              <span
-                                key={trait}
-                                className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
-                              >
-                                {trait.replace(/([A-Z])/g, " $1").trim()}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
-                          <div className="mt-2 flex justify-center gap-1">
-                            {Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
-                              <span
-                                key={`q-${i}`}
-                                className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
-                              >
-                                ?
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <Tooltip content={ARCHETYPE_DESCRIPTIONS[player.personalityProfile.archetype]} side="top">
-                            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 cursor-help underline decoration-dotted underline-offset-2">
-                              {ARCHETYPE_LABELS[player.personalityProfile.archetype]}
-                            </span>
-                          </Tooltip>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {player.personalityProfile.revealedTraits.map((trait) => (
-                            <span
-                              key={trait}
-                              className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
-                            >
-                              {trait.replace(/([A-Z])/g, " $1").trim()}
-                            </span>
-                          ))}
-                          {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
-                            Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
-                              <span
-                                key={`h-${i}`}
-                                className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
-                              >
-                                ?
-                              </span>
-                            ))
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Transfer Willingness</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : player.personalityProfile.transferWillingness >= 0.4 ? "text-amber-400" : "text-emerald-400"}`}>
-                              {player.personalityProfile.transferWillingness >= 0.7 ? "High" : player.personalityProfile.transferWillingness >= 0.4 ? "Medium" : "Low"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Dressing Room</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : player.personalityProfile.dressingRoomImpact >= 0 ? "text-zinc-300" : "text-red-400"}`}>
-                              {player.personalityProfile.dressingRoomImpact >= 2 ? "Positive" : player.personalityProfile.dressingRoomImpact >= 0 ? "Neutral" : "Negative"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Consistency</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : player.personalityProfile.formVolatility <= 0.6 ? "text-amber-400" : "text-red-400"}`}>
-                              {player.personalityProfile.formVolatility <= 0.3 ? "Very Consistent" : player.personalityProfile.formVolatility <= 0.6 ? "Moderate" : "Volatile"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-zinc-500">Big Match</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : player.personalityProfile.bigMatchModifier >= 0 ? "text-zinc-300" : "text-red-400"}`}>
-                              {player.personalityProfile.bigMatchModifier >= 2 ? "Thrives" : player.personalityProfile.bigMatchModifier >= 1 ? "Rises" : player.personalityProfile.bigMatchModifier >= 0 ? "Neutral" : "Struggles"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
+            {/* Character knowledge comes from retained evidence, never profile modifiers. */}
+            <div>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                Character Evidence
+              </h2>
+              <Card>
+                <CardContent className="space-y-3 px-4 pb-4 pt-4">
+                  {player.personalityRevealed.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {player.personalityRevealed.map((trait) => (
+                        <span key={trait} className="rounded bg-amber-500/15 px-2 py-1 text-xs text-amber-300">
+                          {trait.replace(/([A-Z])/g, " $1").trim()} · observed impression
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs leading-5 text-zinc-400">
+                    Character remains a working judgment. Revisit reactions to pressure and setbacks, and seek an independent view of training habits.
+                  </p>
+                  {observations.flatMap((observation) => observation.flaggedMoments)
+                    .filter((moment) => ["composure", "workRate", "teamwork", "decisionMaking"].includes(moment.attribute))
+                    .slice(-3).map((moment, index) => (
+                      <p key={`${moment.phase}-${index}`} className="border-l-2 border-zinc-700 pl-3 text-xs leading-5 text-zinc-300">
+                        {moment.description}
+                      </p>
+                    ))}
+                </CardContent>
+              </Card>
+            </div>
             {/* Behavioral Traits */}
             {(player.playerTraitsRevealed?.length ?? 0) > 0 && (
               <div>
@@ -1668,7 +1589,7 @@ export function PlayerProfile() {
                   {player.playerTraitsRevealed!.map((trait) => (
                     <span
                       key={trait}
-                      className="rounded-full bg-violet-500/15 px-3 py-1 text-xs font-medium text-violet-300"
+                      className="rounded-full bg-[var(--surface-elevated)] px-3 py-1 text-xs font-medium text-[var(--signal-focus)]"
                     >
                       {trait.replace(/([A-Z])/g, " $1").trim()}
                     </span>
@@ -1695,13 +1616,13 @@ export function PlayerProfile() {
                             {role.role.replace(/([A-Z])/g, " $1").trim()}
                           </span>
                           {role.suitability !== undefined && (
-                            <span className="text-[10px] text-zinc-500">
+                            <span className="text-xs text-zinc-500">
                               {role.suitability}% observed fit
                             </span>
                           )}
                         </div>
                       ))}
-                      <p className="text-[10px] text-zinc-500">
+                      <p className="text-xs text-zinc-500">
                         {latestAuthoredRole
                           ? "From your latest submitted role projection."
                           : "Aggregated from role-fit evidence in your observations."}
@@ -1752,11 +1673,11 @@ export function PlayerProfile() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <FileText size={13} className="text-sky-400" aria-hidden="true" />
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">
                             Journal
                           </p>
                         </div>
-                        <span className="text-[10px] text-zinc-600">
+                        <span className="text-xs text-zinc-600">
                           {dossierEntries.length} saved
                         </span>
                       </div>
@@ -1778,7 +1699,7 @@ export function PlayerProfile() {
                                 <p className="text-xs font-medium text-white">
                                   {formatObservationActivityLabel(entry.activityType)}
                                 </p>
-                                <p className="mt-0.5 text-[10px] text-zinc-500">
+                                <p className="mt-0.5 text-xs text-zinc-500">
                                   {formatSeasonWeekLabel(entry.season, entry.week)}
                                 </p>
                               </div>
@@ -1804,7 +1725,7 @@ export function PlayerProfile() {
 
                             {entry.flaggedMoments.length > 0 && (
                               <div className="mt-3 space-y-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
                                   Flagged Moments
                                 </p>
                                 {entry.flaggedMoments.slice(0, 2).map((moment) => {
@@ -1812,7 +1733,7 @@ export function PlayerProfile() {
                                   return (
                                     <div key={moment.id} className="rounded-md border border-[#202020] bg-[#101010] p-2.5">
                                       <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[10px] text-zinc-500">
+                                        <p className="text-xs text-zinc-500">
                                           {moment.minute}&apos; · {formatMomentType(moment.momentType)}
                                           {moment.pressureContext ? " · Under pressure" : ""}
                                         </p>
@@ -1824,7 +1745,7 @@ export function PlayerProfile() {
                                         {moment.description}
                                       </p>
                                       {moment.note && (
-                                        <p className="mt-1 text-[11px] text-zinc-500">
+                                        <p className="mt-1 text-xs text-zinc-500">
                                           Note: {moment.note}
                                         </p>
                                       )}
@@ -1836,7 +1757,7 @@ export function PlayerProfile() {
 
                             {entry.hypotheses.length > 0 && (
                               <div className="mt-3 space-y-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
                                   Hypotheses
                                 </p>
                                 {entry.hypotheses.slice(0, 2).map((hypothesis) => {
@@ -1856,11 +1777,11 @@ export function PlayerProfile() {
                                           {hypothesisDisplay.label}
                                         </span>
                                       </div>
-                                      <p className="mt-1 text-[10px] text-zinc-500">
+                                      <p className="mt-1 text-xs text-zinc-500">
                                         {formatAttribute(hypothesis.domain)} · {forEvidence.length} for · {againstEvidence.length} against
                                       </p>
                                       {latestEvidence && (
-                                        <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                                        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
                                           Latest evidence: {latestEvidence.description}
                                         </p>
                                       )}
@@ -1872,11 +1793,11 @@ export function PlayerProfile() {
 
                             {entry.notes.length > 0 && (
                               <div className="mt-3 space-y-1.5">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
                                   Notes
                                 </p>
                                 {entry.notes.slice(0, 2).map((note, noteIndex) => (
-                                  <p key={`${entry.id}-note-${noteIndex}`} className="text-[11px] leading-relaxed text-zinc-400">
+                                  <p key={`${entry.id}-note-${noteIndex}`} className="text-xs leading-relaxed text-zinc-400">
                                     {note}
                                   </p>
                                 ))}
@@ -1890,12 +1811,12 @@ export function PlayerProfile() {
                     <section aria-label="Linked inbox intelligence" className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          <Users size={13} className="text-violet-400" aria-hidden="true" />
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                          <Users size={13} className="text-[var(--signal-focus)]" aria-hidden="true" />
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">
                             Linked Intel
                           </p>
                         </div>
-                        <span className="text-[10px] text-zinc-600">
+                        <span className="text-xs text-zinc-600">
                           {dossierInboxIntel.length} linked
                         </span>
                       </div>
@@ -1915,7 +1836,7 @@ export function PlayerProfile() {
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <p className="text-xs font-medium text-white">{message.title}</p>
-                                <p className="mt-0.5 text-[10px] text-zinc-500">
+                                <p className="mt-0.5 text-xs text-zinc-500">
                                   {formatSeasonWeekLabel(message.season, message.week)}
                                 </p>
                               </div>
@@ -1948,7 +1869,7 @@ export function PlayerProfile() {
                       {contactIntel.map((intel, i) => (
                         <div key={i} className="rounded-md border border-[#27272a] bg-[#141414] p-3">
                           <div className="flex items-start justify-between gap-3 mb-1.5">
-                            <span className="text-xs font-medium text-violet-300">
+                            <span className="text-xs font-medium text-[var(--signal-focus)]">
                               {formatAttribute(intel.attribute)}
                             </span>
                             <ReliabilityDots reliability={intel.reliability} />
@@ -1990,6 +1911,8 @@ export function PlayerProfile() {
 
             {activeTab === "history" && (
               <>
+            <PlayerAgeTimeline playerId={canonicalPlayerId} className="border-b border-zinc-800 pb-6 md:col-span-2 xl:col-span-3" />
+
             {/* Injury Status & History */}
             <InjuryStatusCard player={player} />
 
@@ -2028,13 +1951,13 @@ export function PlayerProfile() {
                       <div key={event.id} className="rounded-md border border-[#27272a] bg-[#111] px-3 py-2">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs font-medium text-zinc-200">{presentation.title}</p>
-                          <span className="text-[10px] text-zinc-500">S{event.season} W{event.week}</span>
+                          <span className="text-xs text-zinc-500">S{event.season} W{event.week}</span>
                         </div>
-                        <p className="mt-1 text-[11px] text-zinc-400">{presentation.summary}</p>
+                        <p className="mt-1 text-xs text-zinc-400">{presentation.summary}</p>
                         {presentation.details.map((detail, index) => (
                           <p
                             key={`${event.id}-detail-${index}`}
-                            className="mt-1 text-[10px] text-zinc-500"
+                            className="mt-1 text-xs text-zinc-500"
                           >
                             {detail}
                           </p>
@@ -2069,7 +1992,7 @@ export function PlayerProfile() {
                         <div className="flex items-center justify-between mb-1">
                           <Badge
                             variant={convictionVariant(r.conviction)}
-                            className="text-[10px]"
+                            className="text-xs"
                           >
                             {r.conviction === "tablePound"
                               ? "TABLE POUND"
@@ -2097,7 +2020,7 @@ export function PlayerProfile() {
               </CardContent>
             </Card>
             {(caseQuestionSnapshot?.callbacks.length ?? 0) > 0 && (
-              <Card className="border-violet-400/20 bg-violet-400/[0.04]">
+              <Card className="border-[var(--border)] bg-[var(--surface)]">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Evidence Callbacks</CardTitle>
                 </CardHeader>
@@ -2105,7 +2028,7 @@ export function PlayerProfile() {
                   {caseQuestionSnapshot?.callbacks.slice(0, 6).map((callback) => (
                     <div key={callback.id} className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
                       <p className="text-xs font-medium text-zinc-200">{callback.title}</p>
-                      <p className="mt-1 text-[11px] leading-5 text-zinc-400">{callback.summary}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-400">{callback.summary}</p>
                     </div>
                   ))}
                 </CardContent>
@@ -2119,7 +2042,7 @@ export function PlayerProfile() {
       {loanDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setLoanDialogOpen(false)}>
           <div
-            className="mx-4 w-full max-w-lg rounded-xl border border-[#27272a] bg-[#0c0c0c] p-6 shadow-2xl"
+            className="mx-4 w-full max-w-lg rounded-md border border-[#27272a] bg-[#0c0c0c] p-6 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-5 flex items-start justify-between gap-4">
@@ -2198,7 +2121,7 @@ export function PlayerProfile() {
       {networkIntel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setNetworkIntel(null)}>
           <div
-            className="relative mx-4 w-full max-w-md rounded-xl border border-[#27272a] bg-[#0c0c0c] p-6 shadow-2xl"
+            className="relative mx-4 w-full max-w-md rounded-md border border-[#27272a] bg-[#0c0c0c] p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button

@@ -48,6 +48,7 @@ import {
   resolveScoutPerkModifiers,
 } from "@/engine/specializations/perks";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
+import { indexLatestPlayerReports } from "@/engine/reports/reportAccountability";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -778,12 +779,11 @@ function topObservedPlayers(
     .map(([playerId, observations]) => ({ playerId, observations }));
 }
 
-function topObservedUnsignedYouth(
+function observedUnsignedYouth(
   observedCounts: Map<string, number>,
   unsignedYouth?: Record<string, UnsignedYouth>,
-  maxCount = 5,
 ): Array<{ youth: UnsignedYouth; observations: number }> {
-  const results = Object.values(unsignedYouth ?? {})
+  return Object.values(unsignedYouth ?? {})
     .filter((y) => !y.placed && !y.retired)
     .map((y) => ({
       youth: y,
@@ -791,7 +791,6 @@ function topObservedUnsignedYouth(
     }))
     .filter((entry) => entry.observations > 0)
     .sort((a, b) => b.observations - a.observations);
-  return results.slice(0, maxCount);
 }
 
 /**
@@ -1066,7 +1065,8 @@ export function getAvailableActivities(
         currentSeason: opportunityContext.currentSeason,
       })
     : [];
-  const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, 5);
+  // This is the searchable picker's complete source, not a top-five preview.
+  const targetedYouth = observedUnsignedYouth(observedCounts, unsignedYouth);
 
   if (targetedYouth.length > 0 || activeProfessionalCaseOpportunities.length > 0) {
     const youthPoolByPlayerId = new Map<string, TargetOption>();
@@ -1123,12 +1123,11 @@ export function getAvailableActivities(
         "parentCoachMeeting",
       ),
     });
-    const authoredPlayerIds = new Set(
-      Object.values(reports ?? {})
-        .filter((report) => report.scoutId === scout.id)
-        .map((report) => report.playerId),
-    );
-    const pitchPool = youthPool.filter((target) => authoredPlayerIds.has(target.id));
+    const latestReports = indexLatestPlayerReports(Object.values(reports ?? {}), scout.id);
+    const pitchPool = youthPool.filter((target) => {
+      const report = latestReports.get(target.id);
+      return report && report.recommendedAction !== "pass";
+    });
     if (pitchPool.length > 0) {
       activities.push({
         type: "writePlacementReport",

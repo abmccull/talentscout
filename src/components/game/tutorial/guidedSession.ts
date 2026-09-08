@@ -193,7 +193,7 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
       "A school match started early and no academy scout is here yet. One player produced a moment worth a second look. " +
       "Begin the session. You are not here to confirm a star—you are here to notice evidence before everyone else.",
     mentorTextFreelance:
-      "A school match started early. Nobody from an academy has arrived, but I was told one name might be worth writing down. " +
+      "A school match started early. Nobody from an academy has arrived. " +
       "Start watching. One action can open a case, but it cannot finish one.",
     position: "top",
     interactive: true,
@@ -201,12 +201,12 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   },
   {
     id: "focusedPlayer",
-    target: "observation-focus-panel",
+    target: ["observation-focus-lens", "observation-focus-panel"],
     title: "Focus on a youth prospect",
     mentorText:
-      "Pick a prospect and commit focus. That is how you turn a busy school match into a usable read. Use the lens that matches what you're trying to learn.",
+      "Choose your prospect in Players in view, then choose a lens under Your attention. Stay with a player long enough to test your first impression.",
     mentorTextFreelance:
-      "Lock onto one prospect first. Focus is how you trade broad exposure for a deeper, cleaner read.",
+      "Choose a prospect, then a lens under Your attention. Focus trades a broad look for a cleaner read.",
     position: "left",
     interactive: true,
     screen: "observation",
@@ -214,17 +214,17 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   {
     id: "flaggedBreakthrough",
     target: [
-      "observation-promising-reaction",
+      "observation-reactions",
       "observation-flag-moment",
       "observation-advance-to-standout",
     ],
-    title: "Record the standout moment",
+    title: "Record a useful moment",
     mentorText:
-      "There it is—the action that changes the question. Select Flag moment, then mark it Promising. " +
-      "You have not proved the player is special; you have earned a reason to keep watching.",
+      "Flag an action from your lead and choose an honest reaction: promising, concerning, or interesting. " +
+      "One moment can give you a question to test. It does not settle the player's future.",
     mentorTextFreelance:
-      "That is why we came. Select Flag moment, then mark it Promising while it is fresh. " +
-      "You found a signal, not an answer. The next context decides whether you were early or merely impressed.",
+      "Keep a moment from your lead while it is fresh. Choose the reaction the evidence deserves. " +
+      "A concern can be as useful as a promising action when deciding whether to watch again.",
     position: "left",
     interactive: true,
     screen: "observation",
@@ -232,27 +232,39 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   {
     id: "completedMatch",
     target: [
-      "observation-halftime-approach",
-      "observation-complete-reflection",
       "observation-session-controls",
+      "observation-complete-reflection",
+      "observation-halftime-approach",
     ],
     title: "Complete the observation session",
     mentorText:
-      "Now test the first impression against the rest of the match. Choose how you will watch the second half, then finish the reflection and preserve the uncertainty, not just the highlight.",
+      "Now test the first impression against the rest of the match. Choose a half-time approach, then select Complete Reflection so the doubt stays visible with the highlight.",
     mentorTextFreelance:
-      "Choose how you will challenge the first read in the second half. Then finish the reflection and decide what you actually believe.",
+      "Choose how you will watch the second half. Then select Complete Reflection and keep the uncertainty on the record.",
     position: "top",
     interactive: true,
     screen: "observation",
   },
   {
+    id: "resolvedOpeningDiscovery",
+    target: "opening-discovery-choices",
+    title: "Decide who hears the name",
+    mentorText:
+      "You have a lead, not a finished judgment. Choose one of the three next moves: keep the name private, call a club, or ask your source to verify.",
+    mentorTextFreelance:
+      "The watch is done. Pick who hears the name next. Each choice is a real career move, not a tutorial skip.",
+    position: "left",
+    interactive: true,
+    screen: "openingDiscovery",
+  },
+  {
     id: "wroteReport",
     target: "report-conviction",
-    title: "Write up what you learned",
+    title: "Write the first assessment",
     mentorText:
-      "You were first to write the name down. Now turn the moment and the contradiction into a professional opinion. Keep conviction proportional to the evidence.",
+      "This is the same report writer you will use later. Complete the five decisions: the saved evidence, what it suggests, what remains untested, the next test, and your confidence.",
     mentorTextFreelance:
-      "The name is in your notebook. Write the report while the evidence is fresh, and let the uncertainty stay visible.",
+      "File a first assessment, not a hunch. Work the five decisions on this page — evidence, claim, unknown, next test, confidence.",
     position: "right",
     interactive: true,
     screen: "reportWriter",
@@ -260,50 +272,14 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   {
     id: "submittedReport",
     target: "report-submit",
-    title: "Submit the scouting write-up",
+    title: "File the first assessment",
     mentorText:
-      "Submit once the summary reflects the school match properly. This opens an accountable case whose delivery and outcome can shape your reputation.",
+      "When the five decisions are complete, select File initial assessment. That opens an accountable case.",
     mentorTextFreelance:
-      "Send it when the notes are tight. A disciplined youth report is worth more than hype.",
+      "Select File initial assessment once the five decisions are ready. A tight first read beats hype.",
     position: "top",
     interactive: true,
     screen: "reportWriter",
-  },
-  {
-    id: "checkedInbox",
-    target: "report-marketplace-prompt",
-    title: "List your first report",
-    mentorText:
-      "List the youth report on the marketplace. That closes the real loop: observe the school match, write it up, then put the intel where buyers can act on it. Bids come after you advance more weeks.",
-    mentorTextFreelance:
-      "Don't go looking for feedback in an empty inbox. List the report, advance a few weeks, and let the market tell you whether the read has value.",
-    position: "bottom",
-    interactive: true,
-    screen: "reportHistory",
-  },
-  {
-    id: "openedCalendar",
-    target: ["mobile-nav-calendar", "nav-calendar"],
-    title: "Plan the second look",
-    mentorText:
-      "The first report preserves what you saw; it does not end the case. Open the Planner and choose the next context before the trail cools.",
-    mentorTextFreelance:
-      "You have a name and a first opinion. Now open the Planner. The second context is where a lucky highlight starts becoming a real scouting case.",
-    position: "bottom",
-    interactive: true,
-    screen: "reportHistory",
-  },
-  {
-    id: "scheduledActivity",
-    target: "calendar-activities",
-    title: "Spend the week with intent",
-    mentorText:
-      "Schedule the work that best tests your open question. Another live context adds more than repeating the same easy observation.",
-    mentorTextFreelance:
-      "Time is your scarce resource. Schedule a follow-up, contact conversation, or contrasting venue that can prove your first read wrong.",
-    position: "left",
-    interactive: true,
-    screen: "calendar",
   },
   {
     id: "advancedWeek",
@@ -323,8 +299,12 @@ function isYouthGuidedSession(): boolean {
   return useGameStore.getState().gameState?.scout.primarySpecialization === "youth";
 }
 
+export function getYouthGuidedMilestones(): readonly GuidedMilestoneDefinition[] {
+  return YOUTH_GUIDED_MILESTONES;
+}
+
 function getActiveGuidedMilestones(): GuidedMilestoneDefinition[] {
-  return isYouthGuidedSession() ? YOUTH_GUIDED_MILESTONES : DEFAULT_GUIDED_MILESTONES;
+  return isYouthGuidedSession() ? [...YOUTH_GUIDED_MILESTONES] : DEFAULT_GUIDED_MILESTONES;
 }
 
 export const GUIDED_MILESTONES = new Proxy([] as GuidedMilestoneDefinition[], {
@@ -361,6 +341,16 @@ export function getGuidedMilestone(
   return getActiveGuidedMilestones().find((m) => m.id === id);
 }
 
+/** Navigation is restricted only when this career can present an actual task. */
+export function shouldLockGuidedNavigation(
+  active: boolean,
+  task: GuidedMilestoneId | null,
+): boolean {
+  if (!active || task === null) return false;
+  const milestone = getGuidedMilestone(task);
+  return Boolean(milestone?.screen && milestone.target.length > 0);
+}
+
 /**
  * Count how many milestones have been marked complete in the given record.
  */
@@ -371,7 +361,7 @@ export function getCompletedCount(
 }
 
 /**
- * Return the total number of guided milestones (always 10).
+ * Return the total number of guided milestones for the active path.
  */
 export function getTotalCount(): number {
   return getActiveGuidedMilestones().length;

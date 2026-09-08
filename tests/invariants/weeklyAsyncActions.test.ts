@@ -40,6 +40,61 @@ import { createWeeklyAsyncActions } from "@/stores/actions/weeklyAsyncActions";
 describe("weekly async transaction coordinator", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it.each(["resolve", "reject"])("releases an invalidated same-career operation after worker %s and allows retry", async (outcome) => {
+    let resolve!: (value: unknown) => void;
+    let reject!: (error: Error) => void;
+    mocks.runTransaction.mockReturnValueOnce(new Promise((done, fail) => {
+      resolve = done;
+      reject = fail;
+    }));
+    let store = {
+      gameState: { seed: "same-career", currentSeason: 1, currentWeek: 1, finances: { balance: 400 } },
+      weekSimulation: { currentDay: 7, pendingWorldTick: true },
+      isAdvancingWeek: false,
+    } as unknown as GameStoreState;
+    const set: SetState = (partial) => {
+      store = { ...store, ...(typeof partial === "function" ? partial(store) : partial) };
+    };
+    const actions = createWeeklyAsyncActions(() => store, set);
+    const pending = actions.advanceWeekAsync();
+    store = { ...store, gameState: { ...store.gameState!, finances: { ...store.gameState!.finances!, balance: 100 } } };
+    const edited = store.gameState;
+    if (outcome === "resolve") resolve({});
+    else reject(new Error("Worker interrupted"));
+    await pending;
+    expect(store.gameState).toBe(edited);
+    expect(store.isAdvancingWeek).toBe(false);
+    expect(store.weeklyTransactionError).toMatch(/retry/i);
+    expect(mocks.queueAutosave).not.toHaveBeenCalled();
+    mocks.runTransaction.mockResolvedValueOnce({ materializedCommit: { patch: {}, tutorialCommands: [] }, route: "worker" });
+    await actions.advanceWeekAsync();
+    expect(mocks.runTransaction).toHaveBeenCalledTimes(2);
+    expect(store.isAdvancingWeek).toBe(false);
+  });
+
+  it("does not unlock a newer invocation when an older worker finishes", async () => {
+    const releases: Array<(value: unknown) => void> = [];
+    mocks.runTransaction.mockImplementation(() => new Promise((resolve) => { releases.push(resolve); }));
+    let store = {
+      gameState: { seed: "same-career", currentSeason: 1, currentWeek: 1 },
+      weekSimulation: { currentDay: 7, pendingWorldTick: true },
+      isAdvancingWeek: false,
+    } as unknown as GameStoreState;
+    const set: SetState = (partial) => { store = { ...store, ...(typeof partial === "function" ? partial(store) : partial) }; };
+    const actions = createWeeklyAsyncActions(() => store, set);
+    const old = actions.advanceWeekAsync();
+    // A valid career restore may keep the same football snapshot while retiring its operation.
+    store = { ...store, isAdvancingWeek: false };
+    const latest = actions.advanceWeekAsync();
+    const result = { materializedCommit: { patch: {}, tutorialCommands: [] }, route: "worker" };
+    releases[0](result);
+    await old;
+    expect(store.isAdvancingWeek).toBe(true);
+    releases[1](result);
+    await latest;
+    expect(store.isAdvancingWeek).toBe(false);
+  });
+
   it("discards a completed worker result after the active save is replaced", async () => {
     let resolveTransaction!: (value: unknown) => void;
     mocks.runTransaction.mockReturnValue(new Promise((resolve) => {

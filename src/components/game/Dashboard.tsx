@@ -3,7 +3,12 @@
 import { useEffect, useState, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
+import {
+  useGuardedWeekAdvance,
+  WeekAdvanceConfirmDialog,
+} from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
+import { isYouthFirstHour } from "@/lib/youthFirstHour";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +59,8 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { getSeasonLength } from "@/engine/core/gameDate";
-import { buildYouthActiveCaseModel } from "./workspace/desk/youthDeskModel";
+import { buildYouthActiveCaseModel, buildYouthDeskDecisionIndex } from "./workspace/desk/youthDeskModel";
+import { buildYouthDeskStakes, shouldShowYouthDeskStakes } from "@/engine/youth/youthDeskStakes";
 import { DashboardSupplementalSections } from "./dashboard/DashboardSupplementalSections";
 import type { DashboardActionTarget } from "./dashboard/dashboardPriorityModel";
 import { buildDashboardWorkspaceModel } from "./dashboard/dashboardWorkspaceModel";
@@ -80,7 +86,6 @@ export function Dashboard() {
     openDashboardTarget,
     getUpcomingFixtures,
     getLeagueStandings,
-    requestWeekAdvance,
     scheduleMatch,
     markMessageRead,
     selectPlayer,
@@ -99,7 +104,6 @@ export function Dashboard() {
     openDashboardTarget: state.openDashboardTarget,
     getUpcomingFixtures: state.getUpcomingFixtures,
     getLeagueStandings: state.getLeagueStandings,
-    requestWeekAdvance: state.requestWeekAdvance,
     scheduleMatch: state.scheduleMatch,
     markMessageRead: state.markMessageRead,
     selectPlayer: state.selectPlayer,
@@ -117,6 +121,13 @@ export function Dashboard() {
   const [showSatisfactionHistory, setShowSatisfactionHistory] = useState(false);
   const t = useTranslations("dashboard");
   const tCal = useTranslations("calendar");
+
+  const {
+    request: requestWeekAdvance,
+    pending: weekAdvancePending,
+    confirm: confirmWeekAdvance,
+    cancel: cancelWeekAdvance,
+  } = useGuardedWeekAdvance();
 
   // useMemo hooks MUST be called before any early return to satisfy React's
   // Rules of Hooks (hooks must be called in the same order every render).
@@ -150,15 +161,16 @@ export function Dashboard() {
         : [],
     [gameState],
   );
+  const firstHourDesk = isYouthFirstHour(gameState);
   const dashboardWorkspace = useMemo(
     () =>
-      gameState
+      gameState && !firstHourDesk
         ? buildDashboardWorkspaceModel({
             gameState,
             pendingListingReportId,
           })
         : null,
-    [gameState, pendingListingReportId],
+    [firstHourDesk, gameState, pendingListingReportId],
   );
   useEffect(() => {
     if (!dashboardWorkspace) return;
@@ -225,6 +237,7 @@ export function Dashboard() {
     : new Set<string>();
   const youthReportedCount = youthReportedIds.size;
   const observations = Object.values(gameState.observations);
+  const youthDecisionIndex = buildYouthDeskDecisionIndex(Object.values(gameState.reports), observations, scout.id);
   const observationCountByPlayer = new Map<string, number>();
   for (const observation of observations) {
     observationCountByPlayer.set(
@@ -241,7 +254,8 @@ export function Dashboard() {
             youth: y,
             observationCount: observationCountByPlayer.get(y.player.id) ?? 0,
             intelCount: gameState.contactIntel[y.player.id]?.length ?? 0,
-            reported: youthReportedIds.has(y.id),
+            reported: youthReportedIds.has(y.id) || youthDecisionIndex.has(y.player.id),
+            ...youthDecisionIndex.get(y.player.id),
             buzzLevel: y.buzzLevel,
             visibility: y.visibility,
             hasFirmRead:
@@ -319,10 +333,10 @@ export function Dashboard() {
   const needsPlannerBeforeAdvance = openDayCount > 0;
 
   const decisionReadyYouth = observedYouthEvidence
-    .filter((entry) => entry.hasFirmRead && !entry.reported && !entry.youth.placed)
+    .filter((entry) => entry.hasFirmRead && !entry.reported && !entry.passedForNow && !entry.youth.placed)
     .sort(sortYouthByEvidence);
   const evidenceQueue = observedYouthEvidence
-    .filter((entry) => !entry.reported && !entry.youth.placed)
+    .filter((entry) => ((!entry.reported && !entry.passedForNow) || entry.canReconsider) && !entry.youth.placed)
     .sort(sortYouthByEvidence);
   const nextProspect = decisionReadyYouth[0] ?? evidenceQueue[0];
   const placedYouthCount = Object.values(gameState.placementReports ?? {}).filter(
@@ -342,11 +356,19 @@ export function Dashboard() {
     ? {
         eyebrow: "Decision ready",
         title: `Make the call on ${decisionReadyYouth[0]!.youth.player.firstName} ${decisionReadyYouth[0]!.youth.player.lastName}`,
-        description: "You have enough repeat evidence for a defensible placement recommendation. Review the dossier before the trail cools.",
-        label: "Review decision",
-        kind: "prospect" as const,
+        description: "You have enough repeat evidence for a defensible placement recommendation. File the judgment while the read is still fresh.",
+        label: "Write the report",
+        kind: "report" as const,
       }
-    : scheduledSlots === 0
+    : nextProspect?.canReconsider
+      ? {
+          eyebrow: "New evidence",
+          title: `Reconsider ${nextProspect.youth.player.firstName} ${nextProspect.youth.player.lastName}`,
+          description: "Compare the fresh evidence with the reasons you passed before changing the call.",
+          label: "Review the judgment",
+          kind: "report" as const,
+        }
+      : scheduledSlots === 0
       ? {
           eyebrow: "Week not planned",
           title: "Build a week that can change a career",
@@ -358,9 +380,9 @@ export function Dashboard() {
         ? {
             eyebrow: "Evidence gap",
             title: `Get another look at ${nextProspect.youth.player.firstName} ${nextProspect.youth.player.lastName}`,
-            description: "One impression is a lead, not a judgment. Compare another context before committing your reputation.",
-            label: "Open dossier",
-            kind: "prospect" as const,
+            description: "Watch costs a day. Put the next look on this week, then run the itinerary.",
+            label: "Place the next look",
+            kind: "watch" as const,
           }
         : {
             eyebrow: "Ready to simulate",
@@ -377,9 +399,14 @@ export function Dashboard() {
       setScreen("calendar");
       return;
     }
-    if (youthDeskAction.kind === "prospect" && nextProspect) {
+    if (youthDeskAction.kind === "report" && nextProspect) {
       selectPlayer(nextProspect.youth.player.id);
-      setScreen("playerProfile");
+      setScreen("reportWriter");
+      return;
+    }
+    if (youthDeskAction.kind === "watch" && nextProspect) {
+      selectPlayer(nextProspect.youth.player.id);
+      setScreen("calendar");
       return;
     }
     if (needsPlannerBeforeAdvance) {
@@ -403,9 +430,10 @@ export function Dashboard() {
       scheduledSlots,
       openDayCount,
     });
-    if (!dashboardWorkspace) {
+    if (!firstHourDesk && !dashboardWorkspace) {
       return null;
     }
+    const deskStakes = buildYouthDeskStakes(gameState);
     return (
       <YouthDeskDashboard
         gameState={gameState}
@@ -429,6 +457,12 @@ export function Dashboard() {
         onPrimaryAction={openYouthDeskAction}
         setScreen={setScreen}
         selectPlayer={selectPlayer}
+        stakes={{
+          alumni: deskStakes.alumni,
+          fileMoneyLabel: deskStakes.fileMoney.label,
+          reputationLine: deskStakes.reputationLine,
+          visible: !firstHourDesk && shouldShowYouthDeskStakes(deskStakes),
+        }}
       />
     );
   }
@@ -1434,6 +1468,11 @@ export function Dashboard() {
         />
         </div>
       </div>
+      <WeekAdvanceConfirmDialog
+        open={weekAdvancePending}
+        onConfirm={confirmWeekAdvance}
+        onCancel={cancelWeekAdvance}
+      />
     </GameLayout>
   );
 }

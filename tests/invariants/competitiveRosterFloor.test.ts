@@ -1,0 +1,676 @@
+import { describe, expect, it, vi } from "vitest";
+import type { Club, FreeAgent, GameState, Player } from "@/engine/core/types";
+import {
+  scoreFreeAgentClubInterest,
+  tickFreeAgentPool,
+} from "@/engine/freeAgents/pool";
+import { processContractExpiries } from "@/engine/freeAgents/expiry";
+import {
+  createTransferDestinationIndex,
+  selectViableAITransferDestination,
+} from "@/engine/core/gameLoop";
+import { proposeTransferAgreement } from "@/engine/transfers/transferAgreement";
+import { isLoanEligible } from "@/engine/world/loans";
+import { RNG } from "@/engine/rng";
+import {
+  COMPETITIVE_REGISTERED_FLOOR,
+  COMPETITIVE_ROSTER_OUTFLOW_FLOOR,
+  wouldBreachCompetitiveOutflowGuard,
+  wouldBreachCompetitiveRosterFloor,
+} from "@/engine/match/eligibleRoster";
+
+function club(id: string, playerIds: string[], extras: Partial<Club> = {}): Club {
+  return {
+    id,
+    name: id,
+    shortName: id,
+    leagueId: "league",
+    reputation: 55,
+    budget: 10_000_000,
+    weeklyWageBudget: 500_000,
+    scoutingPhilosophy: "marketSmart",
+    managerId: `${id}-manager`,
+    playerIds,
+    academyPlayerIds: [],
+    youthAcademyRating: 12,
+    ...extras,
+  };
+}
+
+function player(id: string, position: Player["position"], clubId: string, ability = 110): Player {
+  return {
+    id,
+    firstName: id,
+    lastName: "Test",
+    age: 24,
+    nationality: "English",
+    position,
+    secondaryPositions: [],
+    clubId,
+    contractClubId: clubId,
+    contractExpiry: 2,
+    currentAbility: ability,
+    potentialAbility: ability + 10,
+    marketValue: 40_000,
+    wage: 800,
+    form: 0,
+    morale: 5,
+    injured: false,
+    attributes: {},
+    personalityProfile: { transferWillingness: 0.95 },
+    seasonRatings: [],
+    recentMatchRatings: [],
+  } as unknown as Player;
+}
+
+describe("competitive roster floor attrition guards", () => {
+  it("boosts free-agent interest for thin squads and missing keepers", () => {
+    const striker = { age: 25, position: "ST", currentAbility: 110 } as Player;
+    const keeper = { age: 27, position: "GK", currentAbility: 100 } as Player;
+    const thinIds = Array.from({ length: 5 }, (_, index) => `thin-${index}`);
+    const healthyIds = Array.from({ length: 18 }, (_, index) => `healthy-${index}`);
+    const players = Object.fromEntries([
+      ...thinIds.map((id) => [id, { id, position: "CM", clubId: "thin" }]),
+      ...healthyIds.map((id) => [id, { id, position: "CM", clubId: "healthy" }]),
+    ]) as GameState["players"];
+    const state = {
+      players,
+      managerProfiles: {},
+      leagues: {},
+      seed: "thin-squad-urgency",
+      currentSeason: 3,
+    };
+
+    const thin = scoreFreeAgentClubInterest(striker, club("thin", thinIds), state);
+    const healthy = scoreFreeAgentClubInterest(striker, club("healthy", healthyIds), state);
+    expect(thin).toBeGreaterThan(healthy * 3);
+
+    const withoutKeeper = scoreFreeAgentClubInterest(
+      keeper,
+      club("thin", thinIds),
+      state,
+    );
+    const withKeeperPlayers = {
+      ...players,
+      "thin-gk": { id: "thin-gk", position: "GK", clubId: "thin" },
+    } as unknown as GameState["players"];
+    const withKeeper = scoreFreeAgentClubInterest(
+      keeper,
+      club("thin", [...thinIds, "thin-gk"]),
+      { ...state, players: withKeeperPlayers },
+    );
+    expect(withoutKeeper).toBeGreaterThan(withKeeper * 2);
+  });
+
+  it("blocks mid-season releases inside the outflow buffer above the XI floor", () => {
+    const ids = Array.from({ length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR }, (_, index) => `p${index}`);
+    const players = Object.fromEntries(ids.map((id, index) => [
+      id,
+      player(id, index === 0 ? "GK" : "CM", "club", 50),
+    ])) as Record<string, Player>;
+    for (const entry of Object.values(players)) {
+      entry.age = 28;
+      entry.contractExpiry = 4;
+    }
+    const state = {
+      currentWeek: 20,
+      currentSeason: 2,
+      players,
+      clubs: { club: club("club", ids) },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "mid-season-floor",
+    } as unknown as GameState;
+    const rng = {
+      chance: () => true,
+      nextInt: (min: number) => min,
+      pickWeighted: <T,>(items: Array<{ item: T }>) => items[0]?.item,
+      gaussian: () => 0,
+    };
+
+    const result = tickFreeAgentPool(state, rng as never);
+    expect(result.midSeasonReleases).toEqual([]);
+  });
+
+  it("keeps AI sellers from falling through the outflow buffer", () => {
+    const sellerIds = Array.from(
+      { length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR },
+      (_, index) => `s${index}`,
+    );
+    const moving = player("s0", "CM", "seller", 70);
+    moving.personalityProfile = { transferWillingness: 1 } as Player["personalityProfile"];
+    const players = Object.fromEntries([
+      ...sellerIds.map((id) => [id, id === "s0" ? moving : player(id, id === "s1" ? "GK" : "CM", "seller")]),
+      ["buyer-1", player("buyer-1", "ST", "buyer")],
+    ]) as Record<string, Player>;
+    const seller = club("seller", sellerIds, { reputation: 30, budget: 50_000 });
+    const buyer = club("buyer", ["buyer-1"], {
+      reputation: 40,
+      budget: 500_000,
+      weeklyWageBudget: 100_000,
+      scoutingPhilosophy: "winNow",
+    });
+    const state = {
+      seed: "seller-floor",
+      currentWeek: 10,
+      currentSeason: 1,
+      players,
+      clubs: { seller, buyer },
+      leagues: {
+        league: { id: "league", country: "England", tier: 4, clubIds: ["seller", "buyer"] },
+      },
+      managerProfiles: {},
+      fixtures: {},
+      matchRatings: {},
+      reports: {},
+      playerMovementHistory: [],
+    } as unknown as GameState;
+
+    expect(wouldBreachCompetitiveOutflowGuard(seller, players, moving.id)).toBe(true);
+    expect(wouldBreachCompetitiveRosterFloor(seller, players, moving.id)).toBe(false);
+    expect(proposeTransferAgreement({
+      player: moving, sellingClub: seller, buyingClub: buyer, state,
+    }).viable).toBe(true);
+    const rng = new RNG("seller-floor-draw");
+    const draw = vi.spyOn(rng, "pickWeighted");
+    // Destination selection still works; processAITransfers applies the seller floor.
+    expect(selectViableAITransferDestination(moving, seller, state, rng, {
+      index: createTransferDestinationIndex(state),
+    })?.destination.id).toBe("buyer");
+    expect(draw).toHaveBeenCalled();
+  });
+
+  it("emergency-restocks a funded thin club and missing keeper from the free-agent pool", () => {
+    const thinIds = Array.from({ length: 4 }, (_, index) => `thin-${index}`);
+    const players = Object.fromEntries([
+      ...thinIds.map((id) => [id, player(id, "CM", "thin", 40)]),
+      ["fa-gk", player("fa-gk", "GK", "", 35)],
+      ["fa-cm", player("fa-cm", "CM", "", 38)],
+      ["fa-st", player("fa-st", "ST", "", 36)],
+    ]) as Record<string, Player>;
+    for (const id of ["fa-gk", "fa-cm", "fa-st"]) {
+      players[id].clubId = undefined as unknown as string;
+      players[id].contractClubId = undefined;
+    }
+    const agent = (playerId: string): FreeAgent => ({
+      playerId,
+      country: "england",
+      nationality: "English",
+      releasedFrom: "other",
+      releasedSeason: 1,
+      weeksInPool: 2,
+      maxWeeksInPool: 20,
+      wageExpectation: 400,
+      signingBonusExpectation: 800,
+      discoverySource: null,
+      discoveredByScout: false,
+      npcInterest: [],
+      status: "available",
+    });
+    const state = {
+      currentWeek: 12,
+      currentSeason: 2,
+      players,
+      clubs: {
+        thin: club("thin", thinIds, {
+          reputation: 18,
+          budget: 250_000,
+          weeklyWageBudget: 40_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [agent("fa-gk"), agent("fa-cm"), agent("fa-st")],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-restock",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-restock");
+    rng.chance = () => false;
+
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
+    const signedClubs = result.npcSignedPlayerIds.map((entry) => entry.clubId);
+    expect(signedClubs.every((id) => id === "thin")).toBe(true);
+    expect(result.npcSignedPlayerIds.some((entry) => entry.playerId === "fa-gk")).toBe(true);
+    expect(result.npcSignedPlayerIds.map((entry) => entry.playerId)).toEqual(
+      expect.arrayContaining(["fa-cm", "fa-gk", "fa-st"]),
+    );
+    // Pool claims plus journeyman spawn fill to the competitive XI floor.
+    expect(result.npcSignedPlayerIds).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - thinIds.length);
+    expect(result.spawnedPlayers.length).toBe(
+      COMPETITIVE_REGISTERED_FLOOR - thinIds.length - 3,
+    );
+    expect(result.spawnedPlayers.every((spawned) => !spawned.clubId)).toBe(true);
+  });
+
+  it("emergency keeper restock ignores reputation banding when a club has no GK", () => {
+    const squadIds = Array.from({ length: 16 }, (_, index) => `full-${index}`);
+    const players = Object.fromEntries([
+      ...squadIds.map((id) => [id, player(id, "CM", "big", 140)]),
+      ["fa-gk-low", player("fa-gk-low", "GK", "", 40)],
+    ]) as Record<string, Player>;
+    players["fa-gk-low"].clubId = undefined as unknown as string;
+    players["fa-gk-low"].contractClubId = undefined;
+    const state = {
+      currentWeek: 8,
+      currentSeason: 3,
+      players,
+      clubs: {
+        big: club("big", squadIds, {
+          reputation: 90,
+          budget: 50_000_000,
+          weeklyWageBudget: 1_000_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [{
+          playerId: "fa-gk-low",
+          country: "england",
+          nationality: "English",
+          releasedFrom: "other",
+          releasedSeason: 2,
+          weeksInPool: 1,
+          maxWeeksInPool: 20,
+          wageExpectation: 500,
+          signingBonusExpectation: 1_000,
+          discoverySource: null,
+          discoveredByScout: false,
+          npcInterest: [],
+          status: "available",
+        }],
+        lastRefreshSeason: 3,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-keeper-rep",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-keeper-rep");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
+    expect(result.npcSignedPlayerIds).toEqual([
+      expect.objectContaining({ playerId: "fa-gk-low", clubId: "big", relaxWeeklyWageCap: true }),
+    ]);
+    expect(result.spawnedPlayers).toEqual([]);
+  });
+
+  it("spawns emergency journeymen when the free-agent pool cannot supply XI or GK", () => {
+    const thinIds = Array.from({ length: 8 }, (_, index) => `starve-${index}`);
+    const players = Object.fromEntries(
+      thinIds.map((id) => [id, player(id, "CM", "starve", 40)]),
+    ) as Record<string, Player>;
+    const state = {
+      currentWeek: 20,
+      currentSeason: 2,
+      players,
+      clubs: {
+        starve: club("starve", thinIds, {
+          reputation: 22,
+          budget: 500_000,
+          weeklyWageBudget: 50_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-spawn",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-spawn");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
+    expect(result.npcSignedPlayerIds).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - thinIds.length);
+    expect(result.spawnedPlayers).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - thinIds.length);
+    expect(result.spawnedPlayers.some((spawned) => spawned.position === "GK")).toBe(true);
+    expect(result.npcSignedPlayerIds.every((entry) =>
+      entry.clubId === "starve"
+      && entry.relaxWeeklyWageCap === true
+      && entry.signingBonus === 0)).toBe(true);
+  });
+
+  it("restocks a funded club whose last keeper is pending retirement this tick", () => {
+    const squadIds = Array.from({ length: 14 }, (_, index) => `aging-${index}`);
+    const players = Object.fromEntries(
+      squadIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "aging", 50),
+      ]),
+    ) as Record<string, Player>;
+    players["aging-0"].age = 40;
+    const state = {
+      currentWeek: 46,
+      currentSeason: 5,
+      players,
+      clubs: {
+        aging: club("aging", squadIds, {
+          reputation: 40,
+          budget: 2_000_000,
+          weeklyWageBudget: 100_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 5,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-pending-retire",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-pending-retire");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, {
+      allowMidSeasonReleases: false,
+      pendingOutflowPlayerIds: new Set(["aging-0"]),
+    });
+    expect(result.spawnedPlayers.some((spawned) => spawned.position === "GK")).toBe(true);
+    expect(result.npcSignedPlayerIds.some((entry) =>
+      entry.clubId === "aging" && entry.relaxWeeklyWageCap === true)).toBe(true);
+  });
+
+  it("emergency restock can claim same-tick mid-season releases", () => {
+    // Already has a keeper so depth restock claims the mid-season body instead of
+    // spawning a GK and filling the XI without touching the release stream.
+    const thinIds = Array.from({ length: 9 }, (_, index) => `need-${index}`);
+    const donorIds = Array.from({ length: 18 }, (_, index) => `donor-${index}`);
+    const players = Object.fromEntries([
+      ...thinIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "need", 40),
+      ]),
+      ...donorIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "donor", 35),
+      ]),
+    ]) as Record<string, Player>;
+    players["donor-1"].age = 28;
+    players["donor-1"].currentAbility = 40;
+    const state = {
+      currentWeek: 18,
+      currentSeason: 2,
+      players,
+      clubs: {
+        need: club("need", thinIds, {
+          reputation: 20,
+          budget: 300_000,
+          weeklyWageBudget: 40_000,
+        }),
+        donor: club("donor", donorIds, {
+          reputation: 25,
+          budget: 400_000,
+          weeklyWageBudget: 50_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-midseason-claim",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-midseason-claim");
+    let releaseRolls = 0;
+    rng.chance = (probability: number) => {
+      if (probability < 0.01) {
+        releaseRolls += 1;
+        return releaseRolls === 1;
+      }
+      return false;
+    };
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: true });
+    expect(result.midSeasonReleases.some((agent) => agent.playerId === "donor-1")).toBe(true);
+    expect(result.npcSignedPlayerIds.some((entry) =>
+      entry.playerId === "donor-1" && entry.clubId === "need")).toBe(true);
+  });
+
+  it("force-offers renewals that would otherwise leave a club below the registered floor", () => {
+    const ids = Array.from({ length: COMPETITIVE_REGISTERED_FLOOR }, (_, index) => `r${index}`);
+    const players = Object.fromEntries(ids.map((id, index) => {
+      const entry = player(id, index === 0 ? "GK" : "CM", "club", 55);
+      entry.contractExpiry = 1;
+      entry.wage = 500;
+      return [id, entry];
+    })) as Record<string, Player>;
+    const state = {
+      currentWeek: 46,
+      currentSeason: 1,
+      players,
+      clubs: {
+        club: club("club", ids, {
+          reputation: 20,
+          budget: 500_000,
+          weeklyWageBudget: 200_000,
+        }),
+      },
+      leagues: {
+        league: {
+          id: "league", name: "League", shortName: "LGE", country: "England",
+          tier: 4, clubIds: ["club"], season: 1,
+        },
+      },
+      fixtures: {},
+      matchRatings: {},
+      managerProfiles: {},
+    } as unknown as GameState;
+
+    class FloorGuardRNG extends RNG {
+      private step = 0;
+      override chance(_probability: number): boolean {
+        this.step += 1;
+        // Odd steps are club offer rolls (fail); even steps are player acceptance (pass).
+        return this.step % 2 === 0;
+      }
+    }
+
+    const result = processContractExpiries(state, new FloorGuardRNG("floor-renew"));
+    expect(result.renewedPlayerIds.sort()).toEqual(ids.sort());
+    expect(result.releasedPlayers).toEqual([]);
+  });
+
+  it("emergency restock can fill a thin club that is already over its wage budget", () => {
+    const thinIds = Array.from({ length: 10 }, (_, index) => `over-${index}`);
+    const players = Object.fromEntries([
+      ...thinIds.map((id, index) => [id, player(id, index === 0 ? "GK" : "CM", "over", 40)]),
+      ["fa-cheap", player("fa-cheap", "CM", "", 30)],
+    ]) as Record<string, Player>;
+    for (const id of thinIds) players[id].wage = 2_000;
+    players["fa-cheap"].clubId = undefined as unknown as string;
+    players["fa-cheap"].contractClubId = undefined;
+    const state = {
+      currentWeek: 15,
+      currentSeason: 2,
+      players,
+      clubs: {
+        over: club("over", thinIds, {
+          reputation: 15,
+          budget: 200_000,
+          weeklyWageBudget: 10_000,
+        }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [{
+          playerId: "fa-cheap",
+          country: "england",
+          nationality: "English",
+          releasedFrom: "other",
+          releasedSeason: 1,
+          weeksInPool: 2,
+          maxWeeksInPool: 20,
+          wageExpectation: 1_500,
+          signingBonusExpectation: 500,
+          discoverySource: null,
+          discoveredByScout: false,
+          npcInterest: [],
+          status: "available",
+        }],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "emergency-over-wage",
+    } as unknown as GameState;
+    const rng = new RNG("emergency-over-wage");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
+    expect(result.npcSignedPlayerIds).toEqual([
+      expect.objectContaining({ playerId: "fa-cheap", clubId: "over" }),
+    ]);
+  });
+
+  it("restores signed-but-unattached free agents to the available market", () => {
+    const players = {
+      orphan: player("orphan", "GK", "", 40),
+    } as Record<string, Player>;
+    players.orphan.clubId = undefined as unknown as string;
+    players.orphan.contractClubId = undefined;
+    const state = {
+      currentWeek: 4,
+      currentSeason: 2,
+      players,
+      clubs: {
+        thin: club("thin", [], { reputation: 20, budget: 200_000, weeklyWageBudget: 20_000 }),
+      },
+      leagues: { league: { id: "league", country: "England" } },
+      freeAgentPool: {
+        agents: [{
+          playerId: "orphan",
+          country: "england",
+          nationality: "English",
+          releasedFrom: "other",
+          releasedSeason: 1,
+          weeksInPool: 3,
+          maxWeeksInPool: 20,
+          wageExpectation: 400,
+          signingBonusExpectation: 400,
+          discoverySource: null,
+          discoveredByScout: false,
+          npcInterest: [],
+          status: "signed",
+        }],
+        lastRefreshSeason: 2,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      managerProfiles: {},
+      seed: "orphan-restore",
+    } as unknown as GameState;
+    const rng = new RNG("orphan-restore");
+    rng.chance = () => false;
+    const result = tickFreeAgentPool(state, rng, { allowMidSeasonReleases: false });
+    expect(result.updatedPool.agents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "orphan", status: "available" }),
+      ]),
+    );
+    expect(result.npcSignedPlayerIds).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "orphan", clubId: "thin", relaxWeeklyWageCap: true }),
+      ]),
+    );
+    expect(result.npcSignedPlayerIds).toHaveLength(COMPETITIVE_REGISTERED_FLOOR);
+    expect(result.spawnedPlayers).toHaveLength(COMPETITIVE_REGISTERED_FLOOR - 1);
+  });
+
+  it("still releases when a floor-preserving renewal is unaffordable", () => {
+    const ids = Array.from({ length: 5 }, (_, index) => `u${index}`);
+    const players = Object.fromEntries(ids.map((id, index) => {
+      const entry = player(id, index === 0 ? "GK" : "CM", "club", 55);
+      entry.contractExpiry = 1;
+      entry.wage = 5_000;
+      return [id, entry];
+    })) as Record<string, Player>;
+    const state = {
+      currentWeek: 46,
+      currentSeason: 1,
+      players,
+      clubs: {
+        club: club("club", ids, {
+          reputation: 20,
+          budget: 0,
+          weeklyWageBudget: 100,
+        }),
+      },
+      leagues: {
+        league: {
+          id: "league", name: "League", shortName: "LGE", country: "England",
+          tier: 4, clubIds: ["club"], season: 1,
+        },
+      },
+      fixtures: {},
+      matchRatings: {},
+      managerProfiles: {},
+    } as unknown as GameState;
+    const rng = new RNG("unaffordable-floor");
+    rng.chance = () => true;
+    const result = processContractExpiries(state, rng);
+    expect(result.renewedPlayerIds).toEqual([]);
+    expect(result.releasedPlayers.map((agent: FreeAgent) => agent.playerId).sort())
+      .toEqual(ids.sort());
+  });
+});
+
+describe("competitive roster floor loan outflow", () => {
+  it("blocks loans that would remove the last registered keeper or breach the buffer", () => {
+    const squadIds = Array.from({ length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR }, (_, index) => `loan-${index}`);
+    const players = Object.fromEntries(
+      squadIds.map((id, index) => [
+        id,
+        player(id, index === 0 ? "GK" : "CM", "parent", 40),
+      ]),
+    ) as Record<string, Player>;
+    for (const id of squadIds) {
+      players[id].contractExpiry = 4;
+      players[id].age = 20;
+      players[id].currentAbility = 30;
+    }
+    const parent = club("parent", squadIds, { reputation: 40 });
+    expect(isLoanEligible(players["loan-0"], parent, players, 1)).toBe(false);
+    expect(isLoanEligible(players["loan-1"], parent, players, 1)).toBe(false);
+
+    const deepIds = Array.from({ length: COMPETITIVE_ROSTER_OUTFLOW_FLOOR + 3 }, (_, index) => `deep-${index}`);
+    const deepPlayers = Object.fromEntries(
+      deepIds.map((id, index) => [
+        id,
+        player(id, index < 2 ? "GK" : "CM", "deep", index < 2 ? 35 : 30),
+      ]),
+    ) as Record<string, Player>;
+    for (const id of deepIds) {
+      deepPlayers[id].contractExpiry = 4;
+      deepPlayers[id].age = 20;
+    }
+    for (let index = 0; index < 5; index += 1) {
+      deepPlayers[deepIds[index]].currentAbility = 80 - index;
+    }
+    deepPlayers[deepIds[deepIds.length - 1]].currentAbility = 20;
+    const deep = club("deep", deepIds, { reputation: 40 });
+    expect(isLoanEligible(deepPlayers[deepIds[deepIds.length - 1]], deep, deepPlayers, 1)).toBe(true);
+  });
+});

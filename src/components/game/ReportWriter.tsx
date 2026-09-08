@@ -37,9 +37,8 @@ import {
 } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
-import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { useAudio } from "@/lib/audio/useAudio";
-import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
@@ -51,7 +50,7 @@ import {
   getFreshReportObservationIds,
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
-import { InitialAssessmentBuilder } from "@/components/game/InitialAssessmentBuilder";
+import { InitialAssessmentBuilder, type InitialAssessmentBuilderResult } from "@/components/game/InitialAssessmentBuilder";
 import {
   addGameWeeks,
   gameWeeksBetween,
@@ -61,8 +60,8 @@ import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdenti
 import { getPendingInsightReportQualityEffect } from "@/engine/insight/effects";
 import {
   canOpenReportWorkflowStep,
-  isConciseOpeningReportMode,
   resolveReportWorkflow,
+  shouldUseInitialAssessment,
 } from "@/components/game/reportWriterMode";
 import { buildReportWriterStatus } from "@/components/game/reportWriterStatus";
 import {
@@ -87,6 +86,7 @@ import {
   PreparedReportWorkCallout,
   ReportWriterAlerts,
 } from "@/components/game/report-writer/ReportWriterCallouts";
+import { WorkspaceDisclosure } from "@/components/game/workspace/WorkspaceDisclosure";
 import {
   BREAKDOWN_LABELS,
   CONVICTION_KEYS,
@@ -131,6 +131,8 @@ export function ReportWriter() {
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
   const [initialAssessmentInput, setInitialAssessmentInput] = useState<InitialAssessmentInput | null>(null);
+  const [initialAssessmentCompletedSteps, setInitialAssessmentCompletedSteps] = useState(0);
+  const [initialAssessmentDraftResult, setInitialAssessmentDraftResult] = useState<InitialAssessmentBuilderResult | null>(null);
   const [briefId, setBriefId] = useState("");
   const [intendedAudience, setIntendedAudience] = useState<StructuredReportInput["intendedAudience"]>("academyDirector");
   const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
@@ -332,15 +334,12 @@ export function ReportWriter() {
       : undefined,
     [canonicalPlayerId, freshObservationIds, gameState],
   );
-  const conciseOpeningMode = isConciseOpeningReportMode({
-    isYouthScout: gameState?.scout.primarySpecialization === "youth",
-    openingStage: gameState?.openingCase?.stage ?? null,
-    openingPlayerId: gameState?.openingCase?.playerId ?? null,
-    selectedPlayerId: canonicalPlayerId ?? null,
-    previousReportExists: previousReport !== undefined,
-    observationCount: observations.length,
-    contextCount: contexts.length,
-  }) || (isYouthCase && matchingBriefs.length === 0);
+  const initialAssessmentMode = shouldUseInitialAssessment({
+    isYouthCase,
+    hasOpenBrief: matchingBriefs.length > 0,
+    playerId: canonicalPlayerId,
+    openingCase: gameState?.openingCase,
+  });
   const analystReview = useMemo(
     () => gameState?.finances && canonicalPlayerId
       ? getApplicableAnalystReview(
@@ -418,7 +417,7 @@ export function ReportWriter() {
 
   const structuredInput = useMemo<StructuredReportInput | undefined>(() => {
     return buildStructuredReportInput({
-      conciseOpeningMode,
+      initialAssessmentMode,
       isYouthCase,
       activeBrief,
       projectedRole,
@@ -441,7 +440,7 @@ export function ReportWriter() {
     intendedAudience,
     isYouthCase,
     initialAssessmentCards,
-    conciseOpeningMode,
+    initialAssessmentMode,
     presentationApproach,
     projectedRole,
     recommendedAction,
@@ -450,7 +449,7 @@ export function ReportWriter() {
     verificationDeadline,
   ]);
   const structuredValidation = useMemo(
-    () => conciseOpeningMode
+    () => initialAssessmentMode
       ? { valid: true, errors: [] as string[] }
       : structuredInput
       ? validateStructuredReportInput(
@@ -459,20 +458,20 @@ export function ReportWriter() {
           new Set(initialAssessmentCards.map((card) => card.id)),
         )
       : { valid: !isYouthCase, errors: isYouthCase ? ["Select a matching academy brief."] : [] },
-    [activeBrief, conciseOpeningMode, initialAssessmentCards, isYouthCase, structuredInput],
+    [activeBrief, initialAssessmentMode, initialAssessmentCards, isYouthCase, structuredInput],
   );
   const initialAssessmentResult = useMemo(
-    () => conciseOpeningMode && initialAssessmentInput && player
+    () => initialAssessmentMode && initialAssessmentInput && player
       ? buildInitialAssessment(
           initialAssessmentInput,
           initialAssessmentCards,
           `${player.firstName} ${player.lastName}`,
         )
       : undefined,
-    [conciseOpeningMode, initialAssessmentCards, initialAssessmentInput, player],
+    [initialAssessmentMode, initialAssessmentCards, initialAssessmentInput, player],
   );
   const formalAssessmentResult = useMemo(
-    () => !conciseOpeningMode && structuredInput?.evidenceVersion === 1 && player
+    () => !initialAssessmentMode && structuredInput?.evidenceVersion === 1 && player
       ? buildFormalAssessment(
           structuredInput,
           initialAssessmentCards,
@@ -480,14 +479,16 @@ export function ReportWriter() {
           activeBriefClub?.name ?? "the academy",
         )
       : undefined,
-    [activeBriefClub?.name, conciseOpeningMode, initialAssessmentCards, player, structuredInput],
+    [activeBriefClub?.name, initialAssessmentMode, initialAssessmentCards, player, structuredInput],
   );
-  const effectiveSummary = conciseOpeningMode
+  const effectiveSummary = initialAssessmentMode
     ? initialAssessmentResult?.assessment?.generatedSummary ?? ""
     : isYouthCase
       ? formalAssessmentResult?.assessment?.generatedSummary ?? ""
       : summary;
-  const effectiveConviction = conciseOpeningMode
+  const effectiveConviction = (initialAssessmentMode ? initialAssessmentInput?.recommendation : recommendedAction) === "pass"
+    ? "note"
+    : initialAssessmentMode
     ? initialAssessmentConviction(initialAssessmentInput?.confidence)
     : conviction;
   const totalReportQualityBonus =
@@ -545,7 +546,7 @@ export function ReportWriter() {
       analystReview,
     ],
   );
-  const evidenceQualityScore = conciseOpeningMode
+  const evidenceQualityScore = initialAssessmentMode
     ? initialAssessmentResult?.assessment?.score.total
     : formalAssessmentResult?.assessment?.score.total;
   const displayQualityScore = evidenceQualityScore ?? qualityPreview.score;
@@ -666,18 +667,17 @@ export function ReportWriter() {
     );
   }
 
-  if (isYouthCase && initialAssessmentCards.length === 0) {
+  if (isYouthCase && (initialAssessmentCards.length === 0 || observations.length === 0)) {
     return (
       <GameLayout>
         <div className="relative flex min-h-[70vh] items-center justify-center p-4 sm:p-6">
-          <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
           <Card className="relative z-10 w-full max-w-2xl border-amber-400/25 bg-[#10151b]/98 shadow-2xl shadow-black/40">
             <CardContent className="p-6 text-center sm:p-8">
               <Target className="mx-auto text-amber-300" size={30} aria-hidden="true" />
-              <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Evidence needed</p>
+              <p className="mt-4 text-eyebrow font-semibold uppercase tracking-[0.18em] text-amber-300">Evidence needed</p>
               <h1 className="mt-2 text-2xl font-bold text-white">Return with one question to answer</h1>
               <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-zinc-300">
-                Your existing view of {player.firstName} {player.lastName} did not leave a classified moment you can defend in a report. Plan a focused observation, choose what you are testing, and save the cue that changes your read.
+                Your existing view of {player.firstName} {player.lastName} did not leave first-hand evidence you can use in a report. Plan a focused observation, choose what you are testing, and save a cue to assess.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <Button variant="outline" className="min-h-11" onClick={() => setScreen("playerProfile")}>
@@ -776,7 +776,7 @@ export function ReportWriter() {
   };
 
   const handleSubmit = () => {
-    if (!effectiveSummary.trim() || (isYouthCase && !structuredInput && !conciseOpeningMode)) return;
+    if (!effectiveSummary.trim() || (isYouthCase && !structuredInput && !initialAssessmentMode)) return;
     setIsDirty(false);
     playSFX("report-submit");
     submitReport(
@@ -784,26 +784,26 @@ export function ReportWriter() {
       effectiveSummary.trim(),
       selectedStrengths,
       selectedWeaknesses,
-      isYouthCase && !conciseOpeningMode ? structuredInput : undefined,
-      conciseOpeningMode ? initialAssessmentInput ?? undefined : undefined,
+      isYouthCase && !initialAssessmentMode ? structuredInput : undefined,
+      initialAssessmentMode ? initialAssessmentInput ?? undefined : undefined,
     );
   };
 
-  const isTablePound = !conciseOpeningMode && conviction === "tablePound";
+  const isTablePound = !initialAssessmentMode && conviction === "tablePound";
   const reportStatus = buildReportWriterStatus({
-    mode: conciseOpeningMode ? "opening" : isYouthCase ? "youth" : "general",
+    mode: initialAssessmentMode ? "opening" : isYouthCase ? "youth" : "general",
     hasObservations: observations.length > 0,
     hasFreshEvidence: freshObservationIds.length > 0,
     hasSummary: effectiveSummary.trim().length > 0,
     initialAssessmentReady: Boolean(initialAssessmentInput && initialAssessmentResult?.valid),
-    openingDecisionCount: initialAssessmentInput ? 1 : 5,
+    openingDecisionCount: 5 - initialAssessmentCompletedSteps,
     youthValidationErrors: structuredValidation.errors,
   });
   const canSubmit = reportStatus.canSubmit;
   const observationsBlocker = reportStatus.blockers.find((blocker) => blocker.id === "observation-required");
   const freshEvidenceBlocker = reportStatus.blockers.find((blocker) => blocker.id === "fresh-evidence-required");
   const sectionNavigatorItems: SectionNavigatorItem[] = buildSectionNavigatorItems({
-    conciseOpeningMode,
+    initialAssessmentMode,
     isYouthCase,
     canSubmit,
     reportStatus,
@@ -834,7 +834,6 @@ export function ReportWriter() {
   return (
     <GameLayout>
       <div className="relative min-h-full p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
-        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
         <div className="relative z-10 mx-auto max-w-6xl">
         <button
           onClick={handleBack}
@@ -845,33 +844,62 @@ export function ReportWriter() {
           {t("backToProfile")}
         </button>
 
-        <div className="mb-5 flex items-center gap-4 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 sm:p-6">
-          <PlayerAvatar
+        <header className="mb-5 flex items-center gap-5 border-b border-[color:var(--border)] pb-6 sm:gap-7">
+          <YouthPortraitWithFallback
             playerId={player.id}
             nationality={player.nationality}
-            size={64}
+            age={player.age}
+            size={96}
+            className="shrink-0"
+            alt={`${player.firstName} ${player.lastName}`}
           />
-          <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Scouting judgment</p>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{t("title")}</h1>
-            <p className="text-sm text-zinc-400 mt-1">
-              {player.firstName} {player.lastName} — {player.position}, Age {player.age}
-              {club ? ` — ${club.name}` : ""}
+          <div className="min-w-0">
+            <h1 className="dossier-eyebrow">{t("title")}</h1>
+            <p className="font-editorial mt-2 text-3xl leading-tight text-[color:var(--foreground)] sm:text-4xl">
+              {player.firstName} {player.lastName}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+              {player.position} · Age {player.age} · {player.nationality}
+              {club ? ` · ${club.name}` : ""}
             </p>
           </div>
-        </div>
+        </header>
 
-        <ReportWorkflowNavigator
-          decisionsRemaining={decisionsRemaining}
-          completedSectionCount={completedSectionCount}
-          requiredSectionCount={requiredSectionCount}
-          previousReportRevision={previousReport?.revision}
-          nextSectionTask={nextSectionTask}
-          activeSectionId={activeSectionId}
-          sectionNavigatorItems={sectionNavigatorItems}
-          nextRequiredStepId={workflow.nextRequiredStepId}
-          onOpenSection={openWorkflowSection}
-        />
+        {initialAssessmentMode ? (
+          <div
+            className="sticky top-0 z-20 mb-6 grid gap-3 border-y border-[color:var(--border)] bg-[color:var(--background)] py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            data-tutorial-id="report-submit"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[color:var(--foreground)]">Initial assessment</p>
+              <p id="initial-assessment-filing-status" className="mt-1 text-sm leading-5 text-[color:var(--muted-foreground)]" aria-live="polite">
+                {canSubmit
+                  ? "Ready to file and open the case."
+                  : observationsBlocker?.message
+                    ?? freshEvidenceBlocker?.message
+                    ?? initialAssessmentDraftResult?.result.errors[0]
+                    ?? reportStatus.primaryBlocker
+                    ?? "Choose one saved observation cue."}
+              </p>
+            </div>
+            <Button className="min-h-11" onClick={handleSubmit} disabled={!canSubmit} aria-describedby="initial-assessment-filing-status">
+              <FileText size={16} className="mr-2" aria-hidden="true" />
+              File initial assessment
+            </Button>
+          </div>
+        ) : (
+          <ReportWorkflowNavigator
+            decisionsRemaining={decisionsRemaining}
+            completedSectionCount={completedSectionCount}
+            requiredSectionCount={requiredSectionCount}
+            previousReportRevision={previousReport?.revision}
+            nextSectionTask={nextSectionTask}
+            activeSectionId={activeSectionId}
+            sectionNavigatorItems={sectionNavigatorItems}
+            nextRequiredStepId={workflow.nextRequiredStepId}
+            onOpenSection={openWorkflowSection}
+          />
+        )}
 
         {preparedWorkItem && (
           <PreparedReportWorkCallout
@@ -879,7 +907,7 @@ export function ReportWriter() {
             playerName={`${player.firstName} ${player.lastName}`}
           />
         )}
-        {isYouthCase && !conciseOpeningMode && (
+        {isYouthCase && !initialAssessmentMode && (
           <details
             id="report-section-brief"
             open={isWorkflowSectionActive("brief") || isWorkflowSectionActive("case") || isWorkflowSectionActive("risk")}
@@ -898,14 +926,14 @@ export function ReportWriter() {
             <div className="border-t border-white/10 p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Academy placement case</p>
+                <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-emerald-300">Academy placement case</p>
                 <h2 id="academy-case-heading" className="mt-1 text-xl font-bold text-white">Answer a real club need</h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-300">
                   The academy director will judge whether your case fits the pathway, budget, evidence, and risk appetite.
                 </p>
               </div>
               {activeBrief && (
-                <Badge variant="warning" className="w-fit text-[10px]">
+                <Badge variant="warning" className="w-fit text-eyebrow">
                   Pressure {activeBrief.competitionPressure}/100
                 </Badge>
               )}
@@ -940,22 +968,22 @@ export function ReportWriter() {
                     </select>
                   </label>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Brief closes</p>
+                    <p className="text-eyebrow uppercase tracking-wider text-zinc-500">Brief closes</p>
                     <p className="mt-1 text-sm font-semibold text-white">
                       S{activeBrief?.expiresSeason} W{activeBrief?.expiresWeek}
                     </p>
                     {verificationDeadline && activeBrief && (
-                      <p className="mt-1 text-[10px] leading-4 text-zinc-400">
+                      <p className="mt-1 text-eyebrow leading-4 text-zinc-400">
                         Decision window S{verificationDeadline.season} W{verificationDeadline.week}
                       </p>
                     )}
                   </div>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Wage ceiling</p>
+                    <p className="text-eyebrow uppercase tracking-wider text-zinc-500">Wage ceiling</p>
                     <p className="mt-1 text-sm font-semibold text-white">£{activeBrief?.weeklyWageBudget.toLocaleString()}/wk</p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Risk appetite</p>
+                    <p className="text-eyebrow uppercase tracking-wider text-zinc-500">Risk appetite</p>
                     <p className="mt-1 text-sm font-semibold capitalize text-white">{activeBrief?.riskTolerance}</p>
                   </div>
                 </div>
@@ -965,7 +993,7 @@ export function ReportWriter() {
                     className="rounded-xl border border-sky-400/20 bg-sky-400/[0.07] p-4"
                     data-testid="recruitment-identity-briefing"
                   >
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-300">
+                    <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-sky-300">
                       Recruitment room identity
                     </p>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -974,7 +1002,7 @@ export function ReportWriter() {
                         <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-300">
                           This club will weight {activeBrief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()} more heavily. Evidence, fit, price, risk, and your judgment still matter; the same case can land differently in another recruitment room.
                         </p>
-                        <dl className="mt-3 flex flex-wrap gap-2 text-[11px] text-sky-100">
+                        <dl className="mt-3 flex flex-wrap gap-2 text-meta text-sky-100">
                           <div className="rounded-full border border-sky-300/20 bg-black/20 px-2.5 py-1">
                             <dt className="sr-only">Evidence preference</dt>
                             <dd className="capitalize">{activeRecruitmentIdentity.doctrine.evidencePreference} evidence</dd>
@@ -993,7 +1021,7 @@ export function ReportWriter() {
                           </div>
                         </dl>
                       </div>
-                      <Badge variant="outline" className="w-fit shrink-0 text-[10px]">
+                      <Badge variant="outline" className="w-fit shrink-0 text-eyebrow">
                         One lens, not the verdict
                       </Badge>
                     </div>
@@ -1013,7 +1041,7 @@ export function ReportWriter() {
                     <p className="mt-2 min-h-20 rounded-lg border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white">
                       {recruitmentNeed}
                     </p>
-                    <span className="mt-1 block text-[11px] leading-4 text-zinc-400">
+                    <span className="mt-1 block text-meta leading-4 text-zinc-400">
                       This comes from the selected club brief, so the report answers the actual assignment.
                     </span>
                   </div>
@@ -1052,8 +1080,9 @@ export function ReportWriter() {
 
                 <fieldset>
                   <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Recommended next step</legend>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {([
+                      ["pass", "Pass for now", "Keep the judgment on record without pursuing recruitment. Reconsider after new evidence."],
                       ["monitor", "Monitor", "Preserve optionality and seek more evidence."],
                       ["inviteForTrial", "Invite for trial", "Ask the club to test the weakest part of the case."],
                       ["offerAcademyPlace", "Offer academy place", "Stand behind a signing recommendation now."],
@@ -1087,11 +1116,23 @@ export function ReportWriter() {
                   </div>
                 </fieldset>
 
-                <section id="report-section-framing" data-testid="report-presentation-room" className="scroll-mt-28 overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#0d1519] shadow-[0_22px_70px_-45px_rgba(34,211,238,0.6)]" aria-labelledby="presentation-room-title">
+                <WorkspaceDisclosure
+                  id="report-section-framing"
+                  data-testid="report-presentation-room"
+                  title="Choose how you make the case"
+                  eyebrow="Boardroom framing"
+                  description="Compare the emphasis and tradeoff before opening the full room read."
+                  summary={<span>{PRESENTATION_APPROACHES.find((approach) => approach.id === presentationApproach)?.label}</span>}
+                  responsiveOpenAt="lg"
+                  tone="subtle"
+                  className="scroll-mt-28 lg:overflow-visible lg:border-0 lg:bg-transparent lg:[&>summary]:hidden"
+                  contentClassName="!border-t-0 !p-0 lg:!block"
+                >
+                <section className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#0d1519] shadow-[0_22px_70px_-45px_rgba(34,211,238,0.6)]" aria-labelledby="presentation-room-title">
                   <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_42%)] p-4 sm:p-5">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Boardroom step</p>
+                        <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-cyan-300">Boardroom step</p>
                         <h3 id="presentation-room-title" className="mt-1 text-lg font-bold text-white">Choose how you make the case</h3>
                         <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-400">
                           Framing changes what the room notices. It cannot improve the underlying evidence, and every approach gives something up.
@@ -1140,9 +1181,9 @@ export function ReportWriter() {
                             <span className="flex items-start justify-between gap-3">
                               <span>
                                 <span className="block text-sm font-bold text-white">{approach.label}</span>
-                                <span className="mt-1 block text-[11px] leading-4 text-zinc-400">{approach.roomLine}</span>
+                                <span className="mt-1 block text-meta leading-4 text-zinc-400">{approach.roomLine}</span>
                               </span>
-                              <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] ${
+                              <span className={`shrink-0 rounded-full border px-2 py-1 text-eyebrow font-semibold uppercase tracking-[0.12em] ${
                                 roomRead.sentiment === "positive"
                                   ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
                                   : roomRead.sentiment === "negative"
@@ -1152,13 +1193,13 @@ export function ReportWriter() {
                                 {roomRead.label}
                               </span>
                             </span>
-                            <span className="mt-4 block rounded-lg border border-emerald-400/15 bg-emerald-400/[0.05] p-2.5 text-[10px] leading-4 text-emerald-100/80">
+                            <span className="mt-4 block rounded-lg border border-emerald-400/15 bg-emerald-400/[0.05] p-2.5 text-eyebrow leading-4 text-emerald-100/80">
                               <strong className="text-emerald-300">Emphasis:</strong> {approach.emphasis}
                             </span>
-                            <span className="mt-2 block rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-2.5 text-[10px] leading-4 text-amber-100/75">
+                            <span className="mt-2 block rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-2.5 text-eyebrow leading-4 text-amber-100/75">
                               <strong className="text-amber-300">Tradeoff:</strong> {approach.tradeoff}
                             </span>
-                            <span className="mt-3 block text-[10px] leading-4 text-zinc-500">
+                            <span className="mt-3 block text-eyebrow leading-4 text-zinc-500">
                               {roomRead.description}
                             </span>
                           </label>
@@ -1184,7 +1225,7 @@ export function ReportWriter() {
                             <p className="text-xs font-semibold text-white">Room read: {selectedImpact.label}</p>
                             <span className="text-xs font-bold text-cyan-200">{selectedRoomRead.label}</span>
                           </div>
-                          <ul className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-400 sm:grid-cols-2">
+                          <ul className="mt-2 grid gap-1 text-meta leading-4 text-zinc-400 sm:grid-cols-2">
                             {selectedImpact.reasons.slice(0, 4).map((reason) => <li key={reason} className="flex gap-2"><span className="text-cyan-300">•</span><span>{reason}</span></li>)}
                           </ul>
                         </div>
@@ -1192,6 +1233,7 @@ export function ReportWriter() {
                     })()}
                   </fieldset>
                 </section>
+                </WorkspaceDisclosure>
 
                 <div id="report-section-judgments" className="scroll-mt-28 grid gap-3 lg:grid-cols-3">
                   {JUDGMENT_CATEGORIES.map((category) => {
@@ -1209,8 +1251,23 @@ export function ReportWriter() {
                         ]
                       : FORMAL_CATEGORY_UNKNOWN_OPTIONS[category];
                     return (
-                      <fieldset key={category} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                        <legend data-testid={`report-judgment-${category}`} className="px-1 text-sm font-semibold text-white">{JUDGMENT_LABELS[category]}</legend>
+                      <WorkspaceDisclosure
+                        key={category}
+                        data-testid={`report-judgment-${category}`}
+                        title={JUDGMENT_LABELS[category]}
+                        description={categoryDrafts[category].status === "unselected"
+                          ? "Choose whether the evidence supports a claim."
+                          : categoryDrafts[category].status === "notAssessed"
+                            ? "Explicitly left unassessed."
+                            : "Evidence-backed claim in progress."}
+                        summary={<span>{categoryDrafts[category].status === "unselected" ? "Not started" : "In progress"}</span>}
+                        responsiveOpenAt="lg"
+                        tone="subtle"
+                        className="lg:overflow-visible lg:border-0 lg:bg-transparent lg:[&>summary]:hidden"
+                        contentClassName="!border-t-0 !p-0 lg:!block"
+                      >
+                      <fieldset className="border-0 bg-black/20 p-4 lg:rounded-xl lg:border lg:border-white/10">
+                        <legend className="px-1 text-sm font-semibold text-white">{JUDGMENT_LABELS[category]}</legend>
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           {(["assessed", "notAssessed"] as const).map((status) => (
                             <label
@@ -1242,14 +1299,14 @@ export function ReportWriter() {
                         </div>
 
                         {categoryDrafts[category].status === "unselected" && (
-                          <p className="mt-3 rounded-lg border border-dashed border-white/10 p-3 text-[11px] leading-5 text-zinc-400">
+                          <p className="mt-3 rounded-lg border border-dashed border-white/10 p-3 text-meta leading-5 text-zinc-400">
                             Decide whether the current evidence supports this judgment or whether it should stay explicitly unassessed.
                           </p>
                         )}
 
                         {categoryDrafts[category].status === "assessed" && (
                           <div className="mt-3 space-y-3">
-                            <label className="block text-[11px] font-medium text-zinc-400">
+                            <label className="block text-meta font-medium text-zinc-400">
                               Supporting cue
                               <select
                                 value={categoryDrafts[category].evidenceCardId}
@@ -1268,9 +1325,9 @@ export function ReportWriter() {
                             </label>
                             {selectedCard && (
                               <fieldset className="space-y-2">
-                                <legend className="text-[11px] font-medium text-zinc-400">Interpretation</legend>
+                                <legend className="text-meta font-medium text-zinc-400">Interpretation</legend>
                                 {claimOptions.map((option) => (
-                                  <label key={option.id} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border border-white/10 p-2 text-[11px] leading-4 text-zinc-300 focus-within:outline focus-within:outline-2 focus-within:outline-emerald-300">
+                                  <label key={option.id} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border border-white/10 p-2 text-meta leading-4 text-zinc-300 focus-within:outline focus-within:outline-2 focus-within:outline-emerald-300">
                                     <input
                                       type="radio"
                                       name={`category-claim-${category}`}
@@ -1283,7 +1340,7 @@ export function ReportWriter() {
                                 ))}
                               </fieldset>
                             )}
-                            <label className="block text-[11px] font-medium text-zinc-400">
+                            <label className="block text-meta font-medium text-zinc-400">
                               Confidence
                               <select
                                 value={categoryDrafts[category].confidence}
@@ -1300,9 +1357,9 @@ export function ReportWriter() {
 
                         {categoryDrafts[category].status !== "unselected" && (
                           <fieldset className="mt-3 space-y-2">
-                            <legend className="text-[11px] font-medium text-zinc-400">What remains unknown</legend>
+                            <legend className="text-meta font-medium text-zinc-400">What remains unknown</legend>
                             {unknownOptions.map((option) => (
-                              <label key={option.id} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border border-white/10 p-2 text-[11px] leading-4 text-zinc-300 focus-within:outline focus-within:outline-2 focus-within:outline-amber-300">
+                              <label key={option.id} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border border-white/10 p-2 text-meta leading-4 text-zinc-300 focus-within:outline focus-within:outline-2 focus-within:outline-amber-300">
                                 <input
                                   type="radio"
                                   name={`category-unknown-${category}`}
@@ -1316,6 +1373,7 @@ export function ReportWriter() {
                           </fieldset>
                         )}
                       </fieldset>
+                      </WorkspaceDisclosure>
                     );
                   })}
                 </div>
@@ -1349,7 +1407,7 @@ export function ReportWriter() {
                     />
                     <span>
                       <strong className="block text-sm text-white">Make no specific risk claim</strong>
-                      <span className="mt-0.5 block text-[11px] leading-4 text-zinc-400">
+                      <span className="mt-0.5 block text-meta leading-4 text-zinc-400">
                         No material concern is supported yet; the report will preserve its separate uncertainties.
                       </span>
                     </span>
@@ -1361,7 +1419,7 @@ export function ReportWriter() {
                         <div key={option.id} className={`grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_11rem] sm:items-center ${riskDraft ? "border-amber-400/35 bg-amber-400/[0.07]" : "border-white/10 bg-black/20"}`}>
                           <div>
                             <p className="text-sm font-semibold text-white">{option.label}</p>
-                            <p className="mt-1 text-[11px] leading-4 text-zinc-400">{option.description}</p>
+                            <p className="mt-1 text-meta leading-4 text-zinc-400">{option.description}</p>
                           </div>
                           <select
                             aria-label={`${option.label} assessment`}
@@ -1385,7 +1443,7 @@ export function ReportWriter() {
                             <option value="observed">Flag from evidence</option>
                           </select>
                           {riskDraft?.status === "observed" && (
-                            <label className="block text-[11px] font-medium text-zinc-400 sm:col-span-2">
+                            <label className="block text-meta font-medium text-zinc-400 sm:col-span-2">
                               Supporting cue
                               <select
                                 value={riskDraft.evidenceCardId ?? ""}
@@ -1411,11 +1469,19 @@ export function ReportWriter() {
                   </div>
                 </fieldset>
 
-                <div
+                <WorkspaceDisclosure
                   id="report-section-terms"
                   hidden={!isWorkflowSectionActive("case")}
-                  className="scroll-mt-28 grid gap-4 md:grid-cols-2"
+                  title="Terms and fallback"
+                  eyebrow="Commercial context"
+                  description="Set the wage assumption and name a credible alternative only when needed."
+                  summary={<span>£{estimatedWeeklyWage.toLocaleString()}/week</span>}
+                  responsiveOpenAt="lg"
+                  tone="subtle"
+                  className="scroll-mt-28 lg:overflow-visible lg:border-0 lg:bg-transparent lg:[&>summary]:hidden"
+                  contentClassName="lg:!block lg:!border-t-0 lg:!p-0"
                 >
+                  <div className="grid gap-4 md:grid-cols-2">
                   <label className="text-xs font-medium text-zinc-300">
                     Estimated weekly wage
                     <input
@@ -1430,7 +1496,7 @@ export function ReportWriter() {
                       className="mt-2 min-h-11 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none focus:border-emerald-400/50"
                     />
                     {activeBrief && estimatedWeeklyWage > activeBrief.weeklyWageBudget && (
-                      <span className="mt-1 block text-[11px] text-amber-300">Above the club&apos;s stated ceiling.</span>
+                      <span className="mt-1 block text-meta text-amber-300">Above the club&apos;s stated ceiling.</span>
                     )}
                   </label>
                   <label className="text-xs font-medium text-zinc-300">
@@ -1451,9 +1517,10 @@ export function ReportWriter() {
                       ))}
                     </select>
                   </label>
-                </div>
+                  </div>
+                </WorkspaceDisclosure>
 
-                {!conciseOpeningMode && reportStatus.blockers.length > 0 && isWorkflowSectionActive("final") && (
+                {!initialAssessmentMode && reportStatus.blockers.length > 0 && isWorkflowSectionActive("final") && (
                   <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
                     <p className="text-xs font-semibold text-amber-200">Complete the report before filing:</p>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/80">
@@ -1476,13 +1543,15 @@ export function ReportWriter() {
         {analystReview && <AnalystReviewBanner analystReview={analystReview} />}
 
         <div id="report-section-evidence" className="scroll-mt-28 space-y-6">
-          {conciseOpeningMode ? (
-            <div data-tutorial-id="report-conviction" className="space-y-4">
+          {initialAssessmentMode ? (
+            <div data-tutorial-id="report-conviction" className="min-w-0">
               <InitialAssessmentBuilder
                 key={canonicalPlayerId}
                 cards={initialAssessmentCards}
                 playerName={`${player.firstName} ${player.lastName}`}
                 value={initialAssessmentInput}
+                onResultChange={setInitialAssessmentDraftResult}
+                onProgressChange={setInitialAssessmentCompletedSteps}
                 onChange={(nextValue) => {
                   setInitialAssessmentInput(nextValue);
                   setIsDirty(true);
@@ -1491,23 +1560,7 @@ export function ReportWriter() {
                   }
                 }}
               />
-              <div
-                className="sticky bottom-3 z-20 grid gap-3 rounded-2xl border border-white/10 bg-[#0d1216]/95 p-4 shadow-2xl shadow-black/45 backdrop-blur sm:grid-cols-[1fr_auto_auto] sm:items-center"
-                data-tutorial-id="report-submit"
-              >
-                <p className={`text-sm ${canSubmit ? "text-emerald-200" : "text-amber-200"}`} aria-live="polite">
-                  {canSubmit
-                    ? "Your evidence, uncertainty, next test, and confidence are ready to file."
-                    : reportStatus.primaryBlocker ?? "Complete the five assessment decisions to file this first read."}
-                </p>
-                <Button className="min-h-11" variant="outline" onClick={handleBack}>
-                  {tc("cancel")}
-                </Button>
-                <Button className="min-h-11" onClick={handleSubmit} disabled={!canSubmit}>
-                  <FileText size={14} className="mr-2" aria-hidden="true" />
-                  File initial assessment
-                </Button>
-              </div>
+
             </div>
           ) : (
             <ReportFinalReview
@@ -1516,7 +1569,7 @@ export function ReportWriter() {
               displayQualityScore={displayQualityScore}
               craftReadLabel={craftRead.label}
               activeBriefClubName={activeBriefClub?.name}
-              recommendedActionLabel={attrLabel(recommendedAction)}
+              recommendedActionLabel={recommendedAction === "pass" ? "Pass for now" : attrLabel(recommendedAction)}
               completedJudgmentCount={completedJudgmentCount}
               riskSignalCount={riskSignalCount}
               selectedNoMaterialSignal={selectedRiskAssessments.some((risk) => risk.id === "noMaterialSignal")}
@@ -1549,25 +1602,23 @@ export function ReportWriter() {
             />
           )}
 
-          <details id="report-dossier" className="group scroll-mt-24 rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5">
+          <details id="report-dossier" className="group dossier-section scroll-mt-24">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
               <div>
                 <span className="text-sm font-semibold text-white">
-                  {conciseOpeningMode ? "Optional evidence and expert depth" : isYouthCase ? "Scouting dossier" : "Scouting notes and supporting detail"}
+                  {isYouthCase ? "Supporting observation record" : "Scouting notes and supporting detail"}
                 </span>
                 <span className="mt-1 block text-xs text-zinc-400">
-                  {conciseOpeningMode
-                    ? "Open the deeper dossier only if you want to pressure-test the first read."
-                    : isYouthCase
-                      ? "Review the observation record, current ability ranges, context, and supporting detail behind your case."
-                      : "Review observations, ability ranges, form, attributes, strengths, weaknesses, and character."}
+                  {isYouthCase
+                    ? "Observed ability ranges, context, and field notes."
+                    : "Review observations, ability ranges, form, attributes, strengths, weaknesses, and character."}
                 </span>
               </div>
               <span className="text-xs font-semibold text-emerald-300 group-open:hidden">
-                {conciseOpeningMode ? "Open optional depth" : "Open evidence"}
+                Open evidence
               </span>
               <span className="hidden text-xs font-semibold text-emerald-300 group-open:inline">
-                {conciseOpeningMode ? "Hide optional depth" : "Hide evidence"}
+                Hide evidence
               </span>
             </summary>
             <div className="mt-5 space-y-6">
@@ -1589,7 +1640,7 @@ export function ReportWriter() {
                 <p className="text-xs text-zinc-500">{t("contexts")}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {contexts.map((ctx) => (
-                    <Badge key={ctx} variant="secondary" className="text-[10px] capitalize">
+                    <Badge key={ctx} variant="secondary" className="text-eyebrow capitalize">
                       {ctx.replace(/([A-Z])/g, " $1").trim()}
                     </Badge>
                   ))}
@@ -1763,7 +1814,7 @@ export function ReportWriter() {
                       >
                         <span className="text-xs text-emerald-300">{s}</span>
                         {claim && (
-                          <Badge variant="secondary" className="shrink-0 text-[10px] bg-emerald-500/20 text-emerald-400">
+                          <Badge variant="secondary" className="shrink-0 text-eyebrow bg-emerald-500/20 text-emerald-400">
                             {claim.attributes.map(attrLabel).join(" + ")}
                           </Badge>
                         )}
@@ -1793,7 +1844,7 @@ export function ReportWriter() {
               )}
               {strengthOptions.length > 0 && (
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <p className="mb-2 text-meta font-semibold uppercase tracking-wider text-zinc-500">
                     Evidence-backed options
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -1818,7 +1869,7 @@ export function ReportWriter() {
                             <span className={`text-sm font-medium ${isSelected ? "text-emerald-300" : "text-white"}`}>
                               {option.descriptor}
                             </span>
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="secondary" className="text-eyebrow">
                               {option.attributes.map(attrLabel).join(" + ")}
                             </Badge>
                           </div>
@@ -1826,12 +1877,12 @@ export function ReportWriter() {
                             {option.estimatedValue}/20 observed • {Math.round(option.confidence * 100)}% certainty
                           </p>
                           {blockedByWeakness && (
-                            <p className="mt-1 text-[11px] text-amber-400">
+                            <p className="mt-1 text-meta text-amber-400">
                               Remove the weakness tag for this attribute first.
                             </p>
                           )}
                           {atLimit && !blockedByWeakness && (
-                            <p className="mt-1 text-[11px] text-zinc-500">
+                            <p className="mt-1 text-meta text-zinc-500">
                               Strength limit reached.
                             </p>
                           )}
@@ -1867,7 +1918,7 @@ export function ReportWriter() {
                       >
                         <span className="text-xs text-red-300">{w}</span>
                         {claim && (
-                          <Badge variant="secondary" className="shrink-0 text-[10px] bg-red-500/20 text-red-400">
+                          <Badge variant="secondary" className="shrink-0 text-eyebrow bg-red-500/20 text-red-400">
                             {claim.attributes.map(attrLabel).join(" + ")}
                           </Badge>
                         )}
@@ -1897,7 +1948,7 @@ export function ReportWriter() {
               )}
               {weaknessOptions.length > 0 && (
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <p className="mb-2 text-meta font-semibold uppercase tracking-wider text-zinc-500">
                     Evidence-backed options
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -1922,7 +1973,7 @@ export function ReportWriter() {
                             <span className={`text-sm font-medium ${isSelected ? "text-red-300" : "text-white"}`}>
                               {option.descriptor}
                             </span>
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="secondary" className="text-eyebrow">
                               {option.attributes.map(attrLabel).join(" + ")}
                             </Badge>
                           </div>
@@ -1930,12 +1981,12 @@ export function ReportWriter() {
                             {option.estimatedValue}/20 observed • {Math.round(option.confidence * 100)}% certainty
                           </p>
                           {blockedByStrength && (
-                            <p className="mt-1 text-[11px] text-amber-400">
+                            <p className="mt-1 text-meta text-amber-400">
                               Remove the strength tag for this attribute first.
                             </p>
                           )}
                           {atLimit && !blockedByStrength && (
-                            <p className="mt-1 text-[11px] text-zinc-500">
+                            <p className="mt-1 text-meta text-zinc-500">
                               Weakness limit reached.
                             </p>
                           )}
@@ -1968,7 +2019,7 @@ export function ReportWriter() {
                   {player.personalityProfile.revealedTraits.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {player.personalityProfile.revealedTraits.map((trait) => (
-                        <Badge key={trait} variant="secondary" className="text-[10px] capitalize">
+                        <Badge key={trait} variant="secondary" className="text-eyebrow capitalize">
                           {trait.replace(/([A-Z])/g, " $1").trim()}
                         </Badge>
                       ))}
@@ -2011,7 +2062,6 @@ export function ReportWriter() {
             </div>
           </details>
 
-
           {/* Written summary */}
           <Card className="hidden">
             <CardHeader className="pb-3">
@@ -2050,7 +2100,7 @@ export function ReportWriter() {
                         {displayQualityScore}
                       </span>
                     </div>
-                    <span className="text-[10px] text-zinc-500">/ 100</span>
+                    <span className="text-eyebrow text-zinc-500">/ 100</span>
                   </div>
 
                   {/* Breakdown bars */}
@@ -2061,7 +2111,7 @@ export function ReportWriter() {
                       const pct = (value / max) * 100;
                       return (
                         <div key={key} className="flex items-center gap-2">
-                          <span className="w-28 shrink-0 text-[11px] text-zinc-400 truncate">
+                          <span className="w-28 shrink-0 text-meta text-zinc-400 truncate">
                             {label}
                           </span>
                           <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
@@ -2070,7 +2120,7 @@ export function ReportWriter() {
                               style={{ width: `${pct}%` }}
                             />
                           </div>
-                          <span className="w-10 shrink-0 text-right text-[11px] font-mono text-zinc-400">
+                          <span className="w-10 shrink-0 text-right text-meta font-mono text-zinc-400">
                             {value}/{max}
                           </span>
                         </div>
@@ -2082,13 +2132,13 @@ export function ReportWriter() {
                 {/* Improvement hints */}
                 {qualityPreview.hints.length > 0 && (
                   <div className="mt-3 rounded-md border border-[#27272a] bg-[#141414] p-2.5">
-                    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 mb-1.5">
+                    <p className="flex items-center gap-1.5 text-meta font-semibold text-amber-400 mb-1.5">
                       <Lightbulb size={12} aria-hidden="true" />
                       Tips to improve
                     </p>
                     <ul className="space-y-1">
                       {qualityPreview.hints.map((hint) => (
-                        <li key={hint} className="text-[11px] text-zinc-400 leading-tight pl-3.5 relative">
+                        <li key={hint} className="text-meta text-zinc-400 leading-tight pl-3.5 relative">
                           <span className="absolute left-0 top-0 text-zinc-600" aria-hidden="true">
                             &bull;
                           </span>
@@ -2100,17 +2150,17 @@ export function ReportWriter() {
                 )}
 
                 {equipmentReportQualityBonus + infrastructureReportQualityBonus > 0 && (
-                  <p className="mt-2 text-[10px] text-emerald-500">
+                  <p className="mt-2 text-eyebrow text-emerald-500">
                     +{Math.round((equipmentReportQualityBonus + infrastructureReportQualityBonus) * 100)} points from infrastructure and equipment
                   </p>
                 )}
                 {insightReportQualityEffect && (
-                  <p className="mt-1 text-[10px] text-amber-400">
+                  <p className="mt-1 text-eyebrow text-amber-400">
                     +{insightReportQualityEffect.bonusPoints} points from The Verdict; consumed when this report is submitted
                   </p>
                 )}
 
-                <p className="mt-2 text-[10px] text-zinc-600 italic">
+                <p className="mt-2 text-eyebrow text-zinc-600 italic">
                   This grades report craft. Accuracy resolves later from the player&apos;s career.
                 </p>
               </CardContent>
@@ -2137,7 +2187,7 @@ export function ReportWriter() {
                   Price Estimate
                   <Badge
                     variant="outline"
-                    className={`ml-auto text-[10px] ${
+                    className={`ml-auto text-eyebrow ${
                       priceEstimate.marketTemperature === "hot" || priceEstimate.marketTemperature === "deadline"
                         ? "text-orange-400 border-orange-500/40"
                         : priceEstimate.marketTemperature === "cold"
@@ -2152,18 +2202,18 @@ export function ReportWriter() {
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-md border border-[#27272a] bg-[#141414] p-2.5 text-center">
-                    <p className="text-[10px] text-zinc-500 mb-1">Non-Exclusive</p>
+                    <p className="text-eyebrow text-zinc-500 mb-1">Non-Exclusive</p>
                     <p className="text-lg font-bold text-emerald-400">{formatValue(priceEstimate.nonExclusive)}</p>
                   </div>
                   <div className="rounded-md border border-amber-500/20 bg-amber-950/10 p-2.5 text-center">
-                    <p className="text-[10px] text-amber-400/70 mb-1">Exclusive</p>
+                    <p className="text-eyebrow text-amber-400/70 mb-1">Exclusive</p>
                     <p className="text-lg font-bold text-amber-400">{formatValue(priceEstimate.exclusive)}</p>
                   </div>
                 </div>
 
                 {/* Range bar */}
                 <div>
-                  <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
+                  <div className="flex justify-between text-eyebrow text-zinc-500 mb-1">
                     <span>{formatValue(priceEstimate.low)}</span>
                     <span>{formatValue(priceEstimate.high)}</span>
                   </div>
@@ -2178,11 +2228,11 @@ export function ReportWriter() {
                 </div>
 
                 {displayQualityScore < 40 && (
-                  <p className="text-[10px] text-amber-400/80 italic">
+                  <p className="text-eyebrow text-amber-400/80 italic">
                     Improve report craft to increase sale value
                   </p>
                 )}
-                <p className="text-[10px] text-zinc-600 italic">
+                <p className="text-eyebrow text-zinc-600 italic">
                   Calibrated conviction &amp; stronger craft = higher sale price
                 </p>
               </CardContent>
@@ -2222,7 +2272,7 @@ export function ReportWriter() {
                     ] as const
                   ).map(([label, value]) => (
                     <div key={label} className="flex items-center gap-1.5">
-                      <span className="w-14 shrink-0 text-[10px] text-zinc-500">{label}</span>
+                      <span className="w-14 shrink-0 text-eyebrow text-zinc-500">{label}</span>
                       <div className="flex-1 h-1 rounded-full bg-[#27272a] overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
@@ -2231,7 +2281,7 @@ export function ReportWriter() {
                           style={{ width: `${value}%` }}
                         />
                       </div>
-                      <span className={`w-8 text-right text-[10px] font-mono font-semibold ${
+                      <span className={`w-8 text-right text-eyebrow font-mono font-semibold ${
                         value >= 70 ? "text-emerald-400" : value >= 40 ? "text-amber-400" : "text-red-400"
                       }`}>
                         {value}%
@@ -2241,7 +2291,7 @@ export function ReportWriter() {
                 </div>
 
                 {/* Top strengths & weaknesses */}
-                <div className="flex gap-4 text-[11px] leading-tight">
+                <div className="flex gap-4 text-meta leading-tight">
                   {systemFit.fitStrengths.length > 0 && (
                     <div className="flex-1 min-w-0">
                       {systemFit.fitStrengths.slice(0, 2).map((s, i) => (

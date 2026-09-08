@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const reservedFiles = new Set([
   "source-workflow-run.json",
   "source-workflow-jobs.json",
+  "source-workflow-artifacts.json",
+  "source-soak-transport.json",
   "package-workflow-run.json",
   "package-workflow-jobs.json",
 ]);

@@ -451,6 +451,15 @@ function deriveAccountability(
   const latestReview = reviews.filter((review) => review.status === "complete").at(-1);
   const reviewScore = latestReview?.overallScore;
 
+  if (latestReport?.recommendedAction === "pass") {
+    return {
+      status: "closed",
+      latestReviewId: latestReview?.id,
+      summary: latestReview?.origin === "decision" && latestReview.findings?.length
+        ? latestReview.findings.slice(-2).join(" ")
+        : "Passed for now. The evidence stays on record; a fresh observation can reopen the judgment.",
+    };
+  }
   if (reviewScore !== undefined) {
     const status = reviewScore >= 70 ? "vindicated" : reviewScore < 50 ? "challenged" : "mixed";
     return {
@@ -604,6 +613,7 @@ export function openProfessionalScoutingCase(
 export function ensureScoutingCaseForReport(
   scoutingCases: Record<string, ScoutingCase>,
   report: ScoutReport,
+  options: { activateReport?: boolean } = {},
 ): {
   scoutingCases: Record<string, ScoutingCase>;
   scoutingCase: ScoutingCase;
@@ -620,12 +630,16 @@ export function ensureScoutingCaseForReport(
   );
   const reportHypothesisIds = Object.values(report.categoryVerdicts ?? {})
     .flatMap((verdict) => verdict?.hypothesisIds ?? []);
+  // Delivering an earlier report links its history without replacing the
+  // scout's current authored judgment (including a later private pass).
+  const preserveAuthoredState = options.activateReport === false && Boolean(base.activeReportId);
   const scoutingCase: ScoutingCase = {
     ...base,
     legacyUnlinked: false,
-    status: base.status === "placed" ? "placed" : "reported",
-    briefId: report.briefId ?? base.briefId,
-    activeReportId: report.id,
+    status: preserveAuthoredState ? base.status
+      : base.status === "placed" ? "placed" : report.recommendedAction === "pass" ? "closed" : "reported",
+    briefId: preserveAuthoredState ? base.briefId : report.briefId ?? base.briefId,
+    activeReportId: preserveAuthoredState ? base.activeReportId : report.id,
     hypothesisIds: [...new Set([...(base.hypothesisIds ?? []), ...reportHypothesisIds])],
     reportIds: appendUnique(base.reportIds, report.id),
     lastUpdatedWeek: touched.week,
@@ -679,7 +693,7 @@ export function recordMarketplaceDelivery(input: MarketplaceDeliveryInput): {
   report: ScoutReport;
   delivery: ReportDelivery;
 } {
-  const linked = ensureScoutingCaseForReport(input.scoutingCases, input.report);
+  const linked = ensureScoutingCaseForReport(input.scoutingCases, input.report, { activateReport: false });
   const deliveryId = `delivery_marketplace_${input.listing.id}_${input.bid.id}`;
   const existing = input.reportDeliveries[deliveryId];
   const delivery: ReportDelivery = existing ?? {
@@ -702,7 +716,8 @@ export function recordMarketplaceDelivery(input: MarketplaceDeliveryInput): {
   );
   const updatedCase: ScoutingCase = {
     ...currentCase,
-    status: currentCase.status === "placed" ? "placed" : "delivered",
+    status: delivery.status === "resolved" || currentCase.status === "placed" || currentCase.activeReportId !== linked.report.id
+      ? currentCase.status : "delivered",
     listingIds: appendUnique(currentCase.listingIds, input.listing.id),
     deliveryIds: appendUnique(currentCase.deliveryIds, delivery.id),
     lastUpdatedWeek: touched.week,
@@ -731,7 +746,7 @@ export function recordDirectPlacementDelivery(input: DirectPlacementDeliveryInpu
   placementReport: PlacementReport;
   delivery: ReportDelivery;
 } {
-  const linked = ensureScoutingCaseForReport(input.scoutingCases, input.report);
+  const linked = ensureScoutingCaseForReport(input.scoutingCases, input.report, { activateReport: false });
   const deliveryId = input.placementReport.deliveryId
     ?? `delivery_placement_${input.placementReport.id}`;
   const due = input.placementReport.responseDueWeek && input.placementReport.responseDueSeason
@@ -770,7 +785,8 @@ export function recordDirectPlacementDelivery(input: DirectPlacementDeliveryInpu
   );
   const updatedCase: ScoutingCase = {
     ...currentCase,
-    status: currentCase.status === "placed" ? "placed" : "delivered",
+    status: delivery.status === "resolved" || currentCase.status === "placed" || currentCase.activeReportId !== linked.report.id
+      ? currentCase.status : "delivered",
     placementReportIds: appendUnique(currentCase.placementReportIds, placementReport.id),
     deliveryIds: appendUnique(currentCase.deliveryIds, delivery.id),
     lastUpdatedWeek: touched.week,
@@ -802,6 +818,61 @@ interface ResolveDecisionInput {
   recruitmentSnapshot?: ClubDecision["recruitmentSnapshot"];
 }
 
+/** Restore case consequences from dated decisions without replaying authored reports. */
+function reconcileRecordedCaseDecision(
+  scoutingCases: Record<string, ScoutingCase>,
+  clubDecisions: Record<string, ClubDecision>,
+  decision: ClubDecision,
+): Record<string, ScoutingCase> {
+  const currentCase = scoutingCases[decision.caseId];
+  if (!currentCase) return scoutingCases;
+  const decisionIds = appendUnique(currentCase.decisionIds ?? [], decision.id);
+  const recorded = decisionIds
+    .map((id) => clubDecisions[id])
+    .filter((entry): entry is ClubDecision => Boolean(entry) && entry.caseId === currentCase.id);
+  const latestApplicable = recorded
+    .filter((entry) => !currentCase.activeReportId || entry.reportId === currentCase.activeReportId)
+    .sort((left, right) =>
+      right.decidedSeason - left.decidedSeason
+      || right.decidedWeek - left.decidedWeek
+      || right.id.localeCompare(left.id)
+    )[0];
+  const placed = currentCase.status === "placed" || recorded.some((entry) => entry.outcome === "accepted");
+  const touched = laterDate(
+    { week: currentCase.lastUpdatedWeek, season: currentCase.lastUpdatedSeason },
+    { week: decision.decidedWeek, season: decision.decidedSeason },
+  );
+  return {
+    ...scoutingCases,
+    [currentCase.id]: {
+      ...normalizeCase(currentCase),
+      status: placed ? "placed"
+        : !latestApplicable ? currentCase.status
+          : latestApplicable.outcome === "followUpRequested" || latestApplicable.outcome === "trial"
+            ? "reported" : "closed",
+      decisionIds,
+      lastUpdatedWeek: touched.week,
+      lastUpdatedSeason: touched.season,
+    },
+  };
+}
+
+function recordedDecisionForDelivery(
+  delivery: ReportDelivery,
+  decisions: Record<string, ClubDecision>,
+): ClubDecision | undefined {
+  const candidates = delivery.decisionId
+    ? [decisions[delivery.decisionId]].filter(Boolean)
+    : Object.values(decisions).filter((decision) => decision.deliveryId === delivery.id);
+  if (candidates.length !== 1) return undefined;
+  const decision = candidates[0];
+  return decision.deliveryId === delivery.id
+    && decision.caseId === delivery.caseId
+    && decision.clubId === delivery.clubId
+    && decision.reportId === delivery.reportId
+    ? decision : undefined;
+}
+
 export function resolveClubDecision(input: ResolveDecisionInput): {
   scoutingCases: Record<string, ScoutingCase>;
   reportDeliveries: Record<string, ReportDelivery>;
@@ -811,10 +882,28 @@ export function resolveClubDecision(input: ResolveDecisionInput): {
   const delivery = input.reportDeliveries[input.deliveryId];
   if (!delivery) return input;
   const decisionId = delivery.decisionId ?? `decision_${delivery.id}`;
-  const existingDecision = input.clubDecisions[decisionId];
+  const existingDecision = recordedDecisionForDelivery(delivery, input.clubDecisions);
   if (existingDecision) {
-    return { ...input, decision: existingDecision };
+    // Existing decisions are the authority for both outcome and resolution date.
+    // Hydration may supply a legacy placement date; it must not rewrite history.
+    const resolvedDelivery: ReportDelivery = {
+      ...delivery,
+      status: "resolved",
+      decisionId: existingDecision.id,
+      resolvedWeek: existingDecision.decidedWeek,
+      resolvedSeason: existingDecision.decidedSeason,
+    };
+    return {
+      ...input,
+      scoutingCases: reconcileRecordedCaseDecision(input.scoutingCases, input.clubDecisions, existingDecision),
+      reportDeliveries: { ...input.reportDeliveries, [delivery.id]: resolvedDelivery },
+      decision: existingDecision,
+    };
   }
+  // Conflicting historical links need explicit repair, never a second decision
+  // or an overwrite of an unrelated decision under the generated identifier.
+  if (input.clubDecisions[decisionId]
+    || Object.values(input.clubDecisions).some((decision) => decision.deliveryId === delivery.id)) return input;
   const decision: ClubDecision = {
     id: decisionId,
     caseId: delivery.caseId,
@@ -840,27 +929,12 @@ export function resolveClubDecision(input: ResolveDecisionInput): {
     resolvedWeek: input.week,
     resolvedSeason: input.season,
   };
-  const currentCase = input.scoutingCases[delivery.caseId];
-  const updatedCases = currentCase
-    ? {
-        ...input.scoutingCases,
-        [currentCase.id]: {
-          ...normalizeCase(currentCase),
-          status: input.outcome === "accepted"
-            ? "placed" as const
-            : input.outcome === "followUpRequested" || input.outcome === "trial"
-              ? "reported" as const
-              : "closed" as const,
-          decisionIds: appendUnique(currentCase.decisionIds ?? [], decisionId),
-          lastUpdatedWeek: input.week,
-          lastUpdatedSeason: input.season,
-        },
-      }
-    : input.scoutingCases;
+  const updatedDecisions = { ...input.clubDecisions, [decision.id]: decision };
+  const updatedCases = reconcileRecordedCaseDecision(input.scoutingCases, updatedDecisions, decision);
   return {
     scoutingCases: updatedCases,
     reportDeliveries: { ...input.reportDeliveries, [delivery.id]: updatedDelivery },
-    clubDecisions: { ...input.clubDecisions, [decision.id]: decision },
+    clubDecisions: updatedDecisions,
     decision,
   };
 }
@@ -869,14 +943,22 @@ function latestReportForPlayer(
   reports: Record<string, ScoutReport>,
   playerId: string,
   scoutId?: string,
+  deliveredAt?: { week: number; season: number },
 ): ScoutReport | undefined {
-  return Object.values(reports)
+  const latest = Object.values(reports)
     .filter((report) => report.playerId === playerId && (!scoutId || report.scoutId === scoutId))
+    .filter((report) => !deliveredAt
+      || report.submittedSeason < deliveredAt.season
+      || (report.submittedSeason === deliveredAt.season && report.submittedWeek <= deliveredAt.week))
     .sort((left, right) =>
       right.submittedSeason - left.submittedSeason
       || right.submittedWeek - left.submittedWeek
+      || (right.revision ?? 1) - (left.revision ?? 1)
       || right.id.localeCompare(left.id)
     )[0];
+  // A later-authored report cannot explain an earlier placement. A private
+  // pass is also not evidence that the scout delivered a recruitment pitch.
+  return latest?.recommendedAction === "pass" ? undefined : latest;
 }
 
 /**
@@ -890,7 +972,16 @@ export function migrateScoutingCases(state: GameState): void {
   let clubDecisions = { ...(state.clubDecisions ?? {}) };
   const reports = { ...(state.reports ?? {}) };
 
-  for (const original of Object.values(reports)) {
+  // Dictionary insertion order is not authored chronology, especially after
+  // legacy hydration. Resolve same-week revisions numerically before linking
+  // historical sales and placements, which preserve the active judgment.
+  const authoredReports = Object.values(reports).sort((left, right) =>
+    left.submittedSeason - right.submittedSeason
+    || left.submittedWeek - right.submittedWeek
+    || (left.revision ?? 1) - (right.revision ?? 1)
+    || left.id.localeCompare(right.id)
+  );
+  for (const original of authoredReports) {
     const linked = ensureScoutingCaseForReport(scoutingCases, original);
     scoutingCases = linked.scoutingCases;
     reports[original.id] = linked.report;
@@ -939,7 +1030,7 @@ export function migrateScoutingCases(state: GameState): void {
     const source = original.reportId
       ? reports[original.reportId]
       : playerId
-        ? latestReportForPlayer(reports, playerId, original.scoutId)
+        ? latestReportForPlayer(reports, playerId, original.scoutId, original)
         : undefined;
 
     if (source) {
@@ -978,7 +1069,8 @@ export function migrateScoutingCases(state: GameState): void {
       };
       scoutingCases[caseId] = {
         ...normalizeCase(base),
-        status: original.clubResponse === "accepted" ? "placed" : "delivered",
+        status: original.clubResponse === "accepted" || base.status === "placed" ? "placed"
+          : base.activeReportId ? base.status : "delivered",
         placementReportIds: appendUnique(base.placementReportIds ?? [], original.id),
         deliveryIds: appendUnique(base.deliveryIds ?? [], deliveryId),
       };
@@ -1010,6 +1102,25 @@ export function migrateScoutingCases(state: GameState): void {
         placementReports[original.id] = { ...placement, decisionId: resolved.decision.id };
       }
     }
+  }
+
+  // Delivery replay links historical records; dated decisions restore their
+  // consequences after authored chronology, including marketplace-only cases.
+  for (const decision of Object.values(clubDecisions).sort((left, right) =>
+    left.decidedSeason - right.decidedSeason
+    || left.decidedWeek - right.decidedWeek
+    || left.id.localeCompare(right.id)
+  )) {
+    const delivery = reportDeliveries[decision.deliveryId];
+    if (!delivery || recordedDecisionForDelivery(delivery, clubDecisions)?.id !== decision.id) continue;
+    scoutingCases = reconcileRecordedCaseDecision(scoutingCases, clubDecisions, decision);
+    reportDeliveries[delivery.id] = {
+      ...delivery,
+      status: "resolved",
+      decisionId: decision.id,
+      resolvedWeek: decision.decidedWeek,
+      resolvedSeason: decision.decidedSeason,
+    };
   }
 
   state.alumniRecords = (state.alumniRecords ?? []).map((record) => {

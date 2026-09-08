@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 
 interface PlannerOpportunitySheetProps {
   open: boolean;
@@ -21,10 +22,31 @@ export function PlannerOpportunitySheet({
   onClose,
   children,
 }: PlannerOpportunitySheetProps) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const media = window.matchMedia("(min-width: 1024px)");
+    const closeWhenDesktop = () => {
+      if (media.matches) onClose();
+    };
+    closeWhenDesktop();
+    media.addEventListener("change", closeWhenDesktop);
+    return () => media.removeEventListener("change", closeWhenDesktop);
+  }, [onClose, open]);
+
+  useDialogFocusTrap(sheetRef, open, {
+    onClose,
+    initialFocusRef: closeRef,
+  });
+
   return (
     <>
       <button
         type="button"
+        ref={triggerRef}
         data-testid="planner-mobile-opportunities-trigger"
         onClick={onOpen}
         aria-expanded={open}
@@ -32,14 +54,14 @@ export function PlannerOpportunitySheet({
         className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#10151b]/94 px-4 py-3 text-left shadow-xl shadow-black/20"
       >
         <span className="min-w-0">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+          <span className="block text-eyebrow font-semibold uppercase tracking-[0.18em] text-zinc-400">
             Opportunity list
           </span>
           <span className="mt-1 block text-sm font-semibold text-white">
             {selectedLabel ? `Change ${selectedLabel}` : "Choose the next live call"}
           </span>
           <span className="mt-1 block text-xs text-zinc-400">
-            Mobile keeps the day strip visible and moves the full board into a bottom sheet.
+            Review the available work and choose what belongs in your week.
           </span>
         </span>
         <Badge variant="secondary" className="shrink-0 border-white/10 bg-white/5 text-zinc-200">
@@ -57,6 +79,7 @@ export function PlannerOpportunitySheet({
             tabIndex={-1}
           />
           <div
+            ref={sheetRef}
             id="planner-mobile-opportunity-sheet"
             role="dialog"
             aria-modal="true"
@@ -65,7 +88,7 @@ export function PlannerOpportunitySheet({
           >
             <div className="flex min-h-14 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-quiet">
                   Opportunity list
                 </p>
                 <h2 id="planner-mobile-opportunity-sheet-title" className="mt-1 text-sm font-semibold text-white">
@@ -74,6 +97,7 @@ export function PlannerOpportunitySheet({
               </div>
               <button
                 type="button"
+                ref={closeRef}
                 onClick={onClose}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
                 aria-label="Close opportunity sheet"

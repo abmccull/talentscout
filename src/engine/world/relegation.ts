@@ -18,6 +18,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
+import { deriveAnnualRecruitmentBudget } from "@/engine/finance/clubEconomics";
 import type {
   GameState,
   Club,
@@ -335,18 +336,29 @@ export function applyRelegationResult(
     const toLeague = updatedLeagues[event.toLeagueId];
     if (!club || !fromLeague || !toLeague) continue;
     if (club.leagueId !== event.fromLeagueId) continue;
+    if ((club.lastLeagueTransitionSeason ?? 0) >= result.season) continue;
 
     const newReputation = Math.max(
       MIN_CLUB_REPUTATION,
       Math.min(MAX_CLUB_REPUTATION, club.reputation + event.reputationChange),
     );
-    const newBudget = Math.round(club.budget * event.budgetMultiplier);
+    const newBudget = club.budget < 0 ? club.budget : Math.round(club.budget * event.budgetMultiplier);
+    // Recurring capacity follows division level. Reciprocal factors prevent
+    // repeated promotion/relegation from shrinking the same club forever.
+    const recurringFundingMultiplier = event.type === "promoted"
+      ? 1 / RELEGATION_BUDGET_MULTIPLIER
+      : RELEGATION_BUDGET_MULTIPLIER;
 
     updatedClubs[event.clubId] = {
       ...club,
       leagueId: event.toLeagueId,
       reputation: newReputation,
       budget: newBudget,
+      annualRecruitmentBudget: Math.max(0, Math.round(deriveAnnualRecruitmentBudget(club) * recurringFundingMultiplier)),
+      lastLeagueTransitionSeason: result.season,
+      weeklyWageBudget: Number.isFinite(club.weeklyWageBudget) && (club.weeklyWageBudget ?? 0) > 0
+        ? Math.max(800, Math.min(10_000_000, Math.round(club.weeklyWageBudget! * recurringFundingMultiplier)))
+        : club.weeklyWageBudget,
     };
 
     fromLeague.clubIds = fromLeague.clubIds.filter((id) => id !== club.id);

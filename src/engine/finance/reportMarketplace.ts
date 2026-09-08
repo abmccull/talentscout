@@ -54,10 +54,33 @@ const BASE_BID_PROBABILITY = 0.20;
 
 /** Legacy clubs derive a ring-fenced procurement budget until saves persist one. */
 export function getClubScoutingBudget(club: Club): number {
+  if (Number.isFinite(club.scoutingBudget)) {
+    return Math.max(0, Math.round(club.scoutingBudget!));
+  }
   return Math.max(
     750,
-    Math.round(club.scoutingBudget ?? Math.min(club.budget * 0.08, 50_000)),
+    Math.round(Math.min(club.budget * 0.08, 50_000)),
   );
+}
+
+/** A club purchases a report version, regardless of how often it is listed. */
+function getPreviousReportBuyerIds(finances: FinancialRecord, reportId: string): Set<string> {
+  const buyers = new Set<string>();
+  for (const listing of finances.reportListings) {
+    if (listing.reportId !== reportId) continue;
+    for (const bid of listing.bids) {
+      if (bid.status === "accepted") buyers.add(bid.clubId);
+    }
+    if (listing.status === "sold" && listing.buyerClubId) buyers.add(listing.buyerClubId);
+    // Older records may retain the cash receipt without the accepted bid.
+    const prefix = `marketplace:${listing.id}:buyer:`;
+    for (const transaction of finances.transactions) {
+      if (transaction.referenceId?.startsWith(prefix)) {
+        buyers.add(transaction.referenceId.slice(prefix.length));
+      }
+    }
+  }
+  return buyers;
 }
 
 /** Priority multipliers for bid amounts */
@@ -420,6 +443,7 @@ function generateBidsForListing(
   week: number,
   season: number,
   clientRelationships: ClientRelationship[],
+  previousBuyerIds: ReadonlySet<string>,
   guaranteeBid: boolean = false,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
   marketContext: {
@@ -440,14 +464,10 @@ function generateBidsForListing(
   // Determine candidate clubs
   const candidateClubs = listing.targetClubId
     ? [clubs[listing.targetClubId]].filter(Boolean) as Club[]
-    : Object.values(clubs).filter((c) => getClubScoutingBudget(c) >= listing.price * 0.5);
-  const previousBuyerIds = new Set(
-    listing.bids
-      .filter((bid) => bid.status === "accepted")
-      .map((bid) => bid.clubId),
-  );
-
-  const scoredCandidates = candidateClubs.map((club) => ({
+    : Object.values(clubs);
+  const scoredCandidates = candidateClubs.filter((club) =>
+    !previousBuyerIds.has(club.id) && getClubScoutingBudget(club) >= 50
+  ).map((club) => ({
     club,
     needMatchScore: calculateNeedMatchScore(report, player, club, players),
   }));
@@ -487,7 +507,11 @@ function generateBidsForListing(
 
     // Bid probability
     const availableScoutingBudget = getClubScoutingBudget(club);
-    const affordability = Math.min(1, availableScoutingBudget / (listing.price * 5));
+    // The seller can negotiate below fair value, but an inflated ask cannot
+    // increase a club's valuation or hide a sensible onboarding counteroffer.
+    const assessedValue = calculateReportPrice(report, scout, club, listing.isExclusive, marketTemperature);
+    const negotiationBase = Math.min(listing.price, assessedValue);
+    const affordability = Math.min(1, availableScoutingBudget / (negotiationBase * 5));
     const scoutRep = Math.max(0.1, scout.reputation / 100);
     const marketTemp = scout.careerPath === "independent"
       ? ({ hot: 1.3, normal: 1.0, cold: 0.7, deadline: 1.5 } as Record<MarketTemperature, number>)[marketTemperature]
@@ -518,14 +542,18 @@ function generateBidsForListing(
     const repeatBuyerMult = 1.0 + Math.min(10, reportsDelivered) * 0.03;
 
     let amount = Math.round(
-      listing.price * needMult * budgetMult * priorityMult * competitionMult
+      negotiationBase * needMult * budgetMult * priorityMult * competitionMult
       * repeatBuyerMult * accuracyMult * noise * marketContext.valueMultiplier,
     );
+    // Preserve the existing bargaining range, anchored to report quality,
+    // reputation, club level and market demand rather than an arbitrary ask.
+    const reservationValue = Math.min(availableScoutingBudget,
+      Math.round(assessedValue * 2.5 * marketContext.valueMultiplier));
     amount = Math.max(
-      Math.round(listing.price * 0.6 * marketContext.valueMultiplier),
-      Math.min(Math.round(listing.price * 2.5 * marketContext.valueMultiplier), amount),
+      Math.round(negotiationBase * 0.6 * marketContext.valueMultiplier),
+      Math.min(reservationValue, Math.round(negotiationBase * 2.5 * marketContext.valueMultiplier), amount),
     );
-    amount = Math.min(availableScoutingBudget, amount);
+    amount = Math.min(reservationValue, isGuaranteedFirstBid ? Math.max(50, amount) : amount);
     if (amount < 50) continue;
 
     const bidDurationWeeks = rng.nextInt(2, 3);
@@ -549,6 +577,7 @@ function generateBidsForListing(
     if (competitionMult > 1.0) reasons.push(`${listing.bids.filter((b) => b.status === "pending").length} competing bids`);
     if (marketContext.valueMultiplier > 1.01) reasons.push("strong seasonal demand");
     if (marketContext.valueMultiplier < 0.99) reasons.push("cautious seasonal market");
+    if (listing.price > assessedValue) reasons.push("asking price exceeds assessed report value");
     const bidReason = reasons.join(" · ");
 
     const bid: MarketplaceBid = {
@@ -575,7 +604,7 @@ function generateBidsForListing(
       season,
       type: "marketplaceBid",
       title: `Bid from ${club.name}`,
-      body: `${club.name} has placed a bid of £${amount.toLocaleString()} on your report.\nThey have a ${positionNeed} need at ${player?.position ?? "this position"} and appear ${interestLevel}.\nThe bid expires in ${bidDurationWeeks} week${bidDurationWeeks > 1 ? "s" : ""}.`,
+      body: `${club.name} has ${amount < listing.price ? "made a counteroffer" : "placed a bid"} of £${amount.toLocaleString()} on your report.\nThey have a ${positionNeed} need at ${player?.position ?? "this position"} and appear ${interestLevel}.\nThe bid expires in ${bidDurationWeeks} week${bidDurationWeeks > 1 ? "s" : ""}.`,
       read: false,
       actionRequired: true,
       relatedId: bid.id,
@@ -606,10 +635,12 @@ function generateBidsForListing(
         // 8% base chance
         if (!rng.chance(Math.min(0.16, 0.08 * marketContext.demandMultiplier))) continue;
 
-        // Upgrade price: 2-3x the listing price
+        // Preserve the 2-3x exclusivity premium on independently assessed
+        // nonexclusive value; raising the listing ask cannot raise this ceiling.
         const upgradeMult = 2.0 + rng.next(); // 2.0 - 3.0
+        const assessedValue = calculateReportPrice(report, scout, club, false, marketTemperature);
         const upgradeAmount = Math.min(getClubScoutingBudget(club), Math.round(
-          listing.price * upgradeMult * marketContext.valueMultiplier,
+          Math.min(listing.price, assessedValue) * upgradeMult * marketContext.valueMultiplier,
         ));
         if (upgradeAmount < 50) continue;
         const bidDurationWeeks = rng.nextInt(2, 3);
@@ -696,7 +727,7 @@ export function processMarketplaceBids(
 
   for (const listing of activeListings) {
     const report = reports[listing.reportId];
-    if (!report) continue;
+    if (!report || report.recommendedAction === "pass") continue;
     if (isGameDateAtOrAfter(
       { week, season },
       { week: listing.biddingEndsWeek, season: listing.biddingEndsSeason },
@@ -706,6 +737,7 @@ export function processMarketplaceBids(
     const { bids: newBids, inboxMessages } = generateBidsForListing(
       rng, listing, report, clubs, marketplacePlayers, scout, week, season,
       updatedFinances.clientRelationships,
+      getPreviousReportBuyerIds(updatedFinances, listing.reportId),
       firstBidGuaranteeAvailable,
       seasonLength,
       marketContext,
@@ -786,9 +818,7 @@ export function acceptBid(
   if (finances.transactions.some((transaction) =>
     transaction.referenceId === `marketplace:${listingId}:buyer:${bid.clubId}`
   )) return finances;
-  if (listing.bids.some((candidate) =>
-    candidate.clubId === bid.clubId && candidate.status === "accepted"
-  )) return finances;
+  if (getPreviousReportBuyerIds(finances, listing.reportId).has(bid.clubId)) return finances;
 
   // Complete the sale with the bid amount
   let updated = completeSale(finances, listingId, bid.clubId, bid.amount, week, season);
@@ -863,6 +893,7 @@ export function acceptExclusiveUpgrade(
 
   const bid = listing.bids.find((b) => b.id === bidId);
   if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return finances;
+  if (getPreviousReportBuyerIds(finances, listing.reportId).has(bid.clubId)) return finances;
   if (finances.transactions.some((transaction) =>
     transaction.referenceId === `marketplace:${listingId}:buyer:${bid.clubId}`
   )) return finances;

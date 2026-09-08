@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "../fixtures";
 
 test.describe("interactive observation pitch", () => {
@@ -14,43 +15,43 @@ test.describe("interactive observation pitch", () => {
     await expect(gamePage.page.getByTestId("observation-pitch")).toBeVisible();
   });
 
-  test("mobile pitch and synchronized list allocate focus with keyboard parity", async ({ gamePage }) => {
+  test("single portrait strip and inline lenses allocate and release focus with keyboard parity", async ({ gamePage }) => {
     const page = gamePage.page;
     const sessionPlayerCount = await page.evaluate(() =>
       (window as any).__GAME_STORE__.getState().activeSession.players.length,
     );
+    const players = page.getByRole("list", { name: "Players on the observation pitch" }).getByRole("button", { name: /^Track / });
+    await expect(page.getByRole("group", { name: "Players in view", exact: true })).toBeVisible();
+    await expect(players).toHaveCount(sessionPlayerCount);
+    // One control per subject, with no duplicate floating pitch subjects.
+    await expect(page.locator('[data-testid="observation-pitch"] button[aria-label^="Track "]')).toHaveCount(sessionPlayerCount);
+    await expect(page.locator('[aria-label^="Observation pitch at "] button')).toHaveCount(0);
+    await expect(page.locator('[data-observation-pitch-marker][tabindex="0"]')).toHaveCount(1);
 
-    const pitchMarkers = page.locator(
-      '[aria-label^="Interactive observation pitch at "] button[aria-label^="Track "]',
-    );
-    const synchronizedPlayers = page.locator(
-      'ul[aria-label="Synchronized list of players on the observation pitch"] button',
-    );
-    await expect(
-      page.getByRole("group", { name: /^Interactive observation pitch at / }),
-    ).toBeVisible();
-    await expect(pitchMarkers).toHaveCount(sessionPlayerCount);
-    await expect(synchronizedPlayers).toHaveCount(sessionPlayerCount);
-    await expect(page.locator(
-      '[aria-label^="Interactive observation pitch at "] button[aria-label^="Track "][tabindex="0"]',
-    )).toHaveCount(1);
-
-    const firstPlayer = synchronizedPlayers.first();
+    const firstPlayer = players.first();
     await firstPlayer.focus();
+    if (sessionPlayerCount > 1) {
+      await page.keyboard.press("ArrowRight");
+      await expect(players.nth(1)).toBeFocused();
+      await expect(players.nth(1)).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Home");
+      await expect(firstPlayer).toBeFocused();
+    }
+    await page.keyboard.press("Enter");
+    await expect(firstPlayer).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Tab");
+    const technicalLens = page.getByRole("button", { name: /^Use technical lens for / }).first();
+    await expect(technicalLens).toBeFocused();
+    // Inline controls retain Escape ownership and do not create a modal.
+    await page.keyboard.press("Escape");
+    await expect(technicalLens).toBeFocused();
+    await expect(page.getByRole("dialog", { name: "Choose your focus" })).toHaveCount(0);
+    const lensBox = await technicalLens.boundingBox();
+    expect(lensBox?.width).toBeGreaterThanOrEqual(44);
+    expect(lensBox?.height).toBeGreaterThanOrEqual(44);
     await page.keyboard.press("Enter");
 
-    const contextToggle = page.getByRole("button", {
-      name: /Focus targets and lenses/i,
-    });
-    await expect(contextToggle).toHaveAttribute("aria-expanded", "true");
-    const technicalLens = page.getByRole("button", {
-      name: /^Use technical lens for /,
-    }).first();
-    await expect(technicalLens).toBeVisible();
-    await expect(technicalLens).toBeFocused();
-    await technicalLens.click();
-
-    const focusedState = await page.evaluate(() => {
+    const readFocus = () => page.evaluate(() => {
       const session = (window as any).__GAME_STORE__.getState().activeSession;
       const focused = session.players.filter((player: any) => player.isFocused);
       return {
@@ -61,31 +62,34 @@ test.describe("interactive observation pitch", () => {
         total: session.focusTokens.total,
       };
     });
+    const focusedState = await readFocus();
     expect(focusedState.focusedCount).toBe(1);
     expect(focusedState.lens).toBe("technical");
     expect(focusedState.available).toBe(focusedState.total - 1);
-    await expect(
-      page
-        .getByRole("dialog", { name: "Choose your focus" })
-        .getByLabel(
-          `technical observation lens locked for ${focusedState.playerName}`,
-        ),
-    ).toBeVisible();
-    const removeFocusBox = await page
-      .getByRole("button", { name: `Remove focus from ${focusedState.playerName}` })
-      .boundingBox();
+    const panel = page.locator('[data-tutorial-id="observation-focus-panel"]');
+    await expect(panel).toContainText("Technical focus");
+    await expect(firstPlayer).toHaveAttribute("aria-label", /focus active/);
+    const removeFocus = page.getByRole("button", { name: `Remove focus from ${focusedState.playerName}` });
+    await expect(removeFocus).toBeFocused();
+    const removeFocusBox = await removeFocus.boundingBox();
     expect(removeFocusBox?.width).toBeGreaterThanOrEqual(44);
     expect(removeFocusBox?.height).toBeGreaterThanOrEqual(44);
-    await expect(
-      page.locator("#mobile-observation-context").getByRole("combobox"),
-    ).toHaveCount(0);
-    await page.getByRole("button", { name: "Close focus controls" }).click();
-    await expect(page.getByRole("dialog", { name: "Choose your focus" })).toBeHidden();
+    await expect(panel.getByRole("combobox")).toHaveCount(0);
+    await page.keyboard.press("Enter");
+    // Release deliberately does not refund an attention token in this half.
+    await expect.poll(readFocus).toMatchObject({ focusedCount: 0, available: focusedState.available });
+    if (focusedState.available > 0) {
+      await expect(technicalLens).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(removeFocus).toBeFocused();
+      await expect.poll(readFocus).toMatchObject({ focusedCount: 1, lens: "technical", available: focusedState.total - 2 });
+    } else {
+      await expect(page.getByRole("heading", { name: "Your attention", exact: true })).toBeFocused();
+      await expect(panel).toContainText("No focus remaining this half");
+    }
 
     const layoutWidths = await page.evaluate(() => {
-      const layout = document.querySelector<HTMLElement>(
-        '[data-testid="active-observation-layout"]',
-      );
+      const layout = document.querySelector<HTMLElement>('[data-testid="active-observation-layout"]');
       if (!layout) throw new Error("Active observation layout is unavailable");
       return {
         viewport: document.documentElement.clientWidth,
@@ -96,47 +100,44 @@ test.describe("interactive observation pitch", () => {
     });
     expect(layoutWidths.document).toBeLessThanOrEqual(layoutWidths.viewport + 1);
     expect(layoutWidths.layoutScroll).toBeLessThanOrEqual(layoutWidths.layoutClient + 1);
-
     const controls = page.getByTestId("mobile-observation-controls");
     const controlsBox = await controls.boundingBox();
     expect(controlsBox).not.toBeNull();
-    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(844 - 63);
-    await expect(page.getByRole("button", { name: "Next phase" })).toBeVisible();
+    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(844 + 1);
+    await expect(controls.getByRole("button", { name: "Next phase", exact: true })).toBeVisible();
 
-    const animations = await page
-      .locator('[data-testid="observation-pitch"] .motion-safe\\:animate-pulse')
-      .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).animationName));
-    expect(animations.every((animationName) => animationName === "none")).toBe(true);
-
+    const motion = await page.locator('[data-testid="observation-pitch"] [class*="motion-reduce:transition-none"]')
+      .evaluateAll((nodes) => nodes.map((node) => ({
+        animation: getComputedStyle(node).animationName,
+        transition: getComputedStyle(node).transitionDuration,
+        transitionProperty: getComputedStyle(node).transitionProperty,
+      })));
+    expect(motion.length).toBeGreaterThan(0);
+    // The global reduced-motion duration must not mask transition-property:none.
+    expect(motion.every((style) => style.animation === "none" && (style.transitionProperty === "none" || style.transition.split(",").every((duration) => parseFloat(duration) === 0)))).toBe(true);
     const axe = await new AxeBuilder({ page }).analyze();
-    expect(
-      axe.violations.filter(
-        (violation) => violation.impact === "serious" || violation.impact === "critical",
-      ),
-    ).toEqual([]);
+    expect(axe.violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical")).toEqual([]);
     gamePage.expectNoConsoleErrors();
   });
 
-  test("pitch markers are touch-selectable and expose the same focus sheet", async ({ gamePage }) => {
+  test("portrait subjects are touch-selectable and update inline focus controls", async ({ gamePage }) => {
     const page = gamePage.page;
-    const pitchMarker = page
-      .locator('[data-testid="observation-pitch"] button[aria-label^="Track "]')
-      .first();
-
-    await pitchMarker.tap();
-    await expect(pitchMarker).toHaveAttribute("aria-pressed", "true");
-    await expect(
-      page.getByRole("button", { name: /Focus targets and lenses/i }),
-    ).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByRole("dialog", { name: "Choose your focus" })).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /^Use technical lens for / }).first(),
-    ).toBeFocused();
-
+    const players = page.getByRole("list", { name: "Players on the observation pitch" }).getByRole("button", { name: /^Track / });
+    const portrait = players.nth((await players.count()) > 1 ? 1 : 0);
+    await portrait.tap();
+    await expect(portrait).toHaveAttribute("aria-pressed", "true");
+    const selectedName = (await portrait.getAttribute('aria-label'))?.match(/^Track (.+?), /)?.[1];
+    expect(selectedName).toBeTruthy();
+    const lens = page.getByRole("button", { name: /^Use technical lens for / });
+    await expect(lens).toBeVisible();
+    await expect(lens).toHaveAttribute("aria-label", `Use technical lens for ${selectedName}`);
+    await lens.tap();
+    await expect(page.getByRole("button", { name: /^Remove focus from / })).toBeVisible();
+    await expect(portrait).toHaveAttribute("aria-label", /focus active/);
+    await expect(page.getByRole("dialog", { name: "Choose your focus" })).toHaveCount(0);
     gamePage.expectNoConsoleErrors();
   });
-
-  test("tablet action controls align with the desktop sidebar breakpoint", async ({ gamePage }) => {
+  test("tablet action controls sit on the watch floor without overflowing", async ({ gamePage }) => {
     const page = gamePage.page;
 
     for (const viewport of [
@@ -148,7 +149,7 @@ test.describe("interactive observation pitch", () => {
       await expect(controls).toBeVisible();
       const box = await controls.boundingBox();
       expect(box).not.toBeNull();
-      expect(box!.x).toBeGreaterThanOrEqual(239);
+      expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(Math.abs(box!.y + box!.height - viewport.height)).toBeLessThanOrEqual(1);
       expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
 
@@ -366,6 +367,133 @@ test.describe("observation choice and insight integrity", () => {
     );
     await expect(page.getByTestId("insight-action-hiddenNature")).toBeDisabled();
     await expect(dialog).toBeVisible();
+    gamePage.expectNoConsoleErrors();
+  });
+});
+
+test.describe("normal-motion mobile workspace anchoring", () => {
+  test.use({ hasTouch: true, contextOptions: { reducedMotion: "no-preference" } });
+
+  test.beforeEach(async ({ gamePage }) => {
+    const page = gamePage.page;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await gamePage.goto();
+    // Synthetic mid-career boundary only; preferences, navigation, scrolling
+    // and observation progression below use the actual rendered controls.
+    await gamePage.injectMidGameState("youth");
+    await page.getByRole("button", { name: "Open navigation menu", exact: true }).click();
+    await gamePage.navigateTo("settings");
+    await page.getByRole("tab", { name: "Accessibility", exact: true }).click();
+    const reduceMotion = page.getByRole("switch", { name: "Toggle reduced motion", exact: true });
+    // Persist false through the real setting action, even when false is the default.
+    if (await reduceMotion.getAttribute("aria-checked") === "false") await reduceMotion.click();
+    await expect(reduceMotion).toHaveAttribute("aria-checked", "true");
+    await reduceMotion.click();
+    await expect(reduceMotion).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("html")).not.toHaveClass(/\breduced-motion\b/);
+    expect(await page.evaluate(() => ({
+      osReducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      gameReducedMotion: JSON.parse(localStorage.getItem("talentscout_settings") ?? "{}").reducedMotion,
+    }))).toEqual({ osReducedMotion: false, gameReducedMotion: false });
+  });
+
+  async function settleScreen(screen: Locator) {
+    await expect(screen).toBeVisible();
+    await expect.poll(() => screen.evaluate((element) =>
+      element.getAnimations().every((animation) => animation.playState === "finished"),
+    )).toBe(true);
+    const style = await screen.evaluate((element) => ({
+      transform: getComputedStyle(element).transform,
+      animationName: getComputedStyle(element).animationName,
+      durationSeconds: parseFloat(getComputedStyle(element).animationDuration),
+    }));
+    // Do not let an inherited reduced-motion configuration hide this regression.
+    expect(style.animationName).not.toBe("none");
+    expect(style.durationSeconds).toBeGreaterThan(0.001);
+    return style;
+  }
+
+  async function bounds(control: Locator) {
+    return control.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+    });
+  }
+
+  function expectViewportAnchor(box: Awaited<ReturnType<typeof bounds>>, edge: "top" | "bottom") {
+    expect.soft(box.x).toBeGreaterThanOrEqual(0);
+    expect.soft(box.right).toBeLessThanOrEqual(391);
+    expect.soft(box.y).toBeGreaterThanOrEqual(0);
+    expect.soft(box.bottom).toBeLessThanOrEqual(845);
+    expect.soft(Math.abs(edge === "top" ? box.y : box.bottom - 844)).toBeLessThanOrEqual(1);
+  }
+
+  async function scrollContent(page: Page, screen: Locator) {
+    const beforeTop = await screen.evaluate((element) => element.getBoundingClientRect().top);
+    await page.mouse.move(195, 360);
+    await page.mouse.wheel(0, 600);
+    // A real content move is required; a no-op scroll cannot establish anchoring.
+    await expect.poll(() => screen.evaluate((element) => element.getBoundingClientRect().top))
+      .toBeLessThan(beforeTop - 100);
+    return { beforeTop, afterTop: await screen.evaluate((element) => element.getBoundingClientRect().top) };
+  }
+
+  test("normal motion keeps the Watch phase bar on screen before and after scrolling", async ({ gamePage }, testInfo) => {
+    const page = gamePage.page;
+    await gamePage.startObservationSession("schoolMatch");
+    await page.getByRole("button", { name: /^Begin Observation$/ }).click();
+    const screen = page.locator('[data-game-screen="observation"]');
+    const style = await settleScreen(screen);
+    const controls = page.getByTestId("mobile-observation-controls");
+    const header = page.getByRole("banner");
+    const nextPhase = controls.getByRole("button", { name: "Next phase", exact: true });
+    await expect(nextPhase).toBeEnabled();
+    const before = { controls: await bounds(controls), header: await bounds(header) };
+    await testInfo.attach("watch-before-scroll", { body: await page.screenshot(), contentType: "image/png" });
+    const scrolling = await scrollContent(page, screen);
+    const after = { controls: await bounds(controls), header: await bounds(header) };
+    await testInfo.attach("watch-after-scroll", { body: await page.screenshot(), contentType: "image/png" });
+    await testInfo.attach("normal-motion-watch-geometry", {
+      body: JSON.stringify({ syntheticMidCareerBoundary: true, style, scrolling, before, after }, null, 2),
+      contentType: "application/json",
+    });
+    for (const frame of [before, after]) {
+      expectViewportAnchor(frame.controls, "bottom");
+      expectViewportAnchor(frame.header, "top");
+    }
+    expect.soft(Math.abs(after.controls.y - before.controls.y)).toBeLessThanOrEqual(1);
+    // Even translateY(0) retains a containing block with animation-fill-mode:both.
+    expect.soft(style.transform).toBe("none");
+    const phaseBefore = (await gamePage.getActiveSession())!.currentPhaseIndex;
+    await nextPhase.tap();
+    await expect.poll(async () => (await gamePage.getActiveSession())!.currentPhaseIndex).toBe(phaseBefore + 1);
+    gamePage.expectNoConsoleErrors();
+  });
+
+  test("normal motion keeps mobile workspace header and navigation anchored while content scrolls", async ({ gamePage }, testInfo) => {
+    const page = gamePage.page;
+    await gamePage.navigateTo("calendar");
+    const screen = page.locator('[data-game-screen="calendar"]');
+    const style = await settleScreen(screen);
+    const header = page.getByRole("banner");
+    const navigation = page.getByRole("navigation", { name: "Youth Scout workspace", exact: true });
+    const before = { header: await bounds(header), navigation: await bounds(navigation) };
+    const scrolling = await scrollContent(page, screen);
+    const after = { header: await bounds(header), navigation: await bounds(navigation) };
+    await testInfo.attach("workspace-after-scroll", { body: await page.screenshot(), contentType: "image/png" });
+    await testInfo.attach("normal-motion-workspace-geometry", {
+      body: JSON.stringify({ syntheticMidCareerBoundary: true, style, scrolling, before, after }, null, 2),
+      contentType: "application/json",
+    });
+    for (const frame of [before, after]) {
+      expectViewportAnchor(frame.header, "top");
+      expectViewportAnchor(frame.navigation, "bottom");
+    }
+    expect.soft(style.transform).toBe("none");
+    await navigation.getByRole("button", { name: "Desk", exact: true }).tap();
+    await gamePage.waitForScreen("dashboard");
+    await expect(page.getByRole("heading", { name: "The scouting desk", exact: true })).toBeVisible();
     gamePage.expectNoConsoleErrors();
   });
 });

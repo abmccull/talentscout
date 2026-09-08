@@ -47,6 +47,18 @@ export interface Club {
   leagueId: string;
   reputation: number;
   budget: number;
+  /** Board-approved annual recruitment funding, separate from wage capacity. */
+  annualRecruitmentBudget?: number;
+  /** Completed season of the latest applied division transition. */
+  lastLeagueTransitionSeason?: number;
+  /** The latest allocation is also the idempotency key for season funding. */
+  lastRecruitmentAllocation?: {
+    season: number;
+    grant: number;
+    carryover: number;
+    returned: number;
+    previousBalance: number;
+  };
   weeklyWageBudget?: number;
   scoutingBudget?: number;
   financialObligations?: ClubFinancialObligation[];

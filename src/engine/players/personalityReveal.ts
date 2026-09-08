@@ -21,10 +21,13 @@ import type { PersonalityTrait } from "../core/types";
 /**
  * Traits that are naturally observable in each activity context.
  * When a context has an affinity list, only those traits (intersected with
- * unrevealed ones) are eligible.  Contexts that are not listed here allow
- * any unrevealed trait to be revealed.
+ * unrevealed ones) are eligible. An unlisted context reveals no hidden traits.
  */
 const CONTEXT_TRAIT_AFFINITY: Record<string, PersonalityTrait[]> = {
+  schoolMatch: ["flair", "pressurePlayer", "temperamental", "leader", "determined"],
+  grassrootsTournament: ["flair", "pressurePlayer", "temperamental", "leader", "determined"],
+  academyVisit: ["professional", "determined", "easygoing", "ambitious", "introvert"],
+  parentCoachMeeting: ["professional", "determined", "loyal", "ambitious", "easygoing", "introvert"],
   liveMatch: [
     "bigGamePlayer",
     "pressurePlayer",
@@ -53,14 +56,12 @@ const CONTEXT_TRAIT_AFFINITY: Record<string, PersonalityTrait[]> = {
   youthTrial: [
     "ambitious",
     "flair",
-    "lateDeveloper",
     "pressurePlayer",
     "easygoing",
   ],
   academyTrialDay: [
     "ambitious",
     "flair",
-    "lateDeveloper",
     "pressurePlayer",
     "easygoing",
   ],
@@ -112,6 +113,8 @@ export interface RevealContext {
   activityType: string;
   /** The observational lens in use, if any. */
   lens?: string;
+  /** Optional traits supported by an actual behavioral cue, never a reveal-all switch. */
+  supportedTraits?: readonly PersonalityTrait[];
 }
 
 /**
@@ -183,24 +186,14 @@ export function checkPersonalityReveal(
   // --- Determine eligible traits ---
 
   // Combine the primary activityType affinity lookup with any context-specific keys
-  const affinityList =
-    CONTEXT_TRAIT_AFFINITY[context.activityType] ?? null;
-
-  let eligible: PersonalityTrait[];
-  if (affinityList !== null) {
-    // Intersect unrevealed with context-appropriate traits
-    const affinitySet = new Set<PersonalityTrait>(affinityList);
-    eligible = unrevealed.filter((t) => affinitySet.has(t));
-
-    // If the intersection is empty (player's traits don't overlap with this
-    // context's affinity), fall back to any unrevealed trait so the roll is
-    // never wasted.
-    if (eligible.length === 0) {
-      eligible = unrevealed;
-    }
-  } else {
-    eligible = unrevealed;
-  }
+  const affinityList = CONTEXT_TRAIT_AFFINITY[context.activityType] ?? [];
+  const affinitySet = new Set<PersonalityTrait>(affinityList);
+  const supported = context.supportedTraits ? new Set(context.supportedTraits) : undefined;
+  // An uninformative context yields no conclusion. A successful random roll
+  // never grants permission to reveal an unrelated hidden characteristic.
+  const eligible = unrevealed.filter((trait) => affinitySet.has(trait)
+    && (!supported || supported.has(trait)));
+  if (eligible.length === 0) return null;
 
   // --- Pick one at random ---
 

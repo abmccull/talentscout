@@ -262,7 +262,8 @@ export function synchronizeInternationalAssignmentProgress(state: GameState): Ga
 
   const reports = Object.values(state.reports)
     .filter((report) =>
-      report.submittedWeek === state.currentWeek
+      report.recommendedAction !== "pass"
+      && report.submittedWeek === state.currentWeek
       && report.submittedSeason === state.currentSeason
       && reportMatchesDestination(state, assignment, report),
     )

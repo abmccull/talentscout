@@ -53,6 +53,10 @@ function buildClub(rng: RNG, data: ClubData, leagueId: string, playerIds: string
     scoutingPhilosophy: data.scoutingPhilosophy,
     youthAcademyRating: data.youthAcademyRating,
     budget: data.budget,
+    annualRecruitmentBudget: data.budget,
+    lastRecruitmentAllocation: {
+      season: 1, grant: data.budget, carryover: 0, returned: 0, previousBalance: 0,
+    },
     managerId: `mgr_${data.id}`,
     playerIds,
     tacticalStyle: generateTacticalStyle(rng, data.scoutingPhilosophy, data.reputation),

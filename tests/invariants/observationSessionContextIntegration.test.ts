@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Observation, ReflectionJournalEntry } from "@/engine/core/types";
+import type { Observation, ReflectionJournalEntry, ScoutCueReading } from "@/engine/core/types";
+import { createSession } from "@/engine/observation/session";
+import type { PlayerMoment } from "@/engine/observation/types";
+import { createRNG } from "@/engine/rng";
 import { useGameStore } from "@/stores/gameStore";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
@@ -18,6 +21,65 @@ vi.mock("@/lib/db", () => ({
 }));
 
 describe("observation session context integration", () => {
+  it("retains focused glimpses without estimates, excludes missed and peripheral passages, and completes only once", async () => {
+    await useGameStore.getState().startNewGame({
+      scoutFirstName: "Evidence", scoutLastName: "Scout", scoutAge: 24,
+      specialization: "youth", difficulty: "normal", worldSeed: "earned-cue-store",
+      selectedCountries: ["england"], startingCountry: "england", nationality: "English",
+      skillAllocations: { technicalEye: 2, psychologicalRead: 2, playerJudgment: 2, potentialAssessment: 2 },
+      originId: "academy-apprentice", flawId: "fragile-network", doctrineIds: ["evidence-first"],
+    });
+    const state = useGameStore.getState().gameState!;
+    const prospects = Object.values(state.unsignedYouth).slice(0, 4);
+    expect(prospects).toHaveLength(4);
+    const session = createSession({
+      activityType: "schoolMatch", specialization: "youth", seed: "earned-store-session",
+      week: state.currentWeek, season: state.currentSeason,
+      playerPool: prospects.map(({ player }) => ({ playerId: player.id, name: player.firstName, position: player.position })),
+    }, createRNG("earned-store-session"));
+    const moments: PlayerMoment[] = prospects.map(({ player }, index) => ({
+      id: `moment-${index}`, playerId: player.id, momentType: "technicalAction", quality: 7,
+      attributesHinted: ["passing"], description: "A useful pass.", vagueDescription: "Play moves on.",
+      pressureContext: false, isStandout: false,
+    }));
+    useGameStore.setState({
+      gameState: state,
+      activeSession: {
+        ...session, state: "reflection", currentPhaseIndex: 0,
+        phases: [{ ...session.phases[0], index: 0, moments }],
+        players: session.players.map((player, index) => ({
+          ...player, isFocused: index !== 1, focusedPhases: index !== 1 ? [0] : [],
+        })),
+        flaggedMoments: [{ id: "peripheral-flag", moment: moments[1], phaseIndex: 0, minute: 12, reaction: "interesting" }],
+        evidenceDecisions: { "cue-1": { cueId: "cue-1", classification: "noConclusion" } },
+        cueReadings: moments.map((moment, index) => ({
+          id: `cue-${index}`, sessionId: session.id, momentId: moment.id, playerId: moment.playerId,
+          phaseIndex: 0, attributesHinted: ["passing"], confidence: 0.65,
+          clarity: index === 3 ? "missed" : index === 2 ? "glimpse" : "strong", direction: "positive",
+          detail: "A detailed read of the player's technique.", suggestedClassifications: ["technicalExecution"],
+        } as ScoutCueReading)),
+      },
+    });
+    useGameStore.getState().endObservationSession();
+    const after = useGameStore.getState().gameState!;
+    const filed = Object.values(after.observations).filter((observation) => observation.sourceSessionId === session.id);
+    expect(filed).toHaveLength(2);
+    expect(filed[0].playerId).toBe(prospects[0].player.id);
+    expect(filed[0].attributeReadings.map((reading) => reading.attribute)).toEqual(["passing"]);
+    const sparse = filed.find((entry) => entry.playerId === prospects[2].player.id)!;
+    expect(sparse.attributeReadings).toEqual([]);
+    expect(sparse.abilityReading).toBeUndefined();
+    expect(sparse.revealedPersonalityTrait).toBeUndefined();
+    expect(sparse.updatedPersonalityProfile).toBeUndefined();
+    expect(filed.some((entry) => entry.playerId === prospects[1].player.id)).toBe(false);
+    expect(filed.some((entry) => entry.playerId === prospects[3].player.id)).toBe(false);
+    const journal = after.reflectionJournal[session.id];
+    expect(journal.flaggedMoments?.[0].description).toBe(moments[1].vagueDescription);
+    expect(journal.flaggedMoments?.[0].attributesHinted).toEqual([]);
+    expect(journal.evidenceCards?.[0]).toMatchObject({ clarity: "glimpse", classification: "noConclusion", attributesHinted: [] });
+    useGameStore.getState().endObservationSession();
+    expect(useGameStore.getState().gameState).toBe(after);
+  }, 30_000);
   it("carries prior evidence across youth aliases and keeps the contextual opening question", async () => {
     await useGameStore.getState().startNewGame({
       scoutFirstName: "Context",

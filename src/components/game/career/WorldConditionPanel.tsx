@@ -86,6 +86,8 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
   );
   const activeArcs = Object.values(state.worldConditionArcState?.active ?? {})
     .sort((left, right) => left.id.localeCompare(right.id));
+  const actionableArcs = activeArcs.filter((arc) => arc.phase === "decision" || arc.selectedChoiceId);
+  const developingArcs = activeArcs.filter((arc) => arc.phase !== "decision" && !arc.selectedChoiceId);
 
   return (
     <section
@@ -118,9 +120,9 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
         </div>
       )}
 
-      {activeArcs.length > 0 && (
+      {actionableArcs.length > 0 && (
         <div className="grid gap-3 lg:grid-cols-2" aria-label="Active world-condition story arcs">
-          {activeArcs.map((arc) => {
+          {actionableArcs.map((arc) => {
             const definition = arcDefinitions.get(arc.definitionId);
             const selectedChoice = definition?.choices.find(
               (choice) => choice.id === arc.selectedChoiceId,
@@ -158,6 +160,21 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
             );
           })}
         </div>
+      )}
+
+      {developingArcs.length > 0 && (
+        <details className="border-t border-[var(--border)]">
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
+            Developing stories ({developingArcs.length}) <ChevronDown size={16} aria-hidden="true" />
+          </summary>
+          <p className="pb-3 text-sm leading-6 text-quiet">Your contacts will update you as these situations develop.</p>
+          <ul className="divide-y divide-[var(--border)] pb-4">
+            {developingArcs.map((arc) => {
+              const definition = arcDefinitions.get(arc.definitionId);
+              return definition ? <li key={arc.id} data-testid={`world-condition-arc-${definition.id}`} className="py-2 text-sm">{definition.title}</li> : null;
+            })}
+          </ul>
+        </details>
       )}
 
       <div className="grid gap-3 lg:grid-cols-3">

@@ -9,6 +9,10 @@ vi.mock("@/config/beta", async (importOriginal) => ({
   BETA_ONLINE_FEEDBACK_ENABLED: true,
 }));
 
+vi.mock("@/lib/supabaseConfiguration", () => ({
+  SUPABASE_CONFIGURED: true,
+}));
+
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     from: vi.fn(() => ({ insert: feedbackBoundary.insert })),

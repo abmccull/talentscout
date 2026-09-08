@@ -67,7 +67,7 @@ describe("achievement integrity", () => {
     expect(getAchievementProgress(state, "countries-3")?.current).toBe(3);
   });
 
-  it("counts only genuine wonderkid discoveries in unlocks and progress", () => {
+  it("does not treat hidden wonderkid classifications as earned unlocks or progress", () => {
     const state = {
       discoveryRecords: [
         { playerId: "ordinary-1", wasWonderkid: false },
@@ -82,13 +82,13 @@ describe("achievement integrity", () => {
       (achievement) => achievement.id === "discoveries-5",
     );
 
-    expect(countWonderkidDiscoveries(state)).toBe(1);
-    expect(firstWonderkid?.check(state)).toBe(true);
+    expect(countWonderkidDiscoveries(state)).toBe(0);
+    expect(firstWonderkid?.check(state)).toBe(false);
     expect(fiveWonderkids?.check(state)).toBe(false);
     expect(getAchievementProgress(state, "discoveries-5")).toMatchObject({
-      current: 1,
+      current: 0,
       target: 5,
-      percentage: 20,
+      percentage: 0,
     });
   });
 
@@ -121,7 +121,7 @@ describe("achievement integrity", () => {
     });
   });
 
-  it("resolves unsigned youth for generational and position achievements", () => {
+  it("resolves unsigned youth positions without awarding their hidden generational tier", () => {
     const positions = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
     const unsignedYouth = Object.fromEntries(
       positions.map((position, index) => [
@@ -162,7 +162,7 @@ describe("achievement integrity", () => {
       (achievement) => achievement.id === "full-house",
     );
 
-    expect(generational?.check(state)).toBe(true);
+    expect(generational?.check(state)).toBe(false);
     expect(countReportedPositions(state)).toBe(10);
     expect(fullHouse?.check(state)).toBe(true);
     expect(getAchievementProgress(state, "full-house")?.current).toBe(10);

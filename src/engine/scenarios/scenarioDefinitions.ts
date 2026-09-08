@@ -13,6 +13,7 @@
  */
 
 import type { GameState } from "../core/types";
+import { getEarnedDiscoveryOutcomes } from "../career/earnedDiscoveryOutcomes";
 import {
   CONTENT_SCHEMA_VERSION,
   defineContentPack,
@@ -101,9 +102,9 @@ function countDiscoveries(state: GameState): number {
   return state.discoveryRecords.length;
 }
 
-/** Count wonderkid discoveries (wasWonderkid === true). */
+/** Count discoveries backed before a later successful run of rated appearances. */
 function countWonderkidDiscoveries(state: GameState): number {
-  return state.discoveryRecords.filter((d) => d.wasWonderkid).length;
+  return getEarnedDiscoveryOutcomes(state).length;
 }
 
 /** Count reports with qualityScore above a threshold. */
@@ -195,7 +196,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
       },
       {
         id: "discover_wonderkid",
-        description: "Discover at least one wonderkid",
+        description: "Back a discovery before 10 rated appearances averaging 7.0 in a season",
         check: (state) => countWonderkidDiscoveries(state) >= 1,
         required: false,
       },
@@ -374,11 +375,11 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     id: "wonderkid_hunter",
     name: "Wonderkid Hunter",
     description:
-      "There are generational talents out there — you just need to find them first. " +
-      "Your brief is to discover three wonderkids across different countries in a single season. " +
-      "Rivals are circling the same pool, so move fast and trust your eye.",
+      "Find prospects worth backing, then let their performances test your judgment. " +
+      "Recommend three discoveries before each records 10 rated appearances averaging 7.0 in a season. " +
+      "You have three seasons; finding successes in different countries earns an extra distinction.",
     difficulty: "hard",
-    estimatedSeasons: 1,
+    estimatedSeasons: 3,
     category: "advanced",
     setup: {
       startingTier: 3,
@@ -391,18 +392,17 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     objectives: [
       {
         id: "discover_3_wonderkids",
-        description: "Discover 3 wonderkid-tier players",
+        description: "Back 3 discoveries before each records 10 rated appearances averaging 7.0 in a season",
         check: (state) => countWonderkidDiscoveries(state) >= 3,
         required: true,
       },
       {
         id: "multi_country_wonderkids",
-        description: "Find wonderkids from at least 2 different countries",
+        description: "Record successful discoveries from at least 2 different countries",
         check: (state) => {
           const countries = new Set(
-            state.discoveryRecords
-              .filter((d) => d.wasWonderkid)
-              .map((d) => state.players[d.playerId]?.nationality)
+            getEarnedDiscoveryOutcomes(state)
+              .map((outcome) => outcome.nationality)
               .filter(Boolean),
           );
           return countries.size >= 2;

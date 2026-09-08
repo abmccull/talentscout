@@ -8,6 +8,8 @@ import type {
 } from "@/engine/core/types";
 import {
   assessClubAffordability,
+  assessClubAffordabilityFromContext,
+  type ClubAffordabilityContextEntry,
   buildTransferAddOnObligations,
   getTransferContingentReserve,
   type ClubAffordabilityResult,
@@ -19,6 +21,7 @@ import {
 } from "@/engine/world/transferMotivation";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
 import { normalizeCountryKey } from "@/lib/country";
+import { getContractWageBaseline } from "@/engine/finance/wages";
 
 export type TransferAgreementRole = NonNullable<LoanDeal["agreedPlayingTime"]>;
 export type TransferRegistrationStatus = "clear" | "conditional" | "blocked";
@@ -73,6 +76,8 @@ export interface ProposeTransferAgreementInput {
   sellingClub?: Club;
   releasedPlayerId?: string;
   motivation?: TransferMotivation;
+  /** Immutable same-tick payroll view, reused while selecting AI destinations. */
+  affordabilityContext?: ClubAffordabilityContextEntry;
 }
 
 export interface TransferAgreementProposal extends ProposedTransferTerms {
@@ -290,13 +295,13 @@ export function proposeTransferTerms(
     ),
   );
 
-  const abilityBaseline = Math.max(player.wage, Math.round(player.currentAbility * 60));
+  const abilityBaseline = getContractWageBaseline(player, buyingClub.reputation);
   const wage = roundWeeklyWage(
     abilityBaseline
     * roleWeight(role)
     * (player.age <= 22 ? 1.04 : player.age >= 33 ? 0.9 : 1)
     * clamp(1 + (buyingClub.reputation - (sellingClub?.reputation ?? buyingClub.reputation)) / 180, 0.94, 1.1)
-    * (player.personalityProfile?.transferWillingness ?? 0.5 >= 0.75 ? 1.06 : 1)
+    * ((player.personalityProfile?.transferWillingness ?? 0.5) >= 0.75 ? 1.06 : 1)
     * (contractLength >= 4 ? 0.98 : contractLength === 1 ? 1.04 : 1),
   );
 
@@ -334,6 +339,7 @@ export function assessTransferClubAffordability(input: {
   releasedPlayerId?: string;
   currentWeek?: number;
   currentSeason?: number;
+  affordabilityContext?: ClubAffordabilityContextEntry;
 }): TransferClubAffordabilityAssessment {
   const addOns = input.addOns ?? [];
   const obligations = addOns.length === 0
@@ -351,14 +357,19 @@ export function assessTransferClubAffordability(input: {
     input.players,
     input.releasedPlayerId,
   );
-  const result = assessClubAffordability({
-    club: input.buyingClub,
-    players: input.players,
+  const affordabilityTerms = {
     upfrontCost: Math.max(0, input.fee) + Math.max(0, input.signingBonus ?? 0),
     weeklyWageCommitment: input.wage,
     releasedWeeklyCommitment: released,
     contingentReserve: addOnReserve,
-  });
+  };
+  const result = input.affordabilityContext?.club.id === input.buyingClub.id
+    ? assessClubAffordabilityFromContext(input.affordabilityContext, affordabilityTerms)
+    : assessClubAffordability({
+        club: input.buyingClub,
+        players: input.players,
+        ...affordabilityTerms,
+      });
 
   const reasons = result.affordable
     ? [
@@ -559,6 +570,7 @@ export function proposeTransferAgreement(
     releasedPlayerId: input.releasedPlayerId,
     currentWeek: input.state.currentWeek,
     currentSeason: input.state.currentSeason,
+    affordabilityContext: input.affordabilityContext,
   });
   const willingness = assessTransferPlayerWillingness({
     player: input.player,

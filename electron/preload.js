@@ -126,6 +126,20 @@ function assertFilename(filename) {
   return normalized || "talentscout-save.json";
 }
 
+// The sandbox cannot import the controller. Keep this status-only contract in
+// sync with quit-save-controller.js; never send an Error or career data to main.
+function assertSaveFlushResult(result) {
+  if (
+    !result || typeof result !== "object" || Array.isArray(result) ||
+    Object.keys(result).length !== 2 ||
+    !Number.isSafeInteger(result.requestId) || result.requestId <= 0 ||
+    (result.status !== "saved" && result.status !== "failed")
+  ) {
+    throw new TypeError("Invalid save flush result");
+  }
+  return { requestId: result.requestId, status: result.status };
+}
+
 function invoke(channel, ...args) {
   return ipcRenderer.invoke(channel, ...args);
 }
@@ -280,6 +294,40 @@ const electronAPI = Object.freeze({
   dialog: Object.freeze({
     saveFile,
     openFile,
+  }),
+
+  window: Object.freeze({
+    setFullScreen: (enabled) => invoke("window:setFullScreen", enabled === true),
+    isFullScreen: () => invoke("window:isFullScreen"),
+    onFullScreenChange: (listener) => {
+      if (typeof listener !== "function") {
+        throw new TypeError("Fullscreen listener must be a function");
+      }
+      const wrapped = (_event, enabled) => {
+        listener(enabled === true);
+      };
+      ipcRenderer.on("window:fullscreen-changed", wrapped);
+      return () => {
+        ipcRenderer.removeListener("window:fullscreen-changed", wrapped);
+      };
+    },
+  }),
+
+  game: Object.freeze({
+    onFlushSaveRequest: (listener) => {
+      if (typeof listener !== "function") {
+        throw new TypeError("Save flush listener must be a function");
+      }
+      const wrapped = (_event, requestId) => {
+        if (Number.isSafeInteger(requestId) && requestId > 0) listener(requestId);
+      };
+      ipcRenderer.on("game:flush-save", wrapped);
+      return () => {
+        ipcRenderer.removeListener("game:flush-save", wrapped);
+      };
+    },
+    notifySaveFlushed: (result) =>
+      invoke("game:notifySaveFlushed", assertSaveFlushResult(result)),
   }),
 });
 

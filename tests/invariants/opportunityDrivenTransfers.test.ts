@@ -8,7 +8,7 @@ import type {
   ReportListing,
   ScoutReport,
 } from "@/engine/core/types";
-import { selectOpportunityDrivenTransfers } from "@/engine/core/gameLoop";
+import { createTransferDestinationIndex, selectOpportunityDrivenTransfers } from "@/engine/core/gameLoop";
 import { createRNG } from "@/engine/rng";
 
 const REPORT: ScoutReport = {
@@ -124,6 +124,8 @@ function createState(overrides: {
         scoutingPhilosophy: "marketSmart",
         youthAcademyRating: 66,
         budget: 10_000_000,
+        // This empty receiving club has approved recruitment capacity.
+        weeklyWageBudget: 150_000,
         leagueId: "league-target",
         managerId: "manager-target",
         playerIds: [],
@@ -139,6 +141,7 @@ function createState(overrides: {
         budget: 10_000_000,
         leagueId: "league-target",
         managerId: "manager-other",
+        weeklyWageBudget: 150_000,
         playerIds: [],
         academyPlayerIds: [],
       },
@@ -215,9 +218,13 @@ describe("opportunity-driven transfers", () => {
         createRNG(seed),
       ).length === 1);
     expect(actingSeed).toBeDefined();
+    const state = createState();
+    const index = createTransferDestinationIndex(state);
+    const spentBudget = new Map<string, number>();
     const transfers = selectOpportunityDrivenTransfers(
-      createState(),
+      state,
       createRNG(actingSeed!),
+      { index, spentBudget },
     );
 
     expect(transfers).toHaveLength(1);
@@ -228,6 +235,10 @@ describe("opportunity-driven transfers", () => {
       week: 6,
       season: 1,
     });
+    expect(index.reservedWeeklyCommitmentByClub.get("club-target")).toBe(transfers[0].wage);
+    expect(index.reservedIncomingByClub.get("club-target")).toBe(1);
+    expect(spentBudget.get("club-target")).toBe(transfers[0].fee
+      + (transfers[0].signingBonus ?? 0) + (transfers[0].contingentReserve ?? 0));
   });
 
   it("ignores expired opportunities after the deadline passes", () => {

@@ -1,11 +1,16 @@
-export interface ConciseOpeningReportModeInput {
-  isYouthScout: boolean;
-  openingStage?: string | null;
-  openingPlayerId?: string | null;
-  selectedPlayerId?: string | null;
-  previousReportExists: boolean;
-  observationCount: number;
-  contextCount: number;
+import type { OpeningCaseState } from "@/engine/youth/openingCaseTypes";
+
+/** The guided first read stays an initial assessment even if a restored world has open briefs. */
+export function shouldUseInitialAssessment(input: {
+  isYouthCase: boolean;
+  hasOpenBrief: boolean;
+  playerId: string | null | undefined;
+  openingCase?: Pick<OpeningCaseState, "playerId" | "stage">;
+}): boolean {
+  return input.isYouthCase && (
+    !input.hasOpenBrief
+    || (input.openingCase?.stage === "report" && input.openingCase.playerId === input.playerId)
+  );
 }
 
 export interface ReportWorkflowStep {
@@ -21,14 +26,6 @@ export interface ReportWorkflowProgress {
   decisionsRemaining: number;
   nextRequiredStepId: string | null;
   requiredSteps: number;
-}
-
-export function isConciseOpeningReportMode(input: ConciseOpeningReportModeInput): boolean {
-  if (!input.isYouthScout) return false;
-  if (input.openingStage !== "report") return false;
-  if (!input.openingPlayerId || input.openingPlayerId !== input.selectedPlayerId) return false;
-  if (input.previousReportExists) return false;
-  return input.observationCount <= 1 && input.contextCount <= 1;
 }
 
 /**

@@ -30,11 +30,136 @@ async function prepareObservedYouthPlayer(gamePage: GamePage) {
   ).toBe(true);
 
   await gamePage.openFirstYouthPlayerProfile();
-  await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+  await gamePage.page.getByRole("button", { name: "Write the report", exact: true }).click();
   await gamePage.waitForScreen("reportWriter");
 }
 
 test.describe("Report Writing", () => {
+  test("a restored opening case files an initial assessment even when a matching club brief is open", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({ scout: { primarySpecialization: "youth" } });
+
+    // This is a save-resume fixture: a completed opening watch has left one
+    // classified cue, while the world still contains an open matching brief.
+    const setup = await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      const youth = Object.values(state.unsignedYouth)[0] as any;
+      const sourceBrief = Object.values(state.youthRecruitmentBriefs)[0] as any;
+      if (!youth || !sourceBrief) throw new Error("Restored opening fixture needs a youth and club brief");
+      const brief = {
+        ...sourceBrief,
+        requiredPositions: [youth.player.position],
+        maxAge: Math.max(sourceBrief.maxAge, youth.player.age),
+        status: "open",
+      };
+      const observation = {
+        id: "restored_opening_observation",
+        playerId: youth.player.id,
+        scoutId: state.scout.id,
+        sourceSessionId: "restored_opening_session",
+        week: state.currentWeek,
+        season: state.currentSeason,
+        context: "schoolMatch",
+        attributeReadings: [],
+        notes: ["A promising first look still needs another context."],
+        flaggedMoments: [],
+        abilityReading: {
+          perceivedCA: 1,
+          caConfidence: 0.3,
+          perceivedPALow: 1,
+          perceivedPAHigh: 2,
+          paConfidence: 0.25,
+        },
+      };
+      store.getState().loadGame({
+        ...state,
+        unsignedYouth: {
+          ...state.unsignedYouth,
+          [youth.id]: {
+            ...youth,
+            discoveredBy: [...new Set([...youth.discoveredBy, state.scout.id])],
+          },
+        },
+        observations: { [observation.id]: observation },
+        youthRecruitmentBriefs: { [brief.id]: brief },
+      });
+      return { playerId: youth.player.id, youthId: youth.id, briefId: brief.id, clubId: brief.clubId };
+    });
+    await seedStructuredEvidenceForPlayer(gamePage.page, setup.playerId);
+
+    await gamePage.page.evaluate(({ playerId, youthId, briefId, clubId }) => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      const restoredState = JSON.parse(JSON.stringify({
+        ...state,
+        activeObservationSession: undefined,
+        openingCase: {
+          id: "restored_opening_case",
+          scoutId: state.scout.id,
+          youthId,
+          playerId,
+          playerPoolIds: [playerId],
+          sourceContactName: "Opening source",
+          briefId,
+          clubId,
+          stage: "report",
+          startedWeek: state.currentWeek,
+          startedSeason: state.currentSeason,
+          claimedWeek: state.currentWeek,
+          claimedSeason: state.currentSeason,
+          discoveryRecordCreated: true,
+          selectedChoiceId: "protect",
+        },
+      }));
+      // Let the load boundary choose the route and player; do not start the
+      // writer manually, which would miss the resumed-opening regression.
+      store.getState().loadGame(restoredState);
+    }, setup);
+
+    await gamePage.waitForScreen("reportWriter");
+    expect(await gamePage.getGameStateValue(`youthRecruitmentBriefs.${setup.briefId}.status`)).toBe("open");
+    await expect(gamePage.page.getByRole("heading", { name: "Write Scouting Report" })).toBeVisible();
+    await expect(gamePage.page.getByRole("group", { name: "Saved evidence" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toHaveCount(0);
+    const fileAssessment = gamePage.page.getByRole("button", { name: "File initial assessment", exact: true });
+    await expect(fileAssessment).toBeDisabled();
+    await gamePage.submitCurrentReportViaUI("note", { submit: false });
+    await expect(fileAssessment).toBeEnabled();
+    await fileAssessment.click();
+    await gamePage.waitForScreen("calendar");
+
+    const report = await gamePage.page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      return Object.values(state.reports).at(-1) as any;
+    });
+    expect(report.playerId).toBe(setup.playerId);
+    expect(report.evidenceAssessment?.kind).toBe("initial");
+    expect(report.evidenceAssessment?.evidenceIds.length).toBeGreaterThan(0);
+    expect(report.evidenceAssessment?.unknowns.length).toBeGreaterThan(0);
+    expect(report.briefId ?? null).toBeNull();
+    expect(await gamePage.getGameStateValue(`youthRecruitmentBriefs.${setup.briefId}.status`)).toBe("open");
+    expect(await gamePage.getGameStateValue("openingCase.stage")).toBe("complete");
+    await gamePage.page.evaluate(async () => {
+      await (window as any).__GAME_STORE__.getState().flushGameplaySave();
+    });
+    await gamePage.page.reload();
+    await gamePage.page.getByRole("button", { name: "Continue Career", exact: true }).click();
+    await gamePage.waitForScreen("dashboard");
+    expect(await gamePage.getGameStateValue("openingCase.stage")).toBe("complete");
+    // An older checkpoint can still have stage=report after filing. Its
+    // authoritative authored report must repair the route without a reward.
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const saved = JSON.parse(JSON.stringify(store.getState().gameState));
+      saved.openingCase.stage = "report";
+      store.getState().loadGame(saved);
+    });
+    await gamePage.waitForScreen("dashboard");
+    expect(await gamePage.getGameStateValue("openingCase.stage")).toBe("complete");
+    gamePage.expectNoConsoleErrors();
+  });
+
   test("a Youth report cannot begin without a classified scouting cue", async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectState({ scout: { primarySpecialization: "youth" } });
@@ -75,6 +200,8 @@ test.describe("Report Writing", () => {
     });
 
     await gamePage.waitForScreen("playerProfile");
+    await expect(gamePage.page.getByRole("button", { name: "Plan next observation", exact: true })).toBeEnabled();
+    await gamePage.page.getByText("Player actions & contacts", { exact: true }).click();
     await expect(
       gamePage.page.getByRole("button", { name: "Build report evidence first" }),
     ).toBeDisabled();

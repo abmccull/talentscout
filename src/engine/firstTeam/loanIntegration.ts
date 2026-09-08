@@ -131,7 +131,7 @@ export function processLoanOutcomeReputation(
   player: Player | undefined,
   week: number,
   season: number,
-  rng: RNG,
+  rng: RNG | string,
 ): {
   reputationDelta: number;
   xpAward: number;
@@ -156,7 +156,7 @@ export function processLoanOutcomeReputation(
   };
 
   const message: InboxMessage = {
-    id: generateId("msg", rng),
+    id: typeof rng === "string" ? rng : generateId("msg", rng),
     week,
     season,
     type: "feedback",
