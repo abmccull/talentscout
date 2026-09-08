@@ -470,11 +470,18 @@ export class GamePage {
           .flatMap((entry: any) => entry.evidenceCards ?? [])
           .map((card: any) => card.playerId),
       );
+      const observedPlayerIds = new Set(
+        Object.values(state.observations ?? {}).map((observation: any) => observation.playerId),
+      );
       const candidates = [
         ...Object.values(state.unsignedYouth ?? {}).map((record: any) => record.player),
         ...Object.values(state.players ?? {}),
       ] as any[];
-      const player = candidates.find((candidate) => evidencePlayerIds.has(candidate?.id));
+      const player = candidates.find((candidate) =>
+        candidate?.id
+        && evidencePlayerIds.has(candidate.id)
+        && observedPlayerIds.has(candidate.id),
+      );
       return player ? {
         id: player.id,
         name: `${player.firstName} ${player.lastName}`,
@@ -659,6 +666,11 @@ export class GamePage {
       await technicalLens.click();
     }
 
+    const focusedPlayerName = await this.page.getByRole("button", { name: /^Remove focus from / }).first()
+      .getAttribute("aria-label")
+      .then((label) => label?.replace(/^Remove focus from /, "") ?? null)
+      .catch(() => null);
+
     let reachedReflection = false;
     for (let step = 0; step < 30; step++) {
       // Observation milestones can enqueue contextual mentor cards after a
@@ -667,7 +679,11 @@ export class GamePage {
       await dismissTutorials(this.page);
       // The authored standout appears after advancing. Flag it in the phase
       // where it is visible before trying a button gated on that decision.
-      const flagMoment = this.page.getByRole("button", { name: /^Flag (standout|this) moment$/ }).first();
+      const flagMoment = focusedPlayerName
+        ? this.page.locator("article").filter({
+            has: this.page.getByRole("heading", { level: 3, name: focusedPlayerName, exact: true }),
+          }).getByRole("button", { name: /^Flag (standout|this) moment$/ }).first()
+        : this.page.getByRole("button", { name: /^Flag (standout|this) moment$/ }).first();
       if (await flagMoment.isVisible({ timeout: 300 }).catch(() => false)) {
         await flagMoment.click();
         await this.page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').first().click();
