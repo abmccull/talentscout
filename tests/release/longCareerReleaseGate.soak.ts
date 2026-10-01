@@ -613,6 +613,18 @@ function assertReleaseInvariants(
   expect(references, "invalid entity references").toEqual([]);
   expect(retentionReferences, "invalid retained archive references").toEqual([]);
   expect(economy, "invalid economy state").toEqual([]);
+  if (bytes > MAX_SERIALIZED_BYTES || SAVE_RETENTION_COLLECTION_KEYS.some(
+    (key) => retentionFootprint.collections[key] > COLLECTION_BYTE_BUDGETS[key],
+  )) {
+    // Emit attribution before the first size assertion; an absolute-size failure
+    // must not hide the failing season or collections behind it.
+    console.info("LONG_CAREER_SAVE_RETENTION_FAILURE", JSON.stringify({
+      season: state.currentSeason, week: state.currentWeek, totalBytes: bytes,
+      collectionBytes: retentionFootprint.collections,
+      largestCollections: largestCollections(state),
+      playerDiagnostic: playerRetentionDiagnostic(state),
+    }));
+  }
   expect(bytes, "serialized save exceeds absolute release budget").toBeLessThanOrEqual(
     MAX_SERIALIZED_BYTES,
   );

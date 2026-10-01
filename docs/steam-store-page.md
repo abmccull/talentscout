@@ -1,7 +1,9 @@
 # TalentScout — Steam Store Page Content
 
-> Working document for store submission. All copy verified against source code.
-> Last updated: 2026-02-23.
+> Historical full-game draft; preserved for reference, not current store submission.
+> Current Youth Scout Early Access copy: `STEAM_STORE_COPY.md`, selected by
+> `docs/steam-store-assets.json`.
+> Original draft date: 2026-02-23.
 
 ---
 

@@ -13,6 +13,7 @@ import type {
 import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
 import { compactPlayerDevelopmentHistory } from "@/engine/world/developmentEnvironment";
 import { compactInjuryArchive, expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { compactVisualIdentity } from "@/engine/players/portraits/identity";
 import { withoutDisciplineMirror } from "@/engine/match/disciplineRecords";
 import {
   compactPlayerMovementSummary,
@@ -269,6 +270,7 @@ function compactPlayerRecord(
   currentSeason: number,
   preserveFullDossierHistory = false,
 ): Player {
+  const visualIdentity = compactVisualIdentity(player.visualIdentity, player.id);
   const compactedDevelopmentHistory = player.developmentHistory
     ? compactPlayerDevelopmentHistory(player.developmentHistory, player.id)
     : undefined;
@@ -313,7 +315,8 @@ function compactPlayerRecord(
     ? compactInjuryArchive(retainedInjuryHistory) : undefined;
 
   if (
-    recentMatchRatings === player.recentMatchRatings
+    visualIdentity === player.visualIdentity
+    && recentMatchRatings === player.recentMatchRatings
     && seasonRatings === player.seasonRatings
     && developmentHistory === player.developmentHistory
     && compactedInjuryHistory === player.injuryHistory
@@ -322,6 +325,7 @@ function compactPlayerRecord(
   }
   return {
     ...player,
+    ...(visualIdentity ? { visualIdentity } : {}),
     recentMatchRatings,
     seasonRatings,
     ...(developmentHistory ? { developmentHistory } : {}),
@@ -965,19 +969,14 @@ export function compactLongCareerHistory(state: GameState): GameState {
         // later migration cannot silently erase the only remaining identity.
         return referencedYouthIds.has(youthId) || causalPlayerIds.has(youth.player.id);
       })
-      .map(([youthId, youth]) => [
-        youthId,
-        youth.player.developmentHistory
-          ? {
-              ...youth,
-              player: compactPlayerRecord(
-                youth.player,
-                state.currentSeason,
-                causalPlayerIds.has(youth.player.id),
-              ),
-            }
-          : youth,
-      ]),
+      .map(([youthId, youth]) => {
+        const player = compactPlayerRecord(
+          youth.player,
+          state.currentSeason,
+          causalPlayerIds.has(youth.player.id),
+        );
+        return [youthId, player === youth.player ? youth : { ...youth, player }];
+      }),
   );
   const players = Object.fromEntries(
     Object.entries(state.players ?? {}).map(([playerId, player]) => [

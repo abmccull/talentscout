@@ -247,8 +247,8 @@ db.version(4).stores({
   mods: "countryKey",
 });
 
-// Version 5 keeps the portable save-envelope schema at version 4. Only the
-// local journal changes: upload intents are revision pointers and archives
+// Database version 5 changed only the local journal; the portable envelope was
+// schema 4 at introduction. Upload intents are revision pointers and archives
 // carry lazily populated retention metadata.
 db.version(5).stores({
   saves: "slot",

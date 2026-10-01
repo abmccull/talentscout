@@ -18,7 +18,7 @@ import {
   type PlayerExperienceRecord,
 } from "@/lib/playerExperience";
 
-export const CURRENT_SAVE_SCHEMA_VERSION = 4;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5;
 export const CURRENT_RULES_VERSION = RUN_RULES_VERSION;
 export const CURRENT_BUILD_VERSION =
   process.env.NEXT_PUBLIC_BUILD_VERSION ?? "development";
@@ -235,12 +235,19 @@ const migrateV3ToV4: SaveMigration = (legacy) => ({
   playerExperience: migratePlayerExperience(legacy.playerExperience),
 });
 
+/** Allows compact stored identities and fixture references without changing rules. */
+const migrateV4ToV5: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 5,
+});
+
 /** Ordered by the version they consume. Never mutate an existing migration. */
 const SAVE_MIGRATIONS: Readonly<Record<number, SaveMigration>> = Object.freeze({
   0: migrateV0ToV1,
   1: migrateV1ToV2,
   2: migrateV2ToV3,
   3: migrateV3ToV4,
+  4: migrateV4ToV5,
 });
 
 function assertEnvelopeShape(raw: Record<string, unknown>): asserts raw is MutableEnvelope {
@@ -330,7 +337,7 @@ export function migrateSaveEnvelope(raw: unknown): SaveEnvelope<unknown> & Recor
     }
   }
 
-  // Player experience has its own version lifecycle inside schema 4. Normalize
+  // Player experience, introduced in schema 4, has its own version lifecycle. Normalize
   // it even when the outer envelope is already current.
   working = {
     ...working,

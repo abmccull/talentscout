@@ -426,7 +426,7 @@ describe("save envelope migrations", () => {
     });
 
     expect(migrated).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
       rulesVersion: "youth-ea.3",
       playerExperience: {
         version: 2,

@@ -15,7 +15,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/invariants/saveRetention.test.ts"],
+    include: [
+      "tests/invariants/saveRetention.test.ts",
+      "tests/invariants/playerVisualIdentityRetention.test.ts",
+    ],
     coverage: {
       provider: "v8",
       enabled: true,

@@ -25,7 +25,13 @@ export interface PlayerVisualIdentity {
   seed: string;
   /** Pending generation DNA is derived from this pinned-version seed, not duplicated 8,000 times. */
 }
-export interface PortraitPlayer { id: string; age: number; firstName?: string; lastName?: string; visualIdentity?: PlayerVisualIdentity }
+/** Owner-derived v1 strings can be reconstructed; the version must remain saved. */
+export type StoredPlayerVisualIdentity = PlayerVisualIdentity | {
+  version: 1;
+  identityId?: never;
+  seed?: never;
+};
+export interface PortraitPlayer { id: string; age: number; firstName?: string; lastName?: string; visualIdentity?: StoredPlayerVisualIdentity }
 export interface GameDate { season: number; week: number }
 export type VisibilityReason = "opening" | "observed" | "selected" | "tracked" | "report" | "history" | "legacy";
 export interface PortraitImage {

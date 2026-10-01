@@ -351,7 +351,7 @@ export type WonderkidTier =
   | "journeyman";
 
 export interface Player {
-  visualIdentity?: import("../../players/portraits/types").PlayerVisualIdentity;
+  visualIdentity?: import("../../players/portraits/types").StoredPlayerVisualIdentity;
   id: string;
   firstName: string;
   lastName: string;
@@ -533,8 +533,11 @@ export interface InjuryHistory {
   reinjuryWindowWeeksLeft: number;
 }
 
-/** Legacy objects and compact, lossless saved form rows are both supported. */
-export type MatchFormEntry = ExpandedMatchFormEntry | [fixtureId: string, week: number, season: number, rating: number];
+/** Scheduled IDs inherit their exact season and week from the containing form row. */
+export type MatchFormFixtureRef = string | [leagueId: string, fixtureOrdinal: number];
+
+/** Legacy objects/string tuples and compact, lossless scheduled references are supported. */
+export type MatchFormEntry = ExpandedMatchFormEntry | [fixtureRef: MatchFormFixtureRef, week: number, season: number, rating: number];
 
 /** Archive defaults are inherited from the owning history and original injury. */
 export type HistoricalInjury = Omit<Injury, "playerId" | "weeksRemaining" | "reinjuryRisk">

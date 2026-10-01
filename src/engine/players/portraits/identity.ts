@@ -1,4 +1,4 @@
-import { AGE_CHECKPOINTS, DNA_OPTIONS, type PlayerVisualIdentity, type PortraitAge, type PortraitPlayer, type VisualDNA } from "./types";
+import { AGE_CHECKPOINTS, DNA_OPTIONS, type PlayerVisualIdentity, type StoredPlayerVisualIdentity, type PortraitAge, type PortraitPlayer, type VisualDNA } from "./types";
 
 function stableHash(value: string): number {
   let hash = 2166136261;
@@ -33,15 +33,31 @@ export function sameDNA(left: VisualDNA, right: VisualDNA): boolean {
   return (Object.keys(DNA_OPTIONS) as (keyof VisualDNA)[]).every((key) => left[key] === right[key]);
 }
 export function validateVisualIdentity(value: unknown, playerId: string): PlayerVisualIdentity {
-  if (!value || typeof value !== "object") throw new Error("Invalid visual identity");
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid visual identity");
   const identity = value as PlayerVisualIdentity;
   if (identity.version !== 1) throw new Error("Unsupported visual identity version");
-  if (identity.identityId !== "person:v1:" + playerId || identity.seed !== "face:v1:" + playerId) {
+  const canonical = createVisualIdentity(playerId);
+  const keys = Object.keys(identity);
+  if (keys.length === 1 && keys[0] === "version") return canonical;
+  if (identity.identityId !== canonical.identityId || identity.seed !== canonical.seed) {
     throw new Error("Visual identity does not match the canonical player");
   }
   return identity;
 }
-export function withVisualIdentity<T extends PortraitPlayer>(player: T): T & { visualIdentity: PlayerVisualIdentity } {
+/** Pack only the exact known identity; authored extensions and legacy exceptions survive. */
+export function compactVisualIdentity(
+  identity: StoredPlayerVisualIdentity | undefined,
+  playerId: string,
+): StoredPlayerVisualIdentity | undefined {
+  if (!identity || identity.version !== 1 || !playerId || playerId.length > 1024) return identity;
+  const keys = Object.keys(identity);
+  if (keys.length === 1 && keys[0] === "version") return identity;
+  if (keys.length !== 3 || keys.some((key) => !["version", "identityId", "seed"].includes(key))
+    || identity.identityId !== "person:v1:" + playerId
+    || identity.seed !== "face:v1:" + playerId) return identity;
+  return { version: 1 };
+}
+export function withVisualIdentity<T extends PortraitPlayer>(player: T): Omit<T, "visualIdentity"> & { visualIdentity: PlayerVisualIdentity } {
   const identity = player.visualIdentity === undefined
     ? createVisualIdentity(player.id)
     : validateVisualIdentity(player.visualIdentity, player.id);

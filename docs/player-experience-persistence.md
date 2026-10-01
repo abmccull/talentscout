@@ -4,7 +4,8 @@ TalentScout treats tutorial completion and permanent tutorial dismissal as
 player experience, not as a property of one scout career.
 
 The versioned `PlayerExperienceRecord` is cached locally under
-`talentscout_player_experience` and embedded in save-envelope schema 4. Saving
+`talentscout_player_experience`. It was introduced in save-envelope schema 4
+and is carried in the current schema 5 envelope. Saving
 therefore carries the record to IndexedDB and, when enabled, the same Steam
 Cloud or authenticated Supabase save slot. Loading any of those copies merges
 the record into the local profile and updates the live tutorial store.
