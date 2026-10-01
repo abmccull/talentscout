@@ -394,13 +394,17 @@ export function withLifecycleWorld(
  * intent per call; higher-priority terminal transitions win deterministic
  * conflicts (for example retirement over renewal).
  */
-export function resolvePlayerMovements(
+interface PlayerMovementContext {
+  state: LifecycleWorldState;
+  payroll: Map<string, number>;
+  clubMemberships: Map<string, Set<string>>;
+}
+
+function preparePlayerMovementContext(
   input: LifecycleWorldState,
-  intents: PlayerMovementIntent[],
   currentWeek: number,
   currentSeason: number,
-  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
-): LifecycleResolution {
+): PlayerMovementContext {
   let state = cloneState(input);
   state.clubs = normalizeClubEconomicsMap(state.clubs, state.players, {
     currentWeek,
@@ -414,6 +418,66 @@ export function resolvePlayerMovements(
     const owner = contractOwner(player);
     if (owner) payroll.set(owner, (payroll.get(owner) ?? 0) + wage(player));
   }
+  return { state, payroll, clubMemberships: buildClubMembershipIndex(state.clubs) };
+}
+
+export function resolvePlayerMovements(
+  input: LifecycleWorldState,
+  intents: PlayerMovementIntent[],
+  currentWeek: number,
+  currentSeason: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+): LifecycleResolution {
+  return applyPlayerMovements(
+    preparePlayerMovementContext(input, currentWeek, currentSeason),
+    intents, currentWeek, currentSeason, seasonLength,
+  );
+}
+
+/**
+ * One opening-recruitment phase owns this scratch world. Every offer still
+ * settles separately; returned state is a borrowed view until the next offer.
+ * Only free signings are supported, since they add no financial obligations.
+ * Discard the resolver at phase end and recreate it after any outside movement.
+ */
+export function createFreeAgentSigningResolver(
+  input: LifecycleWorldState,
+  currentWeek: number,
+  currentSeason: number,
+): (intent: Extract<PlayerMovementIntent, { type: "freeAgentSigning" }>) => LifecycleResolution {
+  let context: PlayerMovementContext | undefined;
+  return (intent) => {
+    const prepared = context ?? preparePlayerMovementContext(input, currentWeek, currentSeason);
+    const previousPool = prepared.state.freeAgentPool;
+    const playerId = prepared.state.players[intent.playerId]?.id ?? intent.playerId;
+    const result = applyPlayerMovements(
+      prepared, [intent], currentWeek, currentSeason, LEGACY_SEASON_LENGTH_WEEKS,
+    );
+    if (result.applied.length === 0) {
+      // Ordinary recruitment discards a refused resolution, including its
+      // derived pool cleanup. Preserve that accepted-world boundary here.
+      prepared.state.freeAgentPool = previousPool;
+      return result;
+    }
+    // Signing cleans every old registration before adding the destination.
+    // The next separately settled offer must use the committed membership.
+    prepared.clubMemberships.set(playerId, new Set([intent.toClubId]));
+    context = prepared;
+    return result;
+  };
+}
+
+function applyPlayerMovements(
+  context: PlayerMovementContext,
+  intents: PlayerMovementIntent[],
+  currentWeek: number,
+  currentSeason: number,
+  seasonLength: number,
+): LifecycleResolution {
+  const state = context.state;
+  const payroll = context.payroll;
+  const clubMemberships = context.clubMemberships;
+  const wage = (player: Player): number => Math.max(0, Math.round(player.wage ?? 0));
   const assessClubAffordability = (request: ClubAffordabilityRequest) =>
     assessClubAffordabilityFromContext({
       club: request.club,
@@ -423,7 +487,6 @@ export function resolvePlayerMovements(
   const applied: PlayerMovementEvent[] = [];
   const rejected: RejectedPlayerMovement[] = [];
   const reserved = new Set<string>();
-  const clubMemberships = buildClubMembershipIndex(state.clubs);
   const ordered = intents
     .map((intent, index) => ({ intent, index }))
     .sort((a, b) => PRIORITY[b.intent.type] - PRIORITY[a.intent.type] || a.index - b.index);
@@ -578,7 +641,7 @@ export function resolvePlayerMovements(
       }
       state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.clubs[intent.toClubId] = {
-        ...affordability.club,
+        ...state.clubs[intent.toClubId],
         budget: affordability.club.budget - signingBonus,
       };
       const contractLength = Math.max(

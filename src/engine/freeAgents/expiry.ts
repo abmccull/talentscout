@@ -94,6 +94,7 @@ export function processContractExpiries(
     const owner = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
     return Boolean(owner && state.clubs[owner]) && player.contractExpiry <= state.currentSeason;
   });
+  const appearanceIndex = buildRenewalAppearanceIndex(state, expiringPlayers);
   // Expiry is one planning horizon: only ongoing contracts are committed.
   // Reserve accepted replacement deals below, rather than charging both the
   // old expiring payroll and the new deals during priority selection.
@@ -182,10 +183,10 @@ export function processContractExpiries(
     if (player.clubId === ownerClubId && !planningClub.playerIds.includes(playerId)) {
       planningClub.playerIds.push(playerId);
     }
-    const renewalChance = calculateContractRenewalChance(player, planningClub, state);
+    const appearances = appearanceIndex.get(club.id)?.get(player.id) ?? 0;
+    const renewalChance = calculateRenewalChanceWithAppearances(player, planningClub, state, appearances);
 
     if ((!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance)) {
-      const appearances = currentSeasonAppearances(player.id, club.id, state);
       const extension = preferredRenewalLength(player, appearances, player.morale ?? 5);
       const renewedWage = renewalWageExpectation(
         player,
@@ -194,7 +195,7 @@ export function processContractExpiries(
         appearances,
         player.morale ?? 5,
       );
-      const playerAcceptance = playerRenewalAcceptanceChance(player, club, state);
+      const playerAcceptance = playerRenewalAcceptanceChance(player, club, state, appearances);
       const clubAffordability = affordabilityContext[ownerClubId];
       const affordability = clubAffordability && assessClubAffordabilityFromContext(
         clubAffordability,
@@ -297,6 +298,42 @@ function currentSeasonAppearances(playerId: string, clubId: string, state: GameS
   return appearances;
 }
 
+function buildRenewalAppearanceIndex(
+  state: GameState,
+  expiringPlayers: readonly Player[],
+): Map<string, Map<string, number>> {
+  const index = new Map<string, Map<string, number>>();
+  for (const player of expiringPlayers) {
+    const owner = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    const club = state.clubs[owner];
+    if (!club) continue;
+    let counts = index.get(club.id);
+    if (!counts) { counts = new Map(); index.set(club.id, counts); }
+    counts.set(player.id, 0);
+  }
+  if (index.size === 0) return index;
+  // Fixtures and ratings do not change during the negotiation batch. Query
+  // only the expiring players for each fixture club, preserving the scalar
+  // lookup's legacy/key semantics without repeated whole-ledger scans.
+  for (const [fixtureId, ratings] of Object.entries(state.matchRatings ?? {})) {
+    const fixture = state.fixtures[fixtureId];
+    if (!fixture?.played || fixture.season !== state.currentSeason) continue;
+    const clubIds = fixture.homeClubId === fixture.awayClubId
+      ? [fixture.homeClubId] : [fixture.homeClubId, fixture.awayClubId];
+    for (const clubId of clubIds) {
+      const counts = index.get(clubId);
+      if (!counts) continue;
+      for (const playerId of counts.keys()) {
+        const rating = ratings[playerId];
+        if (rating && (rating.minutesPlayed !== undefined ? rating.minutesPlayed > 0 : rating.started ?? true)) {
+          counts.set(playerId, counts.get(playerId)! + 1);
+        }
+      }
+    }
+  }
+  return index;
+}
+
 function tacticalPositions(formation: string): ReadonlySet<Player["position"]> {
   const parsed = parseFormation(formation);
   return parsed
@@ -369,9 +406,9 @@ function playerRenewalAcceptanceChance(
   player: Player,
   club: Club,
   state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
+  appearances: number,
 ): number {
   const morale = player.morale ?? 5;
-  const appearances = currentSeasonAppearances(player.id, club.id, state as GameState);
   const coverage = positionCoverage(player, club, state);
   const transferWillingness = player.personalityProfile?.transferWillingness ?? 0.5;
   let chance = 0.48;
@@ -414,6 +451,17 @@ export function calculateContractRenewalChance(
   club: Club,
   state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
 ): number {
+  return calculateRenewalChanceWithAppearances(
+    player, club, state, currentSeasonAppearances(player.id, club.id, state as GameState),
+  );
+}
+
+function calculateRenewalChanceWithAppearances(
+  player: Player,
+  club: Club,
+  state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
+  appearances: number,
+): number {
   let chance = sportingRenewalValue(player, club, state.players);
   chance += Math.max(-0.12, Math.min(0.12, player.form * 0.035));
   chance += Math.max(-0.12, Math.min(0.12, ((player.morale ?? 5) - 5) * 0.025));
@@ -428,7 +476,6 @@ export function calculateContractRenewalChance(
       : coverage >= 4 ? -0.12
         : 0;
 
-  const appearances = currentSeasonAppearances(player.id, club.id, state as GameState);
   if (appearances >= 12) chance += 0.1;
   else if (appearances >= 6) chance += 0.04;
   else if (appearances === 0 && player.age >= 23) chance -= 0.12;

@@ -1,7 +1,7 @@
 import type { GameState } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
 import { assessClubAffordabilityFromContext, buildClubAffordabilityContext } from "@/engine/finance/clubEconomics";
-import { getLifecycleWorld, resolvePlayerMovements, withLifecycleWorld } from "@/engine/world/playerLifecycle";
+import { createFreeAgentSigningResolver, getLifecycleWorld, withLifecycleWorld } from "@/engine/world/playerLifecycle";
 import { NPC_ACCEPTANCE_CHANCE, scoreFreeAgentClubInterest } from "./pool";
 import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "./squadPlanning";
 import { recruitOpeningGoalkeeperLoans } from "./openingLoans";
@@ -20,6 +20,7 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
     // Exhaust permanent vacancy approaches first, then explore loans before
     // optional cover and bench depth spend the remaining recruitment funds.
     if (phase === "keeperCover") state = recruitOpeningGoalkeeperLoans(state, rng);
+    let resolveSigning: ReturnType<typeof createFreeAgentSigningResolver> | undefined;
     for (const clubId of clubOrder) {
       const attempted = attempts.get(clubId)!;
       let affordabilityContext: ReturnType<typeof buildClubAffordabilityContext>[string] | undefined;
@@ -62,12 +63,14 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
         // Same base willingness as a normal pending NPC free-agent offer.
         if (!rng.chance(NPC_ACCEPTANCE_CHANCE)) continue;
         const player = state.players[agent.playerId];
-        const resolution = resolvePlayerMovements(getLifecycleWorld(state), [{
+        const resolution = (resolveSigning ??= createFreeAgentSigningResolver(
+          getLifecycleWorld(state), state.currentWeek, state.currentSeason,
+        ))({
           type: "freeAgentSigning", playerId: player.id, toClubId: clubId,
           wage: agent.wageExpectation, signingBonus: agent.signingBonusExpectation,
           contractLength: player.age >= 32 ? 1 : player.age >= 29 ? 2 : 3,
           preserveSquadWageReserve: true, reason: "Season-opening squad vacancy agreement",
-        }], state.currentWeek, state.currentSeason);
+        });
         if (resolution.applied.length > 0) {
           state = withLifecycleWorld(state, resolution.state);
           affordabilityContext = undefined;
