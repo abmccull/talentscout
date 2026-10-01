@@ -812,8 +812,14 @@ export function processLoanPerformance(
       50 + (appearanceRate > 0.5 ? 20 : -10) + newDevDelta * 5,
     ));
     const appearanceSatisfaction = appeared ? 5 : hasFixture ? -3 : 0;
+    // Ordinary good loans keep their score; outstanding accumulated match
+    // performance can make a permanent move attractive to the borrower.
+    const standoutPerformanceBonus = Math.min(20, Math.max(0,
+      (newAvgRating - 7) * 20,
+    ));
     const loanSatisfaction = Math.min(100, Math.max(0,
-      50 + (newAvgRating > 6.5 ? 15 : -10) + appearanceSatisfaction,
+      50 + (newAvgRating > 6.5 ? 15 : -10)
+        + standoutPerformanceBonus + appearanceSatisfaction,
     ));
 
     updatedLoans.push({

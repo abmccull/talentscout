@@ -110,21 +110,24 @@ const LEGEND_ITEMS = [
 
 function LegendHUD() {
   return (
-    <div
+    <details
       className="absolute bottom-3 left-3 z-20 max-w-[18rem] rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md"
-      role="group"
+      data-testid="world-map-legend"
       aria-label="World map legend"
       title={worldTermSummary()}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
+      <summary className="min-h-8 cursor-pointer text-eyebrow font-semibold uppercase tracking-[0.14em] text-zinc-200">
+        Map legend
+      </summary>
+      <p className="text-eyebrow mt-2 font-semibold uppercase tracking-[0.14em] text-zinc-200">
         {WORLD_TERMS.familiarity.label} marker tiers
       </p>
-      <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
+      <p className="mt-1 text-meta leading-relaxed text-zinc-300">
         Personal credibility shown by the ring color. {WORLD_TERMS.regionalKnowledge.label} uses the purple badge. {WORLD_TERMS.operationalPresence.label} lives in the dossier and country browser, not as a separate map tier.
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {LEGEND_ITEMS.map(({ color, label }) => (
-          <span key={label} className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+          <span key={label} className="flex items-center gap-1.5 text-meta text-zinc-300">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: color }}
@@ -133,7 +136,7 @@ function LegendHUD() {
             {label}
           </span>
         ))}
-        <span className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+        <span className="flex items-center gap-1.5 text-meta text-zinc-300">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full border-2 border-amber-500 bg-zinc-800"
             aria-hidden="true"
@@ -141,18 +144,18 @@ function LegendHUD() {
           Current
         </span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-400">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-zinc-300">
         <span className="flex items-center gap-1.5">
           <span className="inline-flex h-3 w-3 items-center justify-center rounded-[3px] bg-violet-500 text-[8px] font-semibold text-white" aria-hidden="true">
             2
           </span>
           {WORLD_TERMS.regionalKnowledge.label} band
         </span>
-        <span className="text-zinc-500">
+        <span className="text-zinc-300">
           {WORLD_TERMS.operationalPresence.label}: open the dossier
         </span>
       </div>
-    </div>
+    </details>
   );
 }
 

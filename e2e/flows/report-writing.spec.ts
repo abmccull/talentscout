@@ -1,8 +1,9 @@
+import type { TestInfo } from "@playwright/test";
 import type { GamePage } from "../fixtures";
 import { test, expect } from "../fixtures";
 import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence";
 
-async function prepareObservedYouthPlayer(gamePage: GamePage) {
+async function prepareSupportedYouthReportFixture(gamePage: GamePage, testInfo: TestInfo) {
   await gamePage.goto();
   await gamePage.injectState({
     currentWeek: 1,
@@ -14,24 +15,88 @@ async function prepareObservedYouthPlayer(gamePage: GamePage) {
   });
   await gamePage.navigateTo("calendar");
   await gamePage.scheduleActivityByLabel("School Match", "Mon");
-  await gamePage.advanceCanonicalWeek({ launchLiveSession: true });
+  const completedBefore = await gamePage.page.evaluate(() =>
+    ((window as any).__GAME_STORE__.getState().gameState.completedInteractiveSessions ?? []) as string[],
+  );
+  await gamePage.advanceCanonicalWeek({ launchLiveSession: true, maxLiveSessions: 1 });
 
-  const sessionOutcome = await gamePage.page.evaluate(() => {
+  const sessionOutcome = await gamePage.page.evaluate((completedIdsBefore) => {
     const store = (window as any).__GAME_STORE__;
     const state = store.getState().gameState;
     return {
       observationCount: Object.keys(state?.observations ?? {}).length,
       discoveryCount: (state?.discoveryRecords ?? []).length,
+      completedSessionIds: (state.completedInteractiveSessions ?? [])
+        .filter((id: string) => !completedIdsBefore.includes(id)).sort() as string[],
+      interactiveObservations: Object.values(state.observations ?? {})
+        .filter((observation: any) => observation.sourceSessionId)
+        .map((observation: any) => ({ id: observation.id as string,
+          playerId: observation.playerId as string,
+          sourceSessionId: observation.sourceSessionId as string,
+          activityInstanceId: observation.activityInstanceId as string })),
     };
-  });
+  }, completedBefore);
 
   expect(
     sessionOutcome.observationCount > 0 || sessionOutcome.discoveryCount > 0,
   ).toBe(true);
+  expect(sessionOutcome.completedSessionIds).toHaveLength(1);
+  expect(sessionOutcome.interactiveObservations.length).toBeGreaterThan(0);
+  expect(new Set(sessionOutcome.interactiveObservations.map((observation) => observation.sourceSessionId)).size).toBe(1);
+  expect(sessionOutcome.interactiveObservations.every((observation) =>
+    sessionOutcome.completedSessionIds.includes(observation.activityInstanceId))).toBe(true);
 
   await gamePage.openFirstYouthPlayerProfile();
-  await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+  const playerId = await gamePage.page.evaluate(() =>
+    (window as any).__GAME_STORE__.getState().selectedPlayerId as string,
+  );
+  expect(playerId).toBeTruthy();
+  expect(sessionOutcome.interactiveObservations.some((observation) => observation.playerId === playerId)).toBe(true);
+  // These tests isolate writer rules from whether a novice's particular watch
+  // yields a clear signal. Keep the real watch and its observations, then add
+  // the supported durable cues that a completed clear watch would save. The
+  // separate opening tests cover perception/reflection through the real UI.
+  await seedStructuredEvidenceForPlayer(gamePage.page, playerId);
+  const precondition = await gamePage.page.evaluate((id) => {
+    const state = (window as any).__GAME_STORE__.getState().gameState;
+    const journal = state.reflectionJournal[`e2e_structured_journal_${id}`];
+    return {
+      playerId: id,
+      observationIds: journal?.observationIds ?? [],
+      cards: journal?.evidenceCards ?? [],
+    };
+  }, playerId);
+  expect(precondition.observationIds.length).toBeGreaterThan(0);
+  expect(precondition.cards).toHaveLength(3);
+  expect(precondition.cards.every((card: any) => card.playerId === playerId
+    && card.clarity === "strong" && card.classification !== "noConclusion")).toBe(true);
+  await testInfo.attach("supported-report-precondition.json", {
+    body: JSON.stringify({ testControl: { maxLiveSessions: 1 }, sessionOutcome, precondition }, null, 2),
+    contentType: "application/json",
+  });
+  const writeReport = gamePage.page.getByRole("button", { name: /^Write Report$/ });
+  await expect(writeReport).toBeVisible();
+  await expect(writeReport).toBeEnabled();
+  await writeReport.click();
   await gamePage.waitForScreen("reportWriter");
+  return precondition;
+}
+
+async function readAutosavedReport(gamePage: GamePage, reportId: string) {
+  return gamePage.page.evaluate((id) => new Promise<any>((resolve, reject) => {
+    const opening = indexedDB.open("TalentScoutDB");
+    opening.onerror = () => reject(opening.error);
+    opening.onsuccess = () => {
+      const db = opening.result;
+      const read = db.transaction("saves", "readonly").objectStore("saves").get(0);
+      read.onerror = () => { db.close(); reject(read.error); };
+      read.onsuccess = () => {
+        const report = read.result?.state?.reports?.[id] ?? null;
+        db.close();
+        resolve(JSON.parse(JSON.stringify(report)));
+      };
+    };
+  }), reportId);
 }
 
 test.describe("Report Writing", () => {
@@ -221,8 +286,8 @@ test.describe("Report Writing", () => {
     gamePage.expectNoConsoleErrors();
   });
 
-  test("report writer exposes only valid conviction options", async ({ gamePage }) => {
-    await prepareObservedYouthPlayer(gamePage);
+  test("report writer exposes only valid conviction options", async ({ gamePage }, testInfo) => {
+    await prepareSupportedYouthReportFixture(gamePage, testInfo);
 
     await gamePage.submitCurrentReportViaUI("recommend", { submit: false });
 
@@ -254,8 +319,8 @@ test.describe("Report Writing", () => {
     gamePage.expectNoConsoleErrors();
   });
 
-  test("submitting a valid report writes it to report history", async ({ gamePage }) => {
-    await prepareObservedYouthPlayer(gamePage);
+  test("submitting a valid report writes it to report history", async ({ gamePage }, testInfo) => {
+    const setup = await prepareSupportedYouthReportFixture(gamePage, testInfo);
 
     await gamePage.submitCurrentReportViaUI("recommend");
     await gamePage.waitForScreen("reportHistory");
@@ -271,6 +336,9 @@ test.describe("Report Writing", () => {
 
     expect(latestReport).not.toBeNull();
     expect(latestReport.conviction).toBe("recommend");
+    expect(latestReport.playerId).toBe(setup.playerId);
+    expect(latestReport.evidenceAssessment?.kind).toBe("formal");
+    expect(latestReport.evidenceAssessment?.claims.some((claim: any) => claim.support === "supported")).toBe(true);
     expect(Object.keys(latestReport.categoryVerdicts ?? {})).toEqual(
       expect.arrayContaining(["potential", "roleFit", "characterRisk"]),
     );
@@ -278,12 +346,27 @@ test.describe("Report Writing", () => {
     expect(Array.isArray(latestReport.strengths)).toBe(true);
     expect(Array.isArray(latestReport.weaknesses)).toBe(true);
     await expect(gamePage.page.getByText("Recommend", { exact: true }).last()).toBeVisible();
+    // Read the actual autosave, then reload through Continue Career. Do not
+    // inject or flush a substitute checkpoint to claim persistence.
+    await expect.poll(() => readAutosavedReport(gamePage, latestReport.id), { timeout: 15_000 })
+      .toEqual(latestReport);
+    await gamePage.page.reload();
+    await gamePage.page.getByRole("button", { name: "Continue Career", exact: true }).click();
+    await gamePage.waitForScreen("dashboard");
+    const reloaded = await gamePage.page.evaluate((id) =>
+      (window as any).__GAME_STORE__.getState().gameState.reports[id], latestReport.id);
+    expect(reloaded).toEqual(latestReport);
+    await gamePage.navigateTo("reportHistory");
+    await expect(gamePage.page.getByText("Recommend", { exact: true }).last()).toBeVisible();
+    await testInfo.attach("persisted-supported-report.json", {
+      body: JSON.stringify({ latestReport, reloaded }, null, 2), contentType: "application/json",
+    });
 
     gamePage.expectNoConsoleErrors();
   });
 
-  test("final review counts the fresh-evidence blocker before allowing a revision", async ({ gamePage }) => {
-    await prepareObservedYouthPlayer(gamePage);
+  test("final review counts the fresh-evidence blocker before allowing a revision", async ({ gamePage }, testInfo) => {
+    await prepareSupportedYouthReportFixture(gamePage, testInfo);
 
     await gamePage.submitCurrentReportViaUI("recommend");
     await gamePage.waitForScreen("reportHistory");
@@ -308,6 +391,14 @@ test.describe("Report Writing", () => {
     await expect(
       gamePage.page.getByRole("button", { name: /^File revision 2$/ }),
     ).toBeDisabled();
+    const revisionBoundary = await gamePage.page.evaluate(() => {
+      const reports = Object.values((window as any).__GAME_STORE__.getState().gameState.reports) as any[];
+      return { reportCount: reports.length, revisions: reports.map((report) => report.revision) };
+    });
+    expect(revisionBoundary).toEqual({ reportCount: 1, revisions: [1] });
+    await testInfo.attach("blocked-revision-boundary.json", {
+      body: JSON.stringify(revisionBoundary, null, 2), contentType: "application/json",
+    });
 
     gamePage.expectNoConsoleErrors();
   });

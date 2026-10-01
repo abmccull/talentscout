@@ -1990,7 +1990,8 @@ export interface GameState {
 
   /**
    * Per-fixture, per-player match ratings. Keyed fixtureId → playerId.
-   * Ephemeral — wiped at season end after consolidation into player.seasonRatings.
+   * Detailed performance is consolidated at season end; ratings for retained
+   * causally referenced fixtures remain available under the retention policy.
    */
   matchRatings: Record<string, Record<string, PlayerMatchRating>>;
 
@@ -3612,6 +3613,8 @@ export interface AlumniMilestone {
   season: number;
   description: string;
   notified: boolean;
+  /** Canonical fixture or applied movement identity; absent in legacy records. */
+  sourceId?: string;
 }
 
 // --- F12: Youth Pipeline Tracking types ---
@@ -3640,6 +3643,8 @@ export interface AlumniCareerUpdate {
   season: number;
   type: AlumniCareerUpdateType;
   description: string;
+  /** Canonical fixture or applied movement identity; absent in legacy records. */
+  sourceId?: string;
 }
 
 export interface AlumniSeasonStats {

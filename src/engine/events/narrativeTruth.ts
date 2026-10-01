@@ -1,3 +1,4 @@
+import { isSourcedAlumniEvent } from "../youth/alumniEvidence";
 import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import type {
   GameDate,
@@ -459,7 +460,7 @@ function findAlumniDebut(
 ): NarrativeEvidenceReference | null {
   for (const alumni of state.alumniRecords ?? []) {
     const milestone = (alumni.milestones ?? []).find(
-      (item) => item.type === "firstTeamDebut",
+      (item) => item.type === "firstTeamDebut" && isSourcedAlumniEvent(item),
     );
     if (!milestone) continue;
     const player = state.players?.[alumni.playerId]
@@ -468,8 +469,8 @@ function findAlumniDebut(
 
     return {
       source: "alumni-milestone",
-      sourceId: `${alumni.id}:firstTeamDebut:${milestone.season}:${milestone.week}`,
-      relatedIds: [player.id, alumni.id],
+      sourceId: `${alumni.id}:firstTeamDebut:${milestone.sourceId}`,
+      relatedIds: [player.id, alumni.id, milestone.sourceId!],
       context: { playerName: playerName(player) },
     };
   }

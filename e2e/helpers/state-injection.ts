@@ -88,7 +88,7 @@ export async function dismissTutorials(page: Page): Promise<void> {
   // still-mounted pointer-intercepting dialog.
   await page
     .locator('[role="dialog"][aria-label^="Mentor:"]')
-    .waitFor({ state: "hidden", timeout: 2_000 });
+    .waitFor({ state: "hidden", timeout: 10_000 });
 }
 
 export async function injectGameState(

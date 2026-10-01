@@ -613,6 +613,7 @@ export function GameLayout({
             <h1 className="text-lg font-bold tracking-tight">
               Talent<span className="text-amber-400">Scout</span>
             </h1>
+            {!guidedSessionActive && <ScreenHelpButton placement="sidebar" />}
             {/* Close button visible only on mobile */}
             <button
               ref={sidebarCloseRef}
@@ -835,7 +836,7 @@ export function GameLayout({
             </button>
           </div>
         )}
-        {!guidedSessionActive && <ScreenHelpButton />}
+        {watchChrome && !guidedSessionActive && <ScreenHelpButton />}
         {children}
       </main>
     </div>

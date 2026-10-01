@@ -101,6 +101,35 @@ if (shardBySeed.size !== seedCount) {
 const orderedShards = expectedSeeds.map((seed) => shardBySeed.get(seed));
 const runs = orderedShards.map((document) => document.runs[0]);
 const firstShard = orderedShards[0];
+// Preserve what each source process reported. Same-candidate checkpoint reuse
+// remains valid; absent legacy accounting is unknown, never newly executed work.
+const shardAccounting = orderedShards.map((document, index) => {
+  const checkpoint = document.checkpoint;
+  const reused = checkpoint.reusedSeedCount;
+  const executed = checkpoint.executedSeedCount;
+  for (const value of [reused, executed]) {
+    if (value !== undefined && value !== null
+      && (!Number.isInteger(value) || value < 0 || value > document.profile.seedCount)) {
+      throw new Error(`Invalid release soak checkpoint accounting for ${expectedSeeds[index]}`);
+    }
+  }
+  const accountingKnown = Number.isInteger(reused) && Number.isInteger(executed);
+  if (accountingKnown && reused + executed !== document.profile.seedCount) {
+    throw new Error(`Inconsistent release soak checkpoint accounting for ${expectedSeeds[index]}`);
+  }
+  return {
+    seed: expectedSeeds[index],
+    executionIdentityHash: checkpoint.executionIdentityHash,
+    resumeEnabled: typeof checkpoint.resumeEnabled === "boolean" ? checkpoint.resumeEnabled : null,
+    accountingKnown,
+    reusedSeedCount: Number.isInteger(reused) ? reused : null,
+    executedSeedCount: Number.isInteger(executed) ? executed : null,
+  };
+});
+const accountingKnown = shardAccounting.every((shard) => shard.accountingKnown);
+const resumeEnabled = shardAccounting.some((shard) => shard.resumeEnabled === true)
+  ? true
+  : shardAccounting.every((shard) => shard.resumeEnabled === false) ? false : null;
 if (
   firstShard.checkpoint?.determinismReplayExecuted !== true
   || firstShard.persistenceReplay?.seed !== runs[0].seed
@@ -151,9 +180,13 @@ const summary = {
     protocolVersion: 1,
     executionIdentity,
     executionIdentityHash,
-    resumeEnabled: false,
-    reusedSeedCount: 0,
-    executedSeedCount: seedCount,
+    resumeEnabled,
+    accountingKnown,
+    reusedSeedCount: accountingKnown
+      ? shardAccounting.reduce((sum, shard) => sum + shard.reusedSeedCount, 0) : null,
+    executedSeedCount: accountingKnown
+      ? shardAccounting.reduce((sum, shard) => sum + shard.executedSeedCount, 0) : null,
+    shardAccounting,
     determinismReplayExecuted: true,
   },
   profile: {

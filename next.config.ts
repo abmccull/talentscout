@@ -5,6 +5,8 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   output: "export",
+  // Bind builds to this checkout even when a parent folder has another lockfile.
+  outputFileTracingRoot: __dirname,
   reactStrictMode: true,
   experimental: {
     // The app has a large client-only workspace graph. Build each webpack

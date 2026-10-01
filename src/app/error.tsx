@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { captureException } from "@/lib/sentry";
+import { captureException } from "@/lib/deferredErrorReporting";
 
 export default function Error({
   error,

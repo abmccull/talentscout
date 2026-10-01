@@ -1,4 +1,5 @@
 import {
+  WEEKLY_TRANSACTION_PROTOCOL_VERSION,
   createWeeklyTransactionJob,
   createWeeklyTransactionWorkerRequest,
   executeWeeklyTransactionWithFallback,
@@ -6,6 +7,7 @@ import {
   type WeeklyTransactionWorkerDispatcher,
   type WeeklyTransactionWorkerRequest,
   type WeeklyTransactionWorkerResponse,
+  type WeeklyWorkerStageTimings,
 } from "@/engine/core/weeklyTransactionProtocol";
 import {
   compactWeeklyWorkerCommit,
@@ -46,43 +48,71 @@ function monotonicNow(): number {
 }
 
 interface PendingTransaction {
+  owner: Worker;
+  timings: WeeklyWorkerStageTimings;
   resolve: (response: WeeklyTransactionWorkerResponse<WeeklyWorkerCommit>) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout>;
 }
 
 let worker: Worker | null = null;
+let workerReadiness: { owner: Worker; createdAt: number; readyAt: number | null } | null = null;
 let workerBaseState: WeeklyWorkerInput["gameState"] | null = null;
 let transactionSequence = 0;
-const pendingTransactions = new Map<string, PendingTransaction>();
+let lifecycleGeneration = 0;
 
-function rejectAllPending(error: Error): void {
-  for (const pending of pendingTransactions.values()) {
-    clearTimeout(pending.timeoutId);
-    pending.reject(error);
-  }
-  pendingTransactions.clear();
+export function getWeeklySimulationGeneration(): number {
+  return lifecycleGeneration;
 }
 
-function disposeWorker(reason?: Error): void {
-  worker?.terminate();
-  worker = null;
-  workerBaseState = null;
-  if (reason) rejectAllPending(reason);
+class WeeklySimulationCancelledError extends Error {
+  constructor() {
+    super("Weekly simulation was cancelled because the active game changed.");
+    this.name = "WeeklySimulationCancelledError";
+  }
+}
+const pendingTransactions = new Map<string, PendingTransaction>();
+
+function disposeWorker(
+  reason = new Error("Weekly simulation worker was disposed."),
+  owner: Worker | null = worker,
+): void {
+  if (!owner) return;
+  owner.terminate();
+  if (worker === owner) {
+    worker = null;
+    workerReadiness = null;
+    workerBaseState = null;
+  }
+  for (const [jobId, pending] of pendingTransactions) {
+    if (pending.owner !== owner) continue;
+    clearTimeout(pending.timeoutId);
+    pendingTransactions.delete(jobId);
+    pending.reject(reason);
+  }
 }
 
 function getWorker(): Worker | null {
   if (!isBrowserWorkerRuntimeAvailable()) return null;
   if (worker) return worker;
 
-  worker = new Worker(new URL("../workers/weeklySimulation.worker.ts", import.meta.url), {
+  const createdAt = monotonicNow();
+  const activeWorker = new Worker(new URL("../workers/weeklySimulation.worker.ts", import.meta.url), {
     type: "module",
     name: "talentscout-weekly-simulation",
   });
-  worker.addEventListener("message", (event: MessageEvent<WeeklyWorkerMessage>) => {
+  worker = activeWorker;
+  const readiness = { owner: activeWorker, createdAt, readyAt: null as number | null };
+  workerReadiness = readiness;
+  activeWorker.addEventListener("message", (event: MessageEvent<WeeklyWorkerMessage>) => {
+    if (worker !== activeWorker) return;
     const message = event.data;
+    if (message.kind === "weekly-worker-ready") {
+      if (message.protocolVersion === WEEKLY_TRANSACTION_PROTOCOL_VERSION) readiness.readyAt = monotonicNow();
+      return;
+    }
     const pending = pendingTransactions.get(message.jobId);
-    if (!pending) return;
+    if (!pending || pending.owner !== activeWorker) return;
     clearTimeout(pending.timeoutId);
     pendingTransactions.delete(message.jobId);
 
@@ -93,6 +123,7 @@ function getWorker(): Worker | null {
       pending.reject(error);
       return;
     }
+    if (message.timings) Object.assign(pending.timings, message.timings);
     pending.resolve({
       protocolVersion: message.protocolVersion,
       kind: message.kind,
@@ -101,85 +132,133 @@ function getWorker(): Worker | null {
       state: message.state,
     });
   });
-  worker.addEventListener("error", (event) => {
-    disposeWorker(new Error(event.message || "Weekly simulation worker failed."));
+  activeWorker.addEventListener("error", (event) => {
+    if (worker !== activeWorker) return;
+    disposeWorker(new Error(event.message || "Weekly simulation worker failed."), activeWorker);
   });
-  worker.addEventListener("messageerror", () => {
-    disposeWorker(new Error("Weekly simulation worker returned unreadable data."));
+  activeWorker.addEventListener("messageerror", () => {
+    if (worker !== activeWorker) return;
+    disposeWorker(new Error("Weekly simulation worker returned unreadable data."), activeWorker);
   });
-  return worker;
+  return activeWorker;
 }
 
-/** Start loading the simulation bundle before the player advances their first week. */
+/** Best-effort priming must never prevent an otherwise valid career from loading. */
 export function warmWeeklySimulationWorker(): void {
-  getWorker();
+  try {
+    getWorker();
+  } catch (error) {
+    console.warn("Could not warm the weekly simulation worker:", error);
+  }
 }
 
-const dispatcher: WeeklyTransactionWorkerDispatcher<WeeklyWorkerInput, WeeklyWorkerCommit> = {
-  run: (request: WeeklyTransactionWorkerRequest<WeeklyWorkerInput>) => {
+function dispatchWeeklyTransaction(
+  request: WeeklyTransactionWorkerRequest<WeeklyWorkerInput>,
+  timings: WeeklyWorkerStageTimings,
+): Promise<WeeklyTransactionWorkerResponse<WeeklyWorkerCommit>> {
     const activeWorker = getWorker();
     if (!activeWorker) {
       return Promise.reject(new Error("Weekly simulation worker is unavailable."));
     }
 
+    const readiness = workerReadiness?.owner === activeWorker ? workerReadiness : null;
+    timings.workerReadyAtRequest = readiness?.readyAt != null;
     return new Promise((resolve, reject) => {
       const timeoutMs = getWeeklyWorkerTimeoutMs(request.state);
       const timeoutId = setTimeout(() => {
-        pendingTransactions.delete(request.job.id);
-        reject(new Error("Weekly simulation worker timed out."));
-        disposeWorker();
+        const pending = pendingTransactions.get(request.job.id);
+        if (pending?.timeoutId !== timeoutId || pending.owner !== activeWorker) return;
+        disposeWorker(new Error("Weekly simulation worker timed out."), activeWorker);
       }, timeoutMs);
-      pendingTransactions.set(request.job.id, { resolve, reject, timeoutId });
-      const wireRequest: WeeklyWorkerWireRequest = {
-        kind: request.kind,
-        protocolVersion: request.protocolVersion,
-        job: request.job,
-        state: createWeeklyWorkerWireState(workerBaseState, request.state),
-      };
-      activeWorker.postMessage(wireRequest);
+      let postedAt: number | null = null;
+      pendingTransactions.set(request.job.id, {
+        owner: activeWorker, timings, reject, timeoutId,
+        resolve: (response) => {
+          if (readiness?.readyAt != null) {
+            timings.workerStartupObservedMs = Math.max(0, readiness.readyAt - readiness.createdAt);
+            if (postedAt !== null) {
+              timings.workerReadinessWaitObservedMs = Math.max(0, readiness.readyAt - postedAt);
+            }
+          }
+          resolve(response);
+        },
+      });
+      try {
+        const preparationStartedAt = monotonicNow();
+        const wireRequest: WeeklyWorkerWireRequest = {
+          kind: request.kind,
+          protocolVersion: request.protocolVersion,
+          job: request.job,
+          state: createWeeklyWorkerWireState(workerBaseState, request.state),
+        };
+        timings.rendererRequestPreparationMs = Math.max(0, monotonicNow() - preparationStartedAt);
+        postedAt = monotonicNow();
+        activeWorker.postMessage(wireRequest);
+        timings.rendererPostMessageMs = Math.max(0, monotonicNow() - postedAt);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        pendingTransactions.delete(request.job.id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
-  },
-};
+}
 
 export async function runWeeklyWorkerTransaction(
   input: WeeklyWorkerInput,
 ): Promise<WeeklyWorkerExecution> {
+  const generation = lifecycleGeneration;
+  const assertActiveGeneration = () => {
+    if (generation !== lifecycleGeneration) throw new WeeklySimulationCancelledError();
+  };
   const startedAt = monotonicNow();
   const baseJob = createWeeklyTransactionJob(input.gameState);
   transactionSequence += 1;
   const job = { ...baseJob, id: `${baseJob.id}:job${transactionSequence}` };
   const request = createWeeklyTransactionWorkerRequest(job, input);
-  const result = await executeWeeklyTransactionWithFallback(
+  const timings: WeeklyWorkerStageTimings = {};
+  const dispatcher: WeeklyTransactionWorkerDispatcher<WeeklyWorkerInput, WeeklyWorkerCommit> = {
+    run: (workerRequest) => dispatchWeeklyTransaction(workerRequest, timings),
+  };
+  const pendingResult = executeWeeklyTransactionWithFallback(
     request,
     () => {
+      assertActiveGeneration();
+      // Final telemetry represents the selected fallback, not a rejected worker response.
+      delete timings.wireSyncMs;
       const computeStartedAt = monotonicNow();
       const fullCommit = runHeadlessWeeklyTransaction(input);
-      return compactWeeklyWorkerCommit(
-        input.gameState,
-        fullCommit,
-        monotonicNow() - computeStartedAt,
-      );
+      const computeMs = monotonicNow() - computeStartedAt;
+      const compactionStartedAt = monotonicNow();
+      const compact = compactWeeklyWorkerCommit(input.gameState, fullCommit, computeMs);
+      timings.compactionMs = Math.max(0, monotonicNow() - compactionStartedAt);
+      return compact;
     },
     isBrowserWorkerRuntimeAvailable() ? dispatcher : undefined,
   );
+  const dispatchedWorker = worker;
+  const result = await pendingResult;
+  assertActiveGeneration();
   const fallbackReason = result.fallbackReason === "synchronous-store-transaction"
     ? undefined
     : result.fallbackReason;
   const route = result.route === "worker" ? "worker" : "main-thread-fallback";
   let materializedCommit;
+  const materializationStartedAt = monotonicNow();
   try {
     materializedCommit = materializeWeeklyWorkerCommit(
       input.gameState,
       result.state,
     );
   } catch (error) {
-    disposeWorker();
+    disposeWorker(error instanceof Error ? error : new Error(String(error)), dispatchedWorker);
     throw error;
   }
-  if (route === "worker") {
+  timings.rendererMaterializationMs = Math.max(0, monotonicNow() - materializationStartedAt);
+  assertActiveGeneration();
+  if (route === "worker" && worker === dispatchedWorker) {
     workerBaseState = materializedCommit.patch.gameState ?? null;
-  } else {
-    disposeWorker();
+  } else if (route !== "worker") {
+    disposeWorker(undefined, dispatchedWorker);
   }
   return {
     commit: result.state,
@@ -188,6 +267,7 @@ export async function runWeeklyWorkerTransaction(
     fallbackReason,
     telemetry: {
       ...result.state.metrics,
+      ...timings,
       route,
       fallbackReason,
       roundTripMs: Math.max(0, monotonicNow() - startedAt),
@@ -197,5 +277,6 @@ export async function runWeeklyWorkerTransaction(
 
 /** Cancel in-flight work when a save is replaced or the game is disposed. */
 export function terminateWeeklySimulationWorker(): void {
-  disposeWorker(new Error("Weekly simulation was cancelled because the active game changed."));
+  lifecycleGeneration += 1;
+  disposeWorker(new WeeklySimulationCancelledError());
 }

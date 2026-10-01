@@ -116,10 +116,10 @@ function EvidenceSynthesisPanel({
       <div className="mb-3 flex items-center gap-2">
         <Crosshair size={14} className="text-cyan-300" aria-hidden="true" />
         <div>
-          <h2 id="evidence-synthesis-heading" className="text-xs font-semibold uppercase tracking-widest text-cyan-200">
+          <h2 id="evidence-synthesis-heading" className="text-eyebrow font-semibold uppercase tracking-widest text-cyan-200">
             Interpret what you kept
           </h2>
-          <p className="mt-1 text-xs leading-5 text-zinc-400">
+          <p className="text-meta mt-1 leading-5 text-zinc-300">
             Classify at least one passage. This choice becomes report evidence; your private notes do not.
           </p>
         </div>
@@ -132,15 +132,15 @@ function EvidenceSynthesisPanel({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-white">{cue.minute}&apos; · {cue.summary}</p>
-                  <p className="mt-1 text-xs leading-5 text-zinc-300">{cue.detail}</p>
+                  <p className="text-meta mt-1 leading-5 text-zinc-300">{cue.detail}</p>
                 </div>
-                <span className="rounded-full border border-cyan-300/25 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+                <span className="text-eyebrow rounded-full border border-cyan-300/25 px-2 py-1 font-semibold uppercase tracking-wide text-cyan-200">
                   {cue.clarity} read
                 </span>
               </div>
-              <p className="mt-2 text-[10px] leading-4 text-zinc-400">{cueReason(cue)}</p>
+              <p className="text-meta mt-2 leading-5 text-zinc-300">{cueReason(cue)}</p>
               <fieldset className="mt-3">
-                <legend className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">What did this passage show?</legend>
+                <legend className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-zinc-300">What did this passage show?</legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {[...new Set([...cue.suggestedClassifications, "noConclusion" as const])].map((classification) => {
                     const copy = CLASSIFICATION_COPY[classification];
@@ -160,8 +160,8 @@ function EvidenceSynthesisPanel({
                           onChange={() => onClassify(cue.id, classification)}
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         />
-                        <span className="block text-xs font-semibold text-white">{copy.label}</span>
-                        <span className="mt-1 block text-[10px] leading-4 text-zinc-400">{copy.description}</span>
+                        <span className="text-meta block font-semibold text-white">{copy.label}</span>
+                        <span className="text-meta mt-1 block leading-5 text-zinc-300">{copy.description}</span>
                       </label>
                     );
                   })}

@@ -1,3 +1,4 @@
+import { describeAlumniHistory, isSourcedAlumniEvent } from "../youth/alumniEvidence";
 import type {
   AlumniCareerUpdateType,
   GameState,
@@ -416,8 +417,8 @@ export function buildScoutingCaseTimeline(
         kind: "milestone",
         week: milestone.week,
         season: milestone.season,
-        title: humanize(milestone.type),
-        description: milestone.description,
+        title: `${humanize(milestone.type)}${isSourcedAlumniEvent(milestone) ? "" : " (legacy)"}`,
+        description: describeAlumniHistory(milestone),
         alumniRecordId: alumni.id,
       });
     }
@@ -431,8 +432,8 @@ export function buildScoutingCaseTimeline(
         kind: "alumni",
         week: update.week,
         season: update.season,
-        title: alumniUpdateTitle(update.type),
-        description: update.description,
+        title: `${alumniUpdateTitle(update.type)}${isSourcedAlumniEvent(update) ? "" : " (legacy)"}`,
+        description: describeAlumniHistory(update),
         alumniRecordId: alumni.id,
       });
     }

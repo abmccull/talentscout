@@ -169,6 +169,9 @@ jobs:
           CORE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: node ../scripts/create-candidate-core-evidence.mjs --start
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
         working-directory: candidate
 
@@ -199,6 +202,14 @@ jobs:
       - name: Unit and migration tests
         working-directory: candidate
         run: npm run test:unit
+
+      - name: Accepted-source soak staging contract
+        working-directory: candidate
+        run: npm run test:accepted-soak-staging
+
+      - name: Windows installer input contract
+        working-directory: candidate
+        run: npm run test:windows-installer-inputs
 
       - name: Critical simulation and persistence coverage gate
         working-directory: candidate
@@ -321,6 +332,9 @@ jobs:
       - name: Isolate immutable candidate package workspace
         run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
         working-directory: candidate
 
@@ -425,6 +439,9 @@ jobs:
 
       - name: Isolate immutable candidate package workspace
         run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
+
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
 
       - run: npm ci
         working-directory: candidate
@@ -550,6 +567,9 @@ jobs:
       - name: Isolate immutable candidate package workspace
         run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
         working-directory: candidate
 
@@ -642,6 +662,39 @@ jobs:
         with:
           name: quality-evidence
           path: quality-evidence
+
+      - name: Download raw source workflow evidence via GitHub token
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
+        run: |
+          mkdir -p candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > source-artifacts.json
+          node -e 'const fs=require("node:fs"); const data=JSON.parse(fs.readFileSync("source-artifacts.json","utf8")); const matches=(data.artifacts||[]).filter((artifact)=>/^release-soak-shard-\d+$/.test(String(artifact.name||""))); if (matches.length===0) process.exit(1); for (const artifact of matches) console.log(`${artifact.id}\t${artifact.name}`);' > source-artifacts.tsv || {
+            echo "::error::No release-soak shard artifacts were found for the accepted source run"
+            exit 1
+          }
+          while IFS=$'\t' read -r artifact_id artifact_name; do
+            [ -n "$artifact_id" ] || continue
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > source-artifact.zip
+            unzip -jo source-artifact.zip -d candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
+            rm -f source-artifact.zip
+          done < source-artifacts.tsv
+          rm -f source-artifacts.json source-artifacts.tsv
+
+      - name: Stage exact accepted-source canonical soak aggregate
+        working-directory: candidate
+        run: >-
+          node scripts/stage-accepted-soak-evidence.mjs
+          --candidate-dir=.
+          --run=../candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
+          --jobs=../candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
+          --shards=../candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
+          --out=../candidate-bundle/artifacts/release/generated/long-career-release-summary.json
+          --source-run-id=${{ inputs.accepted_source_run_id }}
 
       - name: Download exact release package artifacts
         if: inputs.verification_only != true
@@ -871,28 +924,6 @@ jobs:
             generatedAt: new Date().toISOString(),
           }, null, 2)}\n`, "utf8");
           NODE
-
-      - name: Download raw source workflow evidence via GitHub token
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
-        run: |
-          mkdir -p candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > source-artifacts.json
-          node -e 'const fs=require("node:fs"); const data=JSON.parse(fs.readFileSync("source-artifacts.json","utf8")); const matches=(data.artifacts||[]).filter((artifact)=>/^release-soak-shard-\d+$/.test(String(artifact.name||""))); if (matches.length===0) process.exit(1); for (const artifact of matches) console.log(`${artifact.id}\t${artifact.name}`);' > source-artifacts.tsv || {
-            echo "::error::No release-soak shard artifacts were found for the accepted source run"
-            exit 1
-          }
-          while IFS=$'\t' read -r artifact_id artifact_name; do
-            [ -n "$artifact_id" ] || continue
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > source-artifact.zip
-            unzip -jo source-artifact.zip -d candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
-            rm -f source-artifact.zip
-          done < source-artifacts.tsv
-          rm -f source-artifacts.json source-artifacts.tsv
 
       - name: Upload accepted candidate bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

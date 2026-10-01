@@ -986,7 +986,8 @@ export function WeekSimulationScreen() {
             </aside>
 
             <section
-              className="min-w-0 overflow-visible md:overflow-y-auto md:pr-1"
+              className="min-w-0 overflow-visible focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400 md:overflow-y-auto md:pr-1"
+              tabIndex={0}
               aria-labelledby="current-day-journey-heading"
               data-testid="current-day-journey"
             >

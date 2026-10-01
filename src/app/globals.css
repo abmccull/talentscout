@@ -188,16 +188,14 @@ html.reduced-motion *::after {
   }
 }
 
-/* Lightweight workspace transition. Keeping this in CSS avoids pulling the
-   animation runtime into /play while preserving the same directional cue. */
+/* Keep the lightweight entry fade on the screen wrapper. Transforming this
+   ancestor would make the shell's fixed controls follow tall page content. */
 @keyframes game-screen-enter {
   from {
     opacity: 0;
-    transform: translateY(0.625rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 

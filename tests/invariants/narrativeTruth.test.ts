@@ -244,6 +244,7 @@ describe("narrative truth contracts", () => {
         playerId: "player-1",
         milestones: [{
           type: "firstTeamDebut",
+          sourceId: "fixture-s1-w19-player-1-debut",
           week: 19,
           season: 1,
           description: "Senior debut",

@@ -1,4 +1,4 @@
-import type { ClubSeasonHistory } from "./worldHistory";
+import type { ClubSeasonHistory } from "./clubSeasonHistoryTypes";
 
 /** Versioned, lossless archive representation; never used for live clubs. */
 export interface CompactClubSeasonHistory {

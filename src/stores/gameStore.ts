@@ -1,3 +1,4 @@
+import { captureException } from "@/lib/deferredErrorReporting";
 import { revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { create } from "zustand";
 import { createNavigationActions } from "./actions/navigationActions";
@@ -8,7 +9,7 @@ import { createFinanceActions } from "./actions/financeActions";
 import { createWeeklyActions } from "./actions/weeklyActions";
 import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
 import { createDashboardActions } from "./actions/dashboardActions";
-import { terminateWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
+import { terminateWeeklySimulationWorker, warmWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
 import type {
   GameState,
   NewGameConfig,
@@ -962,6 +963,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       scenarioProgress: null,
       scenarioOutcome: null,
     });
+    // Prime immediately after publication, before the player plans their first week.
+    warmWeeklySimulationWorker();
 
     // Teaching and career variety are separate: the authored case teaches the
     // loop once, while generated veteran prologues never reactivate mentor UI.
@@ -1028,12 +1031,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadGame: (rawState) => {
-    terminateWeeklySimulationWorker();
     // Every runtime entrypoint, including direct test/import loads, passes
     // through the same pure and idempotent migration used by save providers.
     const migratedState = reconcileOpeningReportStage(migrateSaveState(rawState));
     const scenarioSafeState = revealKnownGamePortraits(migratedState);
     assertEarlyAccessSaveCompatibility(scenarioSafeState);
+    // Rejected imports leave the active career's simulation and saves intact.
+    terminateWeeklySimulationWorker();
     const resumableSession = scenarioSafeState.activeObservationSession ?? null;
     const recovery = scenarioSafeState.pendingWeekRecovery;
     const resumableWeek = recovery && recovery.week === scenarioSafeState.currentWeek
@@ -1077,6 +1081,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
     });
+    // Successful same-career loads also replace the worker; scout.id may be unchanged.
+    warmWeeklySimulationWorker();
 
     if (hadPendingAutosave || scenarioSafeState.playerPortraits !== migratedState.playerPortraits) {
       // An already-started old write cannot be cancelled. Commit the loaded
@@ -1097,7 +1103,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ gameState: saved });
     void flushGameplayAutosave(saved, set).catch((err) => {
       console.warn("saveGame: provider persist failed:", err);
-      void import("@/lib/sentry").then(({ captureException }) => captureException(err));
+      captureException(err);
     });
     return saved;
   },

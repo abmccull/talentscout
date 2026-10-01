@@ -67,7 +67,7 @@ test.describe("Week Simulation journey", () => {
     await expect(journey).not.toHaveAttribute("aria-live", /.+/);
     await expect(gamePage.page.getByTestId("week-journey-status")).toContainText("Decision required");
     await expect(gamePage.page.getByRole("heading", { name: "What you set out to do" })).toBeVisible();
-    await expect(gamePage.page.getByRole("heading", { name: "What unfolded" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "Before your call" })).toBeVisible();
     await expect(gamePage.page.getByRole("heading", { name: "Outcome waiting on your call" })).toBeVisible();
     await expect(gamePage.page.getByTestId("unresolved-day-consequence")).toBeVisible();
     await expect(gamePage.page.getByRole("group", { name: "Day outcome summary" })).toHaveCount(0);

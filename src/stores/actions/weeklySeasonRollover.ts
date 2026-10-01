@@ -1,5 +1,4 @@
 import { buildAcademyPromotionNews } from "@/engine/youth/academyPromotionNews";
-import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { recruitForSeasonOpening } from "@/engine/freeAgents/seasonOpening";
 import type {
   DiscoveryRecord,
@@ -1143,53 +1142,8 @@ export function processWeeklySeasonRollover(
         };
       }
 
-      // ── Season consolidation: matchRatings → player.seasonRatings, then wipe ──
-      if (Object.keys(newState.matchRatings).length > 0) {
-        const consolidatedPlayers = { ...newState.players };
-
-        // Gather all ratings per player from all fixtures this season
-        const playerSeasonRatings = new Map<string, import("@/engine/core/types").PlayerMatchRating[]>();
-        for (const fixtureRatings of Object.values(newState.matchRatings)) {
-          for (const [pid, rating] of Object.entries(fixtureRatings)) {
-            if (!playerSeasonRatings.has(pid)) playerSeasonRatings.set(pid, []);
-            playerSeasonRatings.get(pid)!.push(rating);
-          }
-        }
-
-        // Build SeasonRatingRecord for each player
-        for (const [pid, ratings] of playerSeasonRatings) {
-          const player = consolidatedPlayers[pid];
-          if (!player) continue;
-
-          const avgRating = ratings.reduce((s, r) => s + r.rating, 0) / ratings.length;
-          const appearances = ratings.length;
-          let goals = 0;
-          let assists = 0;
-          let cleanSheets = 0;
-          for (const r of ratings) {
-            goals += r.stats.goals ?? 0;
-            assists += r.stats.assists ?? 0;
-            if (r.stats.cleanSheet) cleanSheets++;
-          }
-
-          const seasonRecord = {
-            season: completedSeason,
-            avgRating: Math.round(avgRating * 10) / 10,
-            appearances,
-            goals,
-            assists,
-            cleanSheets,
-          };
-
-          consolidatedPlayers[pid] = {
-            ...player,
-            seasonRatings: [...(player.seasonRatings ?? []), compactSeasonRating(seasonRecord)],
-          };
-        }
-
-        // Wipe per-fixture match ratings, keep recentMatchRatings on players (carries form)
-        newState = { ...newState, players: consolidatedPlayers, matchRatings: {} };
-      }
+      // Core rollover already projected full-season player statistics before
+      // pruning. Retained match ratings still serve referenced fixture details.
 
       // ── Data scout season-end: resolve predictions and generate new analyst candidates ──
       if (newState.scout.primarySpecialization === "data") {

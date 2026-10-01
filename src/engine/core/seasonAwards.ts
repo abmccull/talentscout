@@ -17,6 +17,9 @@ import type {
 } from "./types";
 import { deriveSeasonReviewMetrics } from "../career/seasonReviewContext";
 import { annualizeWeeklyAmount } from "./annualization";
+import { collectCanonicalAppearances, summarizeCanonicalAppearances } from "../match/canonicalPerformance";
+import { expandSeasonRating } from "../players/seasonRatingArchive";
+import { expandPlayerMovementSummary, type PlayerMovementArchiveSummary } from "../world/worldHistoryTypes";
 import { selectLatestReportsByCaseOpenedInRange } from "../reports/reportAccountability";
 
 // =============================================================================
@@ -284,108 +287,127 @@ function generateScoutAwards(
 // LEAGUE AWARDS GENERATION
 // =============================================================================
 
-function generateLeagueAwards(
-  state: GameState,
-  season: number,
-): LeagueAward[] {
+type RecordedAwardPerformance = {
+  appearances: number;
+  averageRating: number;
+  goals: number;
+};
+const MIN_RECORDED_AWARD_APPEARANCES = 6;
+
+function isRecordedPerformance(value: RecordedAwardPerformance | undefined): value is RecordedAwardPerformance {
+  return value !== undefined && Number.isInteger(value.appearances) && value.appearances > 0
+    && Number.isFinite(value.averageRating) && value.averageRating >= 0 && value.averageRating <= 10
+    && Number.isInteger(value.goals) && value.goals >= 0;
+}
+
+/** Complete current totals are archived before raw fixture retention/retirement. */
+function recordedSeasonPerformances(state: GameState, season: number): Map<string, RecordedAwardPerformance> {
+  const result = new Map<string, RecordedAwardPerformance>();
+  for (const player of Object.values({ ...state.retiredPlayers, ...state.players })) {
+    const row = (player.seasonRatings ?? []).map(expandSeasonRating).find(record => record.season === season);
+    const performance = row && { appearances: row.appearances, averageRating: row.avgRating, goals: row.goals };
+    if (isRecordedPerformance(performance)) result.set(player.id, performance);
+  }
+  const archived = state.worldHistory?.seasons.find(record => record.season === season);
+  for (const row of archived?.players ?? []) {
+    if (!result.has(row.playerId) && isRecordedPerformance(row.performance)) result.set(row.playerId, row.performance);
+  }
+  // A completed past season's surviving observed fixtures are only a subset.
+  // The shared collector is a fallback for a still-live, unpruned season.
+  if (state.currentSeason === season) {
+    for (const [playerId, appearances] of collectCanonicalAppearances(state.fixtures ?? {}, state.matchRatings ?? {}, season)) {
+      const performance = summarizeCanonicalAppearances(appearances);
+      if (!result.has(playerId) && isRecordedPerformance(performance)) result.set(playerId, performance);
+    }
+  }
+  return result;
+}
+
+function generateLeagueAwards(state: GameState, season: number): LeagueAward[] {
   const awards: LeagueAward[] = [];
-  const allPlayers = Object.values(state.players);
+  const players: Record<string, Player> = { ...state.retiredPlayers, ...state.players };
+  const archivedSeason = state.worldHistory?.seasons.find(record => record.season === season);
+  const identities = new Map((archivedSeason?.players ?? []).map(row => [row.playerId, row]));
+  const name = (id: string): string | undefined => {
+    const identity = players[id] ?? identities.get(id);
+    return identity?.firstName && identity.lastName ? `${identity.firstName} ${identity.lastName}` : undefined;
+  };
+  const seasonAge = (id: string): number | undefined => {
+    const archivedAge = identities.get(id)?.age;
+    if (archivedAge !== undefined) return archivedAge;
+    const player = players[id];
+    if (!player) return undefined;
+    // Active players age after the completed-season snapshot; same-tick
+    // retired players retain their completed-season age.
+    return player.age - (state.players[id] ? Math.max(0, state.currentSeason - season) : 0);
+  };
+  const performance = recordedSeasonPerformances(state, season);
+  const candidates = [...performance].filter(([id]) => name(id) !== undefined);
+  const byPerformance = (left: typeof candidates[number], right: typeof candidates[number]) =>
+    right[1].averageRating - left[1].averageRating || right[1].appearances - left[1].appearances
+    || left[0].localeCompare(right[0]);
 
-  // "Golden Boot" — highest goals scored (simulated from fixtures)
-  // Pick a random high-CA striker from the world as the top scorer
-  const strikers = allPlayers
-    .filter((p) => p.position === "ST" && !p.injured)
-    .sort((a, b) => {
-      // Higher CA + higher shooting + form = more goals
-      const aScore =
-        a.currentAbility + a.attributes.shooting * 5 + a.form * 10;
-      const bScore =
-        b.currentAbility + b.attributes.shooting * 5 + b.form * 10;
-      return bScore - aScore;
-    });
-  if (strikers.length > 0) {
-    const topScorer = strikers[0];
-    // Estimate goals based on ability (crude but deterministic)
-    const estimatedGoals = Math.round(
-      10 + (topScorer.attributes.shooting / 20) * 20 + topScorer.form * 2,
-    );
-    awards.push({
-      id: "golden-boot",
-      name: "Golden Boot",
-      description: `Top scorer of the season with ${estimatedGoals} goals`,
-      relatedPlayerId: topScorer.id,
-      stat: `${topScorer.firstName} ${topScorer.lastName} — ${estimatedGoals} goals`,
-    });
+  const topScorer = candidates.filter(([, row]) => row.goals > 0)
+    .sort((left, right) => right[1].goals - left[1].goals || byPerformance(left, right))[0];
+  if (topScorer) awards.push({
+    id: "golden-boot", name: "Golden Boot", relatedPlayerId: topScorer[0],
+    description: `Top recorded scorer of the season with ${topScorer[1].goals} goals`,
+    stat: `${name(topScorer[0])} — ${topScorer[1].goals} goals`,
+  });
+
+  const bestYoung = candidates.filter(([id, row]) => {
+    const age = seasonAge(id);
+    return age !== undefined && age <= YOUTH_MAX_AGE && age >= 0
+      && row.appearances >= MIN_RECORDED_AWARD_APPEARANCES;
+  }).sort(byPerformance)[0];
+  if (bestYoung) awards.push({
+    id: "best-young-player", name: "Best Young Player", relatedPlayerId: bestYoung[0],
+    description: "Highest recorded average rating aged 21 or under, with at least 6 appearances",
+    stat: `${name(bestYoung[0])} (${seasonAge(bestYoung[0])}) — ${bestYoung[1].averageRating.toFixed(1)} average rating, ${bestYoung[1].appearances} appearances`,
+  });
+
+  const movements = new Map<string, PlayerMovementArchiveSummary>();
+  for (const stored of archivedSeason?.playerMovementSummaries ?? []) {
+    const movement = expandPlayerMovementSummary(stored);
+    movements.set(movement.id, movement);
+  }
+  for (const movement of state.playerMovementHistory ?? []) {
+    if (movement.season === season) movements.set(movement.id, movement);
+  }
+  const biggest = [...movements.values()].filter(movement =>
+    (movement.type === "permanentTransfer" || movement.type === "loanBuyOption")
+    && typeof movement.fee === "number" && Number.isFinite(movement.fee) && movement.fee > 0
+    && Boolean(movement.toClubId) && movement.fromClubId !== movement.toClubId && name(movement.playerId) !== undefined,
+  ).sort((left, right) => (right.fee ?? 0) - (left.fee ?? 0) || left.id.localeCompare(right.id))[0];
+  if (biggest) {
+    const fee = biggest.fee!;
+    const formattedFee = fee >= 1_000_000 ? `£${(fee / 1_000_000).toFixed(1)}M` : `£${(fee / 1_000).toFixed(0)}K`;
+    awards.push({ id: "biggest-transfer", name: "Biggest Transfer", relatedPlayerId: biggest.playerId,
+      description: "Largest recorded permanent transfer fee this season",
+      stat: `${name(biggest.playerId)} — ${state.clubs[biggest.toClubId!]?.name ?? "their new club"} (${formattedFee})` });
   }
 
-  // "Best Young Player" — highest-rated U21 player
-  const youngPlayers = allPlayers
-    .filter((p) => p.age <= YOUTH_MAX_AGE)
-    .sort((a, b) => b.currentAbility - a.currentAbility);
-  if (youngPlayers.length > 0) {
-    const bestYoung = youngPlayers[0];
-    awards.push({
-      id: "best-young-player",
-      name: "Best Young Player",
-      description: "Highest-rated player aged 21 or under",
-      relatedPlayerId: bestYoung.id,
-      stat: `${bestYoung.firstName} ${bestYoung.lastName} (${bestYoung.age}) — CA ${bestYoung.currentAbility}`,
-    });
-  }
-
-  // "Biggest Transfer" — largest transfer fee from fixture/transfer data
-  // Look at the game loop transfers via inbox or clubs' budget changes
-  // Use a heuristic: find the highest market value player who changed clubs
-  const seasonFixtures = Object.values(state.fixtures).filter(
-    (f) => f.played,
-  );
-  void seasonFixtures; // used for context
-
-  // Find players whose club changed (rough heuristic for transfers)
-  const highValuePlayers = allPlayers
-    .sort((a, b) => b.marketValue - a.marketValue)
-    .slice(0, 1);
-  if (highValuePlayers.length > 0) {
-    const bigTransfer = highValuePlayers[0];
-    const club = state.clubs[bigTransfer.clubId];
-    const formattedFee =
-      bigTransfer.marketValue >= 1_000_000
-        ? `${(bigTransfer.marketValue / 1_000_000).toFixed(1)}M`
-        : `${(bigTransfer.marketValue / 1_000).toFixed(0)}K`;
-    awards.push({
-      id: "biggest-transfer",
-      name: "Biggest Transfer",
-      description: `Most valuable player in the league`,
-      relatedPlayerId: bigTransfer.id,
-      stat: `${bigTransfer.firstName} ${bigTransfer.lastName} — ${club?.name ?? "Unknown"} (${formattedFee})`,
-    });
-  }
-
-  // "Breakthrough Discovery" — your best discovery this season (highest PA)
-  const seasonDiscoveries = state.discoveryRecords
-    .filter((d) => d.discoveredSeason === season)
-    .map((d) => ({
-      record: d,
-      player: state.players[d.playerId],
-    }))
-    .filter(
-      (d): d is { record: typeof d.record; player: Player } =>
-        d.player !== undefined,
-    )
-    .sort((a, b) => b.player.potentialAbility - a.player.potentialAbility);
-
-  if (seasonDiscoveries.length > 0) {
-    const best = seasonDiscoveries[0];
-    const paStars = Math.min(5, Math.round(best.player.potentialAbility / 40));
-    awards.push({
-      id: "breakthrough-discovery",
-      name: "Breakthrough Discovery",
-      description: "Your highest-potential discovery this season",
-      relatedPlayerId: best.player.id,
-      stat: `${best.player.firstName} ${best.player.lastName} — ${paStars} star potential`,
-    });
-  }
-
+  // Older rating aggregates can be partial. The prior immutable WorldHistory
+  // performance owns comparison; an absent prior record is unknown, not zero.
+  const prior = new Map((state.worldHistory?.seasons.find(record => record.season === season - 1)?.players ?? [])
+    .map(row => [row.playerId, row.performance]));
+  const discoveries = state.discoveryRecords.filter(record => record.discoveredSeason === season)
+    .map(record => {
+      const current = performance.get(record.playerId);
+      const previous = prior.get(record.playerId);
+      if (!isRecordedPerformance(current) || !isRecordedPerformance(previous) || name(record.playerId) === undefined
+        || current.appearances < MIN_RECORDED_AWARD_APPEARANCES || previous.appearances < MIN_RECORDED_AWARD_APPEARANCES) return undefined;
+      const improvement = Math.round((current.averageRating - previous.averageRating) * 10) / 10;
+      return improvement > 0 ? { playerId: record.playerId, current, previous, improvement } : undefined;
+    }).filter((row): row is NonNullable<typeof row> => row !== undefined)
+    .sort((left, right) => right.improvement - left.improvement
+      || right.current.averageRating - left.current.averageRating || left.playerId.localeCompare(right.playerId));
+  const breakthrough = discoveries[0];
+  if (breakthrough) awards.push({
+    id: "breakthrough-discovery", name: "Breakthrough Discovery", relatedPlayerId: breakthrough.playerId,
+    description: "Largest recorded season-to-season rating improvement among your discoveries this season",
+    stat: `${name(breakthrough.playerId)} — ${breakthrough.previous.averageRating.toFixed(1)} to ${breakthrough.current.averageRating.toFixed(1)} average rating (+${breakthrough.improvement.toFixed(1)})`,
+  });
   return awards;
 }
 

@@ -1,25 +1,7 @@
 import type { GamePage } from "../fixtures";
 import { test, expect } from "../fixtures";
+import { createSubmittedSupportedYouthReportFixture } from "../helpers/supported-youth-report";
 
-async function createSubmittedYouthReport(gamePage: GamePage) {
-  await gamePage.goto();
-  await gamePage.injectState({
-    currentWeek: 1,
-    scout: {
-      firstName: "Market",
-      lastName: "Tester",
-      primarySpecialization: "youth",
-    },
-  });
-  await gamePage.navigateTo("calendar");
-  await gamePage.scheduleActivityByLabel("School Match", "Mon");
-  await gamePage.advanceCanonicalWeek({ launchLiveSession: true });
-  await gamePage.openFirstYouthPlayerProfile();
-  await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
-  await gamePage.waitForScreen("reportWriter");
-  await gamePage.submitCurrentReportViaUI("strongRecommend");
-  await gamePage.waitForScreen("reportHistory");
-}
 
 async function listFirstReport(gamePage: GamePage) {
   await expect(
@@ -29,8 +11,10 @@ async function listFirstReport(gamePage: GamePage) {
 }
 
 test.describe("Report Marketplace", () => {
-  test("listing the first youth report creates an active marketplace listing", async ({ gamePage }) => {
-    await createSubmittedYouthReport(gamePage);
+  test("listing the first youth report creates an active marketplace listing", async ({ gamePage }, testInfo) => {
+    await createSubmittedSupportedYouthReportFixture(gamePage, testInfo, {
+      firstName: "Market", conviction: "strongRecommend",
+    });
     await listFirstReport(gamePage);
 
     const latestListing = await gamePage.page.evaluate(() => {
@@ -46,8 +30,10 @@ test.describe("Report Marketplace", () => {
     gamePage.expectNoConsoleErrors();
   });
 
-  test("a newly listed first youth report receives a canonical-week bid", async ({ gamePage }) => {
-    await createSubmittedYouthReport(gamePage);
+  test("a newly listed first youth report receives a canonical-week bid", async ({ gamePage }, testInfo) => {
+    await createSubmittedSupportedYouthReportFixture(gamePage, testInfo, {
+      firstName: "Market", conviction: "strongRecommend",
+    });
     await listFirstReport(gamePage);
 
     await gamePage.navigateTo("calendar");

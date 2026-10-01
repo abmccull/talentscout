@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { resolvePlayerDisplayName } from "@/lib/playerResolution";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +29,8 @@ import type {
   AlumniSeasonStats,
   AlumniStatus,
 } from "@/engine/core/types";
-import { calculatePlacementSuccessRate } from "@/engine/youth/alumni";
+import { calculatePlacementSuccessRate, projectAlumniLegacyScore } from "@/engine/youth/alumni";
+import { describeAlumniHistory, deriveAlumniDisplayStatus, isSourcedAlumniEvent } from "@/engine/youth/alumniEvidence";
 import {
   buildScoutingCaseTimeline,
   type ScoutingCaseTimeline,
@@ -194,8 +196,8 @@ function AlumniCard({
 }: AlumniCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"casebook" | "milestones" | "timeline" | "stats">("milestones");
-  const milestoneCount = record.milestones.length;
-  const status = record.currentStatus ?? "academy";
+  const milestoneCount = record.milestones.filter(isSourcedAlumniEvent).length;
+  const status = deriveAlumniDisplayStatus(record);
   const caseTimeline = expanded && activeTab === "casebook" && caseId
     ? getCaseTimeline(caseId)
     : null;
@@ -230,7 +232,7 @@ function AlumniCard({
                 variant="secondary"
                 className="shrink-0 text-[10px]"
               >
-                {milestoneCount} milestone{milestoneCount !== 1 ? "s" : ""}
+                {milestoneCount} verified milestone{milestoneCount !== 1 ? "s" : ""}
               </Badge>
             )}
           </div>
@@ -338,7 +340,7 @@ function AlumniCard({
                             </span>
                           </div>
                           <p className="text-xs text-zinc-400">
-                            {milestone.description}
+                            {describeAlumniHistory(milestone)}
                           </p>
                         </div>
                       </div>
@@ -382,7 +384,7 @@ function AlumniCard({
                               </span>
                             </div>
                             <p className="mt-0.5 text-xs text-zinc-400">
-                              {update.description}
+                              {describeAlumniHistory(update)}
                             </p>
                           </div>
                         </div>
@@ -419,12 +421,11 @@ export function AlumniDashboard() {
 
   if (!gameState) return null;
 
-  const { alumniRecords, legacyScore, players, clubs } = gameState;
+  const { alumniRecords, clubs } = gameState;
+  const legacyScore = projectAlumniLegacyScore(gameState.legacyScore, alumniRecords);
 
-  const getPlayerName = (playerId: string): string => {
-    const p = players[playerId];
-    return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
-  };
+  const getPlayerName = (playerId: string): string =>
+    resolvePlayerDisplayName(gameState, playerId);
 
   const getClubName = (clubId: string): string => {
     return clubs[clubId]?.name ?? "Unknown Club";
@@ -512,7 +513,7 @@ export function AlumniDashboard() {
                 <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-700/30 bg-amber-900/20 px-3 py-2">
                   <UserCheck size={14} className="text-amber-400" aria-hidden="true" />
                   <p className="text-xs text-amber-300">
-                    {contactGraduates} alumni {contactGraduates === 1 ? "has" : "have"} graduated to your contact network
+                    {contactGraduates} alumni {contactGraduates === 1 ? "is" : "are"} in your contact network
                   </p>
                 </div>
               )}

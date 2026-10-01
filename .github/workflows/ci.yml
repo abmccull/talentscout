@@ -25,6 +25,9 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
 
       - name: Dependency vulnerability audit
@@ -38,6 +41,12 @@ jobs:
 
       - name: Architecture dependency gate
         run: npm run test:architecture
+
+      - name: Accepted-source soak staging contract
+        run: npm run test:accepted-soak-staging
+
+      - name: Windows installer input contract
+        run: npm run test:windows-installer-inputs
 
       - name: Critical simulation and persistence coverage gate
         run: npm run test:coverage:critical

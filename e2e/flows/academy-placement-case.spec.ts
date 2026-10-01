@@ -4,7 +4,7 @@ import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence"
 test.describe("Academy placement case", () => {
   test.setTimeout(180_000);
 
-  test("brief, structured report, delayed decision, and long-term reviews form one causal case", async ({ gamePage }) => {
+  test("brief, structured report, delayed decision, and long-term reviews form one causal case", async ({ gamePage }, testInfo) => {
     await gamePage.goto();
     await gamePage.injectState({
       currentWeek: 2,
@@ -78,7 +78,7 @@ test.describe("Academy placement case", () => {
 
     await gamePage.waitForScreen("playerProfile");
     await expect(gamePage.page.getByRole("heading", { name: "Brief fit and opportunity cost" })).toBeVisible();
-    await expect(gamePage.page.getByRole("heading", { name: "Highest-value next evidence" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "Next evidence to consider" })).toBeVisible();
     await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
     await gamePage.waitForScreen("reportWriter");
 
@@ -110,6 +110,7 @@ test.describe("Academy placement case", () => {
       recommendedAction: "offerAcademyPlace",
       presentationApproach: "fitLed",
     });
+    expect(report.caseId).toBeTruthy();
     expect(Object.keys(report.categoryVerdicts)).toEqual(
       expect.arrayContaining(["potential", "roleFit", "characterRisk"]),
     );
@@ -153,6 +154,10 @@ test.describe("Academy placement case", () => {
       );
       return {
         response: placement?.clubResponse,
+        sourceReportId: decision?.reportId,
+        caseId: decision?.caseId,
+        reviewReportIds: reviews.map((review) => review.reportId),
+        reviewCaseIds: reviews.map((review) => review.caseId),
         reasons: decision?.reasons ?? [],
         decisionTotal: decision?.scoreBreakdown?.total,
         presentationScore: decision?.scoreBreakdown?.presentation,
@@ -173,6 +178,14 @@ test.describe("Academy placement case", () => {
     expect(resolved.reasons.some((reason: string) => /fit \d+\/100/.test(reason))).toBe(true);
     expect(resolved.briefStatus, resolved.briefFailures.join(", ")).toBe("fulfilled");
     expect(resolved.reviewCheckpoints).toEqual(["oneSeason", "twoSeasons"]);
+    expect(resolved.sourceReportId).toBe(report.id);
+    expect(resolved.caseId).toBe(report.caseId);
+    expect(resolved.reviewReportIds).toEqual([report.id, report.id]);
+    expect(resolved.reviewCaseIds).toEqual([report.caseId, report.caseId]);
+    await testInfo.attach("academy-causal-case.json", {
+      body: JSON.stringify({ setup, report, pending, resolved }, null, 2),
+      contentType: "application/json",
+    });
     expect(resolved.placementMessageBody).toContain("increased by 5.0 reputation");
     expect(resolved.reputation).toBeGreaterThan(pending.reputation);
     gamePage.expectNoConsoleErrors();

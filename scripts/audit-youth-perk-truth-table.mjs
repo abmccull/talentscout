@@ -72,10 +72,10 @@ const authorities = [
   },
   {
     perkId: "youth_generational_eye",
-    consumer: "src/stores/actions/observationActions.ts",
+    consumer: "src/stores/actions/createSessionReflectionResult.ts",
     consumerToken: "paEstimateMargin",
-    formula: "Attach a gut-feeling PA estimate with a base ±5 canonical-point margin, further bounded by existing equipment logic.",
-    uiExplanation: "The reflection narrative labels the estimate as a gut feeling rather than verified truth.",
+    formula: "When the perk is active and a gut feeling has readable retained cues, derive a broad 1-200 projection range from cue scores and scout reliability; cap equipment and perk precision, keep the margin at least 20, and round outward to five-point bounds. Hidden canonical potential is not used.",
+    uiExplanation: "Reflection labels it a Projection signal, shows a broad range, and explains that it comes from noticed cues and can be wrong.",
     testName: "[youth_generational_eye] makes Generational Eye reveal a broad cue-derived projection signal",
   },
 ];

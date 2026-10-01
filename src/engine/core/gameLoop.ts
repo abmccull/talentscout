@@ -1,3 +1,4 @@
+import { archivePlayerSeasonRatings } from "../players/seasonRatingArchive";
 import { calculateFixtureExpectedGoals, sampleFixtureGoals } from "../match/scoreModel";
 import { buildAcademyPromotionNews } from "../youth/academyPromotionNews";
 import { assignFormationPlayers, calculateLineupStrength } from "../firstTeam/lineupAssignment";
@@ -160,7 +161,7 @@ import {
   type RecruitmentOpportunity,
   type RecruitmentOpportunityOutcome,
 } from "../recruitment";
-import { processLoanOutcomeReputation } from "../firstTeam/loanIntegration";
+import { projectAppliedLoanClosures } from "./weekly/loanClosureFeedback";
 import { applyScoutSkillXp } from "../scout/progression";
 import {
   isFixtureInSeason,
@@ -2341,48 +2342,6 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     }
   }
 
-  // 13. Alumni milestone tracking (F12: pass retiredPlayerIds for status derivation)
-  const alumniResult = processAlumniWeek(
-    rng,
-    state.alumniRecords,
-    state.players,
-    state.clubs,
-    state.currentWeek,
-    state.currentSeason,
-    state.retiredPlayerIds,
-  );
-
-  // Merge alumni messages into inbox messages
-  newMessages.push(...alumniResult.newMessages);
-
-  // 13b. F12: Generate season summaries for all active alumni at end of season
-  let alumniWithSeasonStats = alumniResult.updatedAlumni;
-  if (endOfSeasonTriggered) {
-    const canonicalSeasonFixtures = {
-      ...state.fixtures,
-      ...Object.fromEntries(fixturesPlayed.map((fixture) => [fixture.id, fixture])),
-    };
-    const canonicalSeasonRatings = {
-      ...state.matchRatings,
-      ...Object.fromEntries(
-        fixturesPlayed
-          .filter((fixture) => fixture.playerRatings)
-          .map((fixture) => [fixture.id, fixture.playerRatings!]),
-      ),
-    };
-    alumniWithSeasonStats = alumniWithSeasonStats.map((record) => {
-      const player = state.players[record.playerId];
-      if (!player) return record;
-      return generateAlumniSeasonSummary(
-        record,
-        player,
-        state.currentSeason,
-        canonicalSeasonFixtures,
-        canonicalSeasonRatings,
-      );
-    });
-  }
-
   // 14. Season event effects: apply mechanical effects from active events
   const activeEvents = getActiveSeasonEvents(
     state.seasonEvents,
@@ -2570,11 +2529,6 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     // in the store layer (they need CountryData which requires async loading)
     newUnsignedYouth: undefined,
     newAcademyIntake: undefined,
-    alumniMilestones: alumniResult.newMilestones,
-    alumniRecords: alumniWithSeasonStats,
-    alumniContactPromotions: alumniResult.contactPromotions.length > 0
-      ? alumniResult.contactPromotions
-      : undefined,
     gutFeelings: undefined, // generated during observation processing in store
     regionalKnowledgeResult,
     seasonEventState: seasonEventResult.state,
@@ -2734,6 +2688,13 @@ export function advanceWeek(
   );
   updatedPlayers = fixtureRatingsResult.updatedPlayers;
   let updatedMatchRatings = fixtureRatingsResult.updatedMatchRatings;
+  // The complete participation ledger must be projected before retirement,
+  // fixture retention or the store layer opens the new season.
+  let retiredPlayersForLifecycle = state.retiredPlayers;
+  if (tickResult.endOfSeasonTriggered) {
+    updatedPlayers = archivePlayerSeasonRatings(updatedPlayers, updatedFixtures, updatedMatchRatings, state.currentSeason);
+    retiredPlayersForLifecycle = archivePlayerSeasonRatings(state.retiredPlayers, updatedFixtures, updatedMatchRatings, state.currentSeason);
+  }
 
   // ---- Youth aging: auto-signed youth become regular players ----
   const youthSigningIdentityCollisions = new Set<string>();
@@ -2962,7 +2923,11 @@ export function advanceWeek(
       dealId: deal.id,
       resolution: exerciseBuyOption ? "buyOption" : "return",
       preserveSquadWageReserve: true,
-      outcome: exerciseBuyOption ? "buy-option-exercised" : evaluatedOutcome,
+      outcome: exerciseBuyOption ? "buy-option-exercised"
+        : evaluatedOutcome === "buy-option-exercised"
+          ? evaluateLoanOutcome({ ...deal, buyOptionFee: undefined },
+              getSeasonLength(state.fixtures, deal.startSeason))
+          : evaluatedOutcome,
       reason: exerciseBuyOption ? "Loan buy option exercised" : "Loan term completed",
     });
   }
@@ -3065,6 +3030,7 @@ export function advanceWeek(
   let lifecycleResolution = resolvePlayerMovements(
     {
       ...getLifecycleWorld(state),
+      retiredPlayers: retiredPlayersForLifecycle,
       players: updatedPlayers,
       clubs: updatedClubs,
       activeLoans: tickResult.updatedActiveLoans ?? state.activeLoans ?? [],
@@ -3160,9 +3126,18 @@ export function advanceWeek(
       ),
     };
   }
-  const updatedLoanRecommendations = (
-    tickResult.updatedLoanRecommendations ?? state.loanRecommendations ?? []
-  ).map((recommendation) => {
+  const loanClosureFeedback = projectAppliedLoanClosures({
+    scout: state.scout,
+    previousLoanHistory: state.loanHistory ?? [],
+    loanHistory: updatedLoanHistory,
+    movements: lifecycleResolution.applied,
+    recommendations: tickResult.updatedLoanRecommendations ?? state.loanRecommendations ?? [],
+    players: updatedPlayers,
+    clubs: updatedClubs,
+    week: state.currentWeek,
+    season: state.currentSeason,
+  }, createRNG(`${state.seed}-loan-closures-s${state.currentSeason}w${state.currentWeek}`));
+  const updatedLoanRecommendations = loanClosureFeedback.updatedRecommendations.map((recommendation) => {
     if (recommendation.status !== "accepted" || !recommendation.loanDealId) {
       return recommendation;
     }
@@ -3182,24 +3157,30 @@ export function advanceWeek(
     ...(tickResult.gutFeelings ?? []),
   ];
 
-  // ---- Alumni records update (F12: contact promotions + season summaries) ----
-  let updatedAlumniRecords = (tickResult.alumniRecords ?? state.alumniRecords).map(
-    (record) => updatedRetiredPlayerIds.includes(record.playerId)
-      ? { ...record, currentStatus: "retired" as const }
-      : record,
+  // Alumni feedback projects committed participation and applied movements.
+  // It cannot report a transfer proposal which the lifecycle later rejects.
+  const alumniPlayers = { ...updatedRetiredPlayers, ...updatedPlayers };
+  const alumniResult = processAlumniWeek(
+    createRNG(`${state.seed}-alumni-s${state.currentSeason}w${state.currentWeek}`),
+    state.alumniRecords, alumniPlayers, updatedClubs,
+    state.currentWeek, state.currentSeason, updatedRetiredPlayerIds,
+    { fixtures: updatedFixtures, matchRatings: updatedMatchRatings,
+      movements: lifecycleResolution.applied },
   );
+  const updatedAlumniRecords = tickResult.endOfSeasonTriggered
+    ? alumniResult.updatedAlumni.map((record) => {
+        const player = alumniPlayers[record.playerId];
+        return player ? generateAlumniSeasonSummary(record, player, state.currentSeason, updatedFixtures, updatedMatchRatings) : record;
+      })
+    : alumniResult.updatedAlumni;
 
-  // F3 + F12: Apply F3 contact network updates first, then merge alumni promotions.
+  // Apply contact decay/referrals first, then materialize verified alumni.
   let updatedContacts = tickResult.updatedContacts
-    ? { ...tickResult.updatedContacts }
-    : { ...state.contacts };
+    ? { ...tickResult.updatedContacts } : { ...state.contacts };
   const updatedAccessAgreements = tickResult.accessAgreements
-    ? { ...tickResult.accessAgreements }
-    : { ...(state.accessAgreements ?? {}) };
-  if (tickResult.alumniContactPromotions) {
-    for (const promo of tickResult.alumniContactPromotions) {
-      updatedContacts[promo.contact.id] = promo.contact;
-    }
+    ? { ...tickResult.accessAgreements } : { ...(state.accessAgreements ?? {}) };
+  for (const promotion of alumniResult.contactPromotions) {
+    updatedContacts[promotion.contact.id] = promotion.contact;
   }
 
   // ---- Discipline: the central ledger owns current cards and suspensions ----
@@ -3217,7 +3198,8 @@ export function advanceWeek(
   // accidentally amplifying losses, and harder modes do the reverse.
   // Season event effects may also modify scout reputation and fatigue.
   const boardReputationChange = tickResult.boardDirectiveResult?.reputationChange ?? 0;
-  const rawRepChange = tickResult.reputationChange + boardReputationChange;
+  const rawRepChange = tickResult.reputationChange + boardReputationChange
+    + loanClosureFeedback.reputationDelta;
   const scaledRepChange = scaleReputationChange(rawRepChange, state.difficulty);
   const seasonScout = tickResult.seasonEventState?.scout ?? state.scout;
   const reputationUpdatedScout = {
@@ -3233,12 +3215,16 @@ export function advanceWeek(
     {
       [seasonScout.primarySpecialization === "youth"
         ? "potentialAssessment"
-        : "playerJudgment"]: tickResult.loanOutcomeXp ?? 0,
+        : "playerJudgment"]: (tickResult.loanOutcomeXp ?? 0) + loanClosureFeedback.xpAward,
     },
   );
 
   // ---- A4: Satisfaction history: accumulate deltas with a rolling cap ----
   let allDeltas: BoardSatisfactionDelta[] = [...tickResult.satisfactionDeltas];
+  if (loanClosureFeedback.reputationDelta !== 0) {
+    allDeltas.push({ reason: "Loan outcome accountability", delta: loanClosureFeedback.reputationDelta,
+      week: state.currentWeek, season: state.currentSeason });
+  }
 
   // Add board directive reputation change as a satisfaction delta (tier 5)
   if (boardReputationChange !== 0 && tickResult.boardDirectiveResult) {
@@ -3289,7 +3275,13 @@ export function advanceWeek(
   );
 
   // ---- Inbox ----
-  const updatedInbox = [...state.inbox, ...tickResult.newMessages];
+  const existingMessageIds = new Set(state.inbox.map((message) => message.id));
+  const updatedInbox = [...state.inbox];
+  for (const message of [...tickResult.newMessages, ...loanClosureFeedback.messages, ...alumniResult.newMessages]) {
+    if (existingMessageIds.has(message.id)) continue;
+    existingMessageIds.add(message.id);
+    updatedInbox.push(message);
+  }
 
   // ---- Advance week or season ----
   let nextWeek = state.currentWeek + 1;

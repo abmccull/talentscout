@@ -1,3 +1,4 @@
+import { describeAlumniHistory, deriveAlumniDisplayStatus, hasRecordedSeniorAppearance } from "./alumniEvidence";
 import type {
   AlumniRecord,
   AlumniStatus,
@@ -58,11 +59,11 @@ function latestAlumniLine(record: AlumniRecord): string {
   const update = [...record.careerUpdates].sort(
     (left, right) => right.season - left.season || right.week - left.week,
   )[0];
-  if (update?.description) return sanitizeAlumniLine(update.description);
+  if (update?.description) return describeAlumniHistory({ ...update, description: sanitizeAlumniLine(update.description) });
   const milestone = [...record.milestones].sort(
     (left, right) => right.season - left.season || right.week - left.week,
   )[0];
-  if (milestone?.description) return sanitizeAlumniLine(milestone.description);
+  if (milestone?.description) return describeAlumniHistory({ ...milestone, description: sanitizeAlumniLine(milestone.description) });
   return `Placed S${record.placedSeason} W${record.placedWeek}`;
 }
 
@@ -78,7 +79,7 @@ export function listYouthDeskAlumni(
     .map((record) => ({
       playerId: record.playerId,
       name: playerName(record.playerId, state.unsignedYouth ?? {}, state.players),
-      statusLabel: STATUS_LABEL[record.currentStatus] ?? record.currentStatus,
+      statusLabel: STATUS_LABEL[deriveAlumniDisplayStatus(record)],
       lastLine: latestAlumniLine(record),
     }));
 }
@@ -124,8 +125,7 @@ export function deriveYouthReputationLine(
   state: Pick<GameState, "alumniRecords" | "scout" | "placementReports">,
 ): string {
   const debuts = (state.alumniRecords ?? []).filter((record) =>
-    record.milestones.some((milestone) => milestone.type === "firstTeamDebut")
-    || record.careerUpdates.some((update) => update.type === "debut"),
+    hasRecordedSeniorAppearance(record),
   ).length;
   const placed = Object.values(state.placementReports ?? {}).filter(
     (report) => report.scoutId === state.scout.id && report.clubResponse === "accepted",

@@ -405,7 +405,6 @@ describe("weekly economy orchestration", () => {
     const processed = processWeeklyPostTickSystems({
       beforeWeek,
       state: afterTick,
-      alumniMilestones: [],
     });
     const referenceId = `credit-review:s${beforeWeek.currentSeason}w${closingWeek}`;
 
@@ -417,7 +416,6 @@ describe("weekly economy orchestration", () => {
     const replayed = processWeeklyPostTickSystems({
       beforeWeek,
       state: processed,
-      alumniMilestones: [],
     });
     expect(replayed.finances?.creditScore).toBe(52);
     expect(replayed.finances?.transactions.filter(
@@ -434,7 +432,6 @@ describe("weekly economy orchestration", () => {
         currentWeek: 4,
         schedule: createWeekSchedule(4, 1),
       },
-      alumniMilestones: [],
     });
     expect(first.consequenceState.metrics[CONSECUTIVE_REST_WEEKS_METRIC]).toBe(1);
 
@@ -449,7 +446,6 @@ describe("weekly economy orchestration", () => {
         currentWeek: 5,
         schedule: createWeekSchedule(5, 1),
       },
-      alumniMilestones: [],
     });
     expect(second.consequenceState.metrics[CONSECUTIVE_REST_WEEKS_METRIC]).toBe(2);
     expect(second.inbox.filter((message) => message.title === "Fully Refreshed"))
@@ -468,7 +464,6 @@ describe("weekly economy orchestration", () => {
         currentWeek: 6,
         schedule: createWeekSchedule(6, 1),
       },
-      alumniMilestones: [],
     });
     expect(working.consequenceState.metrics[CONSECUTIVE_REST_WEEKS_METRIC]).toBe(0);
   });

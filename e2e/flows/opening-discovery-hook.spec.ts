@@ -210,7 +210,11 @@ test.describe("guided opening discovery hook", () => {
 
     const evidenceInterpretation = page.getByRole("group", { name: "What did this passage show?" });
     await expect(evidenceInterpretation).toBeVisible();
-    await evidenceInterpretation.getByRole("radio").first().check();
+    // Exercise an explicitly withheld first judgment. A classification
+    // choice must survive reflection without becoming a supported trait claim.
+    const withhold = evidenceInterpretation.getByRole("radio", { name: /^No reliable conclusion/ });
+    await withhold.check();
+    await expect(withhold).toBeChecked();
 
     const completeReflection = page.getByRole("button", { name: "Complete Reflection" });
     await expect(completeReflection).toBeVisible();
@@ -248,7 +252,23 @@ test.describe("guided opening discovery hook", () => {
     const openingDecision = page.getByTestId("opening-discovery");
     await expect(openingDecision).toBeVisible();
     await expect(page.getByText("Write the name down.")).toBeVisible();
-    await expect(page.getByText(/One exceptional action is a lead, not proof/i)).toBeVisible();
+    const openingRead = await page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      const targetId = state.openingCase.playerId;
+      const journals = Object.values(state.reflectionJournal ?? {}) as any[];
+      const cards = journals.flatMap((entry) => entry.evidenceCards ?? [])
+        .filter((card) => card.playerId === targetId);
+      return { playerId: targetId, cards };
+    });
+    expect(openingRead.cards).toHaveLength(1);
+    expect(openingRead.cards[0].classification).toBe("noConclusion");
+    await expect(openingDecision.getByText("The name is worth checking. Your read is still open.", { exact: true })).toBeVisible();
+    await expect(openingDecision.getByText(/Your saved evidence does not yet support a finding\./)).toBeVisible();
+    await expect(openingDecision.getByText(/No reliable conclusion from this watch\./)).toBeVisible();
+    await expect(openingDecision.getByText("What would you need to see or verify before making a claim about this player?", { exact: true })).toBeVisible();
+    await testInfo.attach("opening-withheld-evidence.json", {
+      body: JSON.stringify(openingRead, null, 2), contentType: "application/json",
+    });
     await expect(page.getByText("Your next move", { exact: true })).toBeVisible();
     await expect(page.getByText(/The call you make now will shape who gets access/i)).toBeVisible();
     await expect(page.getByText(/No one knows what this player will become/i)).toBeVisible();
@@ -358,11 +378,48 @@ test.describe("guided opening discovery hook", () => {
     });
     expect(latestReport).not.toBeNull();
     expect(latestReport.evidenceAssessment?.kind).toBe("initial");
+    expect(latestReport.evidenceAssessment?.claims).toHaveLength(1);
+    expect(latestReport.evidenceAssessment.claims[0]).toMatchObject({
+      classification: "noConclusion", support: "withheld", confidence: "tentative",
+    });
+    expect(latestReport.evidenceAssessment.recommendation).toBe("monitor");
+    await testInfo.attach("opening-authored-assessment.json", {
+      body: JSON.stringify({ persisted, latestReport }, null, 2), contentType: "application/json",
+    });
     expect(latestReport.evidenceAssessment?.evidenceIds.length).toBeGreaterThan(0);
     expect(latestReport.evidenceAssessment?.unknowns.length).toBeGreaterThan(0);
     expect(latestReport.summary).toContain("At ");
     expect(latestReport.summary).not.toMatch(/\bthe game\b/i);
     expect(latestReport.briefId ?? null).toBeNull();
+    // The choice, withheld report, and pending consequences must come back
+    // from the real autosave. Reloading must not replay discovery or rewards.
+    // JSON save projections omit optional undefined keys. Preserve every
+    // defined field in the exact expected durable representation.
+    const expectedPersistedReport = JSON.parse(JSON.stringify(latestReport));
+    await expect.poll(() => readUnguidedCheckpoint(page), { timeout: 15_000 }).toMatchObject({
+      openingCase: { stage: "complete", selectedChoiceId: "protect" },
+      reports: { [latestReport.id]: expectedPersistedReport },
+    });
+    expect((await readUnguidedCheckpoint(page)).reports[latestReport.id]).toEqual(expectedPersistedReport);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Continue Career", exact: true }).click();
+    await gamePage.waitForScreen("dashboard");
+    const reloadedOpening = await page.evaluate((reportId) => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      return {
+        report: state.reports[reportId],
+        openingCase: state.openingCase,
+        discoveryCount: state.discoveryRecords.filter((record: any) => record.playerId === state.openingCase.playerId).length,
+        selectedOptionId: state.consequenceState.decisions[state.openingCase.decisionId]?.selectedOptionId,
+      };
+    }, latestReport.id);
+    expect(reloadedOpening.report).toEqual(latestReport);
+    expect(reloadedOpening.openingCase.stage).toBe("complete");
+    expect(reloadedOpening.discoveryCount).toBe(1);
+    expect(reloadedOpening.selectedOptionId).toBe("protect");
+    await testInfo.attach("opening-autosave-reload.json", {
+      body: JSON.stringify(reloadedOpening, null, 2), contentType: "application/json",
+    });
     expect(missingResources, "The opening flow requested missing production assets").toEqual([]);
     gamePage.expectNoConsoleErrors();
   });
@@ -383,6 +440,8 @@ async function readUnguidedCheckpoint(page: GamePage['page']) {
           requested: state?.guidedSessionRequested,
           week: state?.currentWeek,
           session: state?.activeObservationSession,
+          openingCase: state?.openingCase,
+          reports: state?.reports,
         })));
       };
     };
@@ -449,7 +508,7 @@ test('assessment selection survives desktop and phone layouts through a real fir
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeEnabled();
   await page.setViewportSize({ width: 390, height: 844 });
   const outerProgress = page.getByRole('region', { name: 'Report progress', exact: true });
-  await expect(outerProgress).toContainText('5 decisions remaining');
+  await expect(outerProgress).toContainText('6 decisions remaining');
   await page.getByRole('group', { name: 'Saved evidence' }).getByRole('radio').first().locator('..').click();
   await page.getByRole('group', { name: 'What it suggests' }).getByRole('radio').first().locator('..').click();
   const recommendedUnknown = page.getByRole('group', { name: 'What remains untested' }).getByRole('radio').first().locator('..');
@@ -477,7 +536,9 @@ test('assessment selection survives desktop and phone layouts through a real fir
   await page.screenshot({ path: testInfo.outputPath('report-mobile-recommended-long-choice.png'), fullPage: true });
   await recommendedUnknown.click();
   await expect(page.getByText('3/5 complete', { exact: true })).toBeVisible();
-  await expect(outerProgress).toContainText('2 decisions remaining');
+  // Five mobile steps represent six decisions: Next action contains both the
+  // next test and the recommendation. Neither can disappear from the total.
+  await expect(outerProgress).toContainText('3 decisions remaining');
   await page.screenshot({ path: testInfo.outputPath('report-mobile-progress-3-of-5.png'), fullPage: true });
   await page.getByRole('group', { name: 'Next test' }).getByRole('radio').first().locator('..').click();
   await page.getByRole('group', { name: 'Recommended action' }).getByRole('radio', { name: /^Keep private/ }).locator('..').click();

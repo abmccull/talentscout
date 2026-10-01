@@ -1,7 +1,7 @@
 "use client";
 
 import { Component, type ReactNode, type ErrorInfo } from "react";
-import { captureException } from "@/lib/sentry";
+import { captureException } from "@/lib/deferredErrorReporting";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 
@@ -40,8 +40,8 @@ export class ScreenErrorBoundary extends Component<Props, State> {
             Something went wrong on this screen
           </h2>
           <p className="max-w-md text-sm text-zinc-400">
-            An unexpected error occurred. Your game data is safe — autosave
-            runs every week advance.
+            Return to the dashboard to try again. If you reload, use your
+            last successful save; changes since that save may be lost.
           </p>
           <Button onClick={this.handleRecover}>Return to Dashboard</Button>
         </div>

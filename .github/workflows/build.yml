@@ -64,6 +64,9 @@ jobs:
             exit 1
           fi
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
 
       - name: Dependency vulnerability audit
@@ -85,6 +88,12 @@ jobs:
 
       - name: Unit and migration tests
         run: npm run test:unit
+
+      - name: Accepted-source soak staging contract
+        run: npm run test:accepted-soak-staging
+
+      - name: Windows installer input contract
+        run: npm run test:windows-installer-inputs
 
       - name: Critical simulation and persistence coverage gate
         run: npm run test:coverage:critical
@@ -176,6 +185,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
 
       - name: Run isolated seed through 30 canonical seasons
@@ -255,6 +267,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
 
       - run: npm ci
 
@@ -339,6 +354,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
 
       - run: npm ci
 
@@ -440,6 +458,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
 
       - run: npm ci
 

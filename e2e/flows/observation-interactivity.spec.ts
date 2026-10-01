@@ -173,14 +173,19 @@ test.describe("observation choice and insight integrity", () => {
 
   test("investigation consequence is store-backed, immutable, and restored after load", async ({ gamePage }) => {
     const page = gamePage.page;
-    await gamePage.startObservationSession("followUpSession");
+    // Ordinary follow-ups are field observations. Exercise the actual inquiry
+    // activity so this contract proves dialogue consequences and their resume.
+    await gamePage.startObservationSession("parentCoachMeeting");
     await page.getByRole("button", { name: /^Begin Observation$/ }).click();
 
     const before = await page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
       const session = store.getState().activeSession;
+      if (session?.mode !== "investigation") throw new Error("Expected an actual investigation session");
+      if (!session.sourceContactId) throw new Error("Expected a real Youth inquiry source contact");
       const phase = session.phases[session.currentPhaseIndex];
-      const node = phase.dialogueNodes[0];
+      const node = phase.dialogueNodes?.[0];
+      if (!node) throw new Error("Investigation has no dialogue node");
       const option = node.options.find((candidate: any) =>
         candidate.requiresRelationship === undefined
           || candidate.requiresRelationship <= (session.sourceRelationshipScore ?? 0),
@@ -218,6 +223,7 @@ test.describe("observation choice and insight integrity", () => {
         optionId: phase.selectedDialogueOptionIds[nodeId],
         relationship: contact?.relationship,
         relationshipDeltaApplied: resolution.relationshipDeltaApplied,
+        resolution,
       };
     }, before);
     expect(selected.optionId).toBe(before.optionId);
@@ -241,12 +247,19 @@ test.describe("observation choice and insight integrity", () => {
       if (alternateId) store.getState().selectDialogueOption(nodeId, alternateId);
       const session = store.getState().activeSession;
       const phase = session.phases[session.currentPhaseIndex];
+      const resolution = phase.dialogueChoiceResolutions[nodeId];
+      const contact = resolution.sourceContactId
+        ? store.getState().gameState.contacts[resolution.sourceContactId]
+        : undefined;
       return {
         insight: session.insightPointsEarned,
         optionId: phase.selectedDialogueOptionIds[nodeId],
+        relationship: contact?.relationship,
+        relationshipDeltaApplied: resolution.relationshipDeltaApplied,
+        resolution,
       };
     }, before);
-    expect(afterReload).toEqual({ insight: selected.insight, optionId: before.optionId });
+    expect(afterReload).toEqual(selected);
     gamePage.expectNoConsoleErrors();
   });
 

@@ -1366,7 +1366,6 @@ export function createWeeklyActions(
     newState = processWeeklyPostTickSystems({
       beforeWeek: gameState,
       state: newState,
-      alumniMilestones: tickResult.alumniMilestones,
     });
     // ── Season transition: regenerate events, fixtures, and transfer windows ─
     weeklyPipeline.enter("season-rollover");

@@ -1,3 +1,4 @@
+import { hasRecordedSeniorAppearance, isSourcedAlumniEvent } from "../youth/alumniEvidence";
 import type { GameState, LegacyProfile } from "../core/types";
 import { stableFingerprint } from "../run/runManifest";
 import {
@@ -422,8 +423,8 @@ export function deriveCareerSignature(state: GameState): CareerSignatureResult {
   const alumni = [...(state.alumniRecords ?? [])].sort((left, right) => left.id.localeCompare(right.id));
   for (const record of alumni) {
     const pathwayWeight = 1
-      + Math.min(3, record.milestones.length)
-      + (record.currentStatus === "firstTeam" ? 2 : 0);
+      + Math.min(3, record.milestones.filter(isSourcedAlumniEvent).length)
+      + (record.currentStatus === "firstTeam" && hasRecordedSeniorAppearance(record) ? 2 : 0);
     addEvidence(scores, "pathwayBuilder", pathwayWeight, record.id);
     if (record.becameContact) addEvidence(scores, "connector", 3, record.id);
     if (record.currentStatus === "loaned" || record.currentStatus === "released") {

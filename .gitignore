@@ -30,6 +30,8 @@ next-env.d.ts
 
 # Electron
 dist/
+# Derived signed macOS Steam depot; retain the canonical preflight/VDF path.
+steam-stage/macos/
 steam_appid.txt
 
 # Steamworks SDK redistribution binaries (proprietary)

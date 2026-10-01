@@ -82,7 +82,7 @@ async function prepareYouthReportDraft(gamePage: import("../fixtures").GamePage)
 }
 
 test.describe("Delayed scout report validation regression", () => {
-  test("report submission shows craft immediately and later validates against career evidence for youth reports", async ({ gamePage }) => {
+  test("report submission shows craft immediately and later validates against career evidence for youth reports", async ({ gamePage }, testInfo) => {
     const setup = await prepareYouthReportDraft(gamePage);
     expect(setup.presentInSeniorPlayerMap).toBe(false);
 
@@ -212,6 +212,8 @@ test.describe("Delayed scout report validation regression", () => {
       ) ?? null;
 
       return {
+        sourceSeason: validationSeason,
+        sourceWeek: seasonLength,
         reputationBefore,
         reputationAfter: after.scout.reputation,
         currentSeason: after.currentSeason,
@@ -248,19 +250,34 @@ test.describe("Delayed scout report validation regression", () => {
     expect(validation.validationMessage.body).toMatch(/reputation \+3/i);
     expect(validation.reputationAfter).toBeGreaterThan(validation.reputationBefore);
 
-    // Multi-season validation can leave the end-of-season presentation open.
-    // Dismiss that real UI state before asserting the requested workspace;
-    // setting currentScreen behind the overlay races React and caused a flaky
-    // false failure even though the delayed validation had completed.
-    const continueSeason = gamePage.page.getByRole("button", {
-      name: "Continue to Next Season",
+    // Keep the actual validation facts and source boundary in the trace.
+    // This fixture has synthetic report evidence and no interactive watches.
+    const presentation = await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__.getState();
+      return { screen: store.currentScreen, busy: store.isAdvancingWeek,
+        route: store.lastWeeklyExecutionRoute,
+        summaryContinueScreen: store.lastWeekSummary?.continueScreen ?? null,
+        reviewSeason: store.gameState.seasonAwardsData?.season ?? null };
     });
+    await testInfo.attach("delayed-validation-facts.json", {
+      body: JSON.stringify({ setup, submitted, validation, presentation }, null, 2),
+      contentType: "application/json",
+    });
+    // The canonical rollover first presents its real Week Summary, whose
+    // acknowledgement hands off to the completed-season review. Do not replace
+    // either route with the requested detail before accepting that handoff.
     await dismissCareerMomentOverlays(gamePage.page);
-    await gamePage.setScreen("discoveries");
-    if (await continueSeason.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await continueSeason.click();
-      await gamePage.setScreen("discoveries");
+    if (presentation.summaryContinueScreen === "seasonAwards") {
+      const weekSummary = gamePage.page.getByRole("dialog", { name: "Week Summary", exact: true });
+      await expect(weekSummary).toBeVisible();
+      await weekSummary.getByRole("button", { name: /^(Close week summary|Continue to promotion|Continue to milestone)$/ })
+        .click({ timeout: 5_000 });
+      await gamePage.waitForScreen("seasonAwards");
     }
+    expect(await gamePage.continueCanonicalSeasonReview(validation.sourceSeason)).toBe(true);
+    // Discoveries remains an explicitly scoped supported detail entry. This
+    // does not claim a sidebar or Career drilldown that the product lacks.
+    await gamePage.setScreen("discoveries");
     await gamePage.waitForScreen("discoveries");
     await expect(
       gamePage.page.getByRole("heading", { name: "Career Tracker" }),

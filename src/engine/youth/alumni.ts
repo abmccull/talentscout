@@ -1,13 +1,15 @@
+import { hasRecordedSeniorAppearance, isSourcedAlumniEvent } from "./alumniEvidence";
+import { getFixtureSeason } from "@/engine/world/fixtures";
+import { collectCanonicalAppearances, summarizeCanonicalAppearances, type CanonicalPlayerPerformance } from "@/engine/match/canonicalPerformance";
 /**
  * Alumni tracking — long-term payoff loop for placed youth.
  *
  * When a scout places an unsigned youth at a club, an alumni record is created.
- * The system then tracks the player's career milestones (first team debut,
- * international callup, wonderkid status) and generates inbox messages when
- * milestones are achieved.
+ * The system projects career milestones from played participation and applied
+ * movement facts and generates one notification for each recorded event.
  *
  * F12 extends this with:
- *  - Career update timeline (debut, goals, injury, captaincy, etc.)
+ *  - Career update timeline (debut, goals, injury and applied movements)
  *  - Status tracking (academy, firstTeam, loaned, released, retired, transferred)
  *  - Season-by-season stats generation
  *  - Alumni-to-contact promotion for high-achievers
@@ -31,40 +33,30 @@ import type {
   Club,
   UnsignedYouth,
   InboxMessage,
+  PlayerMovementEvent,
 } from "@/engine/core/types";
 
 type CanonicalFixtures = Record<string, import("@/engine/core/types").Fixture>;
 type CanonicalRatings = Record<string, Record<string, import("@/engine/core/types").PlayerMatchRating>>;
 
-interface CanonicalSeasonTotals {
-  appearances: number;
-  goals: number;
-  assists: number;
-  ratingTotal: number;
+export interface AlumniWeekEvidence {
+  fixtures: CanonicalFixtures;
+  matchRatings: CanonicalRatings;
+  /** Only applied movements, after authoritative lifecycle resolution. */
+  movements: readonly PlayerMovementEvent[];
 }
 
-const ALUMNI_SEASON_SUMMARY_CACHE = new WeakMap<
-  CanonicalRatings,
-  WeakMap<CanonicalFixtures, Map<number, Map<string, CanonicalSeasonTotals>>>
->();
+const EMPTY_EVIDENCE: AlumniWeekEvidence = { fixtures: {}, matchRatings: {}, movements: [] };
 
 // =============================================================================
 // HELPERS
 // =============================================================================
 
 /**
- * Build a deterministic message ID using the RNG for entropy.
- * Pattern mirrors gameLoop.ts: `msg_alumni_<6-digit-int>`.
- */
-function makeAlumniMessageId(rng: RNG): string {
-  return `msg_alumni_${rng.nextInt(100000, 999999)}`;
-}
-
-/**
  * Return true if the alumni record already has a milestone of the given type.
  */
 function hasMilestone(record: AlumniRecord, type: AlumniMilestoneType): boolean {
-  return record.milestones.some((m) => m.type === type);
+  return record.milestones.some((m) => m.type === type && isSourcedAlumniEvent(m));
 }
 
 /**
@@ -81,89 +73,27 @@ function hasCareerUpdateInSeason(
   );
 }
 
-/**
- * Return true if the alumni record already has a career update of the given
- * type at any point (for once-only events like debut).
- */
-function hasCareerUpdate(
-  record: AlumniRecord,
-  type: AlumniCareerUpdateType,
-): boolean {
-  return record.careerUpdates.some((u) => u.type === type);
-}
-
 function getSeasonPlayerTotals(
   season: number,
   fixtures: CanonicalFixtures,
   matchRatings: CanonicalRatings,
-): Map<string, CanonicalSeasonTotals> {
-  let fixturesCache = ALUMNI_SEASON_SUMMARY_CACHE.get(matchRatings);
-  if (!fixturesCache) {
-    fixturesCache = new WeakMap();
-    ALUMNI_SEASON_SUMMARY_CACHE.set(matchRatings, fixturesCache);
-  }
-
-  let seasonCache = fixturesCache.get(fixtures);
-  if (!seasonCache) {
-    seasonCache = new Map();
-    fixturesCache.set(fixtures, seasonCache);
-  }
-
-  const cached = seasonCache.get(season);
-  if (cached) return cached;
-
-  const totalsByPlayerId = new Map<string, CanonicalSeasonTotals>();
-  for (const [fixtureId, fixtureRatings] of Object.entries(matchRatings)) {
-    const fixture = fixtures[fixtureId];
-    if (!fixture || fixture.played !== true || (fixture.season ?? season) !== season) continue;
-
-    for (const rating of Object.values(fixtureRatings)) {
-      if ((rating.minutesPlayed ?? 0) <= 0) continue;
-      const current = totalsByPlayerId.get(rating.playerId) ?? {
-        appearances: 0,
-        goals: 0,
-        assists: 0,
-        ratingTotal: 0,
-      };
-      current.appearances += 1;
-      current.goals += rating.stats.goals ?? 0;
-      current.assists += rating.stats.assists ?? 0;
-      current.ratingTotal += rating.rating;
-      totalsByPlayerId.set(rating.playerId, current);
-    }
-  }
-
-  seasonCache.set(season, totalsByPlayerId);
-  return totalsByPlayerId;
+): Map<string, CanonicalPlayerPerformance> {
+  return new Map([...collectCanonicalAppearances(fixtures, matchRatings, season)]
+    .flatMap(([playerId, appearances]) => {
+      const totals = summarizeCanonicalAppearances(appearances);
+      return totals ? [[playerId, totals] as const] : [];
+    }));
 }
 
-/**
- * Derive the current status of an alumni player based on game state signals.
- */
 function deriveAlumniStatus(
-  record: AlumniRecord,
   player: Player,
-  retiredPlayerIds: string[],
+  retiredPlayerIds: readonly string[],
+  recordedSeniorAppearance: boolean,
 ): AlumniStatus {
-  // Retired takes priority
-  if (retiredPlayerIds.includes(player.id)) {
-    return "retired";
-  }
-  // Player was released (no club or club differs and CA dropped significantly)
-  if (!player.clubId) {
-    return "released";
-  }
-  // Transferred — player at a different club from where they were originally placed
-  // AND they moved away from the current tracked club
-  if (player.clubId !== record.placedClubId && player.clubId !== record.currentClubId) {
-    return "transferred";
-  }
-  // First team breakthrough
-  if (player.currentAbility >= 80 && player.age >= 17) {
-    return "firstTeam";
-  }
-  // Still in academy
-  return "academy";
+  if (retiredPlayerIds.includes(player.id)) return "retired";
+  if (!player.clubId) return "released";
+  if (player.onLoan === true) return "loaned";
+  return recordedSeniorAppearance ? "firstTeam" : "academy";
 }
 
 // =============================================================================
@@ -206,37 +136,20 @@ export function createAlumniRecord(
   };
 }
 
-/**
- * Process alumni records for one game week.
- *
- * For each alumni record, checks whether the linked player has hit any new
- * career milestones and, if so, creates the milestone entry and an inbox
- * message to notify the scout.
- *
- * F12 enhancements:
- *  - Generates career updates (debut, firstGoal, injury, captaincy, etc.)
- *  - Tracks current status (academy/firstTeam/loaned/released/retired/transferred)
- *  - Detects alumni eligible for contact promotion
- *
- * Milestone conditions:
- *  - firstTeamDebut:      CA >= 80, age >= 17, not yet awarded
- *  - firstGoal:           CA >= 90, age >= 17, firstTeamDebut already earned,
- *                         15% chance per week
- *  - internationalCallUp: CA >= 120, age <= 23, 5% chance per week
- *  - wonderkidStatus:     PA >= 150, CA >= 100, age <= 21
- *  - transfer:            player.clubId differs from alumni.currentClubId
- *
- * Returns updated records, the new milestones only (for the caller to persist
- * or inspect), and the inbox messages that should be appended to the inbox.
+/** Project alumni facts after the current week's matches and movements commit.
+ * No CA/PA gate or random roll can manufacture a played match achievement.
+ * Call-ups, captaincy and Team-of-the-Week require a future canonical event
+ * authority; legacy history remains intact until then.
  */
 export function processAlumniWeek(
-  rng: RNG,
+  _rng: RNG,
   alumniRecords: AlumniRecord[],
   players: Record<string, Player>,
   clubs: Record<string, Club>,
   week: number,
   season: number,
-  retiredPlayerIds?: string[],
+  retiredPlayerIds: string[] = [],
+  evidence: AlumniWeekEvidence = EMPTY_EVIDENCE,
 ): {
   updatedAlumni: AlumniRecord[];
   newMilestones: AlumniMilestone[];
@@ -247,305 +160,129 @@ export function processAlumniWeek(
   const newMilestones: AlumniMilestone[] = [];
   const newMessages: InboxMessage[] = [];
   const contactPromotions: Array<{ alumniId: string; contact: Contact }> = [];
-  const retired = retiredPlayerIds ?? [];
+  const appearancesByPlayer = collectCanonicalAppearances(evidence.fixtures, evidence.matchRatings, season);
+  const knownAppearanceHistory = new Map(appearancesByPlayer);
+  // Recover a missing sourced first event from surviving facts, including an
+  // earlier retained season. Aggregated history cannot invent a fixture/date.
+  if (alumniRecords.some(record => !hasMilestone(record, "firstTeamDebut") || !hasMilestone(record, "firstGoal"))) {
+    const earliestPlacementSeason = alumniRecords.reduce((earliest, record) => Math.min(earliest, record.placedSeason), season);
+    const priorSeasons = [...new Set(Object.values(evidence.fixtures).map(getFixtureSeason))]
+      .filter((known): known is number => known !== undefined && known >= earliestPlacementSeason && known < season)
+      .sort((left, right) => left - right);
+    for (const priorSeason of priorSeasons) {
+      for (const [playerId, appearances] of collectCanonicalAppearances(evidence.fixtures, evidence.matchRatings, priorSeason)) {
+        knownAppearanceHistory.set(playerId, [...(knownAppearanceHistory.get(playerId) ?? []), ...appearances]);
+      }
+    }
+  }
 
   for (const record of alumniRecords) {
     const player = players[record.playerId];
-
-    if (!player) {
-      // Player no longer in world (transferred out of tracked pool, retired
-      // before the retiredPlayerIds pass runs, etc.): keep record unchanged.
-      updatedAlumni.push(record);
-      continue;
-    }
-
-    // Accumulate any new milestones discovered this tick.
+    if (!player) { updatedAlumni.push(record); continue; }
+    const name = `${player.firstName} ${player.lastName}`;
+    const afterPlacement = (date: { season?: number; week: number }) =>
+      (date.season ?? season) > record.placedSeason
+      || ((date.season ?? season) === record.placedSeason && date.week >= record.placedWeek);
+    const fixtureDate = (fixture: import("@/engine/core/types").Fixture) => ({
+      week: fixture.week, season: getFixtureSeason(fixture) ?? season,
+    });
+    const appearances = (appearancesByPlayer.get(player.id) ?? [])
+      .filter(({ fixture }) => afterPlacement(fixtureDate(fixture)))
+      .sort((left, right) => left.fixture.week - right.fixture.week || left.fixture.id.localeCompare(right.fixture.id));
+    const history = (knownAppearanceHistory.get(player.id) ?? []).filter(({ fixture }) => afterPlacement(fixtureDate(fixture)))
+      .sort((left, right) => fixtureDate(left.fixture).season - fixtureDate(right.fixture).season
+        || left.fixture.week - right.fixture.week || left.fixture.id.localeCompare(right.fixture.id));
+    const weekAppearances = appearances.filter(({ fixture }) => fixture.week === week);
     const tickMilestones: AlumniMilestone[] = [];
     const tickCareerUpdates: AlumniCareerUpdate[] = [];
-    let currentClubId = record.currentClubId;
-
-    // -----------------------------------------------------------------------
-    // Transfer check — must run first so currentClubId is up to date for
-    // subsequent milestone descriptions.
-    // -----------------------------------------------------------------------
-    if (!hasMilestone(record, "transfer") || player.clubId !== currentClubId) {
-      // We allow multiple transfer milestones (each represents a new move), so
-      // re-check even if one was already recorded.
-      if (player.clubId !== currentClubId) {
-        const newClubName = clubs[player.clubId]?.name ?? "a new club";
-        const milestone: AlumniMilestone = {
-          type: "transfer",
-          week,
-          season,
-          description: `${player.firstName} ${player.lastName} has moved to ${newClubName}.`,
-          notified: false,
-        };
-        tickMilestones.push(milestone);
-
-        tickCareerUpdates.push({
-          week,
-          season,
-          type: "transfer",
-          description: `Transferred to ${newClubName}.`,
-        });
-
-        // Update tracked club immediately so descriptions below are accurate.
-        currentClubId = player.clubId;
-      }
-    }
-
-    // -----------------------------------------------------------------------
-    // firstTeamDebut
-    // -----------------------------------------------------------------------
-    if (
-      !hasMilestone(record, "firstTeamDebut") &&
-      player.currentAbility >= 80 &&
-      player.age >= 17
-    ) {
-      const clubName = clubs[currentClubId]?.name ?? "their club";
-      const milestone: AlumniMilestone = {
-        type: "firstTeamDebut",
-        week,
-        season,
-        description: `${player.firstName} ${player.lastName} has made their first team debut at ${clubName}, breaking through at age ${player.age}.`,
-        notified: false,
-      };
-      tickMilestones.push(milestone);
-
-      if (!hasCareerUpdate(record, "debut")) {
-        tickCareerUpdates.push({
-          week,
-          season,
-          type: "debut",
-          description: `Made first team debut at ${clubName} at age ${player.age}.`,
-        });
-      }
-    }
-
-    // -----------------------------------------------------------------------
-    // firstGoal — requires firstTeamDebut to have been earned (including any
-    // earned in this same tick, hence we check tickMilestones too).
-    // -----------------------------------------------------------------------
-    const hasDebut =
-      hasMilestone(record, "firstTeamDebut") ||
-      tickMilestones.some((m) => m.type === "firstTeamDebut");
-
-    if (
-      !hasMilestone(record, "firstGoal") &&
-      player.currentAbility >= 90 &&
-      player.age >= 17 &&
-      hasDebut &&
-      rng.chance(0.15)
-    ) {
-      const milestone: AlumniMilestone = {
-        type: "firstGoal",
-        week,
-        season,
-        description: `${player.firstName} ${player.lastName} has scored their first professional goal.`,
-        notified: false,
-      };
-      tickMilestones.push(milestone);
-
-      if (!hasCareerUpdate(record, "firstGoal")) {
-        tickCareerUpdates.push({
-          week,
-          season,
-          type: "firstGoal",
-          description: `Scored their first professional goal.`,
-        });
-      }
-    }
-
-    // -----------------------------------------------------------------------
-    // internationalCallUp
-    // -----------------------------------------------------------------------
-    if (
-      !hasMilestone(record, "internationalCallUp") &&
-      player.currentAbility >= 120 &&
-      player.age <= 23 &&
-      rng.chance(0.05)
-    ) {
-      const milestone: AlumniMilestone = {
-        type: "internationalCallUp",
-        week,
-        season,
-        description: `${player.firstName} ${player.lastName} has received their first international call-up at age ${player.age}.`,
-        notified: false,
-      };
-      tickMilestones.push(milestone);
-
-      if (!hasCareerUpdate(record, "internationalCall")) {
-        tickCareerUpdates.push({
-          week,
-          season,
-          type: "internationalCall",
-          description: `Received first international call-up at age ${player.age}.`,
-        });
-      }
-    }
-
-    // -----------------------------------------------------------------------
-    // wonderkidStatus
-    // -----------------------------------------------------------------------
-    if (
-      !hasMilestone(record, "wonderkidStatus") &&
-      player.potentialAbility >= 150 &&
-      player.currentAbility >= 100 &&
-      player.age <= 21
-    ) {
-      const milestone: AlumniMilestone = {
-        type: "wonderkidStatus",
-        week,
-        season,
-        description: `${player.firstName} ${player.lastName} has been recognised as a wonderkid.`,
-        notified: false,
-      };
-      tickMilestones.push(milestone);
-    }
-
-    // -----------------------------------------------------------------------
-    // F12: Additional career updates (beyond milestones)
-    // -----------------------------------------------------------------------
-
-    // Captaincy — high CA + leadership traits at first team, once per career
-    if (
-      !hasCareerUpdate(record, "captaincy") &&
-      player.currentAbility >= 110 &&
-      player.age >= 20 &&
-      hasDebut &&
-      rng.chance(0.02)
-    ) {
-      const clubName = clubs[currentClubId]?.name ?? "their club";
-      tickCareerUpdates.push({
-        week,
-        season,
-        type: "captaincy",
-        description: `Named captain of ${clubName}.`,
-      });
-    }
-
-    // Team of the Week — once per season, requires first team status
-    if (
-      !hasCareerUpdateInSeason(record, "teamOfWeek", season) &&
-      player.currentAbility >= 90 &&
-      hasDebut &&
-      rng.chance(0.03)
-    ) {
-      tickCareerUpdates.push({
-        week,
-        season,
-        type: "teamOfWeek",
-        description: `Selected for the Team of the Week.`,
-      });
-    }
-
-    // Injury update — if player is currently injured and we haven't noted it
-    // this season
-    if (
-      player.injured &&
-      !hasCareerUpdateInSeason(record, "injury", season)
-    ) {
-      const weeksStr = player.injuryWeeksRemaining > 0
-        ? ` Expected ${player.injuryWeeksRemaining} weeks out.`
-        : "";
-      tickCareerUpdates.push({
-        week,
-        season,
-        type: "injury",
-        description: `Picked up an injury.${weeksStr}`,
-      });
-    }
-
-    // -----------------------------------------------------------------------
-    // F12: Status derivation
-    // -----------------------------------------------------------------------
-    const newStatus = deriveAlumniStatus(record, player, retired);
-
-    // -----------------------------------------------------------------------
-    // F12: Alumni-to-contact promotion
-    // When a placed youth reaches first team + international call-up (or
-    // wonderkid status), they can become a contact in the scout's network.
-    // -----------------------------------------------------------------------
-    let becameContact = record.becameContact;
-    if (
-      !becameContact &&
-      newStatus === "firstTeam" &&
-      (hasMilestone(record, "internationalCallUp") ||
-        tickMilestones.some((m) => m.type === "internationalCallUp") ||
-        hasMilestone(record, "wonderkidStatus") ||
-        tickMilestones.some((m) => m.type === "wonderkidStatus"))
-    ) {
-      becameContact = true;
-      const clubName = clubs[currentClubId]?.name ?? "Unknown Club";
-      const contact: Contact = {
-        id: `contact_alumni_${record.id}`,
-        name: `${player.firstName} ${player.lastName}`,
-        type: "clubStaff",
-        organization: clubName,
-        relationship: 60,
-        reliability: 55,
-        knownPlayerIds: [],
-        region: player.nationality ?? undefined,
-        country: player.nationality ?? undefined,
-      };
-      contactPromotions.push({ alumniId: record.id, contact });
-
-      newMessages.push({
-        id: makeAlumniMessageId(rng),
-        week,
-        season,
-        type: "event",
-        title: `Alumni Graduated: ${player.firstName} ${player.lastName} is now a Contact`,
-        body: `Your former placement ${player.firstName} ${player.lastName} has become a well-established professional at ${clubName}. They have joined your contact network and can provide insider information on players at their club.`,
-        read: false,
-        actionRequired: false,
-        relatedId: player.id,
-        relatedEntityType: "contact",
-      });
-    }
-
-    // -----------------------------------------------------------------------
-    // Generate inbox messages for every new milestone.
-    // -----------------------------------------------------------------------
-    for (const milestone of tickMilestones) {
-      const milestoneLabel: Record<AlumniMilestoneType, string> = {
-        firstTeamDebut: "made their first team debut",
-        firstGoal: "scored their first professional goal",
-        internationalCallUp: "received an international call-up",
-        wonderkidStatus: "has been labelled a wonderkid",
-        transfer: "has moved to a new club",
-      };
-
-      const message: InboxMessage = {
-        id: makeAlumniMessageId(rng),
-        week,
-        season,
-        type: "event",
-        title: `Alumni Update: ${player.firstName} ${player.lastName} ${milestoneLabel[milestone.type]}`,
-        body: milestone.description,
-        read: false,
-        actionRequired: false,
-        relatedId: player.id,
-        relatedEntityType: "player",
-      };
-
-      newMessages.push(message);
-      newMilestones.push(milestone);
-    }
-
-    // Build the updated record (immutably).
-    const updatedRecord: AlumniRecord = {
-      ...record,
-      currentClubId,
-      milestones: [...record.milestones, ...tickMilestones],
-      careerUpdates: [...record.careerUpdates, ...tickCareerUpdates],
-      currentStatus: newStatus,
-      becameContact,
+    const addMilestone = (type: AlumniMilestoneType, sourceId: string, description: string, occurred = { week, season }) => {
+      if (type !== "transfer" && hasMilestone(record, type)) return;
+      if (record.milestones.some((milestone) => milestone.type === type && milestone.sourceId === sourceId)) return;
+      tickMilestones.push({ type, sourceId, week: occurred.week, season: occurred.season, description, notified: true });
+    };
+    const addUpdate = (type: AlumniCareerUpdateType, sourceId: string, description: string, occurred = { week, season }) => {
+      if (record.careerUpdates.some((update) => update.type === type && update.sourceId === sourceId)) return;
+      tickCareerUpdates.push({ type, sourceId, week: occurred.week, season: occurred.season, description });
     };
 
-    updatedAlumni.push(updatedRecord);
-  }
+    for (const movement of evidence.movements.filter((event) => event.playerId === player.id
+      && event.season === season && event.week === week && afterPlacement(event))) {
+      const destination = movement.toClubId ? clubs[movement.toClubId]?.name ?? "their new club" : undefined;
+      if ((movement.type === "permanentTransfer" || movement.type === "loanBuyOption") && destination) {
+        addMilestone("transfer", movement.id, `${name} has completed a permanent move to ${destination}.`);
+        addUpdate("transfer", movement.id, `Completed a permanent move to ${destination}.`);
+      } else if (movement.type === "release") {
+        addUpdate("released", movement.id, `Released by ${clubs[movement.fromClubId ?? ""]?.name ?? "their club"}.`);
+      } else if (movement.type === "loanStart" && destination) {
+        addUpdate("loanMove", movement.id, `Joined ${destination} on loan.`);
+      } else if ((movement.type === "loanReturn" || movement.type === "loanRecall") && destination) {
+        addUpdate("loanMove", movement.id, `Returned from loan to ${destination}.`);
+      } else if (movement.type === "freeAgentSigning" && destination) {
+        addUpdate("transfer", movement.id, `Signed for ${destination} as a free agent.`);
+      }
+    }
 
+    const currentAppearance = weekAppearances[0];
+    const firstAppearance = history[0];
+    if (currentAppearance && firstAppearance && !hasMilestone(record, "firstTeamDebut")) {
+      const occurred = fixtureDate(firstAppearance.fixture);
+      addMilestone("firstTeamDebut", firstAppearance.fixture.id,
+        `${name}'s first recorded senior appearance was in Season ${occurred.season}, Week ${occurred.week}.`, occurred);
+      addUpdate("debut", firstAppearance.fixture.id, "First recorded senior appearance.", occurred);
+    }
+    const firstGoal = history.find(({ rating }) => (rating.stats.goals ?? 0) > 0);
+    if (currentAppearance && firstGoal && !hasMilestone(record, "firstGoal")) {
+      const occurred = fixtureDate(firstGoal.fixture);
+      addMilestone("firstGoal", firstGoal.fixture.id,
+        `${name}'s first recorded professional goal was in Season ${occurred.season}, Week ${occurred.week}.`, occurred);
+      addUpdate("firstGoal", firstGoal.fixture.id, "First recorded professional goal.", occurred);
+    }
+
+    // Public performance recognition, not a revelation of hidden potential.
+    const performance = summarizeCanonicalAppearances(appearances);
+    const standoutYoungProfessional = player.age <= 21
+      && (performance?.appearances ?? 0) >= 6 && (performance?.averageRating ?? 0) >= 7.5;
+    if (currentAppearance && standoutYoungProfessional && !hasMilestone(record, "wonderkidStatus")) {
+      addMilestone("wonderkidStatus", currentAppearance.fixture.id,
+        `${name} has become a standout young professional: ${performance!.appearances} recorded senior appearances at a ${performance!.averageRating.toFixed(1)} average rating this season.`);
+    }
+
+    const injury = player.currentInjury;
+    if (player.injured && injury && !hasCareerUpdateInSeason(record, "injury", season)) {
+      addUpdate("injury", injury.id, `Recovering from a recorded injury${player.injuryWeeksRemaining > 0 ? `; ${player.injuryWeeksRemaining} weeks remain` : ""}.`);
+    }
+    const recordedSeniorAppearance = hasRecordedSeniorAppearance(record) || appearances.length > 0;
+    const newStatus = deriveAlumniStatus(player, retiredPlayerIds, recordedSeniorAppearance);
+    let becameContact = record.becameContact;
+    if (!becameContact && newStatus === "firstTeam" && standoutYoungProfessional) {
+      becameContact = true;
+      const clubName = clubs[player.clubId]?.name ?? "their club";
+      const contact: Contact = { id: `contact_alumni_${record.id}`, name, type: "clubStaff",
+        organization: clubName, relationship: 60, reliability: 55, knownPlayerIds: [],
+        region: player.nationality, country: player.nationality };
+      contactPromotions.push({ alumniId: record.id, contact });
+      newMessages.push({ id: `alumni-contact-${record.id}`, week, season, type: "event",
+        title: `Alumni Graduated: ${name} is now a Contact`,
+        body: `${name}'s recorded professional progress at ${clubName} has opened a new relationship in your contact network.`,
+        read: false, actionRequired: false, relatedId: contact.id, relatedEntityType: "contact" });
+    }
+
+    for (const milestone of tickMilestones) {
+      newMessages.push({ id: `alumni-${record.id}-${milestone.type}-${milestone.sourceId}`, week, season,
+        type: "event", title: `Alumni Update: ${name}`, body: milestone.description,
+        read: false, actionRequired: false, relatedId: player.id, relatedEntityType: "player" });
+      newMilestones.push(milestone);
+    }
+    for (const update of tickCareerUpdates) {
+      if (tickMilestones.some((milestone) => milestone.sourceId === update.sourceId)) continue;
+      newMessages.push({ id: `alumni-${record.id}-${update.type}-${update.sourceId}`, week, season,
+        type: "event", title: `Alumni Career Update: ${name}`, body: update.description,
+        read: false, actionRequired: false, relatedId: player.id, relatedEntityType: "player" });
+    }
+    updatedAlumni.push({ ...record, currentClubId: player.clubId,
+      milestones: [...record.milestones, ...tickMilestones], careerUpdates: [...record.careerUpdates, ...tickCareerUpdates],
+      currentStatus: newStatus, becameContact });
+  }
   return { updatedAlumni, newMilestones, newMessages, contactPromotions };
 }
 
@@ -602,7 +339,7 @@ export function generateAlumniSeasonSummary(
   const seasonTotals = getSeasonPlayerTotals(season, fixtures, matchRatings).get(player.id);
   if (!seasonTotals || seasonTotals.appearances === 0) return record;
 
-  const avgRating = seasonTotals.ratingTotal / seasonTotals.appearances;
+  const avgRating = seasonTotals.averageRating;
 
   const stats: AlumniSeasonStats = {
     season,
@@ -631,16 +368,16 @@ export function generateAlumniSeasonSummary(
 /**
  * F12: Check if an alumni is eligible for contact promotion.
  *
- * Criteria: first team status + either international call-up or wonderkid
- * status milestone. Must not have already been promoted.
+ * Criteria: recorded senior participation and a sourced recognition milestone.
+ * Must not have already been promoted.
  */
 export function isEligibleForContactPromotion(record: AlumniRecord): boolean {
   if (record.becameContact) return false;
-  if (record.currentStatus !== "firstTeam") return false;
+  if (record.currentStatus !== "firstTeam" || !hasRecordedSeniorAppearance(record)) return false;
 
   return (
     record.milestones.some(
-      (m) => m.type === "internationalCallUp" || m.type === "wonderkidStatus",
+      (m) => Boolean(m.sourceId) && (m.type === "internationalCallUp" || m.type === "wonderkidStatus"),
     )
   );
 }
@@ -648,8 +385,8 @@ export function isEligibleForContactPromotion(record: AlumniRecord): boolean {
 /**
  * F12: Compute placement success rate for all alumni.
  *
- * Success is defined as reaching firstTeam status or having achieved
- * the firstTeamDebut milestone.
+ * Success requires recorded senior participation. Legacy unsupported narrative
+ * is kept in history but cannot establish a verified breakthrough.
  */
 export function calculatePlacementSuccessRate(
   alumniRecords: AlumniRecord[],
@@ -657,8 +394,7 @@ export function calculatePlacementSuccessRate(
   if (alumniRecords.length === 0) return 0;
   const successes = alumniRecords.filter(
     (r) =>
-      r.currentStatus === "firstTeam" ||
-      r.milestones.some((m) => m.type === "firstTeamDebut"),
+      hasRecordedSeniorAppearance(r),
   ).length;
   return Math.round((successes / alumniRecords.length) * 100);
 }
@@ -675,16 +411,14 @@ export function calculatePlacementSuccessRate(
 export function calculateLegacyScore(alumniRecords: AlumniRecord[]): LegacyScore {
   const youthFound = alumniRecords.length;
 
-  const firstTeamBreakthroughs = alumniRecords.filter((r) =>
-    r.milestones.some((m) => m.type === "firstTeamDebut"),
-  ).length;
+  const firstTeamBreakthroughs = alumniRecords.filter(hasRecordedSeniorAppearance).length;
 
   const internationalCapsFromFinds = alumniRecords.filter((r) =>
-    r.milestones.some((m) => m.type === "internationalCallUp"),
+    r.milestones.some((m) => m.type === "internationalCallUp" && Boolean(m.sourceId)),
   ).length;
 
   const wonderkidCount = alumniRecords.filter((r) =>
-    r.milestones.some((m) => m.type === "wonderkidStatus"),
+    r.milestones.some((m) => m.type === "wonderkidStatus" && Boolean(m.sourceId)),
   ).length;
 
   const totalScore =
@@ -710,6 +444,18 @@ export function calculateLegacyScore(alumniRecords: AlumniRecord[]): LegacyScore
   };
 }
 
+/** Refresh derived alumni outcomes without resetting extended career history. */
+export function projectAlumniLegacyScore(stored: LegacyScore, alumniRecords?: AlumniRecord[]): LegacyScore {
+  // Unavailable legacy evidence cannot replace persisted career credit. A known
+  // empty collection still derives zero through the normal projection below.
+  if (alumniRecords === undefined) return { ...stored };
+  const alumni = calculateLegacyScore(alumniRecords);
+  return { ...stored, youthFound: alumni.youthFound,
+    firstTeamBreakthroughs: alumni.firstTeamBreakthroughs,
+    internationalCapsFromFinds: alumni.internationalCapsFromFinds,
+    totalScore: alumni.totalScore };
+}
+
 /**
  * Return the reputation bonus the scout earns when a placed alumni hits a
  * given milestone type.
@@ -731,7 +477,7 @@ export function calculateAlumniReputationBonus(milestoneType: AlumniMilestoneTyp
  * activeAlumni counts records whose player ID is still present in the players
  * map (i.e. has not retired / been removed).
  * highestCA is the maximum currentAbility across active alumni (0 if none).
- * milestoneCount is the sum of all milestones across every record.
+ * milestoneCount is the number of sourced milestones across every record.
  */
 export function getAlumniSummary(
   alumniRecords: AlumniRecord[],
@@ -758,7 +504,7 @@ export function getAlumniSummary(
       }
     }
 
-    milestoneCount += record.milestones.length;
+    milestoneCount += record.milestones.filter(isSourcedAlumniEvent).length;
   }
 
   return { totalPlaced, activeAlumni, highestCA, milestoneCount };

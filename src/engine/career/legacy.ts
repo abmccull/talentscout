@@ -10,6 +10,7 @@
  *  - Determines scenario unlocks based on cumulative career history
  */
 
+import { projectAlumniLegacyScore } from "../youth/alumni";
 import type {
   GameState,
   LegacyProfile,
@@ -314,7 +315,8 @@ function areCompletedCareersEquivalent(
  * Pure function — does not persist anything.
  */
 export function generateCompletedCareer(state: GameState): CompletedCareer {
-  const { scout, legacyScore, discoveryRecords } = state;
+  const { scout, discoveryRecords } = state;
+  const legacyScore = projectAlumniLegacyScore(state.legacyScore, state.alumniRecords);
   const { signature, finalChapter } = deriveCareerSignature(state);
 
   const totalReports =

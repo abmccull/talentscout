@@ -36,7 +36,21 @@ export interface WeeklyWorkerMetrics {
   }>;
 }
 
-export interface WeeklyWorkerTelemetry extends WeeklyWorkerMetrics {
+/** Profiling only: these values never affect transaction selection or GameState. */
+export interface WeeklyWorkerStageTimings {
+  wireSyncMs?: number;
+  compactionMs?: number;
+  rendererRequestPreparationMs?: number;
+  rendererPostMessageMs?: number;
+  rendererMaterializationMs?: number;
+  /** Constructor to ready-message receipt; includes renderer event-queue delay. */
+  workerStartupObservedMs?: number;
+  /** Request post to ready-message receipt; overlaps postMessage and other work. */
+  workerReadinessWaitObservedMs?: number;
+  workerReadyAtRequest?: boolean;
+}
+
+export interface WeeklyWorkerTelemetry extends WeeklyWorkerMetrics, WeeklyWorkerStageTimings {
   route: "worker" | "main-thread-fallback";
   fallbackReason?: Exclude<
     WeeklyTransactionFallbackReason,

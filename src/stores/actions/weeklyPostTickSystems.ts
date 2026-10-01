@@ -1,5 +1,5 @@
 import type { GameState, InboxMessage } from "@/engine/core/types";
-import { getSeasonLength, type TickResult } from "@/engine/core/gameLoop";
+import { getSeasonLength } from "@/engine/core/gameLoop";
 import { isFinancialPeriodClose } from "@/engine/core/annualization";
 import { createRNG } from "@/engine/rng";
 import { processMonthlySnapshot } from "@/engine/career";
@@ -26,7 +26,6 @@ import { projectWeeklyProspectFollowUps } from "@/engine/youth/prospectFollowUps
 export interface WeeklyPostTickSystemsInput {
   beforeWeek: GameState;
   state: GameState;
-  alumniMilestones: TickResult["alumniMilestones"];
 }
 
 /** Build post-tick feedback and apply weekly career-health consequences. */
@@ -44,20 +43,6 @@ export function processWeeklyPostTickSystems(
         ...prospectFollowUps.map((beat) => beat.message),
       ],
     };
-  }
-
-  if (input.alumniMilestones && input.alumniMilestones.length > 0) {
-    const messages: InboxMessage[] = input.alumniMilestones.map((milestone, index) => ({
-      id: `msg_alumni_${milestone.type}_s${state.currentSeason}w${state.currentWeek}_${index}`,
-      week: state.currentWeek,
-      season: state.currentSeason,
-      type: "event",
-      title: `Alumni Milestone: ${milestone.type.replace(/([A-Z])/g, " $1").trim()}`,
-      body: milestone.description,
-      read: false,
-      actionRequired: false,
-    }));
-    state = { ...state, inbox: [...state.inbox, ...messages] };
   }
 
   const decayWarnings: InboxMessage[] = [];

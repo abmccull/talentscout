@@ -1,4 +1,5 @@
 import type { GameState, InboxMessage, NarrativeEvent } from "@/engine/core/types";
+import { projectAlumniLegacyScore } from "@/engine/youth/alumni";
 import { getSeasonLength } from "@/engine/core/gameLoop";
 import {
   compactCompletedSeasonHistory,
@@ -98,7 +99,7 @@ function updateLegacyHighWater(state: GameState): GameState {
   return {
     ...state,
     legacyScore: {
-      ...state.legacyScore,
+      ...projectAlumniLegacyScore(state.legacyScore, state.alumniRecords),
       careerHighTier: Math.max(state.legacyScore.careerHighTier, state.scout.careerTier),
       totalSeasons: Math.max(
         state.legacyScore.totalSeasons,

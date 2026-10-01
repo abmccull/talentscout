@@ -1,3 +1,4 @@
+import { describeAlumniHistory } from "./alumniEvidence";
 import type { GameState } from "@/engine/core/types";
 import { deriveYouthFileMoney } from "./youthDeskStakes";
 import { listYouthCases } from "./youthCaseList";
@@ -113,7 +114,7 @@ export function deriveYouthSeasonCaseReview(
     if (hits.length === 0) return [];
     const latest = [...hits].sort((left, right) => left.week - right.week).at(-1);
     if (!latest) return [];
-    return [`${playerName(state, record.playerId)} — ${sanitizeAlumniDescription(latest.description)}`];
+    return [`${playerName(state, record.playerId)} — ${describeAlumniHistory({ ...latest, description: sanitizeAlumniDescription(latest.description) })}`];
   });
   const alumniLine = alumniThisSeason.length > 0
     ? alumniThisSeason.slice(0, 4).join(" ")

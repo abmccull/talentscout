@@ -1,4 +1,4 @@
-import type { PlayerDevelopmentHistoryEntry } from "../world/developmentEnvironment";
+import type { PlayerDevelopmentHistoryEntry } from "./developmentHistoryTypes";
 
 // Persisted ordinal tables: append new values; never reorder existing values.
 const EVENTS = ["routine-growth", "breakthrough", "decline", "injury-setback"] as const;

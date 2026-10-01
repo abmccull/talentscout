@@ -1541,7 +1541,13 @@ export function ObservationScreen() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <GameLayout chrome="watch">
-      <div className="relative flex min-h-dvh min-w-0 flex-col overflow-x-hidden pb-6 md:h-full md:min-h-0 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden">
+      <div className={`relative flex min-w-0 flex-col overflow-x-hidden pb-6 ${
+        isLiveWatch
+          // The Watch header already occupies 3rem. Live content must grow
+          // through halftime and dense fields instead of overflowing a fixed stage.
+          ? "min-h-[calc(100dvh-3rem)]"
+          : "min-h-dvh md:h-full md:min-h-0 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden"
+      }`}>
         <ScreenBackground
           src={isOpeningWatch
             ? "/images/backgrounds/activities/school-match.png"
@@ -1610,16 +1616,16 @@ export function ObservationScreen() {
 
           {state === "active" && currentPhase && (
             <div
-              className={`flex min-h-0 min-w-0 flex-1 overflow-x-hidden ${
+              className={`flex min-h-0 min-w-0 overflow-x-hidden ${
                 isLiveWatch
-                  ? "flex-col pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
-                  : "flex-col lg:flex-row lg:overflow-hidden"
+                  ? "flex-none flex-col pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
+                  : "flex-1 flex-col lg:flex-row lg:overflow-hidden"
               }`}
               data-testid="active-observation-layout"
             >
 
               {/* ── Stage: stadium fills the remaining watch room ──────── */}
-              <div className={`flex min-w-0 flex-col ${isLiveWatch ? "min-h-0 flex-1" : "flex-none lg:flex-1 lg:self-stretch lg:overflow-hidden"}`}>
+              <div className={`flex min-w-0 flex-col ${isLiveWatch ? "flex-none" : "flex-none lg:flex-1 lg:self-stretch lg:overflow-hidden"}`}>
 
                 {/* Phase description banner */}
                 <div className="shrink-0 border-b border-[#27272a] bg-[#0f0f0f] px-4 py-2">
@@ -1662,7 +1668,7 @@ export function ObservationScreen() {
                 )}
 
                 {/* Phase content — live watch is a stadium, not a two-column desk */}
-                <div className={`min-h-0 ${isLiveWatch ? "relative flex flex-1 flex-col" : "flex-none p-3 sm:p-4 lg:flex-1 lg:overflow-y-auto"}`}>
+                <div className={isLiveWatch ? "relative flex flex-none flex-col" : "min-h-0 flex-none p-3 sm:p-4 lg:flex-1 lg:overflow-y-auto"}>
                   {isLiveWatch ? (
                     <>
                       <ObservationPitch
@@ -1672,7 +1678,7 @@ export function ObservationScreen() {
                         onSelectPlayer={handlePitchPlayerSelect}
                       />
                       <section
-                        className="notebook-paper z-20 max-h-[32vh] overflow-y-auto border-t border-white/10 p-3 sm:p-4"
+                        className="notebook-paper z-20 shrink-0 max-h-[32vh] overflow-y-auto border-t border-white/10 p-3 sm:p-4"
                         aria-labelledby="observation-evidence-heading"
                         data-tutorial-id="observation-evidence-feed"
                       >
@@ -1807,7 +1813,7 @@ export function ObservationScreen() {
               </aside>
 
               {/* Focus sheet: live watch uses it at every width, including the opening match. */}
-              <section className={`border-t border-[#27272a] bg-[#0c0c0c] ${isLiveWatch ? "" : "lg:hidden"}`}>
+              <section className={`border-t border-[#27272a] bg-[#0c0c0c] ${isLiveWatch ? "shrink-0" : "lg:hidden"}`}>
                 <button
                   ref={mobileFocusToggleRef}
                   type="button"

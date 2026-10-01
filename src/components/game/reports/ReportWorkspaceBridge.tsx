@@ -180,11 +180,25 @@ export function ReportWorkspaceBridge({
             </>
           ) : (
             <div className="mt-5 rounded-xl border border-dashed border-emerald-400/25 bg-[linear-gradient(180deg,rgba(8,11,15,0.94),rgba(14,18,23,0.98))] p-5">
+              <div className="mb-4">
+                <Button
+                  type="button"
+                  className="min-h-11 bg-emerald-400 text-zinc-950 hover:bg-emerald-300 motion-reduce:transition-none"
+                  onClick={() => evidenceReview ? onAction(evidenceReview.action) : onPlanScouting()}
+                >
+                  {evidenceReview ? evidenceReview.action.label : "Plan the first live look"}
+                  <ArrowRight size={16} className="ml-2" aria-hidden="true" />
+                </Button>
+              </div>
               <p className="text-sm leading-6 text-zinc-300">
                 The first professional artifact appears once a live look becomes a filed recommendation.
                 Start with the question that matters, then decide when the evidence is strong enough to put your name behind it.
               </p>
-              <div className="relative mt-4 overflow-hidden rounded-xl border border-white/10 bg-[repeating-linear-gradient(180deg,rgba(255,255,255,0.025)_0,rgba(255,255,255,0.025)_1px,transparent_1px,transparent_2.4rem)] p-4">
+              <details className="mt-4">
+                <summary className="min-h-8 cursor-pointer text-meta font-semibold text-zinc-200">
+                  Opening question and report guidance
+                </summary>
+              <div className="relative mt-3 overflow-hidden rounded-xl border border-white/10 bg-[repeating-linear-gradient(180deg,rgba(255,255,255,0.025)_0,rgba(255,255,255,0.025)_1px,transparent_1px,transparent_2.4rem)] p-4">
                 <div className="pointer-events-none absolute inset-y-0 left-5 w-px bg-emerald-400/15" aria-hidden="true" />
                 <div className="relative pl-5">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
@@ -205,16 +219,7 @@ export function ReportWorkspaceBridge({
                   </div>
                 </div>
               </div>
-              <div className="mt-4">
-                <Button
-                  type="button"
-                  className="min-h-11 bg-emerald-400 text-zinc-950 hover:bg-emerald-300 motion-reduce:transition-none"
-                  onClick={() => evidenceReview ? onAction(evidenceReview.action) : onPlanScouting()}
-                >
-                  {evidenceReview ? evidenceReview.action.label : "Plan the first live look"}
-                  <ArrowRight size={16} className="ml-2" aria-hidden="true" />
-                </Button>
-              </div>
+              </details>
             </div>
           )}
         </article>

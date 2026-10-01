@@ -278,6 +278,7 @@ describe("youth case loop", () => {
         currentClubId: "club-1",
         milestones: [{
           type: "firstTeamDebut",
+          sourceId: "fixture-s2-w20-p-alum-debut",
           week: 20,
           season: 2,
           description: "Debuted for the first team.",

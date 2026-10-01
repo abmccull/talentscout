@@ -57,7 +57,7 @@ import {
   type SaveUnavailableNotice,
 } from "@/lib/db";
 import type { GameState } from "@/engine/core/types";
-import { captureException } from "@/lib/sentry";
+import { captureException } from "@/lib/deferredErrorReporting";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
 import { SaveMigrationError } from "@/lib/saveEnvelope";
 import { createSaveEnvelope } from "@/lib/saveEnvelope";

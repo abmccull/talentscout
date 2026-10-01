@@ -1,3 +1,4 @@
+import { isSourcedAlumniEvent } from "../youth/alumniEvidence";
 import type { AlumniRecord, GameState, RecommendationReview } from "@/engine/core/types";
 import type { DashboardCareerThread } from "./types";
 import { buildDashboardActiveFrontThreads } from "./activeFronts";
@@ -10,8 +11,8 @@ function playerName(state: GameState, playerId: string): string {
 
 function latestAlumniThread(state: GameState, record: AlumniRecord): DashboardCareerThread | null {
   const updates = [
-    ...record.milestones.map((entry) => ({ ...entry, id: `${record.id}:milestone:${entry.type}:${entry.season}:${entry.week}` })),
-    ...record.careerUpdates.map((entry) => ({ ...entry, id: `${record.id}:update:${entry.type}:${entry.season}:${entry.week}` })),
+    ...record.milestones.filter(isSourcedAlumniEvent).map((entry) => ({ ...entry, id: `${record.id}:milestone:${entry.type}:${entry.season}:${entry.week}` })),
+    ...record.careerUpdates.filter(isSourcedAlumniEvent).map((entry) => ({ ...entry, id: `${record.id}:update:${entry.type}:${entry.season}:${entry.week}` })),
   ].sort((left, right) =>
     right.season - left.season || right.week - left.week || left.id.localeCompare(right.id),
   );

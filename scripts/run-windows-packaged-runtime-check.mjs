@@ -20,6 +20,7 @@ import {
   cp,
   mkdir,
   readFile,
+  realpath,
   readdir,
   rm,
   stat,
@@ -33,12 +34,12 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const ROOT = process.cwd();
+const rawArgs = process.argv.slice(2);
 const DIST_DIR = path.resolve(ROOT, "dist");
 const APP_DIR = path.resolve(DIST_DIR, "win-unpacked");
 const APP_EXE = path.resolve(APP_DIR, "TalentScout.exe");
 const APP_ASAR = path.resolve(APP_DIR, "resources", "app.asar");
-const INSTALLER = path.resolve(DIST_DIR, "TalentScout-Setup-1.0.0.exe");
-const rawArgs = process.argv.slice(2);
+const INSTALLER = resolveInstallerPath(ROOT, rawArgs);
 const args = new Set(rawArgs);
 const keepProfile = args.has("--keep-profile");
 const strict = args.has("--strict") || process.env.npm_config_strict === "true";
@@ -51,6 +52,29 @@ const manifestPath = path.resolve(
   manifestArgument?.slice("--manifest=".length)
     ?? "artifacts/release/candidate-package-manifest.json",
 );
+
+function resolveInstallerPath(root, argv) {
+  const selections = argv.filter((argument) => argument === "--installer"
+    || argument.startsWith("--installer="));
+  if (selections.length > 1) throw new Error("Provide at most one --installer option");
+  const configured = selections.length === 1
+    ? selections[0].slice("--installer=".length)
+    : "dist/TalentScout-Setup-1.0.0.exe";
+  if (!configured || path.isAbsolute(configured) || path.win32.isAbsolute(configured)
+    || path.posix.isAbsolute(configured)) {
+    throw new Error("Installer must be a nonempty repository-relative path");
+  }
+  const installer = path.resolve(root, configured);
+  const relative = path.relative(path.resolve(root), installer);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relative)) {
+    throw new Error("Installer path escapes the repository");
+  }
+  if (path.extname(installer).toLowerCase() !== ".exe") {
+    throw new Error("Installer path must refer to an .exe file");
+  }
+  return installer;
+}
 
 function runGit(argsList) {
   const result = spawnSync("git", argsList, {
@@ -189,6 +213,11 @@ async function artifactMetadata(kind, filePath) {
 async function assertRequiredFiles() {
   for (const filePath of [APP_EXE, APP_ASAR, INSTALLER]) {
     await access(filePath, fsConstants.R_OK);
+  }
+  const actualRoot = await realpath(ROOT);
+  const actualInstaller = await realpath(INSTALLER);
+  if (!isPathInside(actualRoot, actualInstaller)) {
+    throw new Error("Installer resolves outside the repository");
   }
 }
 

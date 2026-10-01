@@ -24,6 +24,14 @@ const coreFiles = [
   "e2e/regression/weekly-worker-resilience.spec.ts",
   "e2e/regression/week-simulation-interactivity.spec.ts",
   "e2e/regression/quick-interaction-integrity.spec.ts",
+  "e2e/regression/weekly-worker-lifecycle.spec.ts",
+  "e2e/regression/canonical-career-facts.spec.ts",
+  "e2e/regression/loan-outcome-truth.spec.ts",
+  "e2e/regression/season-awards-truth.spec.ts",
+  "e2e/regression/screen-error-recovery.spec.ts",
+  "e2e/regression/observation-pitch-hit-targets.spec.ts",
+  "e2e/regression/observation-pitch-keyboard-reveal.spec.ts",
+  "e2e/regression/observation-halftime-controls.spec.ts",
 ];
 
 const groups = [
