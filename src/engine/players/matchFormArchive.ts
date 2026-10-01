@@ -36,7 +36,12 @@ export function compactMatchFormEntry(entry: MatchFormEntry): MatchFormEntry {
     const fixtureRef = compactFixtureRef(entry[0], entry[1], entry[2]);
     return fixtureRef === entry[0] ? entry : [fixtureRef, entry[1], entry[2], entry[3]];
   }
-  // Preserve custom extension fields rather than silently losing mod data.
-  if (Object.keys(entry).some(key => !["fixtureId", "week", "season", "rating"].includes(key))) return entry;
+  // Only complete, valid known-field objects may become recognized tuples.
+  // Preserve incomplete legacy rows, explicit nulls and custom fields as objects.
+  const keys = ["fixtureId", "week", "season", "rating"] as const;
+  if (Object.keys(entry).length !== keys.length
+    || Object.keys(entry).some(key => !keys.includes(key as typeof keys[number]))
+    || typeof entry.fixtureId !== "string"
+    || ![entry.week, entry.season, entry.rating].every(value => typeof value === "number" && Number.isFinite(value))) return entry;
   return [compactFixtureRef(entry.fixtureId, entry.week, entry.season), entry.week, entry.season, entry.rating];
 }

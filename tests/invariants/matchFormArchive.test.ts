@@ -103,3 +103,65 @@ it("reduces a cohort of existing scheduled form tuples without discarding a matc
   expect(restored.map(expandMatchFormEntry)).toEqual(oldRows.map(expandMatchFormEntry));
   for (const row of compacted) expect(compactMatchFormEntry(row)).toBe(row);
 });
+const LEGACY_FORM_FIELDS = ["fixtureId", "week", "season", "rating"] as const;
+const COMPLETE_LEGACY_FORM = {
+  fixtureId: "fixture-england-premier-s19-w04-0038", week: 4, season: 19, rating: 7.123456789012345,
+};
+
+function legacyForm(value: Record<string, unknown>): MatchFormEntry {
+  // Imported legacy/mod data passes the root save validator before deep codecs.
+  return value as unknown as MatchFormEntry;
+}
+
+function persistedForm(value: MatchFormEntry): MatchFormEntry {
+  return JSON.parse(JSON.stringify(value)) as MatchFormEntry;
+}
+
+it.each(LEGACY_FORM_FIELDS)("keeps an object with missing %s instead of introducing a null tuple slot", (field) => {
+  const row: Record<string, unknown> = { ...COMPLETE_LEGACY_FORM };
+  delete row[field];
+  const original = JSON.stringify(row);
+  const compacted = compactMatchFormEntry(legacyForm(row));
+  expect(compacted).toBe(row);
+  expect(expandMatchFormEntry(persistedForm(compacted))).toEqual(JSON.parse(original));
+  expect(Object.hasOwn(expandMatchFormEntry(persistedForm(compacted)), field)).toBe(false);
+  expect(JSON.stringify(row)).toBe(original);
+});
+
+it.each(LEGACY_FORM_FIELDS)("keeps explicit undefined %s in object form with existing JSON omission semantics", (field) => {
+  const row = { ...COMPLETE_LEGACY_FORM, [field]: undefined };
+  const compacted = compactMatchFormEntry(legacyForm(row));
+  expect(compacted).toBe(row);
+  expect(expandMatchFormEntry(persistedForm(compacted))).toEqual(JSON.parse(JSON.stringify(row)));
+  expect(Object.hasOwn(expandMatchFormEntry(persistedForm(compacted)), field)).toBe(false);
+});
+
+it.each(LEGACY_FORM_FIELDS)("preserves explicit null %s as a legacy object fact", (field) => {
+  const row = { ...COMPLETE_LEGACY_FORM, [field]: null };
+  const compacted = compactMatchFormEntry(legacyForm(row));
+  expect(compacted).toBe(row);
+  const expanded = expandMatchFormEntry(persistedForm(compacted));
+  expect(expanded).toEqual(row);
+  expect(Object.hasOwn(expanded, field)).toBe(true);
+});
+
+it.each([
+  ["fixtureId", 42], ["week", "4"], ["season", "19"], ["rating", "7.25"],
+  ["week", Number.NaN], ["season", Number.POSITIVE_INFINITY], ["rating", Number.NEGATIVE_INFINITY],
+] as const)("does not reinterpret invalid legacy %s values as a recognized compact row", (field, value) => {
+  const row = { ...COMPLETE_LEGACY_FORM, [field]: value };
+  const compacted = compactMatchFormEntry(legacyForm(row));
+  expect(compacted).toBe(row);
+  expect(expandMatchFormEntry(persistedForm(compacted))).toEqual(JSON.parse(JSON.stringify(row)));
+});
+
+it("retains zero facts and exact precision while leaving existing null/extra-column tuples unchanged", () => {
+  const zero = { fixtureId: "fixture-england-premier-s0-w00-0000", week: 0, season: 0, rating: 0 };
+  expect(expandMatchFormEntry(persistedForm(compactMatchFormEntry(zero)))).toEqual(zero);
+  const legacyNull = ["custom-fixture", 4, 19, null] as unknown as MatchFormEntry;
+  const legacyExtra = ["fixture-england-premier-s19-w04-0038", 4, 19, 7.123456789012345, { provider: "legacy" }] as unknown as MatchFormEntry;
+  for (const row of [legacyNull, legacyExtra]) {
+    expect(compactMatchFormEntry(row)).toBe(row);
+    expect(JSON.stringify(compactMatchFormEntry(row))).toBe(JSON.stringify(row));
+  }
+});

@@ -70,7 +70,8 @@ function repairAndPruneWeeklyInbox(state: GameState): GameState {
   if (nextState.inbox.length > 200) {
     const priority = nextState.inbox.filter((message) => message.actionRequired && !message.read);
     const rest = nextState.inbox.filter((message) => !(message.actionRequired && !message.read));
-    const trimmedRest = rest.slice(-Math.max(0, 200 - priority.length));
+    const ordinaryAllocation = Math.max(0, 200 - priority.length);
+    const trimmedRest = ordinaryAllocation === 0 ? [] : rest.slice(-ordinaryAllocation);
     nextState = { ...nextState, inbox: [...trimmedRest, ...priority] };
   }
   return nextState;

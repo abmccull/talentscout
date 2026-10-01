@@ -2,6 +2,7 @@ import type {
   ClubDecision,
   GameState,
   InboxMessage,
+  ProspectFollowUpStage,
   ScoutReport,
   ScoutingCase,
 } from "@/engine/core/types";
@@ -17,7 +18,13 @@ import {
   type ScoutingCaseDepthIndex,
 } from "@/engine/reports/scoutingCases";
 
-export type ProspectFollowUpStage = "early-check" | "decision-point" | "accountability";
+import {
+  prospectFollowUpMessageId,
+  reconcileProspectFollowUpDeliveries,
+  recordProspectFollowUpDelivery,
+} from "./prospectFollowUpDelivery";
+
+export type { ProspectFollowUpStage } from "@/engine/core/types";
 export type ProspectFollowUpPathway = "placed" | "shortlisted";
 
 export interface ProspectFollowUpBeat {
@@ -318,7 +325,7 @@ function makeBeat(
     )?.player;
   if (!player) return undefined;
 
-  const id = `prospect-follow-up:${scoutingCase.id}:${anchor.sourceId}:${stage}`;
+  const id = prospectFollowUpMessageId(scoutingCase.id, anchor.sourceId, stage);
   const templates = templatesFor(anchor.pathway, stage);
   const rng = createNamedRNG(
     state.runManifest.rootSeed,
@@ -346,7 +353,7 @@ function makeBeat(
       ? `${playerName}: The next pathway decision`
       : `${playerName}: Review the original call`;
   const context = anchor.pathway === "placed"
-    ? `${clubName ?? "The academy"} has supplied its first real post-placement update.`
+    ? `${clubName ?? "The academy"} has supplied ${stage === "early-check" ? "its first real" : "a further"} post-placement update.`
     : `${clubName ?? "The interested club"} has kept the recommendation active.`;
   const body = [
     context,
@@ -389,19 +396,23 @@ function makeBeat(
   };
 }
 
-/**
- * Project the next deterministic, save-safe follow-up for every live youth
- * recommendation. Existing inbox ids are the persistence authority, so a
- * reload or repeated weekly projection cannot duplicate a beat.
- */
-export function projectWeeklyProspectFollowUps(state: GameState): ProspectFollowUpBeat[] {
-  if (state.scout.primarySpecialization !== "youth") return [];
+interface FollowUpPlan {
+  beats: ProspectFollowUpBeat[];
+  scoutingCases: GameState["scoutingCases"];
+}
+
+/** Build one pure plan; committing publishes both its messages and delivery proof. */
+function buildWeeklyProspectFollowUpPlan(state: GameState): FollowUpPlan {
+  if (state.scout.primarySpecialization !== "youth") {
+    return { beats: [], scoutingCases: state.scoutingCases };
+  }
   const existingIds = new Set((state.inbox ?? []).map((message) => message.id));
   const beats: ProspectFollowUpBeat[] = [];
   const index = buildFollowUpProjectionIndex(state);
+  let scoutingCases = reconcileProspectFollowUpDeliveries(state, index.caseDepth);
 
-  for (const scoutingCase of Object.values(state.scoutingCases ?? {})
-    .sort((left, right) => left.id.localeCompare(right.id))) {
+  for (const [caseKey, scoutingCase] of Object.entries(scoutingCases)
+    .sort(([, left], [, right]) => left.id.localeCompare(right.id))) {
     const anchor = resolveAnchor(state, scoutingCase, index);
     if (!anchor) continue;
     const elapsed = gameWeeksBetweenWithCalendar(
@@ -415,12 +426,41 @@ export function projectWeeklyProspectFollowUps(state: GameState): ProspectFollow
     // resumes after a gap. Normal weekly play receives weeks 2, 6, and 18.
     for (const schedule of FOLLOW_UP_STAGES) {
       if (elapsed < schedule.dueAfterWeeks) continue;
-      const id = `prospect-follow-up:${scoutingCase.id}:${anchor.sourceId}:${schedule.stage}`;
-      if (existingIds.has(id)) continue;
+      const id = prospectFollowUpMessageId(scoutingCase.id, anchor.sourceId, schedule.stage);
+      if (existingIds.has(id) || scoutingCase.prospectFollowUpDeliveries?.some(delivery =>
+        delivery.sourceId === anchor.sourceId && delivery.stage === schedule.stage,
+      )) continue;
       const beat = makeBeat(state, scoutingCase, anchor, schedule.stage, index);
-      if (beat) beats.push(beat);
+      if (beat) {
+        beats.push(beat);
+        if (scoutingCases === state.scoutingCases) scoutingCases = { ...scoutingCases };
+        scoutingCases[caseKey] = recordProspectFollowUpDelivery(scoutingCase, {
+          sourceId: anchor.sourceId,
+          stage: schedule.stage,
+          deliveredWeek: state.currentWeek,
+          deliveredSeason: state.currentSeason,
+        });
+      }
       break;
     }
   }
-  return beats;
+  return { beats, scoutingCases };
+}
+
+/** Preview authored communications without changing messages, proof, or RNG. */
+export function projectWeeklyProspectFollowUps(state: GameState): ProspectFollowUpBeat[] {
+  return buildWeeklyProspectFollowUpPlan(state).beats;
+}
+
+/** Publish actual messages and their durable proof together before inbox pruning. */
+export function applyWeeklyProspectFollowUps(state: GameState): GameState {
+  const plan = buildWeeklyProspectFollowUpPlan(state);
+  if (plan.beats.length === 0 && plan.scoutingCases === state.scoutingCases) return state;
+  return {
+    ...state,
+    scoutingCases: plan.scoutingCases,
+    inbox: plan.beats.length === 0
+      ? state.inbox
+      : [...state.inbox, ...plan.beats.map(beat => beat.message)],
+  };
 }

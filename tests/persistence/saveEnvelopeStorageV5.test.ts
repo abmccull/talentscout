@@ -90,7 +90,7 @@ function versionFourEnvelope() {
 }
 
 describe("portable save envelope schema 5 storage boundary", () => {
-  it("writes schema 5 for compact stored identities and fixture references without changing simulation versions", () => {
+  it("writes the current schema for compact stored identities and fixture references without changing simulation versions", () => {
     const state = {
       currentSeason: 19,
       currentWeek: 7,
@@ -105,8 +105,8 @@ describe("portable save envelope schema 5 storage boundary", () => {
     const sourceBytes = JSON.stringify(state);
     const envelope = createSaveEnvelope(state, 456_789, profileExperience());
 
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(5);
-    expect(envelope.schemaVersion).toBe(5);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(6);
+    expect(envelope.schemaVersion).toBe(6);
     expect(envelope.rulesVersion).toBe(CURRENT_RULES_VERSION);
     expect(envelope.buildVersion).toBe(CURRENT_BUILD_VERSION);
     expect(envelope.savedAt).toBe(456_789);
@@ -120,8 +120,8 @@ describe("portable save envelope schema 5 storage boundary", () => {
     const source = JSON.parse(sourceBytes) as ReturnType<typeof versionFourEnvelope>;
     const migrated = migrateSaveEnvelope(source);
 
-    expect(migrated.schemaVersion).toBe(5);
-    expect(migrated).toEqual({ ...source, schemaVersion: 5 });
+    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated).toEqual({ ...source, schemaVersion: 6 });
     expect(migrated.state).toBe(source.state);
     expect(migrated.rulesVersion).toBe("saved-rules-pinned.3");
     expect(JSON.stringify(source)).toBe(sourceBytes);
@@ -151,17 +151,18 @@ describe("portable save envelope schema 5 storage boundary", () => {
     const first = migrateSaveEnvelope(source);
     const second = migrateSaveEnvelope(JSON.parse(JSON.stringify(first)));
 
-    expect(first.schemaVersion).toBe(5);
-    expect(first).toEqual(source);
+    const upgradedBytes = JSON.stringify({ ...source, schemaVersion: 6 });
+    expect(first.schemaVersion).toBe(6);
+    expect(first).toEqual({ ...source, schemaVersion: 6 });
     expect(second).toEqual(first);
-    expect(JSON.stringify(first)).toBe(sourceBytes);
-    expect(JSON.stringify(second)).toBe(sourceBytes);
+    expect(JSON.stringify(first)).toBe(upgradedBytes);
+    expect(JSON.stringify(second)).toBe(upgradedBytes);
     expect(extractSaveStatePayload(source)).toEqual(source.state);
     expect(JSON.stringify(source)).toBe(sourceBytes);
   });
 
   it("retains the future-version rejection and leaves unsupported source bytes recoverable", () => {
-    const sourceBytes = JSON.stringify({ ...versionFourEnvelope(), schemaVersion: 6 });
+    const sourceBytes = JSON.stringify({ ...versionFourEnvelope(), schemaVersion: 7 });
     const source = JSON.parse(sourceBytes);
 
     expect(() => migrateSaveEnvelope(source)).toThrowError(

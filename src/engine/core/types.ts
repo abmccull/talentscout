@@ -652,6 +652,16 @@ export interface ProfessionalCaseContext {
   judgmentDecisionIds: string[];
 }
 
+export type ProspectFollowUpStage = "early-check" | "decision-point" | "accountability";
+
+/** Proof of an authored communication delivered, independent of inbox retention. */
+export interface ProspectFollowUpDelivery {
+  sourceId: string;
+  stage: ProspectFollowUpStage;
+  deliveredWeek: number;
+  deliveredSeason: number;
+}
+
 export interface ScoutingCase {
   id: string;
   playerId: string;
@@ -676,6 +686,8 @@ export interface ScoutingCase {
   placementReportIds: string[];
   /** Long-horizon review records generated from the recommendation. */
   reviewIds?: string[];
+  /** Missing only in legacy saves; absence does not prove any prior delivery. */
+  prospectFollowUpDeliveries?: ProspectFollowUpDelivery[];
   alumniRecordId?: string;
   /** True when a legacy placement had no authored scout report to link. */
   legacyUnlinked?: boolean;

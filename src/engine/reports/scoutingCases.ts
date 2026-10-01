@@ -107,6 +107,7 @@ function createCase(
     placementReportIds: [],
     hypothesisIds: [],
     reviewIds: [],
+    prospectFollowUpDeliveries: [],
     ...(legacyUnlinked ? { legacyUnlinked: true } : {}),
   };
 }

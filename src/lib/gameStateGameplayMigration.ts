@@ -65,6 +65,12 @@ import {
 } from "@/engine/career/chronology";
 import { createCareerMomentState } from "@/engine/career/careerMoments";
 import { migrateStructuredScoutingEvidence } from "@/engine/scout/evidenceMigration";
+import {
+  assertProspectFollowUpDeliveryAuthority,
+  InvalidProspectFollowUpDeliveryError,
+  reconcileProspectFollowUpDeliveries,
+} from "@/engine/youth/prospectFollowUpDelivery";
+import { SaveMigrationError } from "@/lib/saveEnvelope";
 
 type LegacyContactInteraction = Omit<ContactInteraction, "occurredAt"> & {
   occurredAt?: GameDate;
@@ -787,6 +793,7 @@ function migrateLegacyEmployeeReports(state: GameState): void {
       reportIds.length === 0
       && scoutingCase.deliveryIds.length === 0
       && scoutingCase.placementReportIds.length === 0
+      && (scoutingCase.prospectFollowUpDeliveries?.length ?? 0) === 0
     ) {
       delete state.scoutingCases[caseId];
       continue;
@@ -845,6 +852,20 @@ function migrateScoutEmploymentContract(state: GameState): void {
  */
 export function applyGameplaySaveMigrations(state: GameState): GameState {
   normalizeRequiredStateShape(state);
+  // Validate before employee-report cleanup can delete a legacy case. Preserve
+  // which authorities were already initialized before report reconstruction.
+  const initializedDeliveryCases = new Set<string>();
+  try {
+    for (const [key, scoutingCase] of Object.entries(state.scoutingCases ?? {})) {
+      assertProspectFollowUpDeliveryAuthority(scoutingCase);
+      if (scoutingCase.prospectFollowUpDeliveries !== undefined) initializedDeliveryCases.add(key);
+    }
+  } catch (error) {
+    if (error instanceof InvalidProspectFollowUpDeliveryError) {
+      throw new SaveMigrationError("CORRUPT_SAVE", error.message);
+    }
+    throw error;
+  }
   migrateScoutEmploymentContract(state);
   if (state.finances && !state.finances.equipment) {
     state.finances.equipment = migrateEquipmentLevel(state.finances.equipmentLevel);
@@ -893,6 +914,9 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
 
   state.disciplinaryRecords ??= {};
   migrateScoutingCases(state);
+  const legacyDeliveryCases = new Set(Object.keys(state.scoutingCases)
+    .filter(key => !initializedDeliveryCases.has(key)));
+  state.scoutingCases = reconcileProspectFollowUpDeliveries(state, undefined, legacyDeliveryCases);
   state.clubPhilosophyTransitionState = migrateClubPhilosophyTransitionState(
     state.clubPhilosophyTransitionState,
     state.currentSeason,
