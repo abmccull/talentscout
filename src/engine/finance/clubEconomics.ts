@@ -5,6 +5,7 @@ import type {
   PlayerMatchRating,
   TransferAddOn,
 } from "@/engine/core/types";
+import { estimatePlayerWeeklyWage } from "@/engine/players/wages";
 
 const MIN_WEEKLY_WAGE_BUDGET = 800;
 // Elite first-team squads can carry several million pounds of weekly payroll.
@@ -174,7 +175,15 @@ function deriveClubWeeklyWageBudgetFromRoster(
   club: Club,
   roster: ClubRosterEconomics,
 ): number {
-  const committedWages = roster.weeklyWageCommitment;
+  // Borrowed players' wages are paid through obligations, not owned payroll.
+  // Annual approval must recognize the same commitments as recruitment does.
+  const committedWages = roster.weeklyWageCommitment + getClubWeeklyObligationCommitment(club);
+  // Departures free payroll for replacements; they must not erase the club's
+  // capacity to field a squad. The market already maps CA/2 to club reputation.
+  const plannedSquadPayroll = 22 * Math.max(
+    500,
+    estimatePlayerWeeklyWage(club.reputation * 2, club.reputation),
+  );
   const structuralAllowance =
     club.reputation * 140
     + club.youthAcademyRating * 50
@@ -183,7 +192,7 @@ function deriveClubWeeklyWageBudgetFromRoster(
 
   return clamp(
     roundToNearest(
-      Math.max(committedWages * 1.1, structuralAllowance),
+      Math.max(committedWages * 1.1, structuralAllowance, plannedSquadPayroll),
       50,
     ),
     MIN_WEEKLY_WAGE_BUDGET,
@@ -209,10 +218,18 @@ export function deriveClubScoutingBudget(
 export function reapproveAnnualClubEconomics(
   clubs: Record<string, Club>,
   players: Record<string, Player>,
+  season?: number,
 ): Record<string, Club> {
   const rosterEconomics = buildClubRosterEconomicsIndex(players);
   const reapproved: Record<string, Club> = {};
   for (const [clubId, club] of Object.entries(clubs)) {
+    if (season !== undefined && (!Number.isInteger(season) || season < 1)) {
+      throw new Error("Annual club allocation requires a positive integer season");
+    }
+    if (season !== undefined && (club.recruitmentAllocation?.season ?? 0) >= season) {
+      reapproved[clubId] = club;
+      continue;
+    }
     const roster = rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS;
     const annualScoutingBudget = deriveClubScoutingBudgetFromRoster(club, roster);
     const carryover = Math.min(
@@ -224,6 +241,20 @@ export function reapproveAnnualClubEconomics(
       weeklyWageBudget: deriveClubWeeklyWageBudgetFromRoster(club, roster),
       scoutingBudget: annualScoutingBudget + carryover,
     };
+    if (season !== undefined) {
+      // Net recruitment funding, not gross operating revenue: six weeks of
+      // a standard 22-player payroll at this club's level. Independent of
+      // remaining cash and actual wages so depletion/overspending cannot
+      // amplify the next allocation. Provisional fictional-market scale.
+      const amount = 6 * 22 * Math.max(500, estimatePlayerWeeklyWage(club.reputation * 2, club.reputation));
+      reapproved[clubId] = {
+        ...reapproved[clubId],
+        budget: club.budget + amount,
+        recruitmentAllocation: {
+          season, amount, budgetBefore: club.budget, budgetAfter: club.budget + amount,
+        },
+      };
+    }
   }
   return reapproved;
 }
@@ -275,8 +306,7 @@ function normalizeClubEconomicsFromRoster(
     ? Math.round(club.weeklyWageBudget ?? 0)
     : deriveClubWeeklyWageBudgetFromRoster(club, roster);
   const scoutingBudget = Number.isFinite(club.scoutingBudget)
-    && (club.scoutingBudget ?? 0) > 0
-    ? Math.round(club.scoutingBudget ?? 0)
+    ? Math.max(0, Math.round(club.scoutingBudget ?? 0))
     : deriveClubScoutingBudgetFromRoster(club, roster);
   const financialObligations = (club.financialObligations ?? []).map((obligation, index) =>
     normalizeObligation(club.id, obligation, index, currentWeek, currentSeason),
@@ -389,10 +419,19 @@ export function buildClubAffordabilityContext(
     currentSeason?: number;
   } = {},
 ): ClubAffordabilityContext {
-  const rosterEconomics = buildClubRosterEconomicsIndex(players);
+  const clubEntries = Object.entries(clubs);
+  // Opening recruitment reassesses one club after each approach. A global
+  // index allocates totals for every unrelated club on each such call. Keep
+  // the ownership scan (including loaned-out wages), but only total the club
+  // being assessed. Multi-club callers still share one world scan.
+  const rosterEconomics = clubEntries.length > 1
+    ? buildClubRosterEconomicsIndex(players)
+    : undefined;
   const context: ClubAffordabilityContext = {};
-  for (const [clubId, club] of Object.entries(clubs)) {
-    const roster = rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS;
+  for (const [clubId, club] of clubEntries) {
+    const roster = rosterEconomics
+      ? rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS
+      : getClubRosterEconomics(clubId, players);
     const normalizedClub = normalizeClubEconomicsFromRoster(club, roster, options);
     context[clubId] = {
       club: normalizedClub,
@@ -417,8 +456,12 @@ export function assessClubAffordabilityFromContext(
 export function assessClubAffordability(
   request: ClubAffordabilityRequest,
 ): ClubAffordabilityResult {
-  const normalizedClub = normalizeClubEconomics(request.club, request.players);
-  const currentWeeklyCommitment = getClubWeeklyCommitmentTotal(normalizedClub, request.players);
+  // Both normalization and affordability need the same owned-roster totals.
+  // Compute them once per assessment; do not cache across lifecycle mutations.
+  const roster = getClubRosterEconomics(request.club.id, request.players);
+  const normalizedClub = normalizeClubEconomicsFromRoster(request.club, roster);
+  const currentWeeklyCommitment = roster.weeklyWageCommitment
+    + getClubWeeklyObligationCommitment(normalizedClub);
   return assessNormalizedClubAffordability(
     normalizedClub,
     currentWeeklyCommitment,

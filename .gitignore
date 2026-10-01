@@ -68,6 +68,8 @@ artifacts/release/**/runtime-profile/
 artifacts/release/**/runtime-package-no-steam/
 artifacts/release/**/runtime-installed-app/
 artifacts/release/**/runtime-profile-installed/
+artifacts/source-runtime-diagnostics/**/runtime-profile/
+artifacts/source-runtime-diagnostics/**/*.png
 artifacts/release/probe-*.png
 release-artifacts/
 

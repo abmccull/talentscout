@@ -67,12 +67,12 @@ export class GamePage {
   }
 
   private async resolveWeekSimulationInteraction(): Promise<boolean> {
-    const choiceRegion = this.page.getByRole("region", { name: "Day interaction choice" });
+    const choiceRegion = this.page.getByRole("region", { name: "Your call", exact: true });
     if (!(await choiceRegion.isVisible({ timeout: 1_000 }).catch(() => false))) {
       return true;
     }
 
-    const selectedChoice = choiceRegion.getByText(/^Selected:/);
+    const selectedChoice = choiceRegion.getByText(/^Approach locked:/);
     if (await selectedChoice.isVisible({ timeout: 250 }).catch(() => false)) {
       return true;
     }
@@ -199,9 +199,16 @@ export class GamePage {
   async navigateTo(screen: string): Promise<void> {
     const viewport = this.page.viewportSize();
     const isMobile = Boolean(viewport && viewport.width < 768);
-    const mobileSidebarOpen = isMobile && await this.page
+    let mobileSidebarOpen = isMobile && await this.page
       .locator('aside[aria-label="Game navigation"]')
       .evaluate((sidebar) => sidebar.classList.contains("translate-x-0"));
+
+    // Settings and other secondary destinations live in the phone menu,
+    // not in the limited bottom navigation bar.
+    if (isMobile && !mobileSidebarOpen && await this.page.locator(mobileNavItem(screen)).count() === 0) {
+      await this.page.getByRole("button", { name: "Open navigation menu", exact: true }).click();
+      mobileSidebarOpen = true;
+    }
 
     await this.page.click(
       isMobile && !mobileSidebarOpen ? mobileNavItem(screen) : navItem(screen),
@@ -346,9 +353,16 @@ export class GamePage {
       await emptyDayAdvance.click();
     }
 
+    // Opening-week and user-enabled confirmations follow the empty-day guard.
+    // Exercise the actual confirmation instead of bypassing it through state.
+    const confirmation = this.page.getByRole("dialog", { name: "Advance this week?" });
+    if (await confirmation.isVisible()) {
+      await confirmation.getByRole("button", { name: "Advance week", exact: true }).click();
+    }
+
     await this.waitForScreen("weekSimulation", 10_000);
 
-    const settlementDeadline = Date.now() + 30_000;
+    let settlementDeadline = Date.now() + 30_000;
     while (Date.now() < settlementDeadline) {
       // Milestones can replace the final simulation controls with a week-summary
       // and celebration stack. These are acknowledgement dialogs, not gameplay
@@ -369,9 +383,13 @@ export class GamePage {
           continue;
         }
         if (launchResult === "clicked") {
+          const liveSessionStartedAt = Date.now();
           await this.waitForScreen("observation", 10_000);
           await this.completeObservationViaUI();
           await this.waitForScreen("weekSimulation", 10_000);
+          // Watching and reflecting are player activity, not stalled weekly
+          // settlement. Keep their time outside this bounded settlement wait.
+          settlementDeadline += Date.now() - liveSessionStartedAt;
           continue;
         }
       }
@@ -511,13 +529,17 @@ export class GamePage {
       await this.page.getByRole("group", { name: "What remains untested" }).getByRole("radio").first().locator("..").click();
       await this.page.getByRole("group", { name: "Next test" }).getByRole("radio").first().locator("..").click();
       const recommendationName = conviction === "note"
-        ? /^Monitor\b/
+        ? /^Keep private\b/i
         : conviction === "recommend"
-          ? /^Invite for trial\b/i
-          : /^Offer academy place\b/i;
+          ? /^Test in harder context\b/i
+          : /^Escalate now\b/i;
       await this.page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: recommendationName }).locator("..").click();
       const confidenceName = conviction === "note" ? /^Tentative\b/i : conviction === "recommend" ? /^Working\b/i : /^Supported\b/i;
-      await this.page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: confidenceName }).locator("..").click();
+      const confidence = this.page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: confidenceName });
+      await confidence.locator("..").click();
+      // Both responsive layouts stay mounted. Selected styling alone can hide
+      // a native radio-group collision with the offscreen layout.
+      await expect(confidence).toBeChecked();
       if (shouldSubmit) await fileInitialAssessment.click();
       return;
     }
@@ -554,7 +576,7 @@ export class GamePage {
       ];
       for (const categoryName of categoryNames) {
         const category = this.page.getByRole("group", { name: categoryName, exact: true });
-        const makeClaim = category.getByRole("radio", { name: "Make a claim", exact: true });
+        const makeClaim = category.getByRole("radio", { name: "Interpret a saved cue", exact: true });
         const canAssess = await makeClaim.isEnabled().catch(() => false);
         if (canAssess) {
           await makeClaim.locator("..").click();
@@ -625,7 +647,11 @@ export class GamePage {
     await beginObservation.waitFor({ state: "visible", timeout: 10_000 });
     await beginObservation.click();
 
-    const focusButton = this.page.locator('button[aria-label^="Add focus to "]').first();
+    const focusControls = this.page.getByRole("button", { name: /^Focus targets and lenses/ });
+    if (await focusControls.isVisible()) {
+      await focusControls.click();
+    }
+    const focusButton = this.page.getByRole("button", { name: /^Add focus to / }).first();
     if (await focusButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await focusButton.click();
       const technicalLens = this.page
@@ -636,6 +662,10 @@ export class GamePage {
       } else {
         await this.page.keyboard.press("Escape");
       }
+    }
+    const closeFocusControls = this.page.getByRole("button", { name: "Close focus controls", exact: true });
+    if (await closeFocusControls.isVisible()) {
+      await closeFocusControls.click();
     }
 
     const flagMoment = this.page.getByRole("button", { name: /^Flag this moment$/ }).first();
@@ -667,14 +697,14 @@ export class GamePage {
       ) {
         await strategicChoice.click();
       }
-      const reflection = this.page.getByRole("button", { name: /^Go to Reflection$/ });
+      const reflection = this.page.getByRole("button", { name: /^(Go to Reflection|Reflect)$/i });
       if (await reflection.isVisible({ timeout: 500 }).catch(() => false)) {
         await reflection.click();
         reachedReflection = true;
         break;
       }
 
-      const nextPhase = this.page.getByRole("button", { name: /^Next Phase$/ });
+      const nextPhase = this.page.getByRole("button", { name: /^Next Phase$/i });
       if (await nextPhase.isVisible({ timeout: 500 }).catch(() => false)) {
         await nextPhase.click();
         await this.page.waitForTimeout(100);

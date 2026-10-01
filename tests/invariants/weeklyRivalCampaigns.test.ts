@@ -19,6 +19,7 @@ import type {
 import { createRivalCampaignState } from "@/engine/rivals";
 import {
   applyDirectedWeeklyRivalCampaigns,
+  openRivalCampaignResponse,
   prepareWeeklyRivalCampaigns,
   reconcileRivalCampaignDecisions,
 } from "@/stores/actions/weeklyRivalCampaigns";
@@ -314,6 +315,28 @@ function campaignDecisionMessage(inbox: readonly InboxMessage[]): InboxMessage[]
 }
 
 describe("weekly rival campaigns", () => {
+  it("opens a director-deferred response on request without rerolling or duplicating it", () => {
+    const initial = withResponseCampaign(baseState());
+    const before = structuredClone(initial);
+    const opened = openRivalCampaignResponse(initial, "campaign-1");
+    const decision = opened.consequenceState.decisions["decision:campaign-1"];
+    expect(decision).toBeDefined();
+    expect(decision.options.map((option) => option.id)).toEqual(responseCampaign().responseOptions.map((option) => option.id));
+    expect(opened.rivalOrganizationState).toEqual(initial.rivalOrganizationState);
+    expect(initial).toEqual(before);
+    expect(openRivalCampaignResponse(opened, "campaign-1")).toBe(opened);
+    expect(campaignDecisionMessage(opened.inbox)).toHaveLength(1);
+    expect(openRivalCampaignResponse(initial, "missing")).toBe(initial);
+    const expired = { ...initial, currentSeason: 99 };
+    expect(openRivalCampaignResponse(expired, "campaign-1")).toBe(expired);
+    const selected = selectDecisionOption(opened.consequenceState, decision.id, "withdraw",
+      { season: initial.currentSeason, week: initial.currentWeek }, "player", 38);
+    expect(selected.error).toBeUndefined();
+    const resolved = reconcileRivalCampaignDecisions({ ...opened, consequenceState: selected.state },
+      { season: initial.currentSeason, week: initial.currentWeek });
+    expect(resolved.rivalOrganizationState.campaignState.campaigns["campaign-1"].status).not.toBe("active");
+    expect(openRivalCampaignResponse(resolved, "campaign-1")).toBe(resolved);
+  });
   it("prepares deterministically and does not mutate the same week twice", () => {
     const initial = withResponseCampaign(baseState());
 

@@ -1,7 +1,12 @@
 "use client";
 
+import { PlayerAgeTimeline } from "./PlayerAgeTimeline";
+import { ArchivedPlayerProfile } from "./player-profile/ArchivedPlayerProfile";
+
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
+import { ConversationRecord } from "./ConversationRecord";
+import { getPlayerDisciplinaryRecord } from "@/engine/match/disciplineRecords";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +31,7 @@ import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
+import { getEvidenceClaimOptions } from "@/engine/scout/evidenceModel";
 import { hasObservableRecurringInjuryConcern } from "@/engine/scout/playerFacingIntel";
 import { Tooltip } from "@/components/ui/tooltip";
 import { YouthPortrait } from "@/components/game/YouthPortrait";
@@ -38,6 +44,8 @@ import { HelpTooltip, AttributeValueTooltip } from "@/components/ui/HelpTooltip"
 import { getCountryDisplayName } from "@/engine/network/contacts";
 import { formatObservationActivityLabel } from "@/engine/observation/reflection";
 import { getHighestValueNextContext } from "@/engine/observation/informationGain";
+import { getConversationInquiryQuestions } from "@/engine/scout/conversationInquiryQuestions";
+import { getBookableYouthEvidenceContexts } from "./calendar/pendingFocus";
 import { deriveScoutingCaseQuestions } from "@/engine/reports/caseQuestions";
 import { getYouthRivalPressure, getYouthRivalPressureBand } from "@/engine/rivals";
 import { getScoutHomeCountry } from "@/engine/world/travel";
@@ -97,6 +105,7 @@ import {
 import {
   evidenceOpportunityLabel,
   PLAYER_PROFILE_TABS,
+  getLatestPlayerReport,
   selectMostRelevantScoutingCase,
   summarizeUnknownAttributes,
   type PlayerProfileTabId,
@@ -134,7 +143,23 @@ function ensureRange(reading: AttributeReading, scoutSkill: number): AttributeRe
   return { ...reading, rangeLow, rangeHigh };
 }
 
+/** Switch whole components so archive transitions never change the live view's hook order. */
 export function PlayerProfile() {
+  const { gameState, selectedPlayerId, setScreen } = useGameStore(useShallow(state => ({
+    gameState: state.gameState, selectedPlayerId: state.selectedPlayerId, setScreen: state.setScreen,
+  })));
+  if (!gameState || !selectedPlayerId) return null;
+  if (resolvePlayerEntity(gameState, selectedPlayerId)) return <PlayerProfileContent />;
+  return (
+    <GameLayout>
+      <ArchivedPlayerProfile state={gameState} playerId={selectedPlayerId}
+        onBack={() => setScreen(gameState.scout.primarySpecialization === "youth" ? "youthScouting" : "playerDatabase")}
+        onReports={() => setScreen("reportHistory")} />
+    </GameLayout>
+  );
+}
+
+function PlayerProfileContent() {
   const {
     gameState,
     selectedPlayerId,
@@ -153,6 +178,7 @@ export function PlayerProfile() {
     recommendPlayerForLoan,
     recallLoanPlayer,
     scheduleActivity,
+    getAvailableCalendarActivities,
   } = useGameStore(
     useShallow((state) => ({
       gameState: state.gameState,
@@ -172,6 +198,7 @@ export function PlayerProfile() {
       recommendPlayerForLoan: state.recommendPlayerForLoan,
       recallLoanPlayer: state.recallLoanPlayer,
       scheduleActivity: state.scheduleActivity,
+      getAvailableCalendarActivities: state.getAvailableCalendarActivities,
     })),
   );
 
@@ -212,7 +239,13 @@ export function PlayerProfile() {
   const trendHistoryDepth = getActiveToolBonuses(
     gameState.unlockedTools,
   ).trendHistoryDepth;
-  const reports = getPlayerReports(canonicalPlayerId);
+  const reports = getPlayerReports(canonicalPlayerId).filter((report) =>
+    report.scoutId === gameState.scout.id
+    && (report.submittedSeason < gameState.currentSeason
+      || (report.submittedSeason === gameState.currentSeason
+        && report.submittedWeek <= gameState.currentWeek)),
+  );
+  const latestReport = getLatestPlayerReport(reports);
   const latestAuthoredRole = [...reports]
     .sort((left, right) =>
       right.submittedSeason - left.submittedSeason
@@ -373,6 +406,7 @@ export function PlayerProfile() {
         entry.hypotheses.length > 0 ||
         entry.flaggedMoments.length > 0 ||
         entry.notes.length > 0 ||
+        (entry.conversationDecisions?.length ?? 0) > 0 ||
         !!entry.summary,
     )
     .sort((left, right) => {
@@ -395,14 +429,19 @@ export function PlayerProfile() {
 
   // Specialization-specific data
   const specialization = gameState.scout.primarySpecialization;
-  const reportableEvidenceCount = Object.values(gameState.reflectionJournal ?? {})
+  const savedEvidenceCards = Object.values(gameState.reflectionJournal ?? {})
     .flatMap((entry) => entry.evidenceCards ?? [])
-    .filter((card) => relatedPlayerIds.has(card.playerId)).length;
+    .filter((card) => relatedPlayerIds.has(card.playerId));
+  const reportableEvidenceCount = savedEvidenceCards.filter((card) =>
+    getEvidenceClaimOptions(card).some((option) => option.support === "supported"),
+  ).length;
   const needsReportableYouthEvidence = specialization === "youth"
     && reportableEvidenceCount === 0;
+  // An inconclusive report is legitimate; it should not be the suggested next
+  // action when the case has no supported claim yet.
   const canStartReport = !isRetired
     && observations.length > 0
-    && !needsReportableYouthEvidence;
+    && (specialization !== "youth" || savedEvidenceCards.length > 0);
   const clubId = gameState.scout.currentClubId ?? "";
   const fitCacheKey = `${canonicalPlayerId}:${clubId}`;
   const systemFit = specialization === "firstTeam"
@@ -423,12 +462,6 @@ export function PlayerProfile() {
   };
 
   const watchlisted = gameState.watchlist.includes(canonicalPlayerId);
-  const latestReport = [...reports].sort((left, right) => {
-    if ((right.submittedSeason ?? 0) !== (left.submittedSeason ?? 0)) {
-      return (right.submittedSeason ?? 0) - (left.submittedSeason ?? 0);
-    }
-    return (right.submittedWeek ?? 0) - (left.submittedWeek ?? 0);
-  })[0];
   const relevantBriefs = unsignedYouthRecord
     ? Object.values(gameState.youthRecruitmentBriefs)
         .filter((brief) =>
@@ -478,18 +511,27 @@ export function PlayerProfile() {
     }));
     return [...byId.values()];
   })();
+  const bookableEvidenceContexts = unsignedYouthRecord && !unsignedYouthRecord.placed
+    ? getBookableYouthEvidenceContexts(getAvailableCalendarActivities(), canonicalPlayerId)
+    : [];
+  const conversationInquiryQuestions = getConversationInquiryQuestions(
+    dossierEntries.flatMap(entry => entry.conversationDecisions ?? []), relatedPlayerIds,
+  );
   const nextObservationContext = unsignedYouthRecord && !unsignedYouthRecord.placed
     ? getHighestValueNextContext({
         observations,
+        unsuccessfulAttempts: dossierEntries
+          .filter((entry) => entry.activityType === "parentCoachMeeting"
+            && (entry.conversationDecisions?.length ?? 0) > 0
+            && (entry.observationIds?.length ?? 0) === 0
+            && (entry.evidenceCards?.length ?? 0) === 0)
+          .map((entry) => ({ id: entry.activityInstanceId ?? entry.sessionId,
+            playerId: canonicalPlayerId, context: "parentCoachMeeting" as const })),
         playerId: canonicalPlayerId,
-        candidateContexts: [
-          "schoolMatch",
-          "grassrootsTournament",
-          "academyTrialDay",
-          "followUpSession",
-          "parentCoachMeeting",
-          "trainingGround",
-        ],
+        candidateContexts: bookableEvidenceContexts.map((entry) => entry.context),
+        targetQuestionIds: dossierEntries.flatMap((entry) => (entry.conversationDecisions ?? [])
+          .flatMap((decision) => decision.inquiry && relatedPlayerIds.has(decision.inquiry.playerId)
+            ? [decision.inquiry.questionId] : [])),
         targetDomains: latestHypotheses
           .filter((hypothesis) => hypothesis.state !== "confirmed" && hypothesis.state !== "debunked")
           .map((hypothesis) => hypothesis.domain),
@@ -528,15 +570,19 @@ export function PlayerProfile() {
       .filter(([, reading]) => !reading)
       .map(([attr]) => formatAttribute(attr)),
   );
-  const evidenceSignals =
+  const dossierRecordCount =
     observations.length + dossierEntries.length + dossierInboxIntel.length + contactIntel.length;
+  const monitoringYouthCase = Boolean(unsignedYouthRecord && !unsignedYouthRecord.placed
+    && latestReport?.recommendedAction === "monitor");
   const nextDecision =
     observations.length === 0
       ? "Get a live view before you commit."
-      : reports.length === 0 && needsReportableYouthEvidence
+      : needsReportableYouthEvidence
       ? "Return with one question to answer."
       : reports.length === 0
       ? "Turn the read into a report."
+      : monitoringYouthCase
+      ? "Choose the next test for this monitoring case."
       : foreignYouthCountry && !unsignedYouthRecord?.placed
       ? `Travel to ${getCountryDisplayName(foreignYouthCountry)} before escalating.`
       : unsignedYouthRecord && !unsignedYouthRecord.placed
@@ -545,10 +591,14 @@ export function PlayerProfile() {
   const nextDecisionReason =
     observations.length === 0
       ? "You still need first-hand evidence."
-      : reports.length === 0 && needsReportableYouthEvidence
-      ? "The existing view did not leave a classified cue you can defend. Plan a focused observation and save the moment that answers your question."
+      : needsReportableYouthEvidence
+      ? "The saved evidence does not yet support a finding. Plan a focused observation and save the moment that answers your question. Filing an inconclusive report preserves the uncertainty; it does not establish placement readiness."
       : reports.length === 0
       ? `${observations.length} observation${observations.length === 1 ? "" : "s"} and ${reportableEvidenceCount} saved cue${reportableEvidenceCount === 1 ? "" : "s"} are ready to become a report.`
+      : monitoringYouthCase
+      ? "Your latest report recommends monitoring. Choose what would change that judgment before recommending a placement."
+      : foreignYouthCountry && !unsignedYouthRecord?.placed
+      ? "Plan access in the player's country before taking the case further."
       : unsignedYouthRecord && !unsignedYouthRecord.placed
       ? "Placement is the next professional call in this youth dossier."
       : unansweredAttributes.length > 0
@@ -666,11 +716,11 @@ export function PlayerProfile() {
             <Button
               onClick={() => startReport(canonicalPlayerId)}
               disabled={!canStartReport}
-              title={needsReportableYouthEvidence ? "Complete a focused observation and save at least one classified cue first." : undefined}
+              title={!canStartReport ? "Complete a focused observation and save a cue first." : needsReportableYouthEvidence ? "Record what remains uncertain without claiming a finding." : undefined}
               className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-40 min-h-12 !w-auto shadow-2xl shadow-black/50 sm:static sm:z-auto sm:min-h-10 sm:!w-auto sm:shadow-none"
             >
               <FileText size={14} className="mr-2" />
-              {needsReportableYouthEvidence ? "Build report evidence first" : "Write Report"}
+              {!canStartReport ? "Build report evidence first" : needsReportableYouthEvidence ? "Record an inconclusive report" : "Write Report"}
             </Button>
             {club && (
               <Button
@@ -843,12 +893,36 @@ export function PlayerProfile() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Next scouting decision</p>
               <h2 className="mt-2 text-xl font-bold text-white sm:text-2xl">{nextDecision}</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">{nextDecisionReason}</p>
+              {(caseQuestionSnapshot || conversationInquiryQuestions.length > 0) && (
+                <div className="mt-4 max-w-3xl border-l-2 border-amber-300/60 pl-4">
+                  {caseQuestionSnapshot && <>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">Case question</p>
+                  <p className="mt-1 text-base leading-6 text-zinc-100">
+                    {activeCaseQuestion?.prompt ?? caseQuestionSnapshot.centralQuestion}
+                  </p>
+                  {activeCaseQuestion && <p className="mt-2 text-sm leading-5 text-zinc-300">Evidence gap: {activeCaseQuestion.evidenceGap}</p>}
+                  </>}
+                  {conversationInquiryQuestions.length > 0 && <div className={caseQuestionSnapshot ? "mt-3" : ""}>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">Conversation questions to test</p>
+                    <ul className="mt-1 space-y-1 text-sm leading-5 text-zinc-100">
+                      {conversationInquiryQuestions.slice(0, 2).map(question => <li key={`${question.playerId}:${question.questionId}`}>{question.label}</li>)}
+                    </ul>
+                    <p className="mt-1 text-xs leading-5 text-zinc-300">A source account provides context. Test it against first-hand evidence before treating it as a finding.</p>
+                  </div>}
+                  <Button variant="ghost" className="mt-2 min-h-11 px-0 text-emerald-300" onClick={() => setActiveTab("evidence")}>
+                    Review supporting evidence
+                    <ChevronRight size={16} className="ml-2" aria-hidden="true" />
+                  </Button>
+                </div>
+              )}
               <div className="mt-4 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
                   {observations.length} live view{observations.length === 1 ? "" : "s"}
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                  {evidenceSignals} evidence signal{evidenceSignals === 1 ? "" : "s"}
+                  {specialization === "youth"
+                    ? `${reportableEvidenceCount} supported cue${reportableEvidenceCount === 1 ? "" : "s"}`
+                    : `${dossierRecordCount} saved record${dossierRecordCount === 1 ? "" : "s"}`}
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
                   {reports.length} filed report{reports.length === 1 ? "" : "s"}
@@ -858,9 +932,16 @@ export function PlayerProfile() {
             <Button
               className="min-h-11 w-full lg:w-auto"
               onClick={() => {
-                if (canStartReport && reports.length === 0) {
+                if (canStartReport && !needsReportableYouthEvidence && reports.length === 0) {
                   startReport(canonicalPlayerId);
                   return;
+                }
+                if (unsignedYouthRecord && observations.length > 0) {
+                  setPendingCalendarActivity({
+                    type: "followUpSession",
+                    targetId: canonicalPlayerId,
+                    label: `Follow-up: ${player.firstName} ${player.lastName}`,
+                  });
                 }
                 setScreen("calendar");
               }}
@@ -871,6 +952,8 @@ export function PlayerProfile() {
                   ? "Plan focused observation"
                 : reports.length === 0
                   ? "Write the report"
+                : monitoringYouthCase
+                  ? "Plan next look"
                   : "Plan next action"}
               <ChevronRight size={16} className="ml-2" aria-hidden="true" />
             </Button>
@@ -970,7 +1053,7 @@ export function PlayerProfile() {
               <CardHeader className="p-5 pb-3">
                 <CardTitle className="flex items-center gap-2 text-base text-white">
                   <Target size={17} className="text-violet-300" aria-hidden="true" />
-                  Highest-value next evidence
+                  Next evidence to consider
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-1">
@@ -995,10 +1078,36 @@ export function PlayerProfile() {
                       <span>·</span>
                       <span>{nextObservationContext.sameContextIndependentSources} prior independent source{nextObservationContext.sameContextIndependentSources === 1 ? "" : "s"} in this context</span>
                     </div>
-                    <Button className="mt-4 min-h-11 w-full" variant="outline" onClick={() => setScreen("calendar")}>Plan this evidence</Button>
+                    <Button className="mt-4 min-h-11 w-full" variant="outline" onClick={() => {
+                      setPendingCalendarActivity({
+                        type: bookableEvidenceContexts.find((entry) => entry.context === nextObservationContext.context)!.activityType,
+                        targetId: canonicalPlayerId,
+                        label: `${formatAttribute(nextObservationContext.context)}: ${player.firstName} ${player.lastName}`,
+                      });
+                      setScreen("calendar");
+                    }}>Plan this evidence</Button>
                   </>
                 ) : (
-                  <p className="text-sm text-zinc-400">No further youth evidence is currently required.</p>
+                  <div className="space-y-3">
+                    <p className="text-sm leading-6 text-zinc-300">
+                      No player-specific evidence session is available to book this week.
+                      {observations.length === 0
+                        ? " You still need a first-hand observation before judging this prospect."
+                        : " This does not mean the case is complete. Review the unanswered questions and your next route to the player."}
+                    </p>
+                    <Button className="min-h-11 w-full" variant="outline" onClick={() => {
+                      if (foreignYouthCountry) {
+                        setPendingInternationalCountry(foreignYouthCountry);
+                        setScreen("internationalView");
+                      } else {
+                        setScreen("calendar");
+                      }
+                    }}>
+                      {foreignYouthCountry
+                        ? `Review access in ${getCountryDisplayName(foreignYouthCountry)}`
+                        : "Review available work"}
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1058,7 +1167,7 @@ export function PlayerProfile() {
                 <CardContent className="p-4">
                   <p className="text-xs text-zinc-500">Open question</p>
                   <p className="mt-1 font-semibold text-white">
-                    {caseQuestionSnapshot?.activeQuestions.length ?? (nextObservationContext ? 1 : 0)}
+                    {(caseQuestionSnapshot?.activeQuestions.length ?? (nextObservationContext ? 1 : 0)) + conversationInquiryQuestions.length}
                   </p>
                   <p className="text-xs text-zinc-400">current evidence gap{(caseQuestionSnapshot?.activeQuestions.length ?? 0) === 1 ? "" : "s"}</p>
                 </CardContent>
@@ -1101,7 +1210,11 @@ export function PlayerProfile() {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">
-                      No formal scouting case is driving this profile yet. The next step is still to preserve a changed-context judgment.
+                      {caseQuestionSnapshot
+                        ? conversationInquiryQuestions.length > 0
+                          ? "No additional case question is recorded. The conversation inquiries still need testing against first-hand evidence."
+                          : "No unresolved question is currently recorded for this case. Review the central question and decide what new evidence would change your judgment."
+                        : "No formal scouting case is driving this profile yet. The next step is still to preserve a changed-context judgment."}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
@@ -1718,6 +1831,8 @@ export function PlayerProfile() {
                 Evidence Board
               </h2>
               <EvidenceBoard
+                conversationDecisions={dossierEntries.flatMap((entry) => entry.conversationDecisions ?? [])
+                  .filter((decision) => decision.inquiry && relatedPlayerIds.has(decision.inquiry.playerId))}
                 playerName={`${player.firstName} ${player.lastName}`}
                 observations={observations}
                 contactIntel={contactIntel}
@@ -1803,6 +1918,7 @@ export function PlayerProfile() {
                               </p>
                             )}
 
+                            <ConversationRecord decisions={entry.conversationDecisions} />
                             {entry.flaggedMoments.length > 0 && (
                               <div className="mt-3 space-y-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -1997,6 +2113,8 @@ export function PlayerProfile() {
             {/* Form & Performance */}
             <FormPerformanceCard player={player} />
 
+            <PlayerAgeTimeline playerId={player.id} />
+
             <RetirementOutlookCard
               player={player}
               currentSeason={gameState.currentSeason}
@@ -2004,7 +2122,7 @@ export function PlayerProfile() {
 
             {/* Discipline */}
             <DisciplinaryCard
-              record={player.disciplinaryRecord ?? (gameState.disciplinaryRecords ?? {})[player.id]}
+              record={getPlayerDisciplinaryRecord(player, gameState.disciplinaryRecords)}
               gameState={gameState}
             />
 

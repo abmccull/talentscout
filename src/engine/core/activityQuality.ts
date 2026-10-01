@@ -399,48 +399,40 @@ const NARRATIVES: Partial<
   },
 
   // ── Youth activities ──────────────────────────────────────────────────────
+  // Quality describes how useful the appointment was, not a player finding.
+  // Specific claims must come from the saved observation or attributed account.
   followUpSession: {
     poor: [
-      "The follow-up session was frustrating. The player seemed distracted and showed none of the promise you'd seen before.",
-      "A disappointing return visit. Nerves got the better of the youngster and you couldn't confirm your initial impressions.",
+      "A difficult follow-up. Review the saved observation before deciding whether this visit answered your question.",
     ],
     average: [
-      "A steady follow-up session. The player performed as expected — no surprises, positive or negative.",
-      "Routine second look. You confirmed some earlier observations but didn't uncover anything new.",
+      "The follow-up is complete. Compare its saved observation with the earlier look; a repeat visit alone does not confirm a pattern.",
     ],
     good: [
-      "A productive follow-up. The player showed consistency, reinforcing your initial positive assessment.",
-      "Good session. You noticed details you'd missed before — the player's off-the-ball movement is better than you thought.",
+      "A productive return visit. Review the saved observation for what it supports and what remains unresolved.",
     ],
     excellent: [
-      "Excellent follow-up! The player has clearly improved since your last visit. Your early instincts were right.",
-      "Highly revealing session. Under pressure, the youngster showed composure well beyond his years.",
+      "A focused follow-up. Compare the recorded evidence across contexts before changing your assessment.",
     ],
     exceptional: [
-      "A defining follow-up session! The player produced a moment of brilliance that confirmed generational potential.",
-      "Extraordinary return visit. Every doubt from your first observation has been emphatically answered.",
+      "A particularly useful return visit. Its value still depends on the recorded evidence, not the quality rating alone.",
     ],
   },
   parentCoachMeeting: {
     poor: [
-      "An awkward meeting. The parents were defensive and the coach gave only guarded answers.",
-      "Difficult conversation. Cultural barriers made it hard to get honest information about the player's character.",
+      "A difficult meeting. No player trait can be inferred from how well the conversation went.",
     ],
     average: [
-      "A standard meeting. The parents were polite and the coach confirmed what you already suspected.",
-      "Routine conversation. You learned the player's home situation is stable but gained no real edge.",
+      "The meeting is complete. Use only attributed accounts when updating the case, and keep untested questions open.",
     ],
     good: [
-      "A productive meeting. The coach shared training insights and the parents revealed the player's strong work ethic.",
-      "Good conversation. You built rapport and learned about the player's mentality away from the pitch.",
+      "A productive meeting. Any account needs a named source and independent observation before it supports a player finding.",
     ],
     excellent: [
-      "Excellent meeting! The coach confided that this player is the hardest worker in the age group.",
-      "Highly revealing conversation. The parents' stories about the player's dedication painted a picture of real professionalism.",
+      "A well-managed meeting. The quality rating reflects the appointment, not proof of the player's character.",
     ],
     exceptional: [
-      "A breakthrough meeting! The coach shared tactical insights that completely reframed your assessment of the player.",
-      "Extraordinary conversation. The family's passion and the coach's conviction leave you certain this player has elite mentality.",
+      "A particularly effective meeting. Check the conversation record for attributable information; the rating alone establishes no player trait.",
     ],
   },
   writePlacementReport: {

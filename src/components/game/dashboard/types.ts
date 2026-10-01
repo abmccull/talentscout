@@ -24,7 +24,7 @@ export interface DashboardYouthDeskAction {
   title: string;
   description: string;
   label: string;
-  kind: "prospect" | "planner" | "advance";
+  kind: "prospect" | "planner" | "advance" | "report" | "watch";
 }
 
 export interface DashboardDeskMetric {
@@ -71,3 +71,15 @@ export type DashboardYouthEvidenceEntry = YouthDeskProspectEntry;
 export type DashboardSetScreen = (screen: GameScreen) => void;
 export type DashboardResolveSeasonEvent = (eventId: string, choiceIndex: number) => void;
 export type DashboardYouthActionModel = YouthActiveCaseModel;
+
+export interface DashboardYouthDeskStakes {
+  alumni: Array<{
+    playerId: string;
+    name: string;
+    statusLabel: string;
+    lastLine: string;
+  }>;
+  fileMoneyLabel: string;
+  reputationLine: string;
+  visible: boolean;
+}

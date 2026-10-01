@@ -29,7 +29,7 @@ import {
 } from "@/engine/world/saveRetention";
 import type {
   PlayerCareerStatus,
-  PlayerMovementArchiveSummary,
+  StoredPlayerMovementSummary,
   PlayerSeasonHistory,
   PlayerSeasonPerformance,
 } from "@/engine/world/worldHistoryTypes";
@@ -42,8 +42,9 @@ import {
   type ClubRecruitmentDoctrine,
 } from "@/engine/world/recruitmentIdentity";
 export type {
-  PlayerCareerStatus,
   PlayerMovementArchiveSummary,
+  PlayerCareerStatus,
+  StoredPlayerMovementSummary,
   PlayerSeasonHistory,
   PlayerSeasonPerformance,
 } from "@/engine/world/worldHistoryTypes";
@@ -119,7 +120,7 @@ export interface WorldSeasonHistory {
   /** Deterministic simulation clock, not wall-clock time. */
   recordedAfterTotalWeeks: number;
   leagues: LeagueSeasonHistory[];
-  clubs: ClubSeasonHistory[];
+  clubs: import("./clubSeasonArchive").ClubSeasonHistoryEntry[];
   players: PlayerSeasonHistory[];
   /**
    * Compact projection of every material player movement resolved this season.
@@ -131,7 +132,7 @@ export interface WorldSeasonHistory {
    * Optional for legacy saves; migration fills it from the raw ledger when
    * that source is still available.
    */
-  playerMovementSummaries?: PlayerMovementArchiveSummary[];
+  playerMovementSummaries?: StoredPlayerMovementSummary[];
 }
 
 export interface WorldHistoryState {

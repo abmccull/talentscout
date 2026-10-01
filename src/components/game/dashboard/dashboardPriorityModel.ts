@@ -15,6 +15,8 @@ import type {
   DashboardPrioritySourceSystem,
 } from "@/engine/dashboard/types";
 import { migrateDashboardState } from "@/engine/dashboard/state";
+import { hasReportBuyerEvidence, shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
+import { selectReportFollowUpCases } from "@/lib/reportFollowUpPriority";
 import {
   buildCareerStageQueue,
   deriveCareerStageProfile,
@@ -42,7 +44,7 @@ import { buildDashboardSocialFronts } from "@/engine/dashboard/socialFronts";
 import { projectDevelopmentPressureForState } from "@/engine/career/developmentPressure";
 import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
 import * as inboxActionAuthority from "@/engine/world/inboxActionAuthority";
-import { getResolvedPlayerIds, resolvePlayerEntity } from "@/lib/playerResolution";
+import { getResolvedPlayerIds, resolvePlayerEntity, resolvePlayerDisplayName } from "@/lib/playerResolution";
 export type {
   DashboardActionTarget,
   DashboardPriorityCandidate,
@@ -130,8 +132,7 @@ function formatWeekSeason(week: number, season: number): string {
 }
 
 function getPlayerName(state: GameState, playerId: string): string {
-  const player = resolvePlayerEntity(state, playerId)?.player;
-  return player ? `${player.firstName} ${player.lastName}` : "Unknown player";
+  return resolvePlayerDisplayName(state, playerId);
 }
 
 function weeksUntil(
@@ -303,8 +304,8 @@ function isAtOrPastDate(
 function applyDashboardDisposition(
   state: GameState,
   candidate: DashboardPriorityCandidate,
+  dashboardState: ReturnType<typeof migrateDashboardState>,
 ): DashboardPriorityCandidate | null {
-  const dashboardState = migrateDashboardState(state.dashboardState);
   const disposition = dashboardState.itemDispositions[candidate.id]
     ?? dashboardState.itemDispositions[candidate.canonicalKey];
   const fingerprint = candidateFingerprint(candidate);
@@ -624,15 +625,17 @@ function collectOfferedDecisionCandidates(state: GameState): DashboardPriorityCa
   return getOfferedCareerDecisions(state).map((decision) => {
     const dueInWeeks = weeksUntil(state, decision.deadlineAt);
     const sourceLabel = formatLabel(decision.source.kind);
+    const authoredTitle = typeof decision.metadata?.title === "string" ? decision.metadata.title.trim() : "";
+    const authoredPremise = typeof decision.metadata?.premise === "string" ? decision.metadata.premise.trim() : "";
     const optionLabels = decision.options.map((option) => option.label).filter(Boolean);
     return normalizeCandidate({
       id: `dashboard-decision-${decision.id}`,
       collector: "offered_decision",
       category: "required_action",
-      title: `Decision waiting: ${sourceLabel}`,
-      explanation: optionLabels.length > 0
+      title: authoredTitle || `Decision waiting: ${sourceLabel}`,
+      explanation: authoredPremise || (optionLabels.length > 0
         ? `${sourceLabel} is unresolved. Options on the table: ${optionLabels.join(", ")}.`
-        : `${sourceLabel} is unresolved and remains a live career decision.`,
+        : `${sourceLabel} is unresolved and remains a live career decision.`),
       consequence: `If you do nothing, the decision can expire on ${formatWeekSeason(decision.deadlineAt.week, decision.deadlineAt.season)}.`,
       deadlineWeek: decision.deadlineAt.week,
       deadlineSeason: decision.deadlineAt.season,
@@ -867,7 +870,7 @@ function collectReportCandidates(
 
   if (pendingListingReportId) {
     const pendingReport = state.reports[pendingListingReportId];
-    if (pendingReport && pendingReport.scoutId === state.scout.id) {
+    if (pendingReport && pendingReport.scoutId === state.scout.id && shouldPromptReportListing(pendingReport)) {
       const playerName = getPlayerName(state, pendingReport.playerId);
       candidates.push(normalizeCandidate({
         id: `dashboard-pending-listing-${pendingReport.id}`,
@@ -892,11 +895,50 @@ function collectReportCandidates(
     }
   }
 
-  for (const scoutingCase of Object.values(state.scoutingCases ?? {})) {
-    if (scoutingCase.scoutId !== state.scout.id) continue;
-    if (scoutingCase.status !== "reported" || scoutingCase.deliveryIds.length > 0) continue;
+  for (const scoutingCase of selectReportFollowUpCases(state, Object.values(state.scoutingCases ?? {}).filter((item) =>
+    item.scoutId === state.scout.id && item.status === "reported" && item.deliveryIds.length === 0))) {
     const report = getReportForCase(state, scoutingCase);
     if (!report) continue;
+    if (!hasReportBuyerEvidence(report)) {
+      const playerName = getPlayerName(state, scoutingCase.playerId);
+      candidates.push(normalizeCandidate({
+        id: `dashboard-report-evidence-${scoutingCase.id}`,
+        collector: "reports",
+        category: "opportunity",
+        mustResolveBeforeAdvance: false,
+        title: `Find the missing evidence on ${playerName}`,
+        explanation: "Your filed report preserves uncertainty; it does not yet contain a supported finding.",
+        consequence: report.evidenceAssessment?.nextTest?.description
+          ?? "Return to the dossier and choose what another observation needs to establish.",
+        relatedEntityIds: uniqueIds([scoutingCase.id, report.id, scoutingCase.playerId]),
+        sourceSystem: "reports",
+        actionLabel: "Plan the next test",
+        actionTarget: { screen: "playerProfile", playerId: scoutingCase.playerId },
+        canonicalKey: `report-evidence:${scoutingCase.id}`,
+        aliasKeys: [`report:${report.id}`],
+      }));
+      continue;
+    }
+    // Keeping an initial read private is a deliberate scouting decision, not
+    // an unfinished delivery. Formal commissioned reports still need routing.
+    if (state.scout.careerPath === "independent" && report.recommendedAction === "monitor"
+      && !(state.finances?.reportListings ?? []).some((listing) => listing.reportId === report.id)) {
+      candidates.push(normalizeCandidate({
+        id: `dashboard-report-monitor-${scoutingCase.id}`, collector: "reports", category: "opportunity",
+        mustResolveBeforeAdvance: false,
+        title: `Test the next question on ${getPlayerName(state, scoutingCase.playerId)}`,
+        explanation: "Your latest private assessment contains a supported finding, with questions still open.",
+        consequence: report.evidenceAssessment?.nextTest?.description
+          ?? "Choose another context to challenge the current assessment before escalating it.",
+        relatedEntityIds: uniqueIds([scoutingCase.id, report.id, scoutingCase.playerId]),
+        sourceSystem: "reports", actionLabel: "Plan the next test",
+        actionTarget: { screen: "playerProfile", playerId: scoutingCase.playerId },
+        canonicalKey: `report-evidence:${scoutingCase.id}`, aliasKeys: [`report:${report.id}`],
+      }));
+      continue;
+    }
+    if (report.evidenceAssessment?.kind === "initial"
+      && report.evidenceAssessment.recommendation === "monitor") continue;
     const playerName = getPlayerName(state, scoutingCase.playerId);
     const due = report.decisionDeadlineWeek != null && report.decisionDeadlineSeason != null
       ? { week: report.decisionDeadlineWeek, season: report.decisionDeadlineSeason }
@@ -1071,14 +1113,14 @@ function collectPlannerCandidate(state: GameState): DashboardPriorityCandidate[]
   return [normalizeCandidate({
     id: `dashboard-planner-gap-s${state.currentSeason}w${state.currentWeek}`,
     collector: "planner",
-    category: "required_action",
+    category: "opportunity",
     title: openDays === 1
       ? "1 day is still unallocated this week"
       : `${openDays} days are still unallocated this week`,
     explanation: scheduledObservationCount > 0
-      ? `You already have ${scheduledObservationCount} observation block${scheduledObservationCount === 1 ? "" : "s"} booked, but unused planner space still leaves attention on the table.`
-      : "The current week still has no complete plan, so your next evidence and recovery tradeoffs remain undefined.",
-    consequence: "Unused planner space turns into lost attention when the week advances.",
+      ? `You have ${scheduledObservationCount} observation block${scheduledObservationCount === 1 ? "" : "s"} booked. Add work if another question is worth the time and fatigue.`
+      : "Choose the evidence, relationships or recovery worth your time this week.",
+    consequence: "You can advance with open days. Check any dated opportunities before deciding to leave them free.",
     relatedEntityIds: [],
     sourceSystem: "planner",
     actionLabel: "Open planner",
@@ -1089,7 +1131,7 @@ function collectPlannerCandidate(state: GameState): DashboardPriorityCandidate[]
     },
     canonicalKey: `planner-gap:s${state.currentSeason}:w${state.currentWeek}`,
     aliasKeys: [],
-    mustResolveBeforeAdvance: true,
+    mustResolveBeforeAdvance: false,
   })];
 }
 
@@ -1111,7 +1153,10 @@ function getActiveRivalCampaigns(state: GameState): RivalCampaign[] {
 function collectRivalCandidates(state: GameState): DashboardPriorityCandidate[] {
   const candidates: DashboardPriorityCandidate[] = [];
 
-  for (const opportunity of getOpenRivalOrganizationOpportunities(state.rivalOrganizationState)) {
+  for (const opportunity of getOpenRivalOrganizationOpportunities(state.rivalOrganizationState, { season: state.currentSeason, week: state.currentWeek })) {
+    // A restored or just-advanced save can retain an open status until the
+    // next rival tick. The dated window still governs whether it is usable.
+    if ((weeksUntil(state, { season: opportunity.expiresSeason, week: opportunity.expiresWeek }) ?? 0) < 0) continue;
     candidates.push(normalizeCandidate({
       id: `dashboard-rival-opportunity-${opportunity.id}`,
       collector: "rivals",
@@ -1142,6 +1187,7 @@ function collectRivalCandidates(state: GameState): DashboardPriorityCandidate[] 
 
   for (const campaign of getActiveRivalCampaigns(state)) {
     if (campaign.phase !== "contest" && campaign.phase !== "response") continue;
+    if (campaign.phase === "response" && (weeksUntil(state, campaign.responseDueAt) ?? 0) < 0) continue;
     const signal = campaign.visibleSignals[0];
     candidates.push(normalizeCandidate({
       id: `dashboard-rival-campaign-${campaign.id}`,
@@ -1242,8 +1288,9 @@ export function buildDashboardPriorityCandidates(
     ...collectPlannerCandidate(input.gameState),
     ...collectRivalCandidates(input.gameState),
   ];
+  const dashboardState = migrateDashboardState(input.gameState.dashboardState);
   const dispositionAware = dedupeCandidates(allCandidates)
-    .map((candidate) => applyDashboardDisposition(input.gameState, candidate))
+    .map((candidate) => applyDashboardDisposition(input.gameState, candidate, dashboardState))
     .filter((candidate): candidate is DashboardPriorityCandidate => candidate !== null)
     .sort(compareRank);
   const adaptiveQueue = buildCareerStageQueue(

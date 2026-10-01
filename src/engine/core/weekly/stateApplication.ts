@@ -55,6 +55,7 @@ export function applyWeeklyPlayerProgression(
                 : "decline",
               dev.environment,
             ),
+            player.id,
           )
         : player.developmentHistory,
     };
@@ -90,6 +91,7 @@ export function applyWeeklyPlayerProgression(
               "breakthrough",
               bt.environment,
             ),
+            player.id,
           )
         : player.developmentHistory,
     };
@@ -120,6 +122,7 @@ export function applyWeeklyPlayerProgression(
               "injury-setback",
               setback.environment,
             ),
+            player.id,
           )
         : player.developmentHistory,
     };

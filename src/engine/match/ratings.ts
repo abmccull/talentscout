@@ -1,3 +1,4 @@
+import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
 /**
  * Player Match Rating Engine
  *
@@ -478,7 +479,7 @@ export function computeFormFromRatings(
   if (recentRatings.length === 0) return 0;
 
   // Most recent first (assume already ordered, but be safe)
-  const sorted = [...recentRatings].sort(
+  const sorted = recentRatings.map(expandMatchFormEntry).sort(
     (a, b) => b.season - a.season || b.week - a.week,
   );
   const slice = sorted.slice(0, 6);

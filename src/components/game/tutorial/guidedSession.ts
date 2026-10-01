@@ -262,9 +262,9 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     target: "report-conviction",
     title: "Write the first assessment",
     mentorText:
-      "This is the same report writer you will use later. Complete the five decisions: the saved evidence, what it suggests, what remains untested, the next test, and your confidence.",
+      "This is the same report writer you will use later. Complete the six decisions: the saved evidence, what it suggests, what remains untested, the next test, your recommendation, and your confidence.",
     mentorTextFreelance:
-      "File a first assessment, not a hunch. Work the five decisions on this page — evidence, claim, unknown, next test, confidence.",
+      "File a first assessment, not a hunch. Work the six decisions on this page — evidence, claim, unknown, next test, recommendation, confidence.",
     position: "right",
     interactive: true,
     screen: "reportWriter",
@@ -274,9 +274,9 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     target: "report-submit",
     title: "File the first assessment",
     mentorText:
-      "When the five decisions are complete, select File initial assessment. That opens an accountable case.",
+      "When the six decisions are complete, select File initial assessment. That opens an accountable case.",
     mentorTextFreelance:
-      "Select File initial assessment once the five decisions are ready. A tight first read beats hype.",
+      "Select File initial assessment once the six decisions are ready. A tight first read beats hype.",
     position: "top",
     interactive: true,
     screen: "reportWriter",
@@ -339,6 +339,16 @@ export function getGuidedMilestone(
   id: GuidedMilestoneId,
 ): GuidedMilestoneDefinition | undefined {
   return getActiveGuidedMilestones().find((m) => m.id === id);
+}
+
+/** Navigation is restricted only when this career can present an actual task. */
+export function shouldLockGuidedNavigation(
+  active: boolean,
+  task: GuidedMilestoneId | null,
+): boolean {
+  if (!active || task === null) return false;
+  const milestone = getGuidedMilestone(task);
+  return Boolean(milestone?.screen && milestone.target.length > 0);
 }
 
 /**

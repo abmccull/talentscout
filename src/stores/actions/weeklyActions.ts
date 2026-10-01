@@ -256,9 +256,19 @@ const INTERACTIVE_WEEKLY_RUNTIME: WeeklyActionRuntime = {
 
 export function createWeeklyActions(
   get: GetState,
-  set: SetState,
+  rawSet: SetState,
   runtime: WeeklyActionRuntime = INTERACTIVE_WEEKLY_RUNTIME,
 ) {
+  const set: SetState = (update) => {
+    const previousSimulation = get().weekSimulation;
+    rawSet(update);
+    const current = get();
+    if (!runtime.persistenceEnabled || !current.gameState
+      || current.weekSimulation === previousSimulation) return;
+    const saved = snapshotPersistedGameState(current.gameState, current.activeSession, current.weekSimulation);
+    rawSet({ gameState: saved });
+    queueGameplayAutosave(saved, rawSet);
+  };
   return {
   // ══════════════════════════════════════════════════════════════════════════
   // Schedule Management (scheduleActivity, unscheduleActivity)
@@ -302,7 +312,7 @@ export function createWeeklyActions(
       weekSimulation: null,
     });
     if (runtime.persistenceEnabled) {
-      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+      queueGameplayAutosave(snapshotPersistedGameState(get().gameState!), set);
     }
 
     // Tutorial auto-advance — generic and specialization-specific conditions.
@@ -352,7 +362,7 @@ export function createWeeklyActions(
       weekSimulation: null,
     });
     if (runtime.persistenceEnabled) {
-      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+      queueGameplayAutosave(snapshotPersistedGameState(get().gameState!), set);
     }
   },
 

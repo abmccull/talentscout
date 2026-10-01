@@ -168,6 +168,8 @@ export interface PlayerMoment {
   id: string;
   /** The player this moment belongs to. */
   playerId: string;
+  /** Stable action identity; absent on sessions saved before action-bound evidence. */
+  actionId?: string;
   /** Category of action this moment represents. */
   momentType:
     | "technicalAction"
@@ -200,6 +202,17 @@ export interface PlayerMoment {
  * Consequence that flows from an explicit dialogue choice.
  */
 export interface DialogueConsequence {
+  /** Attributed inquiry context; never a direct-observation evidence card. */
+  inquiry?: {
+    playerId: string;
+    questionId: ScoutingQuestionId;
+    sourceContactId?: string;
+    sourceName: string;
+    status: "recalledAccount" | "unanswered" | "withheld";
+    statement?: string;
+    recordedWeek?: number;
+    recordedSeason?: number;
+  };
   /** Narrative text shown to the player describing what happens. */
   narrativeText: string;
   /** Change to the contact relationship score (-5 to +5 typical range). */
@@ -210,6 +223,9 @@ export interface DialogueConsequence {
 
 /** Immutable, auditable result of one investigation response. */
 export interface DialogueChoiceResolution {
+  promptText?: string;
+  sourceName?: string;
+  inquiry?: DialogueConsequence["inquiry"];
   phaseIndex: number;
   nodeId: string;
   optionId: string;
@@ -589,6 +605,8 @@ export interface ObservationSession {
   phases: SessionPhase[];
   /** Index of the phase currently being processed (0-based). */
   currentPhaseIndex: number;
+  /** Original session length when the scout leaves for reflection early. */
+  plannedPhaseCount?: number;
   /** Focus token budget and allocation tracking. */
   focusTokens: FocusTokenState;
   /** Moments the scout has explicitly flagged during the session. */
@@ -652,6 +670,8 @@ export interface ObservationSession {
 export interface SessionConfig {
   /** The scheduled activity type determining mode and phase count. */
   activityType: ActivityType;
+  /** Targeted field revisit versus an authored conversation; old callers retain their format. */
+  followUpFormat?: "observation" | "conversation";
   /** Scheduled activity instance key (calendar instanceId or deterministic fallback). */
   activityInstanceId?: string;
   /** The scout's active specialization for this session. */

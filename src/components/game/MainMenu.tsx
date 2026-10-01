@@ -171,7 +171,7 @@ export function MainMenu() {
             id="talentscout-splash-title"
             className="mb-3 text-5xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] sm:text-7xl"
           >
-            Talent<span className="text-emerald-500 drop-shadow-[0_0_24px_rgba(16,185,129,0.5)]">Scout</span>
+            Talent<span className="text-amber-400 drop-shadow-[0_0_24px_rgba(212,168,67,0.5)]">Scout</span>
           </h1>
           <p className="text-lg tracking-wide text-zinc-400 animate-[splashFadeIn_1000ms_ease-out_400ms_both] drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
             The scout&apos;s eye sees what others miss
@@ -180,7 +180,7 @@ export function MainMenu() {
         <button
           type="button"
           onClick={() => setShowSplash(false)}
-          className="absolute bottom-6 right-6 z-10 min-h-11 rounded-lg border border-white/15 bg-black/35 px-4 text-sm font-medium text-zinc-300 backdrop-blur transition hover:border-white/30 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+          className="absolute bottom-6 right-6 z-10 min-h-11 rounded-lg border border-white/15 bg-black/35 px-4 text-sm font-medium text-zinc-300 backdrop-blur transition hover:border-white/30 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ring)]"
         >
           Skip intro
         </button>
@@ -202,7 +202,7 @@ export function MainMenu() {
       >
         <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.8} />
         <div className="relative z-10">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-[color:var(--primary)]" />
           <p className="mt-4 text-zinc-400">Loading save...</p>
         </div>
       </main>
@@ -215,7 +215,7 @@ export function MainMenu() {
       {/* Title */}
       <div className="relative z-10 mb-10 text-center md:mb-14">
         {IS_YOUTH_EARLY_ACCESS && (
-          <Badge className="mb-4 border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+          <Badge className="mb-4 border border-[color:var(--primary)]/30 bg-[color:var(--primary)]/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">
             Youth Scout Career · Early Access
           </Badge>
         )}

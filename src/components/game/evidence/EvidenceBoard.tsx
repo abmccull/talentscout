@@ -40,6 +40,7 @@ import {
 } from "./evidenceBoardModel";
 
 interface EvidenceBoardProps {
+  conversationDecisions?: import("@/engine/observation/types").DialogueChoiceResolution[];
   playerName: string;
   observations: Observation[];
   contactIntel?: HiddenIntel[];
@@ -218,6 +219,7 @@ function EmptyLane({ children }: { children: React.ReactNode }) {
 }
 
 export function EvidenceBoard({
+  conversationDecisions = [],
   playerName,
   observations,
   contactIntel = [],
@@ -237,6 +239,7 @@ export function EvidenceBoard({
   className,
 }: EvidenceBoardProps) {
   const model = useMemo(() => buildEvidenceBoardModel({
+    conversationDecisions,
     observations,
     contactIntel,
     npcReports,
@@ -250,7 +253,7 @@ export function EvidenceBoard({
       ? { week: currentWeek, season: currentSeason }
       : undefined,
     seasonLength,
-  }), [contactIntel, currentSeason, currentWeek, flaggedMoments, hypotheses, messages, npcReports, observations, reports, seasonLength, selectedHypothesisIds, unknowns]);
+  }), [conversationDecisions, contactIntel, currentSeason, currentWeek, flaggedMoments, hypotheses, messages, npcReports, observations, reports, seasonLength, selectedHypothesisIds, unknowns]);
   const [focusedHypothesisId, setFocusedHypothesisId] = useState<string | null>(null);
   const [focusedSourceId, setFocusedSourceId] = useState<string | null>(null);
   const activeHypothesis = model.hypotheses.find((hypothesis) => hypothesis.id === focusedHypothesisId);
@@ -290,7 +293,7 @@ export function EvidenceBoard({
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="group" aria-label="Evidence board summary">
           {[
-            [model.metrics.sourceCount, "visible sources"],
+            [model.metrics.sourceCount, "evidence records"],
             [model.metrics.contextCount, "contexts"],
             [model.metrics.openQuestions, "open questions"],
             [model.metrics.contradictions, "conflicts"],
@@ -323,10 +326,20 @@ export function EvidenceBoard({
                 {activeHypothesis
                   ? `Focused hypothesis: ${activeHypothesis.text}. ${visibleConnectedSourceIds.length} visible linked ${visibleConnectedSourceIds.length === 1 ? "source" : "sources"}.`
                   : focusedSourceId
-                    ? `Focused evidence source. ${connectedHypothesisIds.size} linked ${connectedHypothesisIds.size === 1 ? "hypothesis" : "hypotheses"}.`
+                    ? model.hypotheses.length > 0
+                      ? `Focused evidence source. ${connectedHypothesisIds.size} linked ${connectedHypothesisIds.size === 1 ? "hypothesis" : "hypotheses"}.`
+                      : "Focused evidence source. Compare its account with the report claims and acknowledged unknowns."
                     : "All evidence shown."}
               </p>
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)_2rem_minmax(0,1fr)]">
+              {(focusedHypothesisId || focusedSourceId) && (
+                <button type="button" onClick={() => { setFocusedHypothesisId(null); setFocusedSourceId(null); }}
+                  className="mb-3 flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs text-zinc-300 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                  <PinOff size={12} aria-hidden="true" /> Clear focus
+                </button>
+              )}
+              <div className={model.hypotheses.length > 0
+                ? "grid gap-3 xl:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)_2rem_minmax(0,1fr)]"
+                : "grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_2rem_minmax(0,1fr)]"}>
                 <section aria-labelledby="evidence-source-lane" className="min-w-0 rounded-xl border border-white/8 bg-white/[0.025] p-3">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <h3 id="evidence-source-lane" className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">1 · Sources</h3>
@@ -347,18 +360,10 @@ export function EvidenceBoard({
 
                 <div className="hidden items-center justify-center text-zinc-700 xl:flex" aria-hidden="true"><ArrowRight size={18} /></div>
 
+                {model.hypotheses.length > 0 && <>
                 <section aria-labelledby="evidence-hypothesis-lane" className="min-w-0 rounded-xl border border-white/8 bg-white/[0.025] p-3">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <h3 id="evidence-hypothesis-lane" className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">2 · Your hypotheses</h3>
-                    {(focusedHypothesisId || focusedSourceId) && (
-                      <button
-                        type="button"
-                        onClick={() => { setFocusedHypothesisId(null); setFocusedSourceId(null); }}
-                        className="flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[10px] text-zinc-400 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                      >
-                        <PinOff size={11} aria-hidden="true" /> Clear focus
-                      </button>
-                    )}
                   </div>
                   <div className="space-y-2">
                     {model.hypotheses.length === 0 ? <EmptyLane>No hypothesis has been preserved. The case is still descriptive.</EmptyLane> : model.hypotheses.map((hypothesis) => (
@@ -378,15 +383,18 @@ export function EvidenceBoard({
                 </section>
 
                 <div className="hidden items-center justify-center text-zinc-700 xl:flex" aria-hidden="true"><ArrowRight size={18} /></div>
+                </>}
 
                 <div className="min-w-0 space-y-3">
                   <section aria-labelledby="evidence-claim-lane" className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
                     <div className="mb-3 flex items-center justify-between gap-2">
-                      <h3 id="evidence-claim-lane" className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">3 · Report claims</h3>
+                      <h3 id="evidence-claim-lane" className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">{model.hypotheses.length > 0 ? "3" : "2"} · Report claims</h3>
                       {mode === "report" && <Badge variant="success" className="text-[9px]">Changes draft</Badge>}
                     </div>
                     <div className="space-y-2">
-                      {model.claims.length === 0 ? <EmptyLane>Select a hypothesis to turn interpretation into a professional claim.</EmptyLane> : model.claims.map((claim) => (
+                      {model.claims.length === 0 ? <EmptyLane>{model.hypotheses.length > 0
+                        ? "Select a hypothesis to turn interpretation into a professional claim."
+                        : "Use the report writer to assess your classified cues, record a supported judgment, and acknowledge what remains uncertain."}</EmptyLane> : model.claims.map((claim) => (
                         <article key={claim.id} className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.07] p-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-300">{claim.label}</span>
@@ -440,7 +448,7 @@ export function EvidenceBoard({
                     </ul>
                   )}
                 </section>
-                <section aria-labelledby="evidence-list-hypotheses">
+                {model.hypotheses.length > 0 && <section aria-labelledby="evidence-list-hypotheses">
                   <h3 id="evidence-list-hypotheses" className="text-xs font-semibold text-white">Hypotheses ({model.hypotheses.length})</h3>
                   {model.hypotheses.length === 0 ? <p className="mt-2 text-xs text-zinc-500">No hypotheses.</p> : (
                     <ul className="mt-2 space-y-2">
@@ -463,9 +471,14 @@ export function EvidenceBoard({
                       ))}
                     </ul>
                   )}
-                </section>
+                </section>}
                 <section aria-labelledby="evidence-list-claims">
                   <h3 id="evidence-list-claims" className="text-xs font-semibold text-white">Report claims ({model.claims.length})</h3>
+                  {model.claims.length === 0 && <p className="mt-2 text-xs leading-5 text-zinc-300">
+                    {model.hypotheses.length > 0
+                      ? "Select a hypothesis to turn interpretation into a professional claim."
+                      : "Use the report writer to assess your classified cues, record a supported judgment, and acknowledge what remains uncertain."}
+                  </p>}
                   <ul className="mt-2 space-y-2 text-xs leading-5 text-zinc-300">
                     {model.claims.map((claim) => <li key={claim.id}><strong>{claim.label}:</strong> {claim.verdict} <span className="text-zinc-500">({claim.confidence})</span></li>)}
                   </ul>

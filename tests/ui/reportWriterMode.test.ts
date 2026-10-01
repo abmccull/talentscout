@@ -3,9 +3,22 @@ import { describe, expect, it } from "vitest";
 import {
   canOpenReportWorkflowStep,
   resolveReportWorkflow,
+  shouldUseInitialAssessment,
 } from "@/components/game/reportWriterMode";
 
 describe("report writer workflow", () => {
+  it("keeps a restored opening report on the guided assessment despite open club briefs", () => {
+    const input = {
+      isYouthCase: true, hasOpenBrief: true, playerId: "opening-player",
+      openingCase: { playerId: "opening-player", stage: "report" as const },
+    };
+    expect(shouldUseInitialAssessment(input)).toBe(true);
+    expect(shouldUseInitialAssessment({ ...input, playerId: "another-player" })).toBe(false);
+    expect(shouldUseInitialAssessment({ ...input, openingCase: { ...input.openingCase, stage: "complete" } })).toBe(false);
+    expect(shouldUseInitialAssessment({ ...input, isYouthCase: false })).toBe(false);
+    expect(shouldUseInitialAssessment({ ...input, openingCase: undefined, hasOpenBrief: false })).toBe(true);
+  });
+
   it("keeps the writer on the next unresolved decision and counts remaining choices", () => {
     const steps = [
       { id: "brief", complete: true, decisionsRemaining: 0 },

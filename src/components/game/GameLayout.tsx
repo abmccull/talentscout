@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
 import { useTutorialStore, type TutorialSequenceId } from "@/stores/tutorialStore";
+import { shouldLockGuidedNavigation } from "@/components/game/tutorial/guidedSession";
 import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -12,6 +13,10 @@ import {
   shouldShowYouthInbox,
   shouldShowYouthWorldCareer,
 } from "@/lib/youthFirstHour";
+import {
+  collectYouthCasePlayerIds,
+  shouldShowYouthInboxMessage,
+} from "@/engine/youth/youthCaseFocus";
 import { useDialogFocusTrap } from "@/lib/a11y/useDialogFocusTrap";
 import { getCareerElapsedWeeks } from "@/engine/core/gameDate";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
@@ -309,7 +314,16 @@ export function GameLayout({
       hasGame: gameState !== null,
       currentWeek: gameState?.currentWeek ?? 0,
       currentSeason: gameState?.currentSeason ?? 0,
-      unreadCount: gameState?.inbox.filter((message) => !message.read).length ?? 0,
+      unreadCount: (() => {
+        const inbox = gameState?.inbox ?? [];
+        if (!IS_YOUTH_EARLY_ACCESS || !gameState) {
+          return inbox.filter((message) => !message.read).length;
+        }
+        const caseIds = collectYouthCasePlayerIds(gameState);
+        return inbox.filter((message) =>
+          !message.read && shouldShowYouthInboxMessage(gameState, message, caseIds),
+        ).length;
+      })(),
       unreviewedNpcReportCount: gameState
         ? Object.values(gameState.npcReports).filter((report) => !report.reviewed).length
         : 0,
@@ -341,8 +355,10 @@ export function GameLayout({
     };
   }));
   const { playSFX } = useAudio();
-  const guidedSessionActive = useTutorialStore((state) => state.guidedSessionActive);
+  const guidedSessionInProgress = useTutorialStore((state) => state.guidedSessionActive);
   const currentGuidedTask = useTutorialStore((state) => state.currentGuidedTask);
+  // A stale task absent from this career's mentor catalog cannot lock navigation.
+  const guidedSessionActive = shouldLockGuidedNavigation(guidedSessionInProgress, currentGuidedTask);
 
   // All hooks must be called before any early return
   const [seenNav, setSeenNav] = useState<Set<GameScreen>>(() => loadSeenNav());
@@ -503,9 +519,9 @@ export function GameLayout({
   }
 
   const watchChrome = chrome === "watch";
-  const firstHourFocus = "focus-visible:outline-emerald-400";
-  const firstHourSelected = "bg-emerald-400/12 font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20";
-  const firstHourMobileActive = "text-emerald-300";
+  const firstHourFocus = "focus-visible:outline-[color:var(--ring)]";
+  const firstHourSelected = "bg-[color:var(--primary)]/12 font-semibold text-[color:var(--primary)] ring-1 ring-inset ring-[color:var(--primary)]/25";
+  const firstHourMobileActive = "text-[color:var(--primary)]";
 
   return (
     <div className="flex min-h-screen bg-[#090b0e]">
@@ -637,7 +653,7 @@ export function GameLayout({
         {guidedSessionActive && (
           <div
             role="status"
-            className="mx-3 mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-zinc-300"
+            className="mx-3 mt-3 rounded-lg border border-[color:var(--primary)]/20 bg-[color:var(--primary)]/[0.06] px-3 py-2 text-xs leading-5 text-zinc-300"
           >
             {currentGuidedTask === "openedCalendar"
               ? "Planner is highlighted. Open it to continue."
@@ -693,7 +709,7 @@ export function GameLayout({
                       </span>
                     )}
                     {isNew && !isLocked && lockState !== "preview" && (
-                      <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-eyebrow font-bold text-emerald-400">
+                      <span className="rounded-full bg-[color:var(--success)]/20 px-1.5 py-0.5 text-eyebrow font-bold text-[color:var(--success)]">
                         New
                       </span>
                     )}
@@ -703,7 +719,7 @@ export function GameLayout({
                       </span>
                     )}
                     {screen === "npcManagement" && !isNew && unreviewedNpcReportCount > 0 && (
-                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-eyebrow font-bold text-black">
+                      <span className="rounded-full bg-[color:var(--success)] px-1.5 py-0.5 text-eyebrow font-bold text-[color:var(--success-foreground)]">
                         {unreviewedNpcReportCount}
                       </span>
                     )}
@@ -723,7 +739,7 @@ export function GameLayout({
                 onClick={() => handleNavClick("career")}
                 disabled={isGuidedNavigationLocked("career")}
                 title={isGuidedNavigationLocked("career") ? "Finish the highlighted tutorial step first" : undefined}
-                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-zinc-400 transition hover:bg-white/5 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-zinc-400 transition hover:bg-white/5 hover:text-[color:var(--primary)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
                 aria-label="Open career screen"
               >
                 <ChevronRight size={12} />
@@ -743,11 +759,11 @@ export function GameLayout({
           </div>
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className="text-zinc-400">Reputation</span>
-            <span className="text-emerald-400">{Math.round(scoutReputation)}</span>
+            <span className="text-[color:var(--success)]">{Math.round(scoutReputation)}</span>
           </div>
           <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
             <div
-              className="h-full rounded-full bg-emerald-500 transition-all"
+              className="h-full rounded-full bg-[color:var(--success)] transition-all"
               style={{ width: `${scoutReputation}%` }}
             />
           </div>

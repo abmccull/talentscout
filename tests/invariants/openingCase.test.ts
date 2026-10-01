@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type {
   GameState,
+  ReflectionJournalEntry,
+  ScoutingEvidenceCard,
   Player,
   Scout,
   UnsignedYouth,
@@ -111,6 +113,46 @@ function openingState(): GameState {
 }
 
 describe("opening discovery case", () => {
+  it("preserves an inconclusive opening read instead of inventing an exceptional action", () => {
+    const state = openingState();
+    const entry: ReflectionJournalEntry = {
+      id: "journal-opening", sessionId: "opening-session", activityInstanceId: "opening-discovery:test",
+      activityType: "schoolMatch", week: 1, season: 1, playerIds: ["lead"],
+      notes: [], hypotheses: [], evidenceVersion: 1, createdAt: 1,
+      evidenceCards: [{ id: "missed", playerId: "lead", clarity: "missed", classification: "noConclusion",
+        detail: "You could not isolate a defensible cue from this passage.", summary: "No clean read",
+      } as ScoutingEvidenceCard],
+    };
+    state.reflectionJournal = { opening: entry };
+    const projection = buildOpeningCaseProjection(state)!;
+    expect(projection.signal).toContain("No reliable conclusion");
+    expect(projection.signal).toContain(entry.evidenceCards![0].detail);
+    expect(projection.uncertainty).toContain("does not yet support a finding");
+    expect(JSON.stringify(projection)).not.toMatch(/exceptional|vision and anticipation|natural composure/i);
+
+    state.reflectionJournal.later = { ...entry, id: "later", week: 2, createdAt: 100,
+      evidenceCards: [{ ...entry.evidenceCards![0], clarity: "usable", classification: "preReceiveDecision", detail: "Later-session detail" }],
+    };
+    expect(buildOpeningCaseProjection(state)?.signal).toBe(projection.signal);
+    entry.evidenceCards = [{ ...entry.evidenceCards![0], clarity: "usable", classification: "preReceiveDecision", detail: "Scanned before receiving and found the exit." }];
+    expect(buildOpeningCaseProjection(state)?.signal).toBe("Scanned before receiving and found the exit.");
+  });
+
+  it("does not borrow another player's cue or an unrelated same-week session", () => {
+    const state = openingState();
+    state.reflectionJournal = { unrelated: {
+      id: "unrelated", sessionId: "other", activityInstanceId: "ordinary-booking",
+      activityType: "schoolMatch", week: 1, season: 1, playerIds: ["lead"],
+      notes: [], hypotheses: [], createdAt: 1,
+      flaggedMoments: [{ id: "other-cue", playerId: "lead", description: "Unrelated detail",
+        phaseIndex: 0, minute: 12, reaction: "promising", momentType: "tacticalDecision",
+        attributesHinted: [], pressureContext: false }],
+    } };
+    expect(buildOpeningCaseProjection(state)?.signal).not.toContain("Unrelated detail");
+    state.reflectionJournal.unrelated.activityInstanceId = "opening-discovery:test";
+    state.reflectionJournal.unrelated.flaggedMoments![0].playerId = "other-player";
+    expect(buildOpeningCaseProjection(state)?.signal).toContain("no retained player-specific passage");
+  });
   it("selects a genuine lead deterministically without leaking hidden ability", () => {
     const first = setup();
     const second = setup();

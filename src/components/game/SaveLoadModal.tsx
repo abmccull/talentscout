@@ -296,6 +296,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
   const [successSlot, setSuccessSlot] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveRetry, setSaveRetry] = useState<{ slot: number; name: string } | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -309,6 +310,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
       setConfirm(null);
       setSuccessSlot(null);
       setLoadError(null);
+      setSaveRetry(null);
       dismissSaveConflict();
     }
   }, [isOpen, refreshSaveSlots, dismissSaveConflict]);
@@ -391,6 +393,23 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
 
   // ── Save handler ──────────────────────────────────────────────────────────
 
+  const performSave = useCallback(async (slot: number, name: string) => {
+    clearTimeout(successTimerRef.current);
+    setLoadError(null);
+    setSaveRetry(null);
+    setSuccessSlot(null);
+    try {
+      await saveToSlot(slot, name);
+      setConfirm(null);
+      setSuccessSlot(slot);
+      successTimerRef.current = setTimeout(() => setSuccessSlot(null), 2000);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Please try again.";
+      setLoadError(`Could not save to slot ${slot}. ${detail}`);
+      setSaveRetry({ slot, name });
+    }
+  }, [saveToSlot]);
+
   const handleSave = useCallback(
     async (slot: number) => {
       if (!gameState) return;
@@ -406,23 +425,16 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
         return;
       }
       const name = `Manual Save - S${gameState.currentSeason} W${gameState.currentWeek}`;
-      await saveToSlot(slot, name);
-      setSuccessSlot(slot);
-      clearTimeout(successTimerRef.current);
-      successTimerRef.current = setTimeout(() => setSuccessSlot(null), 2000);
+      await performSave(slot, name);
     },
-    [gameState, findSlot, reservedSlots, saveToSlot],
+    [gameState, findSlot, reservedSlots, performSave],
   );
 
   const confirmOverwrite = useCallback(async () => {
     if (!gameState || !confirm || confirm.type !== "overwrite") return;
     const name = `Manual Save - S${gameState.currentSeason} W${gameState.currentWeek}`;
-    await saveToSlot(confirm.slot, name);
-    setConfirm(null);
-    setSuccessSlot(confirm.slot);
-    clearTimeout(successTimerRef.current);
-    successTimerRef.current = setTimeout(() => setSuccessSlot(null), 2000);
-  }, [gameState, confirm, saveToSlot]);
+    await performSave(confirm.slot, name);
+  }, [gameState, confirm, performSave]);
 
   // ── Load handler ──────────────────────────────────────────────────────────
 
@@ -595,7 +607,18 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
               className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-200"
               role="alert"
             >
-              {loadError}
+              <p>{loadError}</p>
+              {saveRetry && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 min-h-11"
+                  disabled={isSaving}
+                  onClick={() => void performSave(saveRetry.slot, saveRetry.name)}
+                >
+                  Retry save
+                </Button>
+              )}
             </div>
           )}
 

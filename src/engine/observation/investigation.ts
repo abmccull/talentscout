@@ -329,14 +329,14 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
       {
         speakerKey: "parent",
         textTemplate:
-          "You meet with {speakerName} to talk about {playerName}. They seem cautious — they've been contacted by clubs before and it came to nothing. How do you open?",
+          "You meet with {speakerName} to talk about {playerName}. Before discussing the player, they want to understand why you are here. How do you open?",
         options: [
           {
             text: "Keep it light — ask how {playerName} is finding the season",
             riskLevel: "safe",
           },
           {
-            text: "Be direct: explain your club's genuine interest and development pathway",
+            text: "Explain the scouting question you are trying to answer and the limits of your role",
             riskLevel: "moderate",
           },
           {
@@ -389,7 +389,7 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
       {
         speakerKey: "parent",
         textTemplate:
-          "{speakerName} is warming up slightly. They mention {playerName} has been working extra hours on their own initiative. You sense there is more.",
+          "The conversation turns to {playerName}'s development away from match day. You have an opportunity to ask for context rather than assume what their routine looks like.",
         options: [
           {
             text: "Ask about their home routine and how the family supports development",
@@ -408,18 +408,18 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
       {
         speakerKey: "youthCoach",
         textTemplate:
-          "{speakerName} describes {playerName} as 'talented but still raw.' You can feel there is a qualifier coming. How do you probe it?",
+          "You want to distinguish a broad opinion about {playerName} from something the source has actually seen. How do you probe their assessment?",
         options: [
           {
             text: "Let them finish — give them space to elaborate",
             riskLevel: "safe",
           },
           {
-            text: "Ask what the 'raw' part specifically refers to",
+            text: "Ask for a specific example behind their assessment",
             riskLevel: "moderate",
           },
           {
-            text: "Push: \"Is there a mental side to the rawness or purely technical?\"",
+            text: "Ask for an occasion when their first impression proved wrong",
             riskLevel: "bold",
           },
         ],
@@ -430,18 +430,18 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
       {
         speakerKey: "parent",
         textTemplate:
-          "{speakerName} pauses and looks at you carefully. They want to know what kind of club you represent — values, not just money.",
+          "{speakerName} asks how you will use this conversation. You are gathering a scouting assessment; the conversation itself cannot promise a place, trial or contract.",
         options: [
           {
-            text: "Speak genuinely about your club's youth development record",
+            text: "Explain what is established, what remains uncertain, and what your report can say",
             riskLevel: "safe",
           },
           {
-            text: "Offer a tour — let the facilities speak for themselves",
+            text: "Check which parts of the account they are comfortable being quoted on",
             riskLevel: "moderate",
           },
           {
-            text: "Lay out the financial package upfront to reset the conversation",
+            text: "Challenge an unsupported claim before putting your name behind it",
             riskLevel: "bold",
           },
         ],
@@ -452,18 +452,18 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
       {
         speakerKey: "parent",
         textTemplate:
-          "Before you wrap up, {speakerName} mentions a 'bigger club' that has also reached out. You need to handle this carefully.",
+          "Before you wrap up, you have time to clarify what still needs checking. Interest from another scout, if any, would not establish {playerName}'s ability.",
         options: [
           {
-            text: "Acknowledge it calmly — \"We understand there will be interest\"",
+            text: "Summarise the unanswered question without making a recommendation yet",
             riskLevel: "safe",
           },
           {
-            text: "Ask for the name of the club — frame it as due diligence",
+            text: "Ask where you could independently check the account",
             riskLevel: "moderate",
           },
           {
-            text: "Apply gentle urgency: \"Our window to move on this closes soon\"",
+            text: "Ask directly which part of the account they are least certain about",
             riskLevel: "bold",
           },
         ],
@@ -481,11 +481,11 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
             riskLevel: "safe",
           },
           {
-            text: "Ask for a direct answer: are they open to a formal trial?",
+            text: "Discuss whether another observation would be useful before any approach",
             riskLevel: "moderate",
           },
           {
-            text: "Set a deadline — 'We need to know by the end of the month'",
+            text: "State clearly why you cannot support a recommendation on this evidence alone",
             riskLevel: "bold",
           },
         ],
@@ -1847,10 +1847,9 @@ function resolveSessionNames(session: ObservationSession): {
   const primaryPlayer = session.players[0];
   const playerName = primaryPlayer?.name ?? "the player";
 
-  // For meetings, the second player slot is re-used to carry the contact/parent
-  // name when the session factory sets it up. Fall back to a generic label.
-  const secondPerson = session.players[1];
-  const speakerName = secondPerson?.name ?? deriveDefaultSpeaker(session.activityType);
+  // Player slots are scouting subjects, never proof of a conversation source.
+  // Use the same named contact that owns the relationship consequences.
+  const speakerName = session.sourceContactName?.trim() || deriveDefaultSpeaker(session.activityType);
 
   return { playerName, speakerName };
 }

@@ -14,6 +14,8 @@ import {
   MAX_COMPARABLE_EVIDENCE_SOURCES,
   neutralPlayerPerspective,
 } from "@/engine/scout/sourcePerspectives";
+import type { DialogueChoiceResolution } from "@/engine/observation/types";
+import { getConversationInquiryQuestions } from "@/engine/scout/conversationInquiryQuestions";
 
 export type EvidenceSourceKind = "observation" | "flaggedMoment" | "contactIntel" | "npcReport" | "messageIntel";
 
@@ -78,6 +80,7 @@ export interface EvidenceBoardModel {
 }
 
 export interface BuildEvidenceBoardModelInput {
+  conversationDecisions?: DialogueChoiceResolution[];
   observations: Observation[];
   contactIntel?: HiddenIntel[];
   npcReports?: NPCScoutReport[];
@@ -421,7 +424,13 @@ export function buildEvidenceBoardModel(input: BuildEvidenceBoardModelInput): Ev
       verdict?.acknowledgedUncertainty ? [verdict.acknowledgedUncertainty] : [],
     ),
   ) ?? [];
-  const unknowns = uniqueTrimmed([...(input.unknowns ?? []), ...reportUnknowns]).slice(0, 8);
+  // A source account is not an answer established by observation. Keep the
+  // question visible, without promoting it into a hypothesis or evidence card.
+  const inquiryQuestions = getConversationInquiryQuestions(input.conversationDecisions ?? []);
+  const unknowns = uniqueTrimmed([
+    ...inquiryQuestions.map(question => `Inquiry still to test: ${question.label} A conversation account alone cannot settle this question.`),
+    ...(input.unknowns ?? []), ...reportUnknowns,
+  ]).slice(0, 8);
   const claims = buildClaims(input.reports ?? [], hypotheses);
   const contexts = new Set(input.observations.map((observation) => observation.context));
 
@@ -435,7 +444,7 @@ export function buildEvidenceBoardModel(input: BuildEvidenceBoardModelInput): Ev
       contextCount: contexts.size,
       openQuestions: hypotheses.filter((hypothesis) =>
         hypothesis.state !== "confirmed" && hypothesis.state !== "debunked",
-      ).length,
+      ).length + inquiryQuestions.length,
       contradictions: hypotheses.filter((hypothesis) =>
         hypothesis.state === "contradicted"
         || hypothesis.state === "debunked"

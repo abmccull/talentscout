@@ -1024,6 +1024,11 @@ export interface Contact {
   loyalty?: number;
   /** History of interactions for trust/loyalty calculations. */
   interactionHistory?: ContactInteraction[];
+  /** Current-week inquiry choices survive abandoned sessions without replaying consequences. */
+  inquiryDecisions?: {
+    occurredAt: GameDate;
+    resolutions: Record<string, import("../observation/types").DialogueChoiceResolution>;
+  };
   /** Pending gossip items this contact has to share. */
   gossipQueue?: GossipItem[];
   /** IDs of contacts this contact can introduce (referral network). */
@@ -1167,6 +1172,7 @@ export type ScoutingQuestionId =
 export type EvidenceClassificationId =
   | "technicalExecution"
   | "preReceiveDecision"
+  | "defensiveReading"
   | "offBallMovement"
   | "pressureResponse"
   | "physicalRepeatability"
@@ -1753,6 +1759,10 @@ export interface InvalidScenarioArchiveEntry {
 }
 
 export interface GameState {
+  /** Permanent observed-person portrait reservations, including archived players. */
+  playerPortraits?: import("../players/portraits/types").PlayerPortraitState;
+  /** First-assignment guide choice. Missing in legacy saves; false always keeps navigation open. */
+  guidedSessionRequested?: boolean;
   /** The world seed used for deterministic world generation. */
   seed: string;
   /** Immutable, version-pinned identity for this career simulation. */
@@ -1897,6 +1907,8 @@ export interface GameState {
    * locked decisions or make their rewards available again.
    */
   activeObservationSession?: import("../observation/types").ObservationSession | null;
+  /** Uncommitted weekly itinerary, dated so it cannot replay a later world tick. */
+  pendingWeekRecovery?: { week: number; season: number; simulation: WeekSimulationState } | null;
 
   /** Player IDs bookmarked by the scout for quick access. */
   watchlist: string[];
@@ -3541,6 +3553,7 @@ export interface ReflectionHypothesisRecord {
 
 /** Durable qualitative evidence captured by the scout during a live session. */
 export interface ReflectionFlaggedMomentRecord {
+  momentId?: string;
   id: string;
   playerId: string;
   phaseIndex: number;
@@ -3559,6 +3572,11 @@ export interface ReflectionFlaggedMomentRecord {
 }
 
 export interface ReflectionJournalEntry {
+  /** Locked conversation choices, separate from direct observation evidence. */
+  conversationDecisions?: import("../observation/types").DialogueChoiceResolution[];
+  /** Exact scheduled booking, so repeated activities cannot borrow each other's evidence. */
+  activityInstanceId?: string;
+  sessionMode?: "fullObservation" | "investigation" | "analysis" | "quickInteraction";
   id: string;
   sessionId: string;
   activityType: ActivityType;
@@ -4078,7 +4096,7 @@ export interface DayResult {
   profilesGenerated: number;
   /** Anomalies flagged (data activities). */
   anomaliesFound: number;
-  /** XP gained per scout skill from this day's activity. */
+  /** Base XP preview; weekly processing applies modifiers before awarding XP. */
   xpGained: Partial<Record<ScoutSkill, number>>;
   /** Fatigue change from this day's activity. */
   fatigueChange: number;
@@ -4103,6 +4121,8 @@ export interface WeekSimulationState {
   focusedYouthPlayerIds?: string[];
   /** Pre-computed youth venue results — applied during advanceWeek to avoid double-processing. */
   youthVenueResults?: {
+    /** Per-observation effects, so rejected previews cannot overwrite live state. */
+    observationEffects?: Record<string, { youthId: string; buzzIncrease: number; visibilityIncrease: number }>;
     updatedUnsignedYouth: Record<string, UnsignedYouth>;
     newObservations: Record<string, Observation>;
     newDiscoveries: DiscoveryRecord[];

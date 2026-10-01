@@ -10,7 +10,8 @@
 
 import type { GameState, InboxMessage, RivalScout } from "@/engine/core/types";
 import type { WorldFact } from "@/engine/consequences/types";
-import { gameWeeksBetween, isGameDateAtOrAfter } from "@/engine/core/gameDate";
+import { createGameCalendarIndex, gameWeeksBetweenWithCalendar, isGameDateAtOrAfter,
+  type GameCalendarIndex } from "@/engine/core/gameDate";
 import type { TransferAgreementProposal } from "@/engine/transfers/transferAgreement";
 import {
   createDeterministicRunId,
@@ -680,16 +681,18 @@ export function deriveRivalMarketPressure(
     .sort((left, right) => right.urgency - left.urgency
       || left.rivalId.localeCompare(right.rivalId));
 
+  let leakCalendar: GameCalendarIndex | undefined;
   const recentOrganizationLeaks = (state.rivalOrganizationState?.activities ?? [])
     .filter((activity) => {
-      const age = gameWeeksBetween(state.fixtures, {
+      // Most organization history concerns other players or actions. Filter
+      // those before doing date work, then share one calendar for this query.
+      if (activity.action !== "whisper-campaign" || activity.relatedPlayerId !== playerId) return false;
+      leakCalendar ??= createGameCalendarIndex(state.fixtures);
+      const age = gameWeeksBetweenWithCalendar(leakCalendar, {
         season: activity.season,
         week: activity.week,
       }, now);
-      return age >= 0
-        && age <= 4
-        && activity.action === "whisper-campaign"
-        && activity.relatedPlayerId === playerId;
+      return age >= 0 && age <= 4;
     })
     .map((activity) => activity.id);
   const gossipLeaks = Object.values(state.contacts ?? {}).flatMap((contact) =>
@@ -1653,9 +1656,11 @@ export function getRivalOrganizationThreat(
 
 export function getOpenRivalOrganizationOpportunities(
   state: RivalOrganizationState,
+  date: { season: number; week: number },
 ): RivalOrganizationOpportunity[] {
   return Object.values(state.opportunities)
-    .filter((opportunity) => opportunity.status === "open")
+    .filter((opportunity) => opportunity.status === "open"
+      && compareDate(date, { season: opportunity.expiresSeason, week: opportunity.expiresWeek }) <= 0)
     .sort((left, right) =>
       left.expiresSeason - right.expiresSeason
       || left.expiresWeek - right.expiresWeek

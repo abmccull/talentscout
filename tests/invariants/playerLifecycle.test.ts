@@ -80,6 +80,33 @@ function world(
 }
 
 describe("authoritative player lifecycle", () => {
+  it("reserves scarce payroll for usable senior depth instead of a cheap academy signing", () => {
+    const makeInput = (age: number) => {
+      const input = world(player({ age, position: "CM", clubId: undefined, contractClubId: undefined }));
+      input.clubs.a.playerIds = [];
+      input.clubs.b.weeklyWageBudget = 889;
+      for (let index = 0; index < 12; index++) {
+        const id = `incumbent-${index}`;
+        input.players[id] = player({ id, age: 24, position: index === 0 ? "GK" : "CM",
+          clubId: "b", contractClubId: "b", wage: 0 });
+        input.clubs.b.playerIds.push(id);
+      }
+      return input;
+    };
+    const intent = { type: "freeAgentSigning" as const, playerId: "p1", toClubId: "b",
+      wage: 500, signingBonus: 0, contractLength: 2, preserveSquadWageReserve: true };
+    const academy = makeInput(14);
+    const before = JSON.stringify(academy);
+    const rejected = resolvePlayerMovements(academy, [intent], 4, 2);
+    expect(rejected.rejected).toHaveLength(1);
+    expect(rejected.state.players.p1.clubId).toBeUndefined();
+    expect(rejected.state.playerMovementHistory).toHaveLength(0);
+    expect(JSON.stringify(academy)).toBe(before);
+    const senior = resolvePlayerMovements(makeInput(20), [intent], 4, 2);
+    expect(senior.rejected).toEqual([]);
+    expect(senior.state.clubs.b.playerIds).toContain("p1");
+    expect(senior.state.players.p1.wage).toBe(500);
+  });
   it("applies a permanent transfer once with contract, roster, and budget integrity", () => {
     const input = world();
     input.clubs.b.academyPlayerIds = ["p1"]; // corrupt duplicate membership is repaired

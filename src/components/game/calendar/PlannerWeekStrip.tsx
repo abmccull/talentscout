@@ -75,7 +75,7 @@ export function PlannerWeekStrip({
       id="planner-itinerary"
       data-tutorial-id="calendar-grid"
       aria-labelledby="itinerary-heading"
-      className={`sticky -top-4 z-20 -mx-2 mb-4 rounded-2xl border p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 md:top-0 sm:p-4 ${
+      className={`relative z-20 -mx-2 mb-4 rounded-2xl border p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 sm:p-4 ${
         openingShell
           ? "border-[color:var(--primary)]/25 bg-[#14110c]/95"
           : "border-emerald-400/20 bg-[#0c1217]/95"
@@ -106,8 +106,8 @@ export function PlannerWeekStrip({
           </div>
           <p className="mt-1 text-sm leading-6 text-zinc-300" aria-live="polite">
             {selectedActivity
-              ? `${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Selected activity"} is live in compare mode. Choose a start day in the strip.`
-              : `${openDayCount} open day${openDayCount === 1 ? "" : "s"}. The strip is the week: every placement should make the next choice harder or clearer.`}
+              ? `${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Activity"} selected. Choose an available start day.`
+              : `${openDayCount} open day${openDayCount === 1 ? "" : "s"}. Choose work or select an open day.`}
           </p>
         </div>
         {selectedActivity && (
@@ -165,7 +165,7 @@ export function PlannerWeekStrip({
           return (
             <div
               key={dayKey}
-              className={`workspace-interactive relative min-h-11 min-w-[5.75rem] snap-start rounded-xl border p-2 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] xl:min-w-0 ${
+              className={`workspace-interactive relative min-h-11 w-60 shrink-0 snap-start rounded-xl border p-2 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] xl:w-auto xl:min-w-0 ${
                 activity
                   ? openingShell
                     ? "border-[color:var(--primary)]/30 bg-[color:var(--primary)]/[0.08]"
@@ -323,9 +323,7 @@ export function PlannerWeekStrip({
                         ? canPlaceSelected
                           ? `Commit ${selectedActivity.slots} day${selectedActivity.slots === 1 ? "" : "s"} here.`
                           : "This slot is blocked by another commitment."
-                        : isWeekBlank
-                          ? "Start the week with evidence, access, or recovery before the trail goes quiet."
-                          : "Use one open slot to make the next evidence choice clearer."}
+                        : "Choose observation, contacts or recovery."}
                     </span>
                   )}
                 </button>

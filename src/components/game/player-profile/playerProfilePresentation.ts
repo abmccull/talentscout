@@ -1,4 +1,14 @@
-import type { GameState, ScoutingCase } from "@/engine/core/types";
+import type { GameState, ScoutReport, ScoutingCase } from "@/engine/core/types";
+
+/** Current authored judgment, irrespective of object insertion order in a save. */
+export function getLatestPlayerReport(reports: readonly ScoutReport[]): ScoutReport | undefined {
+  return [...reports].sort((left, right) =>
+    right.submittedSeason - left.submittedSeason
+    || right.submittedWeek - left.submittedWeek
+    || (right.revision ?? 0) - (left.revision ?? 0)
+    || right.id.localeCompare(left.id),
+  )[0];
+}
 
 export type PlayerProfileTabId = "decision" | "evidence" | "development" | "history";
 

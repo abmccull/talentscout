@@ -626,7 +626,7 @@ export function InternationalScreen() {
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<"map" | "browser" | null>(null);
   const [justBooked, setJustBooked] = useState(false);
-  const [travelPosture, setTravelPosture] = useState<TravelPosture>("assignmentFirst");
+  const [travelPosture, setTravelPosture] = useState<TravelPosture>("deepDive");
   const [worldOutlookOpen, setWorldOutlookOpen] = useState(false);
 
   const closeWorldOutlook = useCallback(() => {
@@ -912,9 +912,7 @@ export function InternationalScreen() {
   const selectedContinent = selectedCountry ? getContinentId(selectedCountry) : "unknown";
   const effectiveTravelQuoteFor = (
     country: string,
-    posture: TravelPosture = country === selectedCountry
-      ? travelPosture
-      : "assignmentFirst",
+    posture: TravelPosture = travelPosture,
   ) => {
     const travelEquipmentBonuses = gameState.finances?.equipment
       ? getContextualEquipmentBonuses(
@@ -1093,6 +1091,7 @@ export function InternationalScreen() {
             const position = getCountryMapPosition(country);
             if (!position) return;
             rememberPopupTrigger(document.activeElement);
+            setTravelPosture("assignmentFirst");
             openCountryPopup(country, position.x, position.y);
           }}
           onReviewAssignment={handleReviewAssignment}

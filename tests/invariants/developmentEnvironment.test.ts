@@ -1,3 +1,4 @@
+import { getPlayerDevelopmentHistoryOutcome } from "@/engine/world/developmentEnvironment";
 import { describe, expect, it } from "vitest";
 import type {
   Club,
@@ -14,6 +15,8 @@ import {
   PLAYER_DEVELOPMENT_HISTORY_LIMIT,
   appendPlayerDevelopmentHistory,
   compactPlayerDevelopmentHistory,
+  getPlayerDevelopmentHistorySummary,
+  getPlayerDevelopmentHistoryId,
   createDevelopmentEnvironmentIndex,
   createPlayerDevelopmentHistoryEntry,
   evaluatePlayerDevelopmentEnvironment,
@@ -87,6 +90,33 @@ function makeManager(clubId: string): ManagerProfile {
 }
 
 describe("player development environment", () => {
+  it("reconstructs matching outcomes while retaining exceptional historical outcomes", () => {
+    for (const event of ["routine-growth", "breakthrough", "decline", "injury-setback"] as const) {
+      const original: PlayerDevelopmentHistoryEntry = {
+        season: 2, week: 10, event, environmentBand: "mixed",
+        outcome: event === "decline" ? "declined" : event === "injury-setback" ? "setback" : "improved",
+      };
+      const packed = JSON.parse(JSON.stringify(compactPlayerDevelopmentHistory([original])[0]));
+      expect(packed.outcome).toBeUndefined();
+      expect(getPlayerDevelopmentHistoryOutcome(packed)).toBe(original.outcome);
+      const exception = { ...original, outcome: original.outcome === "improved" ? "setback" as const : "improved" as const };
+      expect(compactPlayerDevelopmentHistory([exception])[0].outcome).toBe(exception.outcome);
+    }
+  });
+  it("reconstructs generated event identities and deduplicates a retry after compact save reload", () => {
+    const entry: PlayerDevelopmentHistoryEntry = { id: "development_8_12_player-long-id_routine-growth",
+      season: 8, week: 12, event: "routine-growth", outcome: "improved", environmentBand: "adverse" };
+    const custom = { ...entry, id: "authored-event", summary: "An unusual development turn." };
+    const packed = JSON.parse(JSON.stringify(compactPlayerDevelopmentHistory([entry, custom], "player-long-id")));
+    expect(packed[0].id).toBeUndefined();
+    expect(getPlayerDevelopmentHistoryId(packed[0], "player-long-id")).toBe(entry.id);
+    expect({ ...packed[1], outcome: getPlayerDevelopmentHistoryOutcome(packed[1]) }).toEqual(custom);
+    const retried = appendPlayerDevelopmentHistory(packed, entry, "player-long-id");
+    expect(retried).toHaveLength(2);
+    expect(retried.map((row) => getPlayerDevelopmentHistoryId(row, "player-long-id"))).toEqual([custom.id, entry.id]);
+    expect(compactPlayerDevelopmentHistory(retried, "player-long-id")).toEqual(retried);
+    expect(compactPlayerDevelopmentHistory([entry], "different-owner")[0].id).toBe(entry.id);
+  });
   it("reuses one weekly lookup index without changing projections or rescanning fixtures", () => {
     const player = makePlayer("indexed", "patient");
     const loanPlayer = {
@@ -305,7 +335,10 @@ describe("player development environment", () => {
 
     const compacted = compactPlayerDevelopmentHistory([legacyVerboseTurn]);
 
-    expect(compacted).toEqual([visibleTurn]);
+    expect(compacted.map((entry) => ({ ...entry, outcome: getPlayerDevelopmentHistoryOutcome(entry), summary: getPlayerDevelopmentHistorySummary(entry) }))).toEqual([visibleTurn]);
+    const custom = { ...visibleTurn, summary: "A specific coach helped this player recover confidence." };
+    expect(compactPlayerDevelopmentHistory([custom])[0].summary).toBe(custom.summary);
+    expect(getPlayerDevelopmentHistorySummary(JSON.parse(JSON.stringify(compacted[0])))).toBe(visibleTurn.summary);
     expect(compactPlayerDevelopmentHistory(compacted)).toEqual(compacted);
     expect(JSON.stringify(compacted).length).toBeLessThan(JSON.stringify(legacyVerboseTurn).length);
   });

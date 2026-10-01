@@ -1,3 +1,4 @@
+import { isPortraitOnlyStateChange, preparePortraitWeekCommit } from "@/engine/players/portraits/gameIntegration";
 import { runWeeklyWorkerTransaction } from "@/lib/weeklySimulationWorkerClient";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import type { GameStoreState } from "../gameStoreTypes";
@@ -59,15 +60,19 @@ export function createWeeklyAsyncActions(
       try {
         const execution = await runWeeklyWorkerTransaction(input);
         const current = get();
-        const sourceIsStillActive = current.gameState === sourceState
+        const sourceIsStillActive = isPortraitOnlyStateChange(sourceState, current.gameState)
           && current.weekSimulation === sourceSimulation;
         if (!sourceIsStillActive) return;
 
         const commit = execution.materializedCommit
           ?? materializeWeeklyWorkerCommit(sourceState, execution.commit);
 
+        const committedState = commit.patch.gameState && current.gameState
+          ? preparePortraitWeekCommit(commit.patch.gameState, current.gameState)
+          : commit.patch.gameState;
         set({
           ...commit.patch,
+          ...(Object.prototype.hasOwnProperty.call(commit.patch, "gameState") ? { gameState: committedState } : {}),
           isAdvancingWeek: false,
           lastWeeklyExecutionRoute: execution.route,
           lastWeeklyWorkerTelemetry: execution.telemetry,
@@ -75,13 +80,12 @@ export function createWeeklyAsyncActions(
         });
         applyWeeklyTutorialCommands(commit.tutorialCommands);
 
-        const committedState = commit.patch.gameState;
         if (committedState && !isBatchAdvanceInProgress()) {
           queueWeeklyAutosave(committedState, set);
         }
       } catch (error) {
         const current = get();
-        const sourceIsStillActive = current.gameState === sourceState
+        const sourceIsStillActive = isPortraitOnlyStateChange(sourceState, current.gameState)
           && current.weekSimulation === sourceSimulation;
         if (!sourceIsStillActive) return;
         const message = error instanceof Error ? error.message : String(error);
@@ -94,7 +98,7 @@ export function createWeeklyAsyncActions(
         const current = get();
         if (
           current.isAdvancingWeek
-          && current.gameState === sourceState
+          && isPortraitOnlyStateChange(sourceState, current.gameState)
           && current.weekSimulation === sourceSimulation
         ) {
           set({ isAdvancingWeek: false });

@@ -1,3 +1,4 @@
+import { revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { create } from "zustand";
 import { createNavigationActions } from "./actions/navigationActions";
 import { createObservationActions } from "./actions/observationActions";
@@ -187,6 +188,8 @@ import {
   snapshotPersistedGameState,
 } from "@/stores/actions/persistGameplayAutosave";
 import { useTutorialStore } from "@/stores/tutorialStore";
+import { createSessionReflectionResult } from "@/stores/actions/createSessionReflectionResult";
+import { reconcileOpeningReportStage } from "@/engine/youth/openingFollowUp";
 import {
   applyScenarioSetup,
   getInvalidScenarioReason,
@@ -386,6 +389,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Cross-screen calendar pre-fill
   pendingCalendarActivity: null,
   pendingNetworkContactId: null,
+  pendingInboxMessageId: null,
   pendingRivalOpportunityId: null,
   pendingInternationalCountry: null,
 
@@ -934,14 +938,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const openingCase = openingMode === "tutorial"
       ? createOpeningCase(openingInput)
       : veteranPrologue?.openingCase ?? null;
-    const finalGameState: GameState = openingCase
-      ? {
-          ...scenarioState,
-          openingCase,
-          ...(veteranPrologue ? { veteranPrologue } : {}),
-        }
-      : scenarioState;
+    let finalGameState: GameState = {
+      ...scenarioState,
+      // This choice belongs to this career; a different browser's tutorial
+      // cache must never turn an explicitly unguided assignment into a tour.
+      guidedSessionRequested: effectiveConfig.specialization === "youth"
+        ? shouldStartYouthGuidedHour({
+            openingMode,
+            guideFirstHour: effectiveConfig.guideFirstHour,
+          }) && Boolean(openingCase)
+        : !scenario,
+      ...(openingCase ? { openingCase } : {}),
+      ...(veteranPrologue ? { veteranPrologue } : {}),
+    };
 
+    finalGameState = revealKnownGamePortraits(finalGameState);
     set({
       gameState: finalGameState,
       isLoaded: true,
@@ -964,15 +975,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         {
           forceReplay:
             tutorialState.guidedSessionCompleted || tutorialState.dismissed,
+          careerId: finalGameState.scout.id,
         },
       );
-    } else if (openingMode === "tutorial" && openingCase) {
-      useTutorialStore.getState().skipGuidedSession();
     } else if (effectiveConfig.specialization !== "youth" && !scenario) {
       useTutorialStore.getState().startGuidedSession(
         !!effectiveConfig.startingClubId,
         "firstWeek",
+        { careerId: finalGameState.scout.id },
       );
+    } else {
+      // A new unguided career must not inherit a previous career's guide.
+      useTutorialStore.getState().skipGuidedSession();
     }
     if (openingCase) {
       const openingPlayerIds = new Set(openingCase.playerPoolIds);
@@ -1014,16 +1028,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadGame: (rawState) => {
-    resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     // Every runtime entrypoint, including direct test/import loads, passes
     // through the same pure and idempotent migration used by save providers.
-    const scenarioSafeState = migrateSaveState(rawState);
+    const migratedState = reconcileOpeningReportStage(migrateSaveState(rawState));
+    const scenarioSafeState = revealKnownGamePortraits(migratedState);
     assertEarlyAccessSaveCompatibility(scenarioSafeState);
     const resumableSession = scenarioSafeState.activeObservationSession ?? null;
+    const recovery = scenarioSafeState.pendingWeekRecovery;
+    const resumableWeek = recovery && recovery.week === scenarioSafeState.currentWeek
+      && recovery.season === scenarioSafeState.currentSeason
+      ? recovery.simulation : null;
+    const resumedReflection = resumableSession?.state === "reflection"
+      ? createSessionReflectionResult(scenarioSafeState, resumableSession)
+      : null;
+    // Failed validation must leave the active career's queued save intact.
+    const hadPendingAutosave = resetGameplayAutosaveWatermark();
     const openingStage = scenarioSafeState.openingCase?.stage;
     const restoreScreen = resumableSession
       ? "observation"
+      : resumableWeek ? "weekSimulation"
       : openingStage === "decision"
         ? "openingDiscovery"
         : openingStage === "report"
@@ -1039,10 +1063,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       scenarioOutcomeScenarioId: null,
       pendingCelebration: null,
       activeSession: resumableSession,
+      lastReflectionResult: resumedReflection,
       sessionReturnScreen: resumableSession
-        ? resolveGameScreenForBuild("dashboard", true)
+        ? resolveGameScreenForBuild(resumableWeek ? "weekSimulation" : "dashboard", true)
         : null,
-      weekSimulation: null,
+      weekSimulation: resumableWeek,
       lastWeekSummary: null,
       batchSummary: null,
       saveConflict: null,
@@ -1053,17 +1078,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       weeklyTransactionError: null,
     });
 
-    const tutState = useTutorialStore.getState();
-    if (!tutState.dismissed && !tutState.guidedSessionCompleted) {
-      const hasIncomplete = Object.values(tutState.guidedMilestones).some((value) => !value);
-      if (hasIncomplete) useTutorialStore.setState({ guidedSessionActive: true });
+    if (hadPendingAutosave || scenarioSafeState.playerPortraits !== migratedState.playerPortraits) {
+      // An already-started old write cannot be cancelled. Commit the loaded
+      // career behind it so that old I/O can never become the final autosave.
+      queueGameplayAutosave(
+        snapshotPersistedGameState(scenarioSafeState, resumableSession),
+        set,
+      );
     }
+
+    useTutorialStore.getState().resumeGuidedSession(scenarioSafeState);
   },
 
   saveGame: () => {
-    const { gameState, activeSession } = get();
+    const { gameState, activeSession, weekSimulation } = get();
     if (!gameState) return null;
-    const saved = snapshotPersistedGameState(gameState, activeSession);
+    const saved = snapshotPersistedGameState(gameState, activeSession, weekSimulation);
     set({ gameState: saved });
     void flushGameplayAutosave(saved, set).catch((err) => {
       console.warn("saveGame: provider persist failed:", err);
@@ -1073,24 +1103,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   flushGameplaySave: async () => {
-    const { gameState, activeSession } = get();
+    const { gameState, activeSession, weekSimulation } = get();
     if (!gameState) return;
-    const saved = snapshotPersistedGameState(gameState, activeSession);
+    const saved = snapshotPersistedGameState(gameState, activeSession, weekSimulation);
     set({ gameState: saved });
     await flushGameplayAutosave(saved, set);
   },
 
   // Persistence (save provider)
   saveToSlot: async (slot, name) => {
-    const { gameState, activeSession } = get();
+    const { gameState, activeSession, weekSimulation } = get();
     if (!gameState) return;
     set({ isSaving: true, saveConflict: null });
     try {
-      const saved = {
-        ...gameState,
-        activeObservationSession: activeSession,
-        lastSaved: Date.now(),
-      };
+      const saved = snapshotPersistedGameState(gameState, activeSession, weekSimulation);
       const provider = await getActiveSaveProvider();
       const commit = await persistGameState(
         provider,
@@ -1098,12 +1124,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         saved,
         name,
       );
-      set({
-        gameState: {
-          ...saved,
-          lastSaved: commit?.record.state.lastSaved ?? Date.now(),
-        },
-      });
+      // Saving a snapshot does not authorize restoring it over newer play.
+      // Reference checks also protect a different career loaded during I/O.
+      set((current) => current.gameState === gameState && current.activeSession === activeSession
+        ? {
+            gameState: {
+              ...current.gameState,
+              lastSaved: commit?.record.state.lastSaved ?? saved.lastSaved,
+            },
+          }
+        : {});
       await get().refreshSaveSlots();
     } finally {
       set({ isSaving: false });

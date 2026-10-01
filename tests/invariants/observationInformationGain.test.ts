@@ -60,6 +60,35 @@ function collectObjectKeys(value: unknown, keys: Set<string> = new Set()): Set<s
 }
 
 describe("observation information gain", () => {
+  it("accounts for unproductive work without inventing independent knowledge", () => {
+    const request = { playerId: PLAYER_ID, observations: [],
+      candidateContexts: ["parentCoachMeeting", "followUpSession"] as const };
+    const attempt = { id: "meeting-1", playerId: PLAYER_ID, context: "parentCoachMeeting" as const };
+    const before = rankNextObservationContexts(request);
+    const after = rankNextObservationContexts({ ...request,
+      unsuccessfulAttempts: [attempt, attempt, { ...attempt, id: "other", playerId: "other-player" }],
+    });
+    const meeting = after.find((entry) => entry.context === "parentCoachMeeting")!;
+    expect(meeting.score).toBeLessThan(before.find((entry) => entry.context === "parentCoachMeeting")!.score);
+    expect(after[0].context).toBe("followUpSession");
+    expect(meeting.sameContextIndependentSources).toBe(0);
+    expect(meeting.rawSameContextObservations).toBe(0);
+    expect(meeting.contextIsNovel).toBe(false);
+    expect(meeting.reasons.join(" ")).toContain("1 completed attempt");
+    expect(summarizeObservationKnowledge(request.observations, PLAYER_ID).independentSourceCount).toBe(0);
+    const observed = { ...request, observations: [observation("obs", "parentCoachMeeting", "meeting-1")] };
+    expect(rankNextObservationContexts({ ...observed, unsuccessfulAttempts: [attempt] }))
+      .toEqual(rankNextObservationContexts(observed));
+  });
+  it("targets the unanswered football question even when another meeting offers unseen domains", () => {
+    const ranked = rankNextObservationContexts({ playerId: PLAYER_ID,
+      observations: [observation("school", "schoolMatch", "school"), observation("follow-up", "followUpSession", "follow-up", ["passing"])],
+      unsuccessfulAttempts: [{ id: "meeting", playerId: PLAYER_ID, context: "parentCoachMeeting" }],
+      targetQuestionIds: ["decisions"], candidateContexts: ["parentCoachMeeting", "followUpSession"],
+    });
+    expect(ranked[0].context).toBe("followUpSession");
+    expect(ranked[1].reasons).toContain("Does not directly address the selected scouting question.");
+  });
   it("applies progressively diminishing returns to independent observations in one context", () => {
     const histories = [
       [],

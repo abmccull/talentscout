@@ -1,5 +1,6 @@
 "use client";
 
+import { calculateCashRunway } from "@/engine/finance/cashRunway";
 import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
@@ -513,6 +514,7 @@ export function CareerScreen() {
   ).length;
   const latestPerformanceReview = performanceReviews.at(-1);
   const rolePackage = deriveCareerRolePackage({
+    cashRunwayMonths: calculateCashRunway(finances, scout),
     scout,
     finances: finances ?? undefined,
     club: currentClub,

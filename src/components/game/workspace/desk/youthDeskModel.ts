@@ -14,6 +14,9 @@ export interface YouthDeskProspectEntry {
     };
   };
   observationCount: number;
+  videoCount?: number;
+  analysisCount?: number;
+  conversationCount?: number;
   intelCount: number;
   reported: boolean;
   buzzLevel: number;
@@ -36,6 +39,8 @@ export interface YouthActiveCaseModel {
   title: string;
   summary: string;
   subjectName?: string;
+  playerId?: string;
+  subjectAge?: number;
   stageId: "lead" | "liveLook" | "case" | "recommendation" | "tracked";
   stageLabel: string;
   stageSteps: Array<{
@@ -100,7 +105,7 @@ export function buildYouthActiveCaseModel(args: {
     : undefined;
 
   let stageIndex = 0;
-  if (focusEntry?.reported || pendingPlacementCount > 0) stageIndex = 4;
+  if (focusEntry?.reported) stageIndex = 4;
   else if (focusEntry?.hasFirmRead) stageIndex = 3;
   else if ((focusEntry?.observationCount ?? 0) >= 2 || (focusEntry?.intelCount ?? 0) >= 2) stageIndex = 2;
   else if ((focusEntry?.observationCount ?? 0) >= 1) stageIndex = 1;
@@ -159,13 +164,23 @@ export function buildYouthActiveCaseModel(args: {
     title: titles[stageId],
     summary: summaries[stageId],
     subjectName,
+    playerId: focusEntry.youth.player.id,
+    subjectAge: focusEntry.youth.player.age,
     stageId,
     stageLabel,
     stageSteps,
-    evidenceLine: `${focusEntry.observationCount} live look${focusEntry.observationCount === 1 ? "" : "s"} and ${focusEntry.intelCount} context note${focusEntry.intelCount === 1 ? "" : "s"} are on file.`,
+    evidenceLine: [
+      `${focusEntry.observationCount} live look${focusEntry.observationCount === 1 ? "" : "s"}`,
+      ...(focusEntry.videoCount ? [`${focusEntry.videoCount} video review${focusEntry.videoCount === 1 ? "" : "s"}`] : []),
+      ...(focusEntry.analysisCount ? [`${focusEntry.analysisCount} analysis record${focusEntry.analysisCount === 1 ? "" : "s"}`] : []),
+      ...(focusEntry.conversationCount ? [`${focusEntry.conversationCount} conversation record${focusEntry.conversationCount === 1 ? "" : "s"}`] : []),
+      `${focusEntry.intelCount} contact note${focusEntry.intelCount === 1 ? "" : "s"}`,
+    ].join(", ") + " on file.",
     networkLine: focusEntry.intelCount > 0
       ? `Private context is attached to the case. Make sure it sharpens the read instead of replacing it.`
-      : "No supporting context is attached yet. The next week can still add family, coach, or contact color.",
+      : focusEntry.conversationCount
+        ? "Conversations are recorded. Check their attributed accounts and unanswered questions; a meeting alone establishes no player finding."
+        : "No supporting context is attached yet. The next week can still add family, coach, or contact color.",
     scheduleLine: openDayCount === 0
       ? "The week is fully committed. Every new call now requires displacing something else."
       : `${openDayCount} open day${openDayCount === 1 ? "" : "s"} remain. Planner should be used to decide what this case is worth.`,

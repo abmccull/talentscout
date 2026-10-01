@@ -1,3 +1,4 @@
+import { migrateVisualIdentities } from "@/engine/players/portraits/state";
 import type {
   ActionableGossipItem,
   Contact,
@@ -1015,8 +1016,8 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
     && !(compacted.completedInteractiveSessions ?? []).includes(completionId ?? "")
       ? serializedSession
       : null;
-  return {
+  return migrateVisualIdentities({
     ...compacted,
     activeObservationSession: resumableSession,
-  };
+  });
 }

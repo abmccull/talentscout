@@ -220,11 +220,17 @@ function makeReflectionSession(): ObservationSession {
     flaggedMoments: [{
       reaction: "promising",
       moment: {
+        id: "technical-moment",
         playerId: "player-1",
         momentType: "technicalAction",
         quality: 8,
         isStandout: true,
       },
+    }],
+    cueReadings: [{
+      id: "technical-cue", momentId: "technical-moment", playerId: "player-1",
+      clarity: "clear", score: 0.8, attributesHinted: ["firstTouch"],
+      detail: "Milo Prospect controlled the arriving ball within reach.",
     }],
     hypotheses: [],
   } as unknown as ObservationSession;

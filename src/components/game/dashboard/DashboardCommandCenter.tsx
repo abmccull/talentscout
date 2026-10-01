@@ -139,13 +139,13 @@ export function DashboardCommandCenter({
     >
       <div className="space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
-          Dashboard command center
+          This week
         </p>
         <h2 id="dashboard-command-center-title" className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
           What matters now
         </h2>
         <p className="max-w-3xl text-sm leading-6 text-zinc-300">
-          The queue is capped to five ranked signals so attention, opportunity cost, and the next move are visible without recreating another screen.
+          Deal with pressing decisions, then choose where your scouting time will make a difference.
         </p>
       </div>
 
@@ -184,7 +184,7 @@ export function DashboardCommandCenter({
           </p>
           <Button
             type="button"
-            className="mt-3 min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-600"
+            className="mt-3 min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
             onClick={() => {
               if (nextAction?.actionTarget) {
                 onAction(nextAction.actionTarget);
@@ -346,13 +346,13 @@ export function DashboardCommandCenter({
                     </p>
                     <p className="mt-2 text-xs leading-6 text-zinc-200 sm:text-sm">
                       {nextAction.actionTarget
-                        ? `Continue in ${ACTION_SCREEN_LABELS[nextAction.actionTarget.screen]} to handle “${nextAction.title}” at its authoritative source.`
+                        ? `Open ${ACTION_SCREEN_LABELS[nextAction.actionTarget.screen]} to review “${nextAction.title}”.`
                         : nextAction.explanation}
                     </p>
                   </div>
                   <Button
                     type="button"
-                    className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-600"
+                    className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                     onClick={() => {
                       if (nextAction.actionTarget) {
                         onAction(nextAction.actionTarget);

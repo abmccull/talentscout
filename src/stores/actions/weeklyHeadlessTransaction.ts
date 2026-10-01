@@ -461,7 +461,7 @@ export function materializeWeeklyWorkerCommit(
     };
     for (const [rawKey, delta] of Object.entries(commit.gameState.recordDeltas)) {
       const key = rawKey as keyof typeof materialized;
-      const sourceRecord = sourceState[key];
+      const sourceRecord: unknown = sourceState[key];
       if (!isPlainRecord(sourceRecord) || !delta) {
         throw new Error(`Cannot materialize record delta for ${rawKey}.`);
       }

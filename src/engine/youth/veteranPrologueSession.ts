@@ -1,4 +1,5 @@
 import type { Player } from "@/engine/core/types";
+import { buildPrologueInquiryOptions } from "./prologueInquiry";
 import type {
   DataPoint,
   ObservationSession,
@@ -75,18 +76,13 @@ function shapeInvestigation(
   prologue: VeteranPrologueCase,
 ): SessionPhase[] {
   const selected = pickThreePhases(phases);
-  const speakers = [prologue.sourceContactName, "Your notes", prologue.sourceContactName];
   return selected.map((phase, index) => {
-    const originalNode = phase.dialogueNodes?.[0];
-    const node = originalNode
-      ? {
-          ...originalNode,
+    const node = {
           id: `${prologue.activityInstanceId}:dialogue:${index}`,
-          speaker: speakers[index],
+          speaker: prologue.sourceContactName,
           text: prologue.evidenceBeats[index].focused,
-          options: originalNode.options.map((option) => ({ ...option })),
-        }
-      : undefined;
+          options: buildPrologueInquiryOptions(prologue, index),
+        };
     return {
       ...phase,
       index,
@@ -94,10 +90,12 @@ function shapeInvestigation(
       description: index === 0
         ? `${prologue.setting} ${prologue.pressure}`
         : index === 1
-          ? "A second account changes what the first answer means."
+          ? prologue.templateId === "contradictory-sources"
+            ? "A second account changes what the first answer means."
+            : "The next passage tests the limits of the initial account."
           : `${prologue.contradiction} ${prologue.deadline}`,
       moments: [],
-      dialogueNodes: node ? [node] : [],
+      dialogueNodes: [node],
       selectedDialogueOptionIds: undefined,
       dialogueChoiceResolutions: undefined,
       isHalfTime: false,

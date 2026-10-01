@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import { MODE_FLAGGED_LABEL } from "@/engine/observation/types";
-import { formatObservationActivityLabel, type ReflectionResult } from "@/engine/observation/reflection";
+import { formatObservationActivityLabel, getPerceivedFlaggedMomentDescription, type ReflectionResult } from "@/engine/observation/reflection";
 import type { EvidenceClassificationId, ScoutCueReading } from "@/engine/core/types";
 import { resolveObservationSignalAssessment } from "@/engine/observation/questions";
 
@@ -75,6 +75,7 @@ const REACTION_COLORS: Record<SessionFlaggedMoment["reaction"], string> = {
 const CLASSIFICATION_COPY: Record<EvidenceClassificationId, { label: string; description: string }> = {
   technicalExecution: { label: "Technical execution", description: "Body shape, touch, pass, strike, or control." },
   preReceiveDecision: { label: "Decision before receiving", description: "Scanning and option selection happened before the ball arrived." },
+  defensiveReading: { label: "Reading defensive danger", description: "Tracking runners, covering space, or choosing a pressing angle shaped the defensive action." },
   offBallMovement: { label: "Off-ball movement", description: "Timing or positioning created value away from the ball." },
   pressureResponse: { label: "Response to pressure", description: "The action changed when contact, risk, or a setback arrived." },
   physicalRepeatability: { label: "Physical repeatability", description: "Balance, recovery, movement quality, or repeated output mattered." },
@@ -141,7 +142,7 @@ function EvidenceSynthesisPanel({
               <fieldset className="mt-3">
                 <legend className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">What did this passage show?</legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {cue.suggestedClassifications.map((classification) => {
+                  {[...new Set([...cue.suggestedClassifications, "noConclusion" as const])].map((classification) => {
                     const copy = CLASSIFICATION_COPY[classification];
                     return (
                       <label
@@ -178,7 +179,8 @@ function EvidenceSynthesisPanel({
 // FLAGGED MOMENT TIMELINE
 // =============================================================================
 
-function MomentTimeline({ flaggedMoments }: { flaggedMoments: SessionFlaggedMoment[] }) {
+function MomentTimeline({ session }: { session: ObservationSession }) {
+  const { flaggedMoments } = session;
   if (flaggedMoments.length === 0) {
     return (
       <p className="text-sm text-zinc-500 italic py-2">No moments were flagged during this session.</p>
@@ -213,7 +215,7 @@ function MomentTimeline({ flaggedMoments }: { flaggedMoments: SessionFlaggedMome
                 </span>
                 <span className="text-[10px] text-zinc-500">Phase {fm.phaseIndex + 1}</span>
               </div>
-              <p className="text-sm text-zinc-300 leading-snug">{fm.moment.description}</p>
+              <p className="text-sm text-zinc-300 leading-snug">{getPerceivedFlaggedMomentDescription(session, fm)}</p>
               {fm.note && (
                 <p className="text-xs text-zinc-500 italic">Note: {fm.note}</p>
               )}
@@ -468,6 +470,24 @@ export function ReflectionScreen({
       )}
 
       {/* ── Flagged Moments Review ── */}
+      {session.mode === "investigation" && (
+        <section aria-labelledby="conversation-record-heading">
+          <h2 id="conversation-record-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+            Conversation record
+          </h2>
+          <p className="mb-3 text-sm text-zinc-400">Keep these accounts in context. They can guide your next observation, but do not establish a trait on their own.</p>
+          <ol className="divide-y divide-zinc-800">
+            {session.phases.flatMap((phase) => Object.values(phase.dialogueChoiceResolutions ?? {}).map((decision) => (
+              <li key={`${phase.index}:${decision.nodeId}`} className="py-3">
+                <p className="text-xs text-zinc-400">{phase.dialogueNodes?.find((node) => node.id === decision.nodeId)?.speaker}</p>
+                <p className="mt-1 text-sm font-medium text-zinc-100">{decision.optionText}</p>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-300">{decision.narrativeText}</p>
+              </li>
+            )))}
+          </ol>
+        </section>
+      )}
+      {(session.mode !== "investigation" || session.flaggedMoments.length > 0) && (
       <section aria-labelledby="flagged-moments-heading">
         <div className="mb-3 flex items-center gap-2">
           <Flag size={13} className="text-zinc-500" aria-hidden="true" />
@@ -485,10 +505,11 @@ export function ReflectionScreen({
         </div>
         <Card className="border-[#27272a] bg-[#141414]">
           <CardContent className="p-4">
-            <MomentTimeline flaggedMoments={session.flaggedMoments} />
+            <MomentTimeline session={session} />
           </CardContent>
         </Card>
       </section>
+      )}
 
       {/* ── Notes ── */}
       <section aria-labelledby="notes-heading">

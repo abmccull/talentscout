@@ -9,7 +9,7 @@ import type {
 import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import {
   buildObservationPitchMarkers,
-  inferObservationPhaseType,
+  observationPassageLabel,
 } from "./observationPitchModel";
 
 interface ObservationPitchProps {
@@ -18,15 +18,6 @@ interface ObservationPitchProps {
   selectedPlayerId: string | null;
   onSelectPlayer: (playerId: string) => void;
 }
-
-const PHASE_LABELS: Record<string, string> = {
-  buildUp: "Build-up",
-  transition: "Transition",
-  setpiece: "Set piece",
-  pressingSequence: "Press",
-  counterAttack: "Counter",
-  possession: "Possession",
-};
 
 function markerLabel(
   marker: ReturnType<typeof buildObservationPitchMarkers>[number],
@@ -52,7 +43,7 @@ export const ObservationPitch = memo(function ObservationPitch({
     () => buildObservationPitchMarkers(session.players, phase),
     [phase, session.players],
   );
-  const phaseType = inferObservationPhaseType(phase);
+  const passageLabel = observationPassageLabel(phase);
   const activeMarkers = markers.filter((marker) => marker.hasMoment);
   const pitchControlsRef = useRef<HTMLDivElement>(null);
   const selectedMarker = markers.find(
@@ -60,7 +51,9 @@ export const ObservationPitch = memo(function ObservationPitch({
   );
   const venue = session.venueAtmosphere?.venueType === "schoolMatch"
     ? "School ground"
-    : session.venueAtmosphere?.venueType?.replace(/([A-Z])/g, " $1").trim() || "School ground";
+    : session.venueAtmosphere?.venueType === "trainingVisit"
+      ? "Training ground"
+      : session.venueAtmosphere?.venueType?.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (character) => character.toUpperCase()) || "School ground";
 
   const handleMarkerKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -88,7 +81,7 @@ export const ObservationPitch = memo(function ObservationPitch({
 
   return (
     <section
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+      className="relative flex min-h-[240px] min-w-0 flex-1 flex-col sm:min-h-[300px]"
       aria-labelledby="observation-pitch-heading"
       data-testid="observation-pitch"
     >
@@ -118,7 +111,7 @@ export const ObservationPitch = memo(function ObservationPitch({
             </p>
           </div>
           <span className="rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-eyebrow font-semibold uppercase tracking-[0.12em] text-zinc-200">
-            {PHASE_LABELS[phaseType] ?? "Live"}
+            {passageLabel}
           </span>
         </div>
 

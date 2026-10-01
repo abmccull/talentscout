@@ -30,9 +30,19 @@ test.describe("Save and Load", () => {
   });
 
   test("quick saves use manual slots 1 through 5", async ({ gamePage }) => {
+    const currentWeek = await gamePage.getCurrentWeek();
+    const currentSeason = await gamePage.getGameStateValue("currentSeason");
+    // Starting/loading the career legitimately creates slot 0. Read that
+    // checkpoint before testing that manual saves leave it intact.
+    await expect.poll(async () => (await readSaveSlots(gamePage.page))
+      .find((slot: { slot: number }) => slot.slot === 0), { timeout: 10_000 })
+      .toMatchObject({ slot: 0, week: currentWeek, season: currentSeason });
+    const autosaveBefore = (await readSaveSlots(gamePage.page))
+      .find((slot: { slot: number }) => slot.slot === 0);
+
     for (let i = 0; i < 5; i++) {
       await gamePage.page.getByRole("button", { name: /^Quick Save$/ }).click();
-      await expect(gamePage.page.getByText(/Saved to slot \d/)).toBeVisible();
+      await expect(gamePage.page.getByText(`Saved to slot ${i + 1}`, { exact: true })).toBeVisible();
     }
 
     const saveSlots = await readSaveSlots(gamePage.page);
@@ -42,7 +52,7 @@ test.describe("Save and Load", () => {
       .sort((left: number, right: number) => left - right);
 
     expect(manualSlots).toEqual([1, 2, 3, 4, 5]);
-    expect(saveSlots.some((slot: { slot: number }) => slot.slot === 0)).toBe(false);
+    expect(saveSlots.find((slot: { slot: number }) => slot.slot === 0)).toEqual(autosaveBefore);
 
     gamePage.expectNoConsoleErrors();
   });

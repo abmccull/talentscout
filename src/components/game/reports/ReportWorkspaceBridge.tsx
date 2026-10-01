@@ -85,6 +85,7 @@ export function ReportWorkspaceBridge({
   onPlanScouting,
 }: ReportWorkspaceBridgeProps) {
   const featuredArtifact = viewModel.featuredArtifact;
+  const evidenceReview = viewModel.evidenceReview;
   const hasFiledArtifact = featuredArtifact !== null;
   const hasLaneItems = viewModel.lanes.some((lane) => lane.items.length > 0);
   const showCompactLifecycle = !hasFiledArtifact && !hasLaneItems;
@@ -108,7 +109,9 @@ export function ReportWorkspaceBridge({
               <p className="mt-1 text-sm text-zinc-300">
                 {featuredArtifact
                   ? `${featuredArtifact.artifactLabel}. Keep the audience, risk, and next accountability step visible before you archive the report.`
-                  : "Observe a player, file the first accountable recommendation, and this workspace will keep the downstream trail in one place."}
+                  : evidenceReview
+                    ? `You have observations of ${evidenceReview.playerName}. Review what they support before deciding whether to file a report.`
+                    : "Observe a player, file the first accountable recommendation, and this workspace will keep the downstream trail in one place."}
               </p>
             </div>
             {featuredArtifact && (
@@ -191,7 +194,9 @@ export function ReportWorkspaceBridge({
                     What would make this prospect worth your name?
                   </p>
                   <p className="mt-2 text-sm leading-6 text-zinc-400">
-                    Create the evidence first. Audience, role, risk, and conviction remain deliberately blank until you have something real to defend.
+                    {evidenceReview
+                      ? "Check your observations, unresolved questions and uncertainty. You can write a report or choose another look from the player's dossier."
+                      : "Create the evidence first. Audience, role, risk, and conviction remain deliberately blank until you have something real to defend."}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
                     <span>Audience unset</span>
@@ -204,9 +209,9 @@ export function ReportWorkspaceBridge({
                 <Button
                   type="button"
                   className="min-h-11 bg-emerald-400 text-zinc-950 hover:bg-emerald-300 motion-reduce:transition-none"
-                  onClick={onPlanScouting}
+                  onClick={() => evidenceReview ? onAction(evidenceReview.action) : onPlanScouting()}
                 >
-                  Plan the first live look
+                  {evidenceReview ? evidenceReview.action.label : "Plan the first live look"}
                   <ArrowRight size={16} className="ml-2" aria-hidden="true" />
                 </Button>
               </div>

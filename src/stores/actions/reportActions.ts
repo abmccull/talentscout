@@ -10,7 +10,7 @@ import {
   queueGameplayAutosave,
   snapshotPersistedGameState,
 } from "./persistGameplayAutosave";
-import { bookOpeningFollowUp } from "@/engine/youth/openingFollowUp";
+import { bookOpeningFollowUp, reconcileOpeningReportStage } from "@/engine/youth/openingFollowUp";
 import type {
   ConvictionLevel,
   FinancialRecord,
@@ -48,6 +48,7 @@ import {
 } from "@/engine/reports/structuredYouthReport";
 import { getRemainingTablePounds } from "@/engine/reports/conviction";
 import { updateReputation } from "@/engine/career/progression";
+import { shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
 import { recordDiscovery } from "@/engine/career/index";
 import {
   evaluateReportAgainstDirectives,
@@ -107,7 +108,8 @@ function recordRetainerReportDelivery(
 export function createReportActions(get: GetState, set: SetState) {
   return {
     startReport: (playerId: string) => {
-      set({ selectedPlayerId: playerId, currentScreen: "reportWriter" });
+      get().selectPlayer(playerId);
+      set({ currentScreen: "reportWriter" });
       // Use the more detailed firstReportWriting tutorial for first-timers
       useTutorialStore.getState().startSequence("firstReportWriting");
     },
@@ -403,6 +405,7 @@ export function createReportActions(get: GetState, set: SetState) {
         set({
           currentScreen: isOpeningRetry ? "dashboard" : "reportHistory",
           ...(isOpeningRetry || gameState.scout.careerPath !== "independent"
+            || !shouldPromptReportListing(gameState.reports[report.id])
             ? {}
             : { pendingListingReportId: report.id }),
         });
@@ -451,6 +454,9 @@ export function createReportActions(get: GetState, set: SetState) {
         ? updateReputation(gameState.scout, {
             type: "reportSubmitted",
             quality,
+            hasSupportedFinding: evidenceAssessment
+              ? evidenceAssessment.claims.some((claim) => claim.support === "supported")
+              : undefined,
         })
         : gameState.scout;
       const practicedScout = evidenceAssessment
@@ -704,11 +710,12 @@ export function createReportActions(get: GetState, set: SetState) {
       }
 
       const isOpeningReport = Boolean(
-        gameState.openingCase
+        gameState.openingCase?.stage === "report"
         && gameState.openingCase.playerId === scoredReport.playerId,
       );
-      // Marketplace is optional after the first hour. Opening reports land on Desk.
+      // The first report returns to its booked follow-up in Planner; listing stays optional.
       const shouldOfferMarketplaceListing = isNewCase
+        && shouldPromptReportListing(scoredReport)
         && gameState.scout.careerPath === "independent"
         && !isOpeningReport;
       const revisionCostMessage: InboxMessage | null = publicRevisionCost > 0
@@ -756,15 +763,19 @@ export function createReportActions(get: GetState, set: SetState) {
           ...(revisionCostMessage ? [revisionCostMessage] : []),
         ],
       });
-      const nextState = isOpeningReport
-        ? bookOpeningFollowUp(committedState)
-        : committedState;
+      const activeWeek = get().weekSimulation;
+      const reconciledState = isOpeningReport ? reconcileOpeningReportStage(committedState) : committedState;
+      // An itinerary remains authoritative through its pending world tick.
+      // Filing during that itinerary must not insert work into elapsed days.
+      const nextState = isOpeningReport && !activeWeek
+        ? bookOpeningFollowUp(reconciledState)
+        : reconciledState;
       set({
         gameState: nextState,
-        currentScreen: isOpeningReport ? "calendar" : "reportHistory",
+        currentScreen: isOpeningReport ? (activeWeek ? "weekSimulation" : "calendar") : "reportHistory",
         ...(shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),
       });
-      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, activeWeek), set);
       const tutorialAfterReport = useTutorialStore.getState();
       if (isNewCase) {
         // Tutorial auto-advance: step expects the first accountable case filing.

@@ -268,7 +268,7 @@ export const VENUE_DESCRIPTIONS: Record<
 
   trainingVisit: {
     early: [
-      "Training session begins with a warm-up and passing drills. No audience, no pressure — the movements are habitual and honest. This is what the player actually does.",
+      "Training opens with passing drills. Watch how the player responds when a teammate or opponent changes the available space; a controlled setting can still put a decision under pressure.",
       "The training visit opens with rondos and short passing sequences. The coaching staff is involved but not intrusive. The players are working and talking freely.",
       "Early phase of a training observation. The warm-up is professional and purposeful. The way a player approaches these invisible minutes says a great deal.",
       "The session starts with positional shape and activation drills. Technical habits that are invisible in matches are appearing clearly here — there is no adrenaline to compensate.",
@@ -370,6 +370,12 @@ function getMinuteBracket(minute: number): number {
  * @param minute      - Match minute or step counter assigned to this phase.
  * @param rng         - Seeded RNG instance for variant selection.
  */
+const CONTINUING_OPENING_DESCRIPTIONS = [
+  "Play continues through the early exchanges. Follow the next action and the response that comes after it.",
+  "The session is underway. Keep the current question in mind while watching the next passage.",
+  "Another passage develops. Look for a repeat of the earlier cue before treating it as a pattern.",
+];
+
 export function generatePhaseDescription(
   venueType: string,
   phaseIndex: number,
@@ -381,13 +387,16 @@ export function generatePhaseDescription(
 
   if (venueBank) {
     const segment = getPhaseSegment(phaseIndex, totalPhases);
-    const pool = venueBank[segment];
+    const pool = segment === "early" && phaseIndex > 0
+      ? CONTINUING_OPENING_DESCRIPTIONS : venueBank[segment];
     return rng.pick(pool);
   }
 
   // Fallback: minute-bracket generic match descriptions.
   const bracket = getMinuteBracket(minute);
-  const pool = GENERIC_MATCH_DESCRIPTIONS[bracket] ?? GENERIC_MATCH_DESCRIPTIONS[0];
+  const pool = bracket === 0 && phaseIndex > 0
+    ? CONTINUING_OPENING_DESCRIPTIONS
+    : GENERIC_MATCH_DESCRIPTIONS[bracket] ?? GENERIC_MATCH_DESCRIPTIONS[0];
   return rng.pick(pool);
 }
 
@@ -458,7 +467,7 @@ export function populateFullObservationPhases(
 
   // Resolve the effective venue type. Prefer the venueAtmosphere's venueType
   // when already set (e.g. pre-populated by caller), otherwise use activityType.
-  const venueType = session.venueAtmosphere?.venueType ?? session.activityType;
+  const venueType = session.venueAtmosphere?.venueType ?? session.situation?.venueType ?? session.activityType;
 
   // Create venue atmosphere if one does not already exist on the session.
   const atmosphere =

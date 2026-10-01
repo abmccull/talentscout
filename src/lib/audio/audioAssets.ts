@@ -109,6 +109,14 @@ export const AMBIENCE_ASSETS: Record<string, AudioAssetDef> = {
 
 const howlCache: Map<string, Howl> = new Map();
 
+/** Release a completed streaming transition; cached one-shot effects are retained. */
+export function releaseStream(howl: Howl): void {
+  for (const [key, cached] of howlCache) {
+    if (cached === howl) howlCache.delete(key);
+  }
+  howl.unload();
+}
+
 /**
  * Pick a random variant source path from an asset definition.
  */

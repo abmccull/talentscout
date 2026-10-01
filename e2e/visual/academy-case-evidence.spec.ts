@@ -214,7 +214,7 @@ test.describe("Academy case rendered evidence", () => {
           exact: true,
         });
         await expect(
-          developmentPotential.getByRole("radio", { name: "Make a claim", exact: true }),
+          developmentPotential.getByRole("radio", { name: "Interpret a saved cue", exact: true }),
         ).toBeVisible();
       }
     }

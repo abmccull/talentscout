@@ -77,4 +77,22 @@ describe("forced guided-session replay", () => {
     expect(useTutorialStore.getState().guidedSessionForcedReplay).toBe(false);
     expect(useTutorialStore.getState().guidedSessionCompleted).toBe(true);
   });
+
+  it("does not graduate a new player when they skip the mentor", () => {
+    useTutorialStore.setState({
+      dismissed: false,
+      guidedSessionActive: true,
+      guidedSessionForcedReplay: false,
+      guidedSessionCompleted: false,
+      currentGuidedTask: "attendedMatch",
+    });
+
+    useTutorialStore.getState().skipGuidedSession();
+
+    expect(useTutorialStore.getState()).toMatchObject({
+      guidedSessionActive: false,
+      currentGuidedTask: null,
+      guidedSessionCompleted: false,
+    });
+  });
 });

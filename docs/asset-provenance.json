@@ -99,6 +99,46 @@
       "notes": [
         "Keep shapes and marks fictional; add regression review if real club or sponsor marks are introduced."
       ]
+    },
+    {
+      "id": "humgen-rendered-portraits",
+      "paths": [
+        "public/images/portraits/humgen-v1/**/*.webp",
+        "public/images/portraits/humgen-v2-curated/**/*.webp"
+      ],
+      "source": "tools/blender/humgen_production.py",
+      "generator": "Local Blender Cycles using user-supplied Human Generator assets",
+      "rightsStatus": "approved",
+      "evidence": [
+        "docs/HUMGEN_FULL_SETUP.md",
+        "docs/HUMGEN_GAME_INTEGRATION.md",
+        "docs/portraits/humgen-v2-curated-review.json"
+      ],
+      "notes": [
+        "User supplied the asset downloads following the commercial-license discussion and authorized game implementation.",
+        "Only rendered images are bundled. Vendor models, textures, add-on code and editable scenes remain local authoring assets."
+      ]
+    },
+    {
+      "id": "openai-documentary-football-art",
+      "paths": [
+        "public/images/portraits/documentary-v1/**/*.webp"
+      ],
+      "source": [
+        "docs/portraits/production-manifest.json",
+        "scripts/package-portraits.cjs"
+      ],
+      "generator": "OpenAI built-in image generation; project-authored offline Sharp crop and WebP encoding",
+      "rightsStatus": "approved",
+      "evidence": [
+        "docs/portraits/asset-generation-evidence.json",
+        "docs/portraits/ORIGINAL_ART_PROVENANCE.md"
+      ],
+      "notes": [
+        "Original fictional subjects and football environment created for this user-authorized overhaul.",
+        "Approval is based on documented original generation, visual review and provider output-ownership terms; it does not extend the July owner attestation to new assets.",
+        "Six photographic lineages remain excluded from new allocation for art quality/likeness reasons; existing bindings preserve their immutable images."
+      ]
     }
   ]
 }

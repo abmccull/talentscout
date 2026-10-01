@@ -46,6 +46,8 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { useShallow } from "zustand/react/shallow";
 import { getActionableGossipItems } from "@/engine/network/gossip";
 import { ConsequenceDecisionCard } from "@/components/game/inbox/ConsequenceDecisionCard";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { collectYouthCasePlayerIds, shouldShowYouthInboxMessage } from "@/engine/youth/youthCaseFocus";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -584,6 +586,8 @@ function MessageItem({
   return (
     <MessageContainer
       {...collapsedMessageProps}
+      id={`inbox-message-${message.id}`}
+      tabIndex={isExpanded ? -1 : undefined}
       className={`w-full rounded-lg border text-left transition ${
         !message.read
           ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50"
@@ -620,7 +624,7 @@ function MessageItem({
                 {message.title}
               </span>
             </div>
-            <span className="shrink-0 text-xs text-zinc-600">
+            <span className="shrink-0 text-xs text-zinc-400">
               {formatRelativeGameDate(
                 { week: message.week, season: message.season },
                 { week: currentWeek, season: currentSeason },
@@ -814,7 +818,7 @@ function MessageItem({
               </div>
             </>
           ) : (
-            <p className="text-xs text-zinc-500 line-clamp-2">{message.body}</p>
+            <p className="text-xs text-zinc-300 line-clamp-2">{message.body}</p>
           )}
         </div>
 
@@ -835,6 +839,7 @@ function MessageItem({
 
 export function InboxScreen() {
   const {
+    pendingInboxMessageId,
     gameState,
     markMessageRead,
     markAllRead,
@@ -851,6 +856,7 @@ export function InboxScreen() {
     startReport,
   } = useGameStore(
     useShallow((state) => ({
+      pendingInboxMessageId: state.pendingInboxMessageId,
       gameState: state.gameState,
       markMessageRead: state.markMessageRead,
       markAllRead: state.markAllRead,
@@ -892,9 +898,29 @@ export function InboxScreen() {
       changed = true;
       return { ...message, actionRequired };
     });
-    return changed ? repaired : source;
-  }, [gameState?.inbox, liveInboxActionIds]);
+    const caseIds = IS_YOUTH_EARLY_ACCESS && gameState ? collectYouthCasePlayerIds(gameState) : undefined;
+    const visible = IS_YOUTH_EARLY_ACCESS && gameState
+      ? (changed ? repaired : source).filter((message) => shouldShowYouthInboxMessage(gameState, message, caseIds))
+      : (changed ? repaired : source);
+    return visible;
+  }, [gameState, liveInboxActionIds]);
   const currentWeek = gameState?.currentWeek ?? 1;
+  useEffect(() => {
+    if (!pendingInboxMessageId || !gameState) return;
+    const message = inbox.find(candidate => candidate.id === pendingInboxMessageId);
+    useGameStore.setState({ pendingInboxMessageId: null });
+    if (!message) return;
+    setFilterCategory("all");
+    setSeasonFilter("all");
+    setExpandedId(message.id);
+    if (!message.read) markMessageRead(message.id);
+  }, [pendingInboxMessageId, gameState, inbox, markMessageRead]);
+  useEffect(() => {
+    if (!expandedId) return;
+    const element = document.getElementById(`inbox-message-${expandedId}`);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView({ block: "nearest" });
+  }, [expandedId]);
   const currentSeason = gameState?.currentSeason ?? 1;
   const seasonLength = gameState
     ? getSeasonLength(gameState.fixtures, currentSeason)
@@ -993,18 +1019,16 @@ export function InboxScreen() {
       );
   }, [inbox]);
 
-  const urgentMessages = useMemo(() => {
-    const urgentById = new Map<string, InboxMessage>();
-    for (const message of liveInboxActionMessages) {
-      urgentById.set(message.id, message);
-    }
-    for (const message of inbox) {
-      if (!message.read) {
-        urgentById.set(message.id, message);
-      }
-    }
-    return sortMessages([...urgentById.values()], "newest").slice(0, 4);
-  }, [inbox, liveInboxActionMessages]);
+  // The visible inbox already resolves actionRequired against live domain state.
+  // Unread updates are not decisions, and hidden messages must not bypass scope.
+  const urgentMessages = useMemo(
+    () => sortMessages(inbox.filter(message => message.actionRequired), "newest").slice(0, 4),
+    [inbox],
+  );
+  // Career and narrative choices have their own cards; they do not always
+  // have an actionRequired message in the message queue above them.
+  const hasCardDecisions = activeCareerDecisions.length > 0
+    || activeNarrativeEvents.some(event => (event.choices?.length ?? 0) > 0 && event.selectedChoice === undefined);
 
   if (!gameState) return null;
 
@@ -1065,7 +1089,8 @@ export function InboxScreen() {
           )}
         </div>
 
-        <div className="mb-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className={`mb-6 grid items-start gap-4 ${urgentMessages.length > 0 ? "xl:grid-cols-[1.15fr_0.85fr]" : ""}`}>
+          {urgentMessages.length > 0 ? (
           <Card className="border-emerald-500/20 bg-zinc-950/85">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -1073,7 +1098,7 @@ export function InboxScreen() {
                 Decision queue
               </CardTitle>
               <p className="text-xs leading-5 text-zinc-400">
-                The highest-pressure items that can still change outcomes this week.
+                Messages with decisions that are still available to act on.
               </p>
             </CardHeader>
             <CardContent className="space-y-2.5">
@@ -1102,24 +1127,32 @@ export function InboxScreen() {
                 ))
               ) : (
                 <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-zinc-400">
-                  No urgent inbox items. The archive is quiet for now.
+                  No decisions are waiting in your inbox. Recent updates are below.
                 </div>
               )}
             </CardContent>
           </Card>
+          ) : (
+            <div role="status" className="flex items-center gap-2 border-b border-zinc-700/60 py-3 text-sm text-zinc-300">
+              <Bell size={14} aria-hidden="true" className="shrink-0 text-emerald-300" />
+              {hasCardDecisions
+                ? "Decisions are waiting below. Review the available choices before advancing the week."
+                : "No decisions are waiting in your inbox. Review recent updates below."}
+            </div>
+          )}
 
           <Card className="border-white/10 bg-black/20">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Link2 size={14} className="text-blue-300" aria-hidden="true" />
-                Live threads
+                Recent threads
               </CardTitle>
               <p className="text-xs leading-5 text-zinc-400">
-                The current mail stream distilled into ongoing relationship and world threads.
+                Latest messages grouped by player, contact, or topic.
               </p>
             </CardHeader>
-            <CardContent className="space-y-2.5">
-              {threadSummaries.slice(0, 5).map((thread) => {
+            <CardContent className={urgentMessages.length > 0 ? "space-y-2.5" : "grid gap-2.5 md:grid-cols-3"}>
+              {threadSummaries.slice(0, 3).map((thread) => {
                 const latestMessage = inbox.find((message) => message.id === thread.latestMessageId);
                 if (!latestMessage) return null;
                 return (
@@ -1182,7 +1215,7 @@ export function InboxScreen() {
             <div className="mb-3 flex items-center gap-2">
               <Zap size={14} className="text-purple-400" aria-hidden="true" />
               <h2 className="text-sm font-semibold text-white">
-                Events Requiring Attention
+                Events and decisions
               </h2>
               <Badge className="text-[10px]">{activeNarrativeEvents.length}</Badge>
             </div>

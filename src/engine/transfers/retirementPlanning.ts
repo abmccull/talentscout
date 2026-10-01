@@ -1,3 +1,5 @@
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { matchFormRating } from "@/engine/players/matchFormArchive";
 import type { Club, GameState, Player } from "@/engine/core/types";
 import { getCurrentSeasonAppearances } from "./appearanceLedger";
 
@@ -57,7 +59,7 @@ function assessAbilityTrend(player: Player): {
     direction = "rising";
   }
 
-  const recentRatings = (player.recentMatchRatings ?? []).map((entry) => entry.rating);
+  const recentRatings = (player.recentMatchRatings ?? []).map(matchFormRating);
   if (recentRatings.length >= 4) {
     const midpoint = Math.floor(recentRatings.length / 2);
     const delta = average(recentRatings.slice(midpoint)) - average(recentRatings.slice(0, midpoint));
@@ -71,7 +73,7 @@ function assessAbilityTrend(player: Player): {
     }
   }
 
-  const seasonRatings = player.seasonRatings ?? [];
+  const seasonRatings = (player.seasonRatings ?? []).map(expandSeasonRating);
   if (seasonRatings.length >= 2) {
     const latest = seasonRatings[seasonRatings.length - 1];
     const prior = seasonRatings[seasonRatings.length - 2];
@@ -111,7 +113,8 @@ function playingTimePressure(
   club: Club | undefined,
   state: RetirementPlanningWorldContext,
 ): number {
-  const fallbackAppearances = player.seasonRatings?.[player.seasonRatings.length - 1]?.appearances ?? 0;
+  const lastSeason = player.seasonRatings?.at(-1);
+  const fallbackAppearances = lastSeason ? expandSeasonRating(lastSeason).appearances : 0;
   const appearances = club ? getCurrentSeasonAppearances(player, club.id, state) : fallbackAppearances;
   const elapsedWeeks = Math.max(1, state.currentWeek ?? 0);
   const expectedStarts = Math.max(1, Math.floor(elapsedWeeks / 2));

@@ -13,6 +13,7 @@ describe("weekly quick-scout actions", () => {
       currentWeek: 4,
       currentSeason: 2,
       scout: {
+        id: "scout",
         fatigue: 20,
         skillXp: { technicalEye: 2 },
         attributeXp: { decisionMaking: 1 },
@@ -21,6 +22,7 @@ describe("weekly quick-scout actions", () => {
       inbox: [],
       discoveryRecords: [],
       observations: {},
+      reports: {},
     } as unknown as GameState;
     const queueAutosave = vi.fn();
     const observedBatchGuards: boolean[] = [];
@@ -72,6 +74,7 @@ describe("weekly quick-scout actions", () => {
     expect(autoSchedule).toHaveBeenCalledTimes(1);
     expect(queueAutosave).toHaveBeenCalledWith(store.gameState, set);
     expect(store.batchSummary).toMatchObject({
+      weekSummaries: [{ scoutingSessions: 0, meetingsHeld: 0, reportsWritten: 0 }],
       weeksAdvanced: 1,
       startingFatigue: 20,
       endingFatigue: 26,

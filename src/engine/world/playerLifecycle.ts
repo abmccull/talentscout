@@ -9,12 +9,16 @@ import type {
   PlayerMovementType,
   TransferAddOn,
 } from "@/engine/core/types";
+import { loanFitsOwnershipContract } from "./loanContract";
 import {
   gameWeeksBetweenWithSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
+import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "@/engine/freeAgents/squadPlanning";
 import {
-  assessClubAffordability,
+  assessClubAffordabilityFromContext,
+  type ClubAffordabilityRequest,
+  getClubWeeklyObligationCommitment,
   buildLoanWageContributionObligation,
   buildTransferAddOnObligations,
   getTransferContingentReserve,
@@ -35,6 +39,8 @@ export interface LifecycleWorldState {
 interface BaseIntent {
   playerId: string;
   reason?: string;
+  /** NPC recruitment policy; explicit user negotiations retain their own choices. */
+  preserveSquadWageReserve?: boolean;
 }
 
 export type PlayerMovementIntent =
@@ -400,6 +406,20 @@ export function resolvePlayerMovements(
     currentWeek,
     currentSeason,
   });
+  // This batch owns player mutations. Maintain only owned payroll incrementally;
+  // obligations and cash are read from the latest club for every agreement.
+  const payroll = new Map<string, number>();
+  const wage = (player: Player): number => Math.max(0, Math.round(player.wage ?? 0));
+  for (const player of Object.values(state.players)) {
+    const owner = contractOwner(player);
+    if (owner) payroll.set(owner, (payroll.get(owner) ?? 0) + wage(player));
+  }
+  const assessClubAffordability = (request: ClubAffordabilityRequest) =>
+    assessClubAffordabilityFromContext({
+      club: request.club,
+      currentWeeklyCommitment: (payroll.get(request.club.id) ?? 0)
+        + getClubWeeklyObligationCommitment(request.club),
+    }, request);
   const applied: PlayerMovementEvent[] = [];
   const rejected: RejectedPlayerMovement[] = [];
   const reserved = new Set<string>();
@@ -548,6 +568,14 @@ export function resolvePlayerMovements(
         reject(rejected, intent, `destination cannot afford the signing package (${pressure})`);
         continue;
       }
+      if (intent.preserveSquadWageReserve && !canFundSquadCompletion(
+        affordability.remainingWeeklyHeadroom,
+        new Set([...target.playerIds, ...(player.age >= 18 ? [player.id] : [])]).size, signedWage,
+        getGoalkeeperRecruitmentNeed(player, target, state.players), getEmergencySquadVacancies(player, target, state.players), player.age,
+      )) {
+        reject(rejected, intent, "NPC signing would consume the squad completion wage reserve");
+        continue;
+      }
       state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.clubs[intent.toClubId] = {
         ...affordability.club,
@@ -610,6 +638,15 @@ export function resolvePlayerMovements(
         contingentReserve: getTransferContingentReserve(addOnObligations),
       });
       const totalCost = intent.fee + signingBonus;
+      if (intent.preserveSquadWageReserve && !canFundSquadCompletion(
+        affordability.remainingWeeklyHeadroom,
+        new Set([...toClub.playerIds, ...(player.age >= 18 ? [player.id] : [])]).size,
+        transferWage + addOnWeeklyCommitment,
+        getGoalkeeperRecruitmentNeed(player, toClub, state.players), getEmergencySquadVacancies(player, toClub, state.players), player.age,
+      )) {
+        reject(rejected, intent, "NPC transfer would consume the squad completion wage reserve");
+        continue;
+      }
       if (
         intent.fromClubId === intent.toClubId ||
         intent.fee < 0 ||
@@ -665,6 +702,10 @@ export function resolvePlayerMovements(
       const deal = intent.deal;
       const parent = state.clubs[deal.parentClubId];
       const loanClub = state.clubs[deal.loanClubId];
+      if (!loanFitsOwnershipContract(player, deal, seasonLength)) {
+        reject(rejected, intent, "loan dates must fit within the player's ownership contract");
+        continue;
+      }
       if (
         player.onLoan ||
         player.age < 16 ||
@@ -689,6 +730,14 @@ export function resolvePlayerMovements(
       });
       if (!affordability.affordable) {
         reject(rejected, intent, "loan club cannot afford the fee and weekly wage contribution");
+        continue;
+      }
+      if (intent.preserveSquadWageReserve && !canFundSquadCompletion(
+        affordability.remainingWeeklyHeadroom,
+        new Set([...loanClub.playerIds, ...(player.age >= 18 ? [player.id] : [])]).size, weeklyContribution,
+        getGoalkeeperRecruitmentNeed(player, loanClub, state.players), getEmergencySquadVacancies(player, loanClub, state.players), player.age,
+      )) {
+        reject(rejected, intent, "NPC loan would consume the squad completion wage reserve");
         continue;
       }
       state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
@@ -759,6 +808,7 @@ export function resolvePlayerMovements(
         player.id,
         "loanWageContribution",
       );
+      let declineNPCBuyOption = false;
       if (intent.resolution === "buyOption") {
         const fee = deal.buyOptionFee ?? 0;
         const buyingWage = defaultWage(player);
@@ -769,7 +819,13 @@ export function resolvePlayerMovements(
           weeklyWageCommitment: buyingWage,
           releasedWeeklyCommitment: releasedLoanContribution,
         });
-        if (!deal.buyOptionFee || !affordability.affordable) {
+        declineNPCBuyOption = Boolean(intent.preserveSquadWageReserve && (
+          !deal.buyOptionFee || !affordability.affordable || !canFundSquadCompletion(
+            affordability.remainingWeeklyHeadroom, new Set(loanClub.playerIds).size, buyingWage,
+            getGoalkeeperRecruitmentNeed(player, loanClub, state.players), getEmergencySquadVacancies(player, loanClub, state.players), player.age,
+          )
+        ));
+        if ((!deal.buyOptionFee || !affordability.affordable) && !declineNPCBuyOption) {
           reject(rejected, intent, "buy option is unavailable or unaffordable");
           continue;
         }
@@ -783,7 +839,7 @@ export function resolvePlayerMovements(
         "loanWageContribution",
       ) ?? state.clubs[deal.loanClubId];
 
-      if (intent.resolution === "buyOption") {
+      if (intent.resolution === "buyOption" && !declineNPCBuyOption) {
         const fee = deal.buyOptionFee ?? 0;
         const boughtWage = defaultWage(player);
         state.clubs[deal.parentClubId] = {
@@ -828,9 +884,10 @@ export function resolvePlayerMovements(
         state.loanHistory.push({
           ...deal,
           status: recalled ? "recalled" : "completed",
-          outcome: recalled ? "recalled-early" : (intent.outcome ?? "neutral"),
+          outcome: recalled ? "recalled-early" : declineNPCBuyOption ? "neutral" : (intent.outcome ?? "neutral"),
         });
-        movement = eventFor(recalled ? "loanRecall" : "loanReturn", intent,
+        movement = eventFor(recalled ? "loanRecall" : "loanReturn",
+          declineNPCBuyOption ? { ...intent, reason: "Loan completed; NPC declined buy option to preserve squad funds" } : intent,
           currentWeek, currentSeason, state.playerMovementHistory.length + applied.length, {
             fromClubId: deal.loanClubId,
             toClubId: deal.parentClubId,
@@ -841,6 +898,11 @@ export function resolvePlayerMovements(
     }
 
     if (movement) {
+      const previousOwner = contractOwner(player);
+      if (previousOwner) payroll.set(previousOwner, (payroll.get(previousOwner) ?? 0) - wage(player));
+      const updatedPlayer = state.players[player.id];
+      const nextOwner = updatedPlayer && contractOwner(updatedPlayer);
+      if (nextOwner) payroll.set(nextOwner, (payroll.get(nextOwner) ?? 0) + wage(updatedPlayer));
       reserved.add(intent.playerId);
       applied.push(movement);
     }

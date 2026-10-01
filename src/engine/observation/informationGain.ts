@@ -11,7 +11,9 @@ import {
   type AttributeDomain,
   type Observation,
   type ObservationContext,
+  type ScoutingQuestionId,
 } from "@/engine/core/types";
+import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
 import type { ObservationSituationSnapshot } from "./situations";
 
 export type ObservationSourceFamily =
@@ -73,11 +75,14 @@ export interface ObservationKnowledgeSummary {
 }
 
 export interface ObservationInformationGainRequest {
+  /** Completed work with no new evidence; affects opportunity cost, never knowledge. */
+  unsuccessfulAttempts?: readonly { id: string; playerId: string; context: ObservationContext }[];
   observations: readonly Observation[];
   playerId: string;
   candidateContexts: readonly ObservationContext[];
   /** Optional question the scout is trying to answer. */
   targetDomains?: readonly AttributeDomain[];
+  targetQuestionIds?: readonly ScoutingQuestionId[];
   /** Optional concrete situations for context choices currently available. */
   candidateSituations?: Partial<Record<ObservationContext, ObservationSituationSnapshot>>;
 }
@@ -204,6 +209,10 @@ function scoreContext(
     (observation) => observation.playerId === request.playerId,
   );
   const sameContextIndependentSources = summary.independentSourcesByContext[context] ?? 0;
+  const unsuccessfulAttemptCount = new Set((request.unsuccessfulAttempts ?? [])
+    .filter((attempt) => attempt.playerId === request.playerId && attempt.context === context
+      && !playerObservations.some((observation) => observation.sourceSessionId === attempt.id))
+    .map((attempt) => attempt.id)).size;
   const rawSameContextObservations = playerObservations.filter(
     (observation) => observation.context === context,
   ).length;
@@ -216,16 +225,21 @@ function scoreContext(
   const repetitionSources = candidateSituation
     ? sameSituationIndependentSources
     : sameContextIndependentSources;
-  const repetitionMultiplier = 1 / (1 + repetitionSources * 0.55);
-  const contextIsNovel = sameContextIndependentSources === 0;
+  const repetitionMultiplier = 1 / (1 + (repetitionSources + unsuccessfulAttemptCount) * 0.55);
+  const contextIsNovel = sameContextIndependentSources === 0 && unsuccessfulAttemptCount === 0;
   const situationIsNovel = sameSituationIndependentSources === 0;
   const seenFamilies = new Set(
     playerObservations.map((observation) => getObservationSourceFamily(observation.context)),
   );
   const sourceFamilyIsNovel = !seenFamilies.has(profile.family);
 
-  const targetDomains = request.targetDomains?.length
-    ? [...new Set(request.targetDomains)]
+  const questionDomains = (request.targetQuestionIds ?? []).flatMap((id) => {
+    const lens = SCOUTING_QUESTIONS.find((question) => question.id === id)?.lens;
+    return lens && lens !== "general" ? [lens] : [];
+  });
+  const requestedDomains = [...(request.targetDomains ?? []), ...questionDomains];
+  const targetDomains = requestedDomains.length
+    ? [...new Set(requestedDomains)]
     : [...profile.domains];
   const applicableDomains = profile.domains.filter((domain) => targetDomains.includes(domain));
   const targetAlignment = targetDomains.length > 0
@@ -250,7 +264,10 @@ function scoreContext(
   else if (situationIsNovel && candidateSituation) {
     reasons.push("Revisits a known context under materially different football conditions.");
   }
-  if (sourceFamilyIsNovel) reasons.push("Adds an independent evidence family.");
+  if (sourceFamilyIsNovel && unsuccessfulAttemptCount === 0) reasons.push("Adds an independent evidence family.");
+  if (unsuccessfulAttemptCount > 0) {
+    reasons.push(`${unsuccessfulAttemptCount} completed attempt${unsuccessfulAttemptCount === 1 ? "" : "s"} produced no new evidence here. Consider a different setting or source before repeating the work.`);
+  }
   if (sameContextIndependentSources > 0) {
     reasons.push(
       `${sameContextIndependentSources} independent prior source${sameContextIndependentSources === 1 ? "" : "s"} already cover this context.`,

@@ -397,7 +397,7 @@ export function processAlumniWeek(
         type: "wonderkidStatus",
         week,
         season,
-        description: `${player.firstName} ${player.lastName} has been recognised as a wonderkid — potential of ${player.potentialAbility} with current ability already at ${player.currentAbility}.`,
+        description: `${player.firstName} ${player.lastName} has been recognised as a wonderkid.`,
         notified: false,
       };
       tickMilestones.push(milestone);

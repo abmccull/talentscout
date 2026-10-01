@@ -71,7 +71,9 @@ import {
 } from "./observation/lensVisual";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isOpeningDiscoverySession } from "@/engine/youth/openingCase";
+import { getRecordedInquiryQuestion } from "@/engine/observation/inquiryQuestion";
 import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
+import { getInvestigationSpeakers } from "@/engine/observation/investigationParticipants";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -195,7 +197,7 @@ const MomentCard = memo(function MomentCard({
                     key={attr}
                     className="rounded bg-zinc-800 px-1.5 py-0.5 text-eyebrow text-zinc-400"
                   >
-                    {attr}
+                    {formatSituationLabel(attr)}
                   </span>
                 ))}
               </div>
@@ -569,7 +571,7 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
   session,
 }: InvestigationSidebarProps) {
   const primaryPlayer = session.players[0];
-  const speaker = session.players[1];
+  const speakers = getInvestigationSpeakers(session, session.currentPhaseIndex);
   const totalPhases = session.phases.length;
   const completedPhases = session.currentPhaseIndex + 1;
   const progressPct = Math.round((completedPhases / totalPhases) * 100);
@@ -591,12 +593,12 @@ const InvestigationSidebar = memo(function InvestigationSidebar({
             <p className="text-xs text-zinc-400">{primaryPlayer.position}</p>
           </div>
         )}
-        {speaker && (
+        {speakers.length > 0 && (
           <div className="rounded-md border border-[#27272a] bg-[#141414] p-3">
             <p className="mb-1 text-eyebrow font-semibold uppercase tracking-wider text-zinc-400">
               Speaking with
             </p>
-            <p className="text-sm font-medium text-zinc-200">{speaker.name}</p>
+            <p className="text-sm font-medium text-zinc-200">{speakers.join(", ")}</p>
           </div>
         )}
       </div>
@@ -707,8 +709,13 @@ interface SetupViewProps {
 
 function formatSituationLabel(value: string): string {
   return value
+    .replace(/_/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/^./, (character) => character.toUpperCase());
+}
+
+function isTrainingObservation(session: ObservationSession): boolean {
+  return (session.venueAtmosphere?.venueType ?? session.situation?.venueType) === "trainingVisit";
 }
 
 interface ScoutingQuestionSelectorProps {
@@ -720,8 +727,11 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
   session,
   onChange,
 }: ScoutingQuestionSelectorProps) {
-  if (session.mode !== "fullObservation") return null;
-  const selected = session.scoutingQuestionId ?? SCOUTING_QUESTIONS[0].id;
+  const isInquiry = session.mode === "investigation" && session.activityType === "parentCoachMeeting"
+    && !isOpeningDiscoverySession(session);
+  if (session.mode !== "fullObservation" && !isInquiry) return null;
+  const recordedQuestion = getRecordedInquiryQuestion(session);
+  const selected = recordedQuestion ?? session.scoutingQuestionId ?? SCOUTING_QUESTIONS[0].id;
   const questionOptions = (session.questionOptions?.length
     ? session.questionOptions.map((option) => {
       const definition = SCOUTING_QUESTIONS.find((question) => question.id === option.id);
@@ -749,7 +759,9 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
         What are you here to learn?
       </legend>
       <p className="mt-1 text-xs leading-5 text-zinc-300">
-        Choose one question to guide your attention. Your focus and scouting strengths decide how clearly you read each passage.
+        {isInquiry
+          ? "Choose the question to take into this conversation. An attributed account can guide your next watch; it does not replace seeing the player yourself."
+          : "Choose one question to guide your attention. Your focus and scouting strengths decide how clearly you read each passage."}
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {questionOptions.map((question) => (
@@ -759,6 +771,8 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
             name={`scouting-question-${session.id}`}
             value={question.id}
             selected={selected === question.id}
+            disabled={recordedQuestion !== undefined}
+            disabledReason={recordedQuestion ? "This question already has a recorded answer. Continue the meeting or plan a new inquiry." : undefined}
             recommended={question.recommended}
             onSelect={() => onChange(question.id)}
             className="min-h-16 px-3 py-2.5"
@@ -768,6 +782,7 @@ const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
           </ChoiceCard>
         ))}
       </div>
+      {recordedQuestion && <p className="mt-2 text-xs text-amber-200">The question is locked to your recorded answer. A different question needs a new inquiry.</p>}
       {selectedDefinition && (
         <p className="mt-3 rounded-lg bg-black/20 px-3 py-2 text-meta leading-4 text-zinc-300">
           <span className="block">{selectedDefinition.prompt}</span>
@@ -798,16 +813,18 @@ const HALFTIME_APPROACHES: Array<{
   {
     id: "broaden",
     label: "Broaden the watch",
-    description: "Spend the second half looking beyond the original signal.",
+    description: "Look beyond the original signal during the remaining phases.",
   },
 ];
 
 const HalftimeApproachPanel = memo(function HalftimeApproachPanel({
   selected,
   onSelect,
+  isTraining,
 }: {
   selected?: ObservationHalftimeApproach;
   onSelect: (approach: ObservationHalftimeApproach) => void;
+  isTraining: boolean;
 }) {
   return (
     <section
@@ -817,8 +834,8 @@ const HalftimeApproachPanel = memo(function HalftimeApproachPanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-amber-300">Half-time adjustment</p>
-          <h2 id="halftime-read-title" className="mt-0.5 text-sm font-semibold text-white">How will you watch the second half?</h2>
+          <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-amber-300">{isTraining ? "Training break" : "Half-time adjustment"}</p>
+          <h2 id="halftime-read-title" className="mt-0.5 text-sm font-semibold text-white">{isTraining ? "How will you watch the remaining drills?" : "How will you watch the second half?"}</h2>
         </div>
         {selected && <Badge variant="warning" className="text-eyebrow">Locked</Badge>}
       </div>
@@ -828,7 +845,7 @@ const HalftimeApproachPanel = memo(function HalftimeApproachPanel({
             key={approach.id}
             selected={selected === approach.id}
             disabled={Boolean(selected) && selected !== approach.id}
-            disabledReason={selected && selected !== approach.id ? "Second-half approach is locked." : undefined}
+            disabledReason={selected && selected !== approach.id ? "Your approach for the remaining phases is locked." : undefined}
             onSelect={() => onSelect(approach.id)}
             className="min-h-16 p-2.5"
           >
@@ -987,7 +1004,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
       <p className="text-sm text-zinc-400 mb-2">
         {session.phases.length} phase{session.phases.length !== 1 ? "s" : ""}
         {session.focusTokens.total > 0 &&
-          ` · ${session.focusTokens.total} focus token${session.focusTokens.total !== 1 ? "s" : ""} per half`}
+          ` · ${session.focusTokens.total} focus token${session.focusTokens.total !== 1 ? "s" : ""} ${isTrainingObservation(session) ? "before and after the training break" : "per half"}`}
       </p>
 
       {venueAtmosphere && (
@@ -1003,7 +1020,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <span className="text-eyebrow text-emerald-500 mr-1">Amplified:</span>
               {venueAtmosphere.amplifiedAttributes.map((a) => (
                 <span key={a} className="rounded bg-emerald-900/30 px-1.5 py-0.5 text-eyebrow text-emerald-400">
-                  {a}
+                  {formatSituationLabel(a)}
                 </span>
               ))}
             </div>
@@ -1013,7 +1030,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <span className="text-eyebrow text-red-500 mr-1">Dampened:</span>
               {venueAtmosphere.dampenedAttributes.map((a) => (
                 <span key={a} className="rounded bg-red-900/30 px-1.5 py-0.5 text-eyebrow text-red-400">
-                  {a}
+                  {formatSituationLabel(a)}
                 </span>
               ))}
             </div>
@@ -1041,7 +1058,9 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
             </div>
           </div>
           <p className="mt-2 text-eyebrow leading-relaxed text-zinc-400">
-            Evidence uncertainty ×{situation.uncertaintyMultiplier.toFixed(2)} · Misleading-sample risk {Math.round(situation.misleadingSignalRisk * 100)}%
+            {situation.uncertaintyMultiplier > 1
+              ? "These conditions make a confident read harder. Look for repeated cues before drawing a conclusion."
+              : "Look for repeated cues and test whether this setting explains what you see."}
           </p>
           {situation.biasWarnings[0] && (
             <p className="mt-1.5 text-eyebrow leading-relaxed text-amber-200/80">
@@ -1260,7 +1279,12 @@ const CompleteView = memo(function CompleteView({ session, onContinue }: Complet
 export function ObservationScreen() {
   const activeSession = useGameStore((s) => s.activeSession);
   const gameState = useGameStore((s) => s.gameState);
+  const setScreen = useGameStore((s) => s.setScreen);
   const { playSFX } = useAudio();
+
+  useEffect(() => {
+    if (!activeSession) setScreen("dashboard");
+  }, [activeSession, setScreen]);
 
   // Local UI state — all hooks must be called before any early return
   const [showInsightOverlay, setShowInsightOverlay] = useState(false);
@@ -1500,9 +1524,16 @@ export function ObservationScreen() {
   }, [closeInsightOverlay]);
 
   // ── Guard ──────────────────────────────────────────────────────────────────
-  if (!activeSession) return null;
+  if (!activeSession) {
+    return (
+      <GameLayout chrome="watch">
+        <p className="sr-only">Returning to the desk. The watch session has ended.</p>
+      </GameLayout>
+    );
+  }
 
   const { state, mode } = activeSession;
+  const isTraining = isTrainingObservation(activeSession);
   const ModeIcon = MODE_ICONS[mode];
   const isLiveWatch = mode === "fullObservation";
   const isOpeningWatch = isOpeningDiscoverySession(activeSession);
@@ -1539,7 +1570,7 @@ export function ObservationScreen() {
                     </Badge>
                     {isHalfTime && (
                       <Badge variant="warning" className="text-xs">
-                        Half Time
+                        {isTraining ? "Training break" : "Half Time"}
                       </Badge>
                     )}
                   </>
@@ -1548,9 +1579,9 @@ export function ObservationScreen() {
             </div>
             {state === "active" && (
               <p className="mt-0.5 text-meta capitalize text-zinc-400">
-                {activeSession.activityType.replace(/([A-Z])/g, " $1").trim()}
+                {formatSituationLabel(activeSession.activityType)}
                 {mode === "fullObservation" && activeSession.venueAtmosphere?.weather
-                  ? ` · ${activeSession.venueAtmosphere.weather}`
+                  ? ` · ${formatSituationLabel(activeSession.venueAtmosphere.weather)}`
                   : ""}
                 {activeSession.situation
                   ? ` · ${formatSituationLabel(activeSession.situation.stakes)} stakes · ${formatSituationLabel(activeSession.situation.tacticalFrame)}`
@@ -1624,6 +1655,7 @@ export function ObservationScreen() {
 
                 {mode === "fullObservation" && isHalfTime && (
                   <HalftimeApproachPanel
+                    isTraining={isTraining}
                     selected={activeSession.halftimeApproach}
                     onSelect={handleHalftimeApproach}
                   />
@@ -1757,7 +1789,7 @@ export function ObservationScreen() {
                       {openingPhaseRequiresFlag
                         ? "Flag the standout moment"
                         : requiresHalftimeChoice
-                          ? "Choose a half-time approach"
+                          ? (isTraining ? "Choose a training approach" : "Choose a half-time approach")
                           : "Next Phase"}
                     </Button>
                   )}
@@ -1919,7 +1951,7 @@ export function ObservationScreen() {
                       {openingPhaseRequiresFlag
                         ? "Flag the moment"
                         : requiresHalftimeChoice
-                          ? "Choose half-time approach"
+                          ? (isTraining ? "Choose training approach" : "Choose half-time approach")
                           : "Next phase"}
                       <ChevronRight size={14} className="ml-1.5" aria-hidden="true" />
                     </Button>

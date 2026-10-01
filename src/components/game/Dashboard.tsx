@@ -57,9 +57,10 @@ import { LeagueStandingsWidget } from "./LeagueStandingsWidget";
 import { useTranslations } from "next-intl";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
-import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
+import { buildYouthDeskEvidenceIndex } from "@/lib/youthDeskEvidence";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { buildYouthActiveCaseModel } from "./workspace/desk/youthDeskModel";
+import { buildYouthDeskStakes, shouldShowYouthDeskStakes } from "@/engine/youth/youthDeskStakes";
 import { DashboardSupplementalSections } from "./dashboard/DashboardSupplementalSections";
 import type { DashboardActionTarget } from "./dashboard/dashboardPriorityModel";
 import { buildDashboardWorkspaceModel } from "./dashboard/dashboardWorkspaceModel";
@@ -235,30 +236,23 @@ export function Dashboard() {
       )
     : new Set<string>();
   const youthReportedCount = youthReportedIds.size;
-  const observations = Object.values(gameState.observations);
-  const observationCountByPlayer = new Map<string, number>();
-  for (const observation of observations) {
-    observationCountByPlayer.set(
-      observation.playerId,
-      (observationCountByPlayer.get(observation.playerId) ?? 0) + 1,
-    );
-  }
+  const youthEvidenceIndex = buildYouthDeskEvidenceIndex(gameState);
   const observedYouthEvidence = specialization === "youth"
     ? youthList
         .filter((y) => y.discoveredBy.includes(scout.id))
         .map((y) => {
-          const perceived = getPerceivedAbility(observations, y.player.id);
+          const evidence = youthEvidenceIndex.get(y.player.id);
           return {
             youth: y,
-            observationCount: observationCountByPlayer.get(y.player.id) ?? 0,
+            observationCount: evidence?.observationCount ?? 0,
+            videoCount: evidence?.videoCount ?? 0,
+            analysisCount: evidence?.analysisCount ?? 0,
+            conversationCount: evidence?.conversationCount ?? 0,
             intelCount: gameState.contactIntel[y.player.id]?.length ?? 0,
             reported: youthReportedIds.has(y.id),
             buzzLevel: y.buzzLevel,
             visibility: y.visibility,
-            hasFirmRead:
-              perceived != null &&
-              perceived.observationCount >= 2 &&
-              (perceived.caConfidence >= 0.7 || perceived.paConfidence >= 0.7),
+            hasFirmRead: evidence?.hasFirmRead ?? false,
           };
         })
     : [];
@@ -353,9 +347,9 @@ export function Dashboard() {
     ? {
         eyebrow: "Decision ready",
         title: `Make the call on ${decisionReadyYouth[0]!.youth.player.firstName} ${decisionReadyYouth[0]!.youth.player.lastName}`,
-        description: "You have enough repeat evidence for a defensible placement recommendation. Review the dossier before the trail cools.",
-        label: "Review decision",
-        kind: "prospect" as const,
+        description: "You have enough repeat evidence for a defensible placement recommendation. File the judgment while the read is still fresh.",
+        label: "Write the report",
+        kind: "report" as const,
       }
     : scheduledSlots === 0
       ? {
@@ -369,9 +363,9 @@ export function Dashboard() {
         ? {
             eyebrow: "Evidence gap",
             title: `Get another look at ${nextProspect.youth.player.firstName} ${nextProspect.youth.player.lastName}`,
-            description: "One impression is a lead, not a judgment. Compare another context before committing your reputation.",
-            label: "Open dossier",
-            kind: "prospect" as const,
+            description: "Watch costs a day. Put the next look on this week, then run the itinerary.",
+            label: "Place the next look",
+            kind: "watch" as const,
           }
         : {
             eyebrow: "Ready to simulate",
@@ -388,9 +382,14 @@ export function Dashboard() {
       setScreen("calendar");
       return;
     }
-    if (youthDeskAction.kind === "prospect" && nextProspect) {
+    if (youthDeskAction.kind === "report" && decisionReadyYouth[0]) {
+      selectPlayer(decisionReadyYouth[0].youth.player.id);
+      setScreen("reportWriter");
+      return;
+    }
+    if (youthDeskAction.kind === "watch" && nextProspect) {
       selectPlayer(nextProspect.youth.player.id);
-      setScreen("playerProfile");
+      setScreen("calendar");
       return;
     }
     if (needsPlannerBeforeAdvance) {
@@ -417,6 +416,7 @@ export function Dashboard() {
     if (!firstHourDesk && !dashboardWorkspace) {
       return null;
     }
+    const deskStakes = buildYouthDeskStakes(gameState);
     return (
       <YouthDeskDashboard
         gameState={gameState}
@@ -440,6 +440,12 @@ export function Dashboard() {
         onPrimaryAction={openYouthDeskAction}
         setScreen={setScreen}
         selectPlayer={selectPlayer}
+        stakes={{
+          alumni: deskStakes.alumni,
+          fileMoneyLabel: deskStakes.fileMoney.label,
+          reputationLine: deskStakes.reputationLine,
+          visible: !firstHourDesk && shouldShowYouthDeskStakes(deskStakes),
+        }}
       />
     );
   }

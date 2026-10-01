@@ -1,3 +1,4 @@
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 /**
  * Employee work simulation — processes weekly employee assignments
  * and generates output (reports, quality bonuses, client leads, admin savings).
@@ -154,7 +155,7 @@ function processScoutWork(
   const qualityScore = Math.min(100, Math.round(
     (emp.quality / 20) * 60 + efficiency * 30 + officeBonus * 100,
   ));
-  const latestSeason = [...(target.seasonRatings ?? [])]
+  const latestSeason = (target.seasonRatings ?? []).map(expandSeasonRating)
     .sort((left, right) => right.season - left.season)[0];
   const currentClub = clubs[target.clubId];
   const confidence: StaffScoutingSignal["confidence"] = qualityScore >= 75

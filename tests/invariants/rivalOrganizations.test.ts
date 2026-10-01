@@ -65,6 +65,24 @@ function processWeek(
 }
 
 describe("persistent rival organizations", () => {
+  it("counts only this player's recent whisper campaigns across a variable season boundary", () => {
+    const state = { currentSeason: 2, currentWeek: 2,
+      fixtures: { final: { id: "final", season: 1, week: 46,
+        homeClubId: "a", awayClubId: "b", leagueId: "league", played: true } },
+      rivalScouts: {}, contacts: {}, unsignedYouth: {},
+      rivalOrganizationState: { ...createRivalOrganizationState(), activities: [
+        { id: "edge", action: "whisper-campaign", relatedPlayerId: "target", season: 1, week: 44 },
+        { id: "old", action: "whisper-campaign", relatedPlayerId: "target", season: 1, week: 43 },
+        { id: "future", action: "whisper-campaign", relatedPlayerId: "target", season: 2, week: 3 },
+        { id: "other", action: "whisper-campaign", relatedPlayerId: "other", season: 2, week: 1 },
+        { id: "different-action", action: "academy-sweep", relatedPlayerId: "target", season: 2, week: 1 },
+      ] },
+    } as unknown as GameState;
+    expect(deriveRivalMarketPressure(state, "target").leakSourceIds).toEqual(["edge"]);
+    state.fixtures.final.week = 47;
+    expect(deriveRivalMarketPressure(state, "target").leakSourceIds).toEqual([]);
+  });
+
   it("ships at least five mechanically distinct organization archetypes", () => {
     expect(RIVAL_ORGANIZATION_DEFINITIONS.length).toBeGreaterThanOrEqual(5);
     expect(new Set(RIVAL_ORGANIZATION_DEFINITIONS.map((entry) => entry.id)).size)
@@ -432,8 +450,13 @@ describe("rival organization store projection", () => {
     ).state;
     const first = processWeek(initialized, 1, 1, 5).state;
     const second = processWeek(first, 1, 2, 5).state;
-    const open = getOpenRivalOrganizationOpportunities(second);
+    const open = getOpenRivalOrganizationOpportunities(second, { season: 1, week: 2 });
     expect(open.length).toBeGreaterThanOrEqual(2);
     expect(open[0].expiresWeek).toBeLessThanOrEqual(open[1].expiresWeek);
+    const expiry = { season: open[0].expiresSeason, week: open[0].expiresWeek };
+    expect(getOpenRivalOrganizationOpportunities(second, expiry).map(item => item.id)).toContain(open[0].id);
+    expect(getOpenRivalOrganizationOpportunities(second, { ...expiry, week: expiry.week + 1 }).map(item => item.id)).not.toContain(open[0].id);
+    expect(getOpenRivalOrganizationOpportunities(second, { season: expiry.season + 1, week: 1 })).toHaveLength(0);
+    expect(second.opportunities[open[0].id].status).toBe("open");
   });
 });

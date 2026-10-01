@@ -1,3 +1,5 @@
+import { mergeYouthVenuePreview } from "./mergeYouthVenuePreview";
+import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
 import type {
   Activity,
   GameState,
@@ -182,24 +184,19 @@ export function processWeeklyYouthObservationActivities(
     // A completed live session has already written authoritative evidence
     // for its activity instance. Keep the pre-computed result only when
     // the player skipped the session, so reports never count both paths.
-    const applicableSimObservations = Object.values(
-      simYouthResults.newObservations,
-    ).filter(
-      (observation) => !observation.activityInstanceId
-        || !completedInteractiveIds.has(observation.activityInstanceId),
-    );
+    const previewMerge = mergeYouthVenuePreview({
+      ...stateWithScheduleApplied, observations: updatedObservations, discoveryRecords: actDiscoveries,
+    }, simYouthResults, completedInteractiveIds);
+    const applicableSimObservations = previewMerge.observations;
     for (const observation of applicableSimObservations) {
       recordObservation(observation);
     }
-    const dedupedNewDiscoveries = simYouthResults.newDiscoveries.filter(
-      (nd) => !actDiscoveries.some((d) => d.playerId === nd.playerId),
-    );
-    actDiscoveries = [...actDiscoveries, ...dedupedNewDiscoveries];
+    actDiscoveries = [...actDiscoveries, ...previewMerge.discoveries];
     weekObservationsGenerated += applicableSimObservations.length;
-    weekPlayersDiscovered += simYouthResults.totalDiscoveries;
+    weekPlayersDiscovered += previewMerge.discoveries.length;
     stateWithScheduleApplied = {
       ...stateWithScheduleApplied,
-      unsignedYouth: { ...stateWithScheduleApplied.unsignedYouth, ...simYouthResults.updatedUnsignedYouth },
+      unsignedYouth: previewMerge.unsignedYouth,
       observations: updatedObservations,
       discoveryRecords: actDiscoveries,
     };
@@ -211,9 +208,14 @@ export function processWeeklyYouthObservationActivities(
       const qr = qualityMap.get("followUpSession");
       const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
       const followUpActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+        .filter((entry) => !completedInteractiveIds.has(
+          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
+        ))
         .map((entry) => entry.activity)
         .filter((a) => a.type === "followUpSession" && !!a.targetId);
       for (const followUpAct of followUpActivities) {
+        const booking = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+          .find(entry => entry.activity === followUpAct)!;
         if (!followUpAct.targetId) continue;
         const targetYouth = resolveTargetYouth(followUpAct.targetId, updatedUnsignedYouthObs);
         if (!targetYouth) continue;
@@ -235,15 +237,11 @@ export function processWeeklyYouthObservationActivities(
         if (pool.length === 0) continue;
         const youth = pool[0];
         const existingObsForYouth = playerEvidence(youth.player.id);
-        const result = processVenueObservation(
-          actObsRng,
-          currentScout,
-          youth,
-          "followUpSession",
-          existingObsForYouth,
-          stateWithScheduleApplied.currentWeek,
-          stateWithScheduleApplied.currentSeason,
-        );
+        const result = produceWeeklyVenueObservation({
+          state: stateWithScheduleApplied, rng: actObsRng, scout: currentScout, youth,
+          context: "followUpSession", existingObservations: existingObsForYouth,
+          activityInstanceId: getInteractiveActivityCompletionKey(booking.activity, booking.dayIndex),
+        });
 
         recordObservation(result.observation);
         updatedUnsignedYouthObs[youth.id] = result.updatedYouth;
@@ -275,6 +273,9 @@ export function processWeeklyYouthObservationActivities(
       const qr = qualityMap.get("parentCoachMeeting");
       const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
       const meetingActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+        .filter((entry) => !completedInteractiveIds.has(
+          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
+        ))
         .map((entry) => entry.activity)
         .filter((a) => a.type === "parentCoachMeeting" && !!a.targetId);
       for (const meetingAct of meetingActivities) {
@@ -704,9 +705,14 @@ export function processWeeklyYouthObservationActivities(
       const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
       // Find the followUpSession activity to get its targetId
       const followUpActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+        .filter((entry) => !completedInteractiveIds.has(
+          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
+        ))
         .map((entry) => entry.activity)
         .filter((a) => a.type === "followUpSession" && !!a.targetId);
       for (const followUpAct of followUpActivities) {
+        const booking = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+          .find(entry => entry.activity === followUpAct)!;
         if (!followUpAct?.targetId) continue;
         const targetYouth = resolveTargetYouth(followUpAct.targetId, updatedUnsignedYouthObs);
         if (!targetYouth) continue;
@@ -728,15 +734,11 @@ export function processWeeklyYouthObservationActivities(
       if (pool.length === 0) continue;
       const youth = pool[0];
       const existingObsForYouth = playerEvidence(youth.player.id);
-      const result = processVenueObservation(
-        actObsRng,
-        currentScout,
-        youth,
-        "followUpSession",
-        existingObsForYouth,
-        stateWithScheduleApplied.currentWeek,
-        stateWithScheduleApplied.currentSeason,
-      );
+      const result = produceWeeklyVenueObservation({
+          state: stateWithScheduleApplied, rng: actObsRng, scout: currentScout, youth,
+          context: "followUpSession", existingObservations: existingObsForYouth,
+          activityInstanceId: getInteractiveActivityCompletionKey(booking.activity, booking.dayIndex),
+        });
 
       recordObservation(result.observation);
       updatedUnsignedYouthObs[youth.id] = result.updatedYouth;
@@ -791,6 +793,9 @@ export function processWeeklyYouthObservationActivities(
       const qr = qualityMap.get("parentCoachMeeting");
       const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
       const meetingActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+        .filter((entry) => !completedInteractiveIds.has(
+          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
+        ))
         .map((entry) => entry.activity)
         .filter((a) => a.type === "parentCoachMeeting" && !!a.targetId);
       for (const meetingAct of meetingActivities) {

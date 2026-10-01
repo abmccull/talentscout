@@ -1,3 +1,4 @@
+import { expandClubSeasonHistory } from "@/engine/world/clubSeasonArchive";
 import { describe, expect, it } from "vitest";
 import type {
   Club,
@@ -249,7 +250,7 @@ describe("authoritative world history", () => {
       "beta",
       "gamma",
     ]);
-    expect(season.clubs.find((entry) => entry.clubId === "alpha")).toEqual(
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "alpha")).toEqual(
       expect.objectContaining({
         standing: expect.objectContaining({ position: 1, played: 2, points: 6 }),
         leagueMovement: "stayed",
@@ -257,15 +258,15 @@ describe("authoritative world history", () => {
         manager: expect.objectContaining({ managerName: "Ada Manager" }),
       }),
     );
-    expect(season.clubs.find((entry) => entry.clubId === "beta")).toEqual(
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "beta")).toEqual(
       expect.objectContaining({
         standing: expect.objectContaining({ position: 2, points: 0 }),
         leagueMovement: "relegated",
         nextLeagueId: "lower",
       }),
     );
-    expect(season.clubs.find((entry) => entry.clubId === "beta")?.manager).toBeUndefined();
-    expect(season.clubs.find((entry) => entry.clubId === "gamma")?.standing).toBeUndefined();
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "beta")?.manager).toBeUndefined();
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "gamma")?.standing).toBeUndefined();
 
     expect(season.players.find((entry) => entry.playerId === "active")).toEqual(
       expect.objectContaining({
@@ -344,8 +345,8 @@ describe("authoritative world history", () => {
     expect(
       recordCompletedSeasonWorldHistory(undefined, reordered, 1, relegationResult()),
     ).toEqual(first);
-    expect(first.seasons[0].clubs.every((club) => club.recruitmentDoctrine)).toBe(true);
-    expect(first.seasons[0].clubs[0].recruitmentDoctrine?.preferredSeniorAgeRange)
+    expect(first.seasons[0].clubs.map(expandClubSeasonHistory).every((club) => club.recruitmentDoctrine)).toBe(true);
+    expect(expandClubSeasonHistory(first.seasons[0].clubs[0]).recruitmentDoctrine?.preferredSeniorAgeRange)
       .toHaveLength(2);
   });
 
@@ -371,7 +372,7 @@ describe("authoritative world history", () => {
     snapshot.clubs.alpha.tacticalStyle!.eventDistribution!.shot = 9;
     snapshot.clubs.alpha.tacticalStyle!.strengthAgainst!.push("balanced");
 
-    expect(history.seasons[0].clubs.find((club) => club.clubId === "alpha")?.tacticalStyle)
+    expect(history.seasons[0].clubs.map(expandClubSeasonHistory).find((club) => club.clubId === "alpha")?.tacticalStyle)
       .toMatchObject({
         eventDistribution: { shot: 1.2 },
         strengthAgainst: ["possessionBased"],
@@ -390,7 +391,7 @@ describe("authoritative world history", () => {
       { ...relegationResult(), season: 2 },
     );
 
-    expect(absent.seasons[0].clubs.every((entry) => entry.leagueMovement === undefined)).toBe(true);
+    expect(absent.seasons[0].clubs.map(expandClubSeasonHistory).every((entry) => entry.leagueMovement === undefined)).toBe(true);
     expect(mismatched).toEqual(absent);
   });
 

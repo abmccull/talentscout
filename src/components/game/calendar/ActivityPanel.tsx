@@ -24,6 +24,7 @@ interface ActivityPanelProps {
   onLeagueFilterChange: (leagueId: string) => void;
   resolveClubName: (id: string) => string;
   highlightTargetId?: string;
+  highlightActivityType?: string;
   selectedActivity?: Activity | null;
   onSelectActivity?: (activity: Activity | null) => void;
   openDayCount: number;
@@ -46,12 +47,20 @@ export function ActivityPanel({
   onLeagueFilterChange,
   resolveClubName,
   highlightTargetId,
+  highlightActivityType,
   selectedActivity,
   onSelectActivity,
   openDayCount,
 }: ActivityPanelProps) {
   const theme = SPECIALIZATION_THEMES[specialization];
   const [activeCategory, setActiveCategory] = useState<ActivityCategory>("scouting");
+  const focusedActivity = activities.find((activity) => activity.type === highlightActivityType
+    && (activity.targetId === highlightTargetId
+      || activity.targetPool?.some((target) => target.id === highlightTargetId)));
+  const focusedCategory = focusedActivity ? ACTIVITY_CATEGORIES[focusedActivity.type] : undefined;
+  useEffect(() => {
+    if (focusedCategory) setActiveCategory(focusedCategory);
+  }, [focusedCategory, highlightActivityType, highlightTargetId]);
 
   const enrichedActivities = useMemo(() => {
     return activities.map((activity) => {
@@ -165,7 +174,7 @@ export function ActivityPanel({
               </Badge>
             </div>
             <p className="mt-1 text-sm text-zinc-400">
-              Compare the cost, choose one opportunity, then commit it to the sticky itinerary.
+              Compare the time and fatigue cost, then choose a day for your next assignment.
             </p>
           </div>
           <div

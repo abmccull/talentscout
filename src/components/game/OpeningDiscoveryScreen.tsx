@@ -24,6 +24,7 @@ export function OpeningDiscoveryScreen() {
   const gameState = useGameStore((state) => state.gameState);
   const resolveChoice = useGameStore((state) => state.resolveOpeningDiscoveryChoice);
   const setScreen = useGameStore((state) => state.setScreen);
+  const activeSession = useGameStore((state) => state.activeSession);
   const { playStinger } = useAudio();
   const [pendingChoice, setPendingChoice] = useState<OpeningCaseChoiceId | null>(null);
   const projection = gameState ? buildOpeningCaseProjection(gameState) : null;
@@ -32,15 +33,6 @@ export function OpeningDiscoveryScreen() {
   const youth = gameState?.openingCase
     ? gameState.unsignedYouth[gameState.openingCase.youthId]
     : undefined;
-  const latestJournal = gameState && projection
-    ? Object.values(gameState.reflectionJournal ?? {})
-        .filter((entry) => entry.playerIds.includes(projection.playerId))
-        .sort((left, right) => right.createdAt - left.createdAt)[0]
-    : undefined;
-  const breakthrough = latestJournal?.flaggedMoments
-    ?.find((moment) => moment.playerId === projection?.playerId && moment.reaction === "promising");
-  const hypothesis = latestJournal?.hypotheses
-    ?.find((entry) => entry.playerId === projection?.playerId);
 
   useEffect(() => {
     if (!gameState?.openingCase) return;
@@ -97,16 +89,26 @@ export function OpeningDiscoveryScreen() {
           </div>
           <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300 sm:flex">
             <Eye size={14} className="text-[color:var(--primary)]" aria-hidden="true" />
-            You were first to notice
+            Your first case
           </div>
         </header>
         <div className="mt-4">
           <button
             type="button"
-            onClick={() => setScreen(gameState.openingCase?.stage === "report" ? "reportWriter" : "observation")}
+            onClick={() => {
+              if (gameState.openingCase?.stage === "report") {
+                setScreen("reportWriter");
+                return;
+              }
+              setScreen(activeSession ? "observation" : "dashboard");
+            }}
             className="min-h-11 rounded-lg px-3 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white"
           >
-            {gameState.openingCase?.stage === "report" ? "Continue to the report" : "Back to Watch"}
+            {gameState.openingCase?.stage === "report"
+              ? "Continue to the report"
+              : activeSession
+                ? "Back to Watch"
+                : "Back to Desk"}
           </button>
         </div>
 
@@ -151,17 +153,13 @@ export function OpeningDiscoveryScreen() {
               <div className="rounded-xl border border-[color:var(--primary)]/20 bg-[color:var(--primary)]/[0.06] p-4">
                 <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-[color:var(--primary)]">{projection.signalLabel}</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-200">
-                  {breakthrough?.description
-                    ?? veteranPrologue?.evidenceBeats[1].focused
-                    ?? "A pressured action showed vision and anticipation beyond the rhythm of the match."}
+                  {projection.signal}
                 </p>
               </div>
               <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.05] p-4">
                 <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-amber-300">The open question</p>
                 <p className="mt-2 text-sm leading-6 text-zinc-200">
-                  {hypothesis?.text
-                    ?? veteranPrologue?.contradiction
-                    ?? "Was that natural composure—or one exceptional moment in an otherwise uneven performance?"}
+                  {projection.openQuestion}
                 </p>
               </div>
             </div>

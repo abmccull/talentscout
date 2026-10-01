@@ -49,7 +49,7 @@ export function validateStructuredReportInput(
     const assessedCategories = REQUIRED_CATEGORIES.filter(
       (category) => input.categoryVerdicts[category]?.status === "assessed",
     );
-    if (assessedCategories.length === 0) {
+    if (assessedCategories.length === 0 && input.recommendedAction !== "monitor") {
       errors.push("Support at least one judgment with saved evidence.");
     }
     for (const category of REQUIRED_CATEGORIES) {

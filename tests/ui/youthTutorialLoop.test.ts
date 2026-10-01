@@ -106,12 +106,12 @@ describe("youth day-to-day guided loop", () => {
       milestoneId: "wroteReport",
       currentScreen: "reportWriter",
       isYouthDiscoveryHook: true,
-    })).toMatch(/five assessment decisions/i);
+    })).toMatch(/six assessment decisions/i);
     expect(getGuidedMilestoneInstruction({
       milestoneId: "submittedReport",
       currentScreen: "reportWriter",
       isYouthDiscoveryHook: true,
-    })).toBe("Select File initial assessment once the five decisions are ready.");
+    })).toBe("Select File initial assessment once the six decisions are ready.");
     expect(getGuidedMilestoneInstruction({
       milestoneId: "advancedWeek",
       currentScreen: "calendar",

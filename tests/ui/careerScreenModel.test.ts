@@ -11,6 +11,18 @@ import {
 const businessFundamentals = COURSE_CATALOG.find((course) => course.id === "business_fundamentals");
 
 describe("career screen model helpers", () => {
+  it("retains the name of a discovered player still in the unsigned youth pool", () => {
+    const timeline = buildCareerTimeline({
+      discoveryRecords: [{ playerId: "lead", discoveredSeason: 1, discoveredWeek: 1 }] as never,
+      discoveredPlayerIds: new Set(["lead"]),
+      gameState: { players: {}, retiredPlayers: {}, clubs: {}, unsignedYouth: {
+        prospect: { player: { id: "lead", firstName: "Jude", lastName: "Rooney" } },
+      } } as never,
+      playerFacingDiscoveryById: new Map(),
+    });
+    expect(timeline[0]).toMatchObject({ label: "Discovery", title: "Jude Rooney" });
+  });
+
   it("returns completed-course count when no enrollment is active", () => {
     expect(getCareerCourseSummary({
       completedCourseCount: 3,

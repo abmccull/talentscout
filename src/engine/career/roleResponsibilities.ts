@@ -1,3 +1,4 @@
+import { calculateCashRunway } from "@/engine/finance/cashRunway";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import type { WorldFact } from "@/engine/consequences/types";
 import type {
@@ -263,7 +264,7 @@ function evaluateIndependentRole(
     };
   }
 
-  const shortRunway = finances.balance < 4_000;
+  const shortRunway = (calculateCashRunway(finances, state.scout) ?? Infinity) < 2;
   if (hasTrack(rolePackage, "business") && shortRunway && summary.delivery === 0) {
     return {
       title: "Runway pressure dictated the week",
@@ -378,6 +379,7 @@ export function processWeeklyRoleResponsibilities(input: {
   state: GameState;
 }): GameState {
   const rolePackage = deriveCareerRolePackage({
+    cashRunwayMonths: calculateCashRunway(input.state.finances, input.state.scout),
     scout: input.state.scout,
     finances: input.state.finances,
     club: input.state.scout.currentClubId

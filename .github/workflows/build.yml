@@ -27,6 +27,7 @@ concurrency:
 env:
   NODE_VERSION: "22"
   NEXT_PUBLIC_BUILD_VERSION: ${{ github.sha }}
+  NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
   # Anonymous writes stay fail-closed until a tracked backend-policy gate is
   # introduced and certified against the production Supabase project.
   NEXT_PUBLIC_ENABLE_ONLINE_FEEDBACK: "false"
@@ -54,6 +55,14 @@ jobs:
         env:
           CORE_CANDIDATE_SHA: ${{ github.sha }}
         run: node scripts/create-candidate-core-evidence.mjs --start
+
+      - name: Require renderer error reporting for tagged packages
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if [ -z "$NEXT_PUBLIC_SENTRY_DSN" ]; then
+            echo "::error::Tagged packages require NEXT_PUBLIC_SENTRY_DSN"
+            exit 1
+          fi
 
       - run: npm ci
 

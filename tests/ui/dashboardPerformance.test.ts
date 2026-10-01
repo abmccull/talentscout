@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createDashboardState } from "@/engine/dashboard/state";
 import { createWeekSchedule } from "@/engine/core/calendar";
 import type { GameState, ReportWorkItem } from "@/engine/core/types";
 import { buildDashboardWorkspaceModel } from "@/components/game/dashboard/dashboardWorkspaceModel";
@@ -70,8 +71,14 @@ function largeState(): GameState {
 }
 
 describe("dashboard model performance", () => {
-  it("builds a long-save command model within the 40ms p95 budget", () => {
+  it.each([false, true])("builds a long-save command model within the 40ms p95 budget (retained preferences: %s)", (retained) => {
     const state = largeState();
+    if (retained) state.dashboardState = createDashboardState({
+      itemDispositions: Object.fromEntries(Array.from({ length: 256 }, (_, index) => {
+        const id = `prior-item-${index}`;
+        return [id, { itemId: id, state: "viewed", changedWeek: 5, changedSeason: 1 }];
+      })),
+    });
     buildDashboardWorkspaceModel({ gameState: state });
     const samples = Array.from({ length: 25 }, () => {
       const started = performance.now();
@@ -79,6 +86,7 @@ describe("dashboard model performance", () => {
       return performance.now() - started;
     }).sort((left, right) => left - right);
     const p95 = samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
+    console.info("DASHBOARD_MODEL_TIMING", { retained, p50: samples[12], p95 });
     expect(p95).toBeLessThan(DASHBOARD_MODEL_P95_BUDGET_MS);
   });
 });

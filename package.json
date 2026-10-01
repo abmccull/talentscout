@@ -14,7 +14,7 @@
     "build": "node scripts/build-production.mjs",
     "test:bundle-budget": "node scripts/assert-shipping-bundle-budget.mjs",
     "build:e2e": "node scripts/build-e2e.mjs",
-    "start": "next start",
+    "start": "node scripts/serve-static.mjs --dir out",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental false",
     "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron electron/main.js --dev\"",
@@ -55,7 +55,9 @@
     "test:e2e:performance": "playwright test e2e/performance/low-end-runtime.spec.ts --workers=1 --retries=0",
     "test:e2e:opening": "playwright test e2e/flows/opening-discovery-hook.spec.ts --workers=1",
     "test:e2e:youth-ea": "node scripts/run-youth-ea-e2e.mjs",
-    "test:e2e:soak": "playwright test e2e/regression/long-career-invariants.spec.ts --workers=1"
+    "test:e2e:soak": "playwright test e2e/regression/long-career-invariants.spec.ts --workers=1",
+    "portraits:index": "node scripts/prepare-portrait-runtime.cjs --write",
+    "portraits:verify": "node scripts/prepare-portrait-runtime.cjs --check && node scripts/verify-bundled-portraits.cjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.69.0",
@@ -101,9 +103,9 @@
       "undici": "7.29.0"
     },
     "brace-expansion": "5.0.9",
-    "fast-uri": "4.1.2",
+    "fast-uri": "4.1.3",
     "js-yaml": "4.3.1",
-    "nanoid": "3.3.17",
+    "nanoid": "3.3.18",
     "postcss": "8.5.25",
     "sharp": "0.35.3",
     "tar": "7.5.22"

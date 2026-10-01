@@ -44,6 +44,7 @@ interface InitialAssessmentBuilderProps {
   value: InitialAssessmentInput | null;
   onChange: (value: InitialAssessmentInput | null) => void;
   onResultChange?: (result: InitialAssessmentBuilderResult) => void;
+  onProgressChange?: (completedDecisions: number) => void;
   disabled?: boolean;
 }
 
@@ -302,6 +303,7 @@ export function InitialAssessmentBuilder({
   value,
   onChange,
   onResultChange,
+  onProgressChange,
   disabled = false,
 }: InitialAssessmentBuilderProps) {
   const baseId = useId();
@@ -367,6 +369,12 @@ export function InitialAssessmentBuilder({
     Boolean(draft.confidence),
   ];
   const completedSteps = stepCompletion.filter(Boolean).length;
+  // Next action groups two decisions on mobile: the test and recommendation.
+  const completedDecisions = [selectedCard, selectedClaim, selectedUnknown,
+    selectedNextTest, draft.recommendation, draft.confidence].filter(Boolean).length;
+  useEffect(() => {
+    onProgressChange?.(completedDecisions);
+  }, [completedDecisions, onProgressChange]);
   const mobileProgressText = `Initial assessment step ${mobileStep + 1} of ${MOBILE_STEPS.length}. ${completedSteps} of ${MOBILE_STEPS.length} steps complete. Current step: ${MOBILE_STEPS[mobileStep]?.label ?? MOBILE_STEPS[0].label}.`;
 
   const canOpenMobileStep = (index: number): boolean => {
@@ -389,7 +397,7 @@ export function InitialAssessmentBuilder({
   );
 
   const preview = evaluation.result.assessment;
-  const renderEvidenceChoices = () => (
+  const renderEvidenceChoices = (layout: "mobile" | "desktop") => (
     <fieldset className="space-y-3">
       <legend className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-200">
         Saved evidence
@@ -401,7 +409,7 @@ export function InitialAssessmentBuilder({
           return (
             <FieldChoice
               key={card.id}
-              name={`${baseId}-evidence`}
+              name={`${baseId}-${layout}-evidence`}
               value={card.id}
               checked={checked}
               disabled={disabled}
@@ -431,7 +439,7 @@ export function InitialAssessmentBuilder({
     </fieldset>
   );
 
-  const renderClaimChoices = () => (
+  const renderClaimChoices = (layout: "mobile" | "desktop") => (
     <fieldset className="space-y-3">
       <legend className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-200">
         What it suggests
@@ -441,7 +449,7 @@ export function InitialAssessmentBuilder({
           {claimOptions.map((option, index) => (
             <FieldChoice
               key={option.id}
-              name={`${baseId}-claim`}
+              name={`${baseId}-${layout}-claim`}
               value={option.id}
               checked={draft.claimOptionId === option.id}
               disabled={disabled}
@@ -465,7 +473,7 @@ export function InitialAssessmentBuilder({
     </fieldset>
   );
 
-  const renderUnknownChoices = () => (
+  const renderUnknownChoices = (layout: "mobile" | "desktop") => (
     <fieldset className="space-y-3">
       <legend className="text-xs font-bold uppercase tracking-[0.14em] text-amber-200">
         What remains untested
@@ -475,7 +483,7 @@ export function InitialAssessmentBuilder({
           {unknownOptions.map((option, index) => (
             <FieldChoice
               key={option.id}
-              name={`${baseId}-unknown`}
+              name={`${baseId}-${layout}-unknown`}
               value={option.id}
               checked={draft.unknownOptionId === option.id}
               disabled={disabled}
@@ -503,7 +511,7 @@ export function InitialAssessmentBuilder({
     </fieldset>
   );
 
-  const renderNextActionChoices = () => (
+  const renderNextActionChoices = (layout: "mobile" | "desktop") => (
     <div className="space-y-5">
       <fieldset className="space-y-3">
         <legend className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-200">
@@ -514,7 +522,7 @@ export function InitialAssessmentBuilder({
             {nextTestOptions.map((option, index) => (
               <FieldChoice
                 key={option.id}
-                name={`${baseId}-next-test`}
+                name={`${baseId}-${layout}-next-test`}
                 value={option.id}
                 checked={draft.nextTestId === option.id}
                 disabled={disabled}
@@ -545,7 +553,7 @@ export function InitialAssessmentBuilder({
           {RECOMMENDATION_OPTIONS.map((option) => (
             <FieldChoice
               key={option.value}
-              name={`${baseId}-recommendation`}
+              name={`${baseId}-${layout}-recommendation`}
               value={option.value}
               checked={draft.recommendation === option.value}
               disabled={disabled}
@@ -565,7 +573,7 @@ export function InitialAssessmentBuilder({
     </div>
   );
 
-  const renderConfidenceChoices = () => (
+  const renderConfidenceChoices = (layout: "mobile" | "desktop") => (
     <fieldset className="space-y-3">
       <legend className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-200">
         Confidence
@@ -574,7 +582,7 @@ export function InitialAssessmentBuilder({
         {CONFIDENCE_OPTIONS.map((option) => (
           <FieldChoice
             key={option.value}
-            name={`${baseId}-confidence`}
+            name={`${baseId}-${layout}-confidence`}
             value={option.value}
             checked={draft.confidence === option.value}
             disabled={disabled}
@@ -620,7 +628,7 @@ export function InitialAssessmentBuilder({
               : "border-amber-300/35 bg-amber-300/15 text-amber-100",
           )}
         >
-          {preview ? "Ready to file" : `${completedSteps}/${MOBILE_STEPS.length} chosen`}
+          {preview ? "Ready to file" : `${completedDecisions}/6 chosen`}
         </span>
       </div>
 
@@ -699,7 +707,7 @@ export function InitialAssessmentBuilder({
           <div className="flex flex-col gap-3 lg:max-w-xs">
             <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.05] px-4 py-3 text-sm text-zinc-200">
               <p className="font-semibold text-cyan-100">Progress</p>
-              <p className="mt-1">{completedSteps} of {MOBILE_STEPS.length} decisions chosen</p>
+              <p className="mt-1">{completedDecisions} of 6 decisions chosen</p>
             </div>
             <p className="text-xs leading-5 text-zinc-400">
               Suggested choices are coaching, not an answer key. Every decision still has to be made and can carry a calibration cost.
@@ -756,13 +764,13 @@ export function InitialAssessmentBuilder({
             </div>
 
             <div className="space-y-5">
-              {mobileStep === 0 && renderEvidenceChoices()}
-              {mobileStep === 1 && renderClaimChoices()}
-              {mobileStep === 2 && renderUnknownChoices()}
-              {mobileStep === 3 && renderNextActionChoices()}
+              {mobileStep === 0 && renderEvidenceChoices("mobile")}
+              {mobileStep === 1 && renderClaimChoices("mobile")}
+              {mobileStep === 2 && renderUnknownChoices("mobile")}
+              {mobileStep === 3 && renderNextActionChoices("mobile")}
               {mobileStep === 4 && (
                 <div className="space-y-5">
-                  {renderConfidenceChoices()}
+                  {renderConfidenceChoices("mobile")}
                   {renderPreview()}
                 </div>
               )}
@@ -805,7 +813,7 @@ export function InitialAssessmentBuilder({
                 <Eye size={16} className="text-cyan-200" aria-hidden="true" />
                 <h3 className="text-lg font-semibold text-white">Evidence lane</h3>
               </div>
-              {renderEvidenceChoices()}
+              {renderEvidenceChoices("desktop")}
             </section>
 
             {selectedCard && (
@@ -832,10 +840,10 @@ export function InitialAssessmentBuilder({
                 <h3 className="text-lg font-semibold text-white">Decision lane</h3>
               </div>
               <div className="space-y-6">
-                {renderClaimChoices()}
-                {renderUnknownChoices()}
-                {renderNextActionChoices()}
-                {renderConfidenceChoices()}
+                {renderClaimChoices("desktop")}
+                {renderUnknownChoices("desktop")}
+                {renderNextActionChoices("desktop")}
+                {renderConfidenceChoices("desktop")}
               </div>
             </section>
 

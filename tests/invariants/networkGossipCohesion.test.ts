@@ -97,6 +97,20 @@ function stateAt(
 }
 
 describe("network gossip cohesion", () => {
+  it("preserves contact grace periods with a 46-week prior season and refreshes changed fixture calendars", () => {
+    const source = contact({ relationship: 60, trustLevel: 60, loyalty: 100,
+      lastInteractionAt: { season: 1, week: 43 } });
+    const state = stateAt(2, 1, source);
+    state.fixtures = { final: { id: "final", season: 1, week: 46,
+      homeClubId: "home", awayClubId: "away", leagueId: "league", played: false } };
+    const run = () => processWeeklyContactDecay(state, new RNG("calendar-refresh")).updatedContacts[source.id];
+    expect(run()).toMatchObject({ relationship: 60, trustLevel: 60 });
+    // A corrected calendar on the same fixture map must affect the next batch.
+    state.fixtures.final.week = 47;
+    expect(run()).toMatchObject({ relationship: 59, trustLevel: 59 });
+    expect(source).toMatchObject({ relationship: 60, trustLevel: 60 });
+  });
+
   it("keeps gossip alive across rollover until its canonical expiry date", () => {
     const source = contact({ gossipQueue: [gossip()] });
 

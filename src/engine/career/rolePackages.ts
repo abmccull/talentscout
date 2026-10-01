@@ -73,6 +73,7 @@ export interface CareerRolePackageInput {
     | "currentClubId"
     | "employmentContract"
   >;
+  cashRunwayMonths?: number;
   finances?: Pick<
     FinancialRecord,
     | "balance"
@@ -287,8 +288,7 @@ function derivePressures(
       });
     }
   } else {
-    const balance = input.finances?.balance ?? 0;
-    if (balance < 4_000) {
+    if (input.cashRunwayMonths !== undefined && input.cashRunwayMonths < 2) {
       pressures.push({
         id: "runway",
         label: "Cash runway is short",

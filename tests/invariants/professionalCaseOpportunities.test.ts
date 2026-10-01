@@ -127,6 +127,25 @@ function makeState(): GameState {
 }
 
 describe("professional case opportunities", () => {
+  it("keeps targeted meetings available beyond the first five observed prospects", () => {
+    const state = makeState();
+    const template = Object.values(state.unsignedYouth)[0];
+    state.unsignedYouth = {};
+    state.observations = {};
+    for (let index = 0; index < 8; index++) {
+      const id = `prospect-${index}`;
+      state.unsignedYouth[id] = { ...template, id, placed: false, retired: false,
+        player: { ...template.player, id } };
+      state.observations[id] = { id, playerId: id } as Observation;
+    }
+    const activities = getAvailableActivities(state.scout, state.currentWeek, [], [],
+      state.subRegions, state.observations, state.unsignedYouth, state.players);
+    for (const type of ["followUpSession", "parentCoachMeeting"]) {
+      expect(activities.find((activity) => activity.type === type)?.targetPool?.map((target) => target.id))
+        .toEqual(Array.from({ length: 8 }, (_, index) => `prospect-${index}`));
+    }
+  });
+
   it("surfaces live windows in targeted youth activity pools and prioritizes them", () => {
     const state = makeState();
 

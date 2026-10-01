@@ -1,3 +1,5 @@
+import { queueGameplayAutosave, snapshotPersistedGameState } from "./persistGameplayAutosave";
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 /**
  * Navigation & UI state actions extracted from gameStore.
  *
@@ -27,7 +29,11 @@ export function createNavigationActions(get: GetState, set: SetState) {
   const openScreen = (screen: GameScreen) => {
     const gs = get().gameState;
     const resolvedScreen = resolveGameScreenForBuild(screen, Boolean(gs));
-    set({ currentScreen: resolvedScreen });
+    set({ currentScreen: resolvedScreen,
+      ...(resolvedScreen !== "inbox" ? { pendingInboxMessageId: null } : {}),
+      ...(get().currentScreen === "calendar" && resolvedScreen !== "calendar"
+        ? { pendingCalendarActivity: null } : {}),
+    });
     const activeMatch = get().activeMatch;
     let matchFixture: string | undefined;
     if (resolvedScreen === "match" && activeMatch && gs) {
@@ -82,6 +88,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
     set({
       pendingCalendarActivity: focusCalendarActivity,
       pendingNetworkContactId: target.screen === "network" ? target.contactId ?? null : null,
+      pendingInboxMessageId: target.screen === "inbox" ? target.messageId ?? null : null,
       pendingRivalOpportunityId: target.screen === "rivals" ? target.opportunityId ?? null : null,
       pendingInternationalCountry: target.screen === "internationalView" ? target.countryId ?? null : null,
     });
@@ -187,7 +194,16 @@ export function createNavigationActions(get: GetState, set: SetState) {
       set({ comparisonReportIds: [] });
     },
 
-    selectPlayer: (playerId: string | null) => set({ selectedPlayerId: playerId }),
+    selectPlayer: (playerId: string | null) => {
+      const current = get();
+      const nextState = playerId && current.gameState
+        ? revealGamePortraits(current.gameState, [playerId], "selected")
+        : current.gameState;
+      set({ selectedPlayerId: playerId, gameState: nextState });
+      if (nextState && nextState !== current.gameState) {
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+      }
+    },
     selectFixture: (fixtureId: string | null) => set({ selectedFixtureId: fixtureId }),
 
     tapNetworkForPlayer: (playerId: string) => {

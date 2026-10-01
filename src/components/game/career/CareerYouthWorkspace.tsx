@@ -66,6 +66,8 @@ import {
   formatSalary,
   formatWeekSeason,
 } from "./careerScreenModel";
+import { deriveYouthSeasonCaseReview } from "@/engine/youth/youthSeasonReview";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
 interface CareerYouthWorkspaceProps {
   acceptedPlacements: number;
@@ -167,6 +169,13 @@ export function CareerYouthWorkspace({
   youthDiscoveryRecords,
   youthPlacementReportCount,
 }: CareerYouthWorkspaceProps) {
+  const reviewedSeason = gameState.currentSeason > 1
+    ? gameState.currentSeason - 1
+    : gameState.currentSeason;
+  const seasonCaseReview = IS_YOUTH_EARLY_ACCESS
+    ? deriveYouthSeasonCaseReview(gameState, reviewedSeason)
+    : null;
+
   return (
     <GameLayout>
       <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
@@ -186,6 +195,30 @@ export function CareerYouthWorkspace({
             <TabsContent value="overview" className="mt-0 space-y-5" data-tutorial-id="career-overview">
               <h2 className="sr-only">Career overview</h2>
               <CareerRecoveryPanel state={gameState} onChoose={onChooseCareerRecovery} />
+              {seasonCaseReview && (
+                <section
+                  aria-labelledby="career-season-cases-title"
+                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                  data-testid="youth-season-case-review"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                    Season {seasonCaseReview.season}
+                  </p>
+                  <h3 id="career-season-cases-title" className="mt-1 text-lg font-semibold text-white">
+                    {seasonCaseReview.headline}
+                  </h3>
+                  <ul className="mt-3 space-y-1.5 text-sm leading-6 text-zinc-300">
+                    {seasonCaseReview.caseLines.length === 0 ? (
+                      <li>No named cases yet this season.</li>
+                    ) : seasonCaseReview.caseLines.map((line) => (
+                      <li key={line.playerId}>{line.line}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-sm text-zinc-400">{seasonCaseReview.rivalLine}</p>
+                  <p className="mt-1 text-sm text-zinc-400">{seasonCaseReview.alumniLine}</p>
+                  <p className="mt-1 text-sm text-zinc-300">This file: {seasonCaseReview.moneyLine}</p>
+                </section>
+              )}
               <details
                 className="group rounded-xl border border-white/10 bg-black/20"
                 open={careerMetricsOpen}

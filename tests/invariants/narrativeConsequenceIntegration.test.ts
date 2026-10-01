@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { queueGameplayAutosave } from "@/stores/actions/persistGameplayAutosave";
+vi.mock("@/stores/actions/persistGameplayAutosave", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/stores/actions/persistGameplayAutosave")>(),
+  queueGameplayAutosave: vi.fn(),
+}));
 import type {
   GameState,
   InboxMessage,
@@ -129,6 +134,24 @@ function progressionHarness(initialState: GameState): {
 }
 
 describe("narrative decision integration", () => {
+  it("queues the accepted decision checkpoint once, preserving its result through serialization", () => {
+    vi.mocked(queueGameplayAutosave).mockClear();
+    const initial = ensureNarrativeDecision(gameState(), narrativeEvent());
+    const decisionId = narrativeDecisionId(narrativeEvent().id);
+    const decision = initial.consequenceState.decisions[decisionId];
+    const harness = progressionHarness(initial);
+    harness.actions.resolveConsequenceDecision(decisionId, "invalid-option");
+    expect(queueGameplayAutosave).not.toHaveBeenCalled();
+    harness.actions.resolveConsequenceDecision(decisionId, decision.options[0].id);
+    expect(queueGameplayAutosave).toHaveBeenCalledTimes(1);
+    const restored = JSON.parse(JSON.stringify(vi.mocked(queueGameplayAutosave).mock.calls[0][0]));
+    expect(restored.consequenceState.decisions[decisionId]).toEqual(harness.state().consequenceState.decisions[decisionId]);
+    expect(restored.consequenceState.decisions[decisionId].status).not.toBe("offered");
+    expect(restored.scout.fatigue).toBe(harness.state().scout.fatigue);
+    harness.actions.resolveConsequenceDecision(decisionId, decision.options[0].id);
+    expect(queueGameplayAutosave).toHaveBeenCalledTimes(1);
+  });
+
   it("registers one deterministic decision with a persisted roll", () => {
     const initial = gameState();
     const event = narrativeEvent();
@@ -272,9 +295,11 @@ describe("narrative decision integration", () => {
   });
 
   it("clears the source action pin immediately when an event is acknowledged", () => {
+    vi.mocked(queueGameplayAutosave).mockClear();
     const event = narrativeEvent({
       id: "event-acknowledge-inbox-cleanup",
       choices: undefined,
+      consequences: [{ type: "reputation", value: 4, description: "A club recognised the scout's work." }],
     });
     const sourceMessage = narrativeActionMessage(event.id);
     const harness = progressionHarness(gameState({
@@ -290,6 +315,14 @@ describe("narrative decision integration", () => {
       actionRequired: false,
       read: false,
     });
+    expect(resolved.scout.reputation).toBe(44);
+    expect(queueGameplayAutosave).toHaveBeenCalledTimes(1);
+    const restored = JSON.parse(JSON.stringify(vi.mocked(queueGameplayAutosave).mock.calls[0][0]));
+    const resumed = progressionHarness(restored);
+    resumed.actions.acknowledgeNarrativeEvent(event.id);
+    resumed.actions.acknowledgeNarrativeEvent("missing-event");
+    expect(resumed.state().scout.reputation).toBe(44);
+    expect(queueGameplayAutosave).toHaveBeenCalledTimes(1);
   });
 
   it("does not duplicate the canonical promise for a deck-backed access event", () => {
@@ -564,6 +597,15 @@ describe("narrative decision integration", () => {
     const resolved = harness.state();
 
     expect(resolved.activeStorylines[0]?.context.playerChoice).toBe("wonderkidRush");
+    const savesAfterChoice = vi.mocked(queueGameplayAutosave).mock.calls.length;
+    const saved = JSON.parse(JSON.stringify(vi.mocked(queueGameplayAutosave).mock.calls.at(-1)?.[0]));
+    expect(saved.activeStorylines).toEqual(resolved.activeStorylines);
+    expect(saved.narrativeEvents).toEqual(resolved.narrativeEvents);
+    expect(saved.consequenceState).toEqual(resolved.consequenceState);
+    expect(saved.scout.fatigue).toBe(15);
+    expect(saved.inbox).toEqual(resolved.inbox);
+    harness.actions.resolveNarrativeEventChoice(event.id, 1);
+    expect(vi.mocked(queueGameplayAutosave).mock.calls.length).toBe(savesAfterChoice);
     expect(resolved.scout.fatigue).toBe(15);
     expect(resolved.narrativeEvents[0]?.selectedChoice).toBe(0);
     expect(resolved.inbox.at(-1)).toMatchObject({

@@ -9,6 +9,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
+import { getRecordedInquiryQuestion } from "./inquiryQuestion";
 import type {
   ObservationSession,
   ObservationMode,
@@ -220,7 +221,9 @@ export function createSession(
   rng: RNG,
 ): ObservationSession {
   const mode: ObservationMode =
-    ACTIVITY_MODE_MAP[config.activityType] ?? "fullObservation";
+    config.activityType === "followUpSession" && config.followUpFormat === "observation"
+      ? "fullObservation"
+      : ACTIVITY_MODE_MAP[config.activityType] ?? "fullObservation";
 
   const phaseCount = resolvePhaseCount(config.activityType, rng);
   const emptyPhases = buildEmptyPhases(phaseCount, mode, config.seed);
@@ -360,6 +363,21 @@ export function startSession(
  * - If this was the final phase, transitions to 'reflection'.
  * - Returns the updated session as a new object.
  */
+export function finishObservationEarly(session: ObservationSession): ObservationSession {
+  if (session.state !== "active" || session.mode !== "fullObservation" || !session.scoutingQuestionId) return session;
+  const phases = session.phases.slice(0, session.currentPhaseIndex + 1);
+  if (phases.length === 0) return session;
+  const observedMomentIds = new Set(phases.flatMap(phase => phase.moments.map(moment => moment.id)));
+  return {
+    ...session,
+    state: "reflection",
+    plannedPhaseCount: session.plannedPhaseCount ?? session.phases.length,
+    phases,
+    flaggedMoments: session.flaggedMoments.filter(flag => observedMomentIds.has(flag.moment.id)),
+    cueReadings: session.cueReadings?.filter(cue => observedMomentIds.has(cue.momentId)),
+  };
+}
+
 export function advanceSessionPhase(
   session: ObservationSession,
 ): ObservationSession {
@@ -470,6 +488,7 @@ export function setSessionScoutingQuestion(
   cueReadings: ScoutCueReading[],
 ): ObservationSession {
   if (session.state !== "setup") return session;
+  if (getRecordedInquiryQuestion(session)) return session;
   return {
     ...session,
     scoutingQuestionId: questionId,

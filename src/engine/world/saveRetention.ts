@@ -1,3 +1,7 @@
+import { packDevelopmentHistoryEntry } from "../players/developmentHistoryArchive";
+import { compactMatchFormEntry } from "@/engine/players/matchFormArchive";
+import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { compactClubSeasonHistory } from "./clubSeasonArchive";
 import type {
   FinancialRecord,
   Fixture,
@@ -8,7 +12,11 @@ import type {
 } from "@/engine/core/types";
 import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
 import { compactPlayerDevelopmentHistory } from "@/engine/world/developmentEnvironment";
+import { compactInjuryArchive, expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { withoutDisciplineMirror } from "@/engine/match/disciplineRecords";
 import {
+  compactPlayerMovementSummary,
+  expandPlayerMovementSummary,
   sortPlayerMovementArchiveSummaries,
   summarizePlayerMovement,
 } from "@/engine/world/worldHistoryTypes";
@@ -199,7 +207,8 @@ function projectWorldHistoryMovementSummaries(
 
   const migrateSeason = (season: WorldSeasonHistory): WorldSeasonHistory => {
     const summariesById = new Map<string, PlayerMovementArchiveSummary>();
-    for (const summary of season.playerMovementSummaries ?? []) {
+    for (const stored of season.playerMovementSummaries ?? []) {
+      const summary = expandPlayerMovementSummary(stored);
       if (!summary.id || !summary.playerId || !isMaterialMovementSummary(summary)) continue;
       summariesById.set(summary.id, summary);
     }
@@ -261,21 +270,29 @@ function compactPlayerRecord(
   preserveFullDossierHistory = false,
 ): Player {
   const compactedDevelopmentHistory = player.developmentHistory
-    ? compactPlayerDevelopmentHistory(player.developmentHistory)
+    ? compactPlayerDevelopmentHistory(player.developmentHistory, player.id)
     : undefined;
-  const developmentHistory = compactedDevelopmentHistory
+  const retainedDevelopmentHistory = compactedDevelopmentHistory
     && !preserveFullDossierHistory
     && compactedDevelopmentHistory.length > BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT
     ? compactedDevelopmentHistory.slice(-BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT)
     : compactedDevelopmentHistory;
+  const developmentHistory = retainedDevelopmentHistory?.map(packDevelopmentHistoryEntry);
+  const compactedForm = (player.recentMatchRatings ?? []).map(compactMatchFormEntry);
+  const compactedSeasons = (player.seasonRatings ?? []).map(compactSeasonRating);
+  const seasonRatings = compactedSeasons.every((entry, index) => entry === player.seasonRatings?.[index])
+    ? player.seasonRatings : compactedSeasons;
+  const recentMatchRatings = compactedForm.every((entry, index) => entry === player.recentMatchRatings?.[index])
+    ? player.recentMatchRatings : compactedForm;
   const injuryHistory = player.injuryHistory;
   const injuryCutoff = Math.max(
     1,
     currentSeason - PLAYER_INJURY_DETAIL_RETENTION_SEASONS + 1,
   );
-  const injuriesInConsequenceWindow = injuryHistory?.injuries.filter((injury) =>
-    injury.occurredSeason >= injuryCutoff || injury.id === player.currentInjury?.id
-  );
+  const injuriesInConsequenceWindow = injuryHistory?.injuries.filter((entry) => {
+    const injury = expandHistoricalInjury(entry, player.id);
+    return injury.occurredSeason >= injuryCutoff || injury.id === player.currentInjury?.id;
+  });
   const recentBackgroundInjuries = injuriesInConsequenceWindow
     && !preserveFullDossierHistory
     && injuriesInConsequenceWindow.length > BACKGROUND_PLAYER_INJURY_HISTORY_LIMIT
@@ -284,23 +301,29 @@ function compactPlayerRecord(
   const activeInjury = player.currentInjury;
   const retainedInjuries = activeInjury
     && recentBackgroundInjuries
-    && !recentBackgroundInjuries.some((injury) => injury.id === activeInjury.id)
+    && !recentBackgroundInjuries.some((injury) => expandHistoricalInjury(injury, player.id).id === activeInjury.id)
     ? [activeInjury, ...recentBackgroundInjuries]
     : recentBackgroundInjuries;
-  const compactedInjuryHistory = injuryHistory && retainedInjuries
+  const retainedInjuryHistory = injuryHistory && retainedInjuries
     ? retainedInjuries.length === injuryHistory.injuries.length
       ? injuryHistory
       : { ...injuryHistory, injuries: retainedInjuries }
     : injuryHistory;
+  const compactedInjuryHistory = retainedInjuryHistory
+    ? compactInjuryArchive(retainedInjuryHistory) : undefined;
 
   if (
-    developmentHistory === player.developmentHistory
+    recentMatchRatings === player.recentMatchRatings
+    && seasonRatings === player.seasonRatings
+    && developmentHistory === player.developmentHistory
     && compactedInjuryHistory === player.injuryHistory
   ) {
     return player;
   }
   return {
     ...player,
+    recentMatchRatings,
+    seasonRatings,
     ...(developmentHistory ? { developmentHistory } : {}),
     ...(compactedInjuryHistory ? { injuryHistory: compactedInjuryHistory } : {}),
   };
@@ -782,7 +805,8 @@ export function findSaveRetentionReferenceViolations(state: GameState): string[]
 
   for (const season of state.worldHistory?.seasons ?? []) {
     const summaryById = new Map<string, PlayerMovementArchiveSummary>();
-    for (const summary of season.playerMovementSummaries ?? []) {
+    for (const stored of season.playerMovementSummaries ?? []) {
+      const summary = expandPlayerMovementSummary(stored);
       if (summaryById.has(summary.id)) {
         failures.push(
           `worldHistory:${season.season}:duplicate-movement-summary:${summary.id}`,
@@ -959,7 +983,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
     Object.entries(state.players ?? {}).map(([playerId, player]) => [
       playerId,
       compactPlayerRecord(
-        player,
+        state.disciplinaryRecords === undefined ? player : withoutDisciplineMirror(player),
         state.currentSeason,
         causalPlayerIds.has(playerId),
       ),
@@ -985,7 +1009,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
   // old public summary without weakening the legacy-save safety rule below.
   const projectedArchivedMovementIds = new Set(
     worldHistory?.seasons.flatMap((season) =>
-      season.playerMovementSummaries?.map((summary) => summary.id) ?? [],
+      season.playerMovementSummaries?.map((summary) => expandPlayerMovementSummary(summary).id) ?? [],
     ) ?? [],
   );
   worldHistory = worldHistory
@@ -993,6 +1017,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
         ...worldHistory,
         seasons: worldHistory.seasons.map((season) => ({
           ...season,
+          clubs: season.clubs.map(compactClubSeasonHistory),
           players: season.players
             .map((player) => {
               const identity = players[player.playerId] ?? state.retiredPlayers[player.playerId];
@@ -1031,7 +1056,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
             : WORLD_HISTORY_ARCHIVE_PLAYER_LIMIT,
         );
         const retainedPlayerIds = new Set(players.map((player) => player.playerId));
-        const playerMovementSummaries = season.playerMovementSummaries?.filter(
+        const playerMovementSummaries = season.playerMovementSummaries?.map(expandPlayerMovementSummary).filter(
           (summary) =>
             keepsFullMovementDetail
             || retainedPlayerIds.has(summary.playerId)
@@ -1041,7 +1066,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
           ...season,
           players,
           ...(playerMovementSummaries && playerMovementSummaries.length > 0
-            ? { playerMovementSummaries }
+            ? { playerMovementSummaries: playerMovementSummaries.map(compactPlayerMovementSummary) }
             : { playerMovementSummaries: undefined }),
         };
       }),

@@ -152,6 +152,7 @@ export interface WeekSummary {
   skillXpGained: Record<string, number>;
   attributeXpGained: Record<string, number>;
   matchesAttended: number;
+  scoutingSessions?: number;
   reportsWritten: number;
   meetingsHeld: number;
   newMessages: number;
@@ -376,6 +377,7 @@ export interface GameStoreState {
   acknowledgeNarrativeEvent: (eventId: string) => void;
   resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => void;
   resolveConsequenceDecision: (decisionId: string, optionId: string) => void;
+  reviewRivalCampaign: (campaignId: string) => void;
   resolveRivalOrganizationOpportunity: (
     opportunityId: string,
     response: "exploit" | "decline",
@@ -491,6 +493,7 @@ export interface GameStoreState {
     pending: { type: string; targetId: string; label: string } | null,
   ) => void;
   pendingNetworkContactId: string | null;
+  pendingInboxMessageId: string | null;
   setPendingNetworkContactId: (contactId: string | null) => void;
   pendingRivalOpportunityId: string | null;
   setPendingRivalOpportunityId: (opportunityId: string | null) => void;

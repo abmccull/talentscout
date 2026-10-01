@@ -42,7 +42,7 @@ import {
 // ---------------------------------------------------------------------------
 
 export type ReputationEvent =
-  | { type: "reportSubmitted"; quality: number }
+  | { type: "reportSubmitted"; quality: number; hasSupportedFinding?: boolean }
   | { type: "reportValidated"; accuracy: number }
   | {
       type: "successfulSigning";
@@ -125,7 +125,7 @@ const DISCOVERY_DELTA: Record<WonderkidTier, number> = {
  */
 export function updateReputation(scout: Scout, event: ReputationEvent): Scout {
   const delta = event.type === "reportSubmitted"
-    ? calculateReportSubmissionDelta(event.quality, scout.reportsSubmitted)
+    ? event.hasSupportedFinding === false ? 0 : calculateReportSubmissionDelta(event.quality, scout.reportsSubmitted)
     : calculateReputationDelta(event);
   const newReputation = Math.max(0, Math.min(100, scout.reputation + delta));
   return { ...scout, reputation: newReputation };

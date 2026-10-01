@@ -1,3 +1,4 @@
+import { matchFormRating } from "@/engine/players/matchFormArchive";
 import type { RNG } from "../../rng/index";
 import {
   computeSemanticBreakthrough,
@@ -91,7 +92,7 @@ function computeFormMomentum(
 
   const clampedRating = currentRating;
   const recentRatings = [
-    ...(player.recentMatchRatings ?? []).map((entry) => entry.rating),
+    ...(player.recentMatchRatings ?? []).map(matchFormRating),
     currentRating,
   ].slice(-6);
   const countTrailing = (predicate: (rating: number) => boolean): number => {
@@ -277,7 +278,8 @@ export function processPlayerDevelopment(
 
   for (const player of Object.values(state.players)) {
     if (player.injuryWeeksRemaining > 6) continue;
-    if (player.age > 35) continue;
+    // Surviving veterans still age. The profile model handles decline; an age
+    // cutoff here would freeze attributes and ability until retirement.
 
     const environment = evaluatePlayerDevelopmentEnvironment(state, player, {
       index: environmentIndex,

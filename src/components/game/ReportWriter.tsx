@@ -36,6 +36,7 @@ import {
   getApplicableAnalystReview,
 } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
+import { hasReportBuyerEvidence } from "@/engine/finance/reportMarketplace";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -62,6 +63,7 @@ import { getPendingInsightReportQualityEffect } from "@/engine/insight/effects";
 import {
   canOpenReportWorkflowStep,
   resolveReportWorkflow,
+  shouldUseInitialAssessment,
 } from "@/components/game/reportWriterMode";
 import { buildReportWriterStatus } from "@/components/game/reportWriterStatus";
 import {
@@ -131,12 +133,13 @@ export function ReportWriter() {
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
   const [initialAssessmentInput, setInitialAssessmentInput] = useState<InitialAssessmentInput | null>(null);
+  const [initialAssessmentCompletedSteps, setInitialAssessmentCompletedSteps] = useState(0);
   const [briefId, setBriefId] = useState("");
   const [intendedAudience, setIntendedAudience] = useState<StructuredReportInput["intendedAudience"]>("academyDirector");
   const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
   const [recruitmentNeed, setRecruitmentNeed] = useState("");
   const [projectedRole, setProjectedRole] = useState<PlayerRole | "">("");
-  const [recommendedAction, setRecommendedAction] = useState<StructuredReportInput["recommendedAction"]>("inviteForTrial");
+  const [chosenRecommendedAction, setRecommendedAction] = useState<StructuredReportInput["recommendedAction"] | null>(null);
   const [riskDrafts, setRiskDrafts] = useState<Partial<Record<string, RiskDraft>>>({});
   const [estimatedWeeklyWage, setEstimatedWeeklyWage] = useState(250);
   const [alternativePlayerId, setAlternativePlayerId] = useState("");
@@ -332,7 +335,12 @@ export function ReportWriter() {
       : undefined,
     [canonicalPlayerId, freshObservationIds, gameState],
   );
-  const initialAssessmentMode = isYouthCase && matchingBriefs.length === 0;
+  const initialAssessmentMode = shouldUseInitialAssessment({
+    isYouthCase,
+    hasOpenBrief: matchingBriefs.length > 0,
+    playerId: canonicalPlayerId,
+    openingCase: gameState?.openingCase,
+  });
   const analystReview = useMemo(
     () => gameState?.finances && canonicalPlayerId
       ? getApplicableAnalystReview(
@@ -358,6 +366,13 @@ export function ReportWriter() {
     return [...new Map(cards.map((card) => [card.id, card])).values()]
       .sort((left, right) => left.minute - right.minute || left.id.localeCompare(right.id));
   }, [canonicalPlayerId, gameState]);
+  // An unclassified or inconclusive visit is a reason to keep watching. Once
+  // the scout chooses an action, evidence refreshes must not overwrite it.
+  const recommendedAction = chosenRecommendedAction ?? (
+    isYouthCase && !initialAssessmentCards.some((card) =>
+      getEvidenceClaimOptions(card).some((option) => option.support === "supported"),
+    ) ? "monitor" : "inviteForTrial"
+  );
   const alternativeCandidates = useMemo(() => {
     if (!gameState || !player) return [];
     return Object.values(gameState.unsignedYouth)
@@ -581,15 +596,19 @@ export function ReportWriter() {
 
   // Live pricing estimate for independent scouts
   const isIndependent = gameState?.scout.careerPath === "independent";
+  const draftAssessment = initialAssessmentResult?.assessment ?? formalAssessmentResult?.assessment;
+  const hasSaleEvidence = initialAssessmentMode || structuredInput?.evidenceVersion === 1
+    ? Boolean(draftAssessment && hasReportBuyerEvidence({ evidenceAssessment: draftAssessment }))
+    : true;
   const priceEstimate = useMemo(() => {
-    if (!isIndependent || !gameState?.finances) return null;
+    if (!isIndependent || !hasSaleEvidence || !gameState?.finances) return null;
     return estimateReportPriceRange(
       effectiveConviction,
       craftRead.representativeScore,
       gameState.scout.reputation,
       gameState.finances.marketTemperature,
     );
-  }, [isIndependent, effectiveConviction, craftRead.representativeScore, gameState?.scout.reputation, gameState?.finances]);
+  }, [isIndependent, hasSaleEvidence, effectiveConviction, craftRead.representativeScore, gameState?.scout.reputation, gameState?.finances]);
 
   // Pre-populate form state from draft (one-shot) and auto-generate summary
   useEffect(() => {
@@ -788,7 +807,7 @@ export function ReportWriter() {
     hasFreshEvidence: freshObservationIds.length > 0,
     hasSummary: effectiveSummary.trim().length > 0,
     initialAssessmentReady: Boolean(initialAssessmentInput && initialAssessmentResult?.valid),
-    openingDecisionCount: initialAssessmentInput ? 1 : 5,
+    openingDecisionCount: 6 - initialAssessmentCompletedSteps,
     youthValidationErrors: structuredValidation.errors,
   });
   const canSubmit = reportStatus.canSubmit;
@@ -1262,7 +1281,7 @@ export function ReportWriter() {
                                 })}
                                 className="sr-only"
                               />
-                              {status === "assessed" ? "Make a claim" : "Leave unassessed"}
+                              {status === "assessed" ? "Interpret a saved cue" : "Leave unassessed"}
                             </label>
                           ))}
                         </div>
@@ -1292,6 +1311,14 @@ export function ReportWriter() {
                                 ))}
                               </select>
                             </label>
+                            {selectedCard && (
+                              <blockquote className="border-l-2 border-emerald-400/40 pl-3 text-xs leading-5 text-zinc-200" data-testid={`report-selected-cue-${category}`}>
+                                <p>{selectedCard.minute}&apos; — {selectedCard.summary}</p>
+                                {selectedCard.detail && selectedCard.detail !== selectedCard.summary && (
+                                  <p className="mt-1 text-zinc-300">{selectedCard.detail}</p>
+                                )}
+                              </blockquote>
+                            )}
                             {selectedCard && (
                               <fieldset className="space-y-2">
                                 <legend className="text-meta font-medium text-zinc-400">Interpretation</legend>
@@ -1384,6 +1411,9 @@ export function ReportWriter() {
                   <div className="mt-3 grid gap-2 lg:grid-cols-2">
                     {YOUTH_REPORT_RISK_OPTIONS.filter((option) => option.id !== "noMaterialSignal").map((option) => {
                       const riskDraft = riskDrafts[option.id];
+                      const riskEvidence = riskDraft?.status === "observed"
+                        ? initialAssessmentCards.find(card => card.id === riskDraft.evidenceCardId)
+                        : undefined;
                       return (
                         <div key={option.id} className={`grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_11rem] sm:items-center ${riskDraft ? "border-amber-400/35 bg-amber-400/[0.07]" : "border-white/10 bg-black/20"}`}>
                           <div>
@@ -1431,6 +1461,14 @@ export function ReportWriter() {
                                 ))}
                               </select>
                             </label>
+                          )}
+                          {riskEvidence && (
+                            <blockquote className="border-l-2 border-emerald-400/40 pl-3 text-xs leading-5 text-zinc-200 sm:col-span-2" data-testid={`report-risk-cue-${option.id}`}>
+                              <p>{riskEvidence.minute}&apos; — {riskEvidence.summary}</p>
+                              {riskEvidence.detail && riskEvidence.detail !== riskEvidence.summary && (
+                                <p className="mt-1 text-zinc-300">{riskEvidence.detail}</p>
+                              )}
+                            </blockquote>
                           )}
                         </div>
                       );
@@ -1519,6 +1557,7 @@ export function ReportWriter() {
                 cards={initialAssessmentCards}
                 playerName={`${player.firstName} ${player.lastName}`}
                 value={initialAssessmentInput}
+                onProgressChange={setInitialAssessmentCompletedSteps}
                 onChange={(nextValue) => {
                   setInitialAssessmentInput(nextValue);
                   setIsDirty(true);
@@ -1534,7 +1573,7 @@ export function ReportWriter() {
                 <p className={`text-sm ${canSubmit ? "text-[#F0EBE3]" : "text-amber-200"}`} aria-live="polite">
                   {canSubmit
                     ? "Ready to file. This first assessment opens the case."
-                    : reportStatus.primaryBlocker ?? "Complete the five assessment decisions to file this first read."}
+                    : reportStatus.primaryBlocker ?? "Complete the six assessment decisions to file this first read."}
                 </p>
                 <Button className="min-h-11" variant="outline" onClick={handleBack}>
                   {t("backToProfile")}
@@ -2151,6 +2190,11 @@ export function ReportWriter() {
           )}
 
           {/* Pricing Guidance (independent scouts only) */}
+          {isIndependent && !hasSaleEvidence && (
+            <p className="text-sm text-zinc-400">
+              You can retain an inconclusive report in your case history. Gather a supported finding before offering it for sale.
+            </p>
+          )}
           {priceEstimate && (
             <details id="report-pricing" className="group rounded-2xl border border-emerald-500/20 bg-[#11161c]/95 p-4 sm:p-5">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">

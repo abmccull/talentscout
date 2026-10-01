@@ -54,6 +54,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+// The final refinements are harder than early development. PA is a ceiling,
+// not a destination promised by enough uninterrupted training weeks.
+function remainingDevelopmentMultiplier(player: Player): number {
+  return 0.35 + 0.65 * clamp(
+    (player.potentialAbility - player.currentAbility) / 40, 0, 1,
+  );
+}
+
 /** Return the numeric delta that matches a semantic improvement or decline. */
 export function getSemanticDevelopmentDelta(
   attribute: PlayerAttribute,
@@ -223,21 +231,21 @@ function developmentMultiplier(
   profile: DevelopmentProfile,
   rng: RNG,
 ): number {
-  const peakAge: Record<DevelopmentProfile, number> = {
-    earlyBloomer: 22,
-    lateBloomer: 29,
-    steadyGrower: 26,
-    volatile: 25,
-  };
-  const peak = peakAge[profile];
-  const yearsFromPeak = age - peak;
-  let base = yearsFromPeak < 0
-    ? Math.min(1, 0.4 + Math.abs(yearsFromPeak) * 0.08)
-    : -yearsFromPeak * 0.02;
-
+  // Development timing is not a retirement clock. Early bloomers improve most
+  // quickly as teenagers, then consolidate; late bloomers accelerate in their
+  // twenties instead of growing slowly until an abrupt switch to decline.
+  const declineAge = { earlyBloomer: 29, steadyGrower: 31, lateBloomer: 33, volatile: 30 }[profile];
+  let base: number;
+  if (age >= declineAge) {
+    base = -(age - declineAge + 1) * 0.04;
+  } else if (profile === "earlyBloomer") {
+    base = age < 22 ? 1.15 : age < 26 ? 0.45 : 0.12;
+  } else if (profile === "lateBloomer") {
+    base = age < 22 ? 0.42 : age < 29 ? 0.85 : 0.3;
+  } else {
+    base = age < 23 ? 1 : age < 28 ? 0.55 : 0.2;
+  }
   if (profile === "volatile") base += rng.gaussian(0, 0.4);
-  if (profile === "earlyBloomer") base *= 1.3;
-  if (profile === "lateBloomer") base *= age < peak ? 0.5 : 0.8;
   return base;
 }
 
@@ -259,6 +267,7 @@ export function computeSemanticPlayerDevelopment(
     : clamp(2 - mindset, 0.7, 1.3);
   const multiplier = direction === "growth"
     ? baseMultiplier
+      * remainingDevelopmentMultiplier(player)
       * developmentRateModifier
       * (environment?.growthQualityMultiplier ?? 1)
       * mindsetModifier
@@ -267,7 +276,11 @@ export function computeSemanticPlayerDevelopment(
       * mindsetModifier;
 
   const formBonus = player.form * 0.017;
-  let developmentChance = clamp(0.15 + formBonus, 0.05, 0.25);
+  // Growth still requires both a useful weekly opportunity and an attribute
+  // improvement. The former 15% gate starved even healthy academy prospects.
+  let developmentChance = direction === "growth"
+    ? clamp(0.20 + formBonus, 0.08, 0.30)
+    : clamp(0.15 + formBonus, 0.05, 0.25);
   const momentum = player.formMomentum ?? 0;
   const trend = player.formTrend ?? "stable";
   if (trend === "rising" && momentum > 0) {
@@ -327,7 +340,11 @@ export function computeSemanticBreakthrough(
   if (player.age < 17 || player.age > 25) return null;
   if (player.form < 1) return null;
   if (player.currentAbility >= player.potentialAbility) return null;
-  if (!rng.chance(clamp(BREAKTHROUGH_CHANCE * environmentMultiplier, 0, 0.04))) {
+  if (!rng.chance(clamp(
+    BREAKTHROUGH_CHANCE * environmentMultiplier * remainingDevelopmentMultiplier(player),
+    0,
+    0.04,
+  ))) {
     return null;
   }
 

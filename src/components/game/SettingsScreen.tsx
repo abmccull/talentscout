@@ -88,6 +88,7 @@ export function SettingsScreen() {
   );
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [saveRetrySlot, setSaveRetrySlot] = useState<number | null>(null);
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [moddedKeys, setModdedKeys] = useState<string[]>([]);
@@ -142,6 +143,9 @@ export function SettingsScreen() {
   const feedbackSubmissionAvailable = isFeedbackSubmissionAvailable();
 
   const handleSave = async (slot: number) => {
+    clearTimeout(saveTimerRef.current);
+    setSaveStatus(null);
+    setSaveRetrySlot(null);
     if (reservedSlots.has(slot)) {
       setSaveStatus(
         `Error: Slot ${slot} is reserved by a preserved full-game save.`,
@@ -149,11 +153,15 @@ export function SettingsScreen() {
       return;
     }
 
-    const name = `Save ${slot}`;
-    await saveToSlot(slot, name);
-    setSaveStatus(`Saved to slot ${slot}`);
-    clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => setSaveStatus(null), 2000);
+    try {
+      await saveToSlot(slot, `Save ${slot}`);
+      setSaveStatus(`Saved to slot ${slot}`);
+      saveTimerRef.current = setTimeout(() => setSaveStatus(null), 2000);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Please try again.";
+      setSaveStatus(`Error: Could not save to slot ${slot}. ${detail}`);
+      setSaveRetrySlot(slot);
+    }
   };
 
   const handleQuickSave = async () => {
@@ -488,7 +496,7 @@ export function SettingsScreen() {
                 className={`flex items-center gap-2 text-sm ${
                   saveStatus.startsWith("Error:") ? "text-red-400" : "text-emerald-400"
                 }`}
-                role="status"
+                role={saveStatus.startsWith("Error:") ? "alert" : "status"}
               >
                 {saveStatus.startsWith("Error:") ? (
                   <AlertTriangle size={14} aria-hidden="true" />
@@ -496,6 +504,17 @@ export function SettingsScreen() {
                   <Check size={14} aria-hidden="true" />
                 )}
                 <span>{saveStatus}</span>
+                {saveRetrySlot !== null && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                    disabled={isSaving}
+                    onClick={() => void handleSave(saveRetrySlot)}
+                  >
+                    Retry save
+                  </Button>
+                )}
               </div>
             )}
 

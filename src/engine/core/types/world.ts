@@ -47,6 +47,8 @@ export interface Club {
   leagueId: string;
   reputation: number;
   budget: number;
+  /** Latest annual board transfer allocation; also prevents duplicate awards. */
+  recruitmentAllocation?: { season: number; amount: number; budgetBefore: number; budgetAfter: number };
   weeklyWageBudget?: number;
   scoutingBudget?: number;
   financialObligations?: ClubFinancialObligation[];

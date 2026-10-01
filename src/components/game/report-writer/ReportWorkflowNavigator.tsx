@@ -35,7 +35,7 @@ export function ReportWorkflowNavigator({
       <div className="rounded-2xl border border-white/10 bg-[#0d1216]/95 p-3 shadow-2xl shadow-black/45 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="mr-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            <p className="mr-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
               Report progress
             </p>
             <Badge
@@ -110,7 +110,7 @@ export function ReportWorkflowNavigator({
           })}
         </div>
         {sectionNavigatorItems.find((item) => item.id === activeSectionId) && (
-          <p className="mt-2 text-[11px] leading-4 text-zinc-400" aria-live="polite">
+          <p className="mt-2 text-xs leading-4 text-zinc-400" aria-live="polite">
             {sectionNavigatorItems.find((item) => item.id === activeSectionId)?.detail}
           </p>
         )}

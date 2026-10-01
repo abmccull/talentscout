@@ -6,7 +6,7 @@ import type {
   YouthVenueType,
 } from "@/engine/core/types";
 import { createRNG, type RNG } from "@/engine/rng";
-import { getYouthVenuePool, type ScoutQualityData } from "@/engine/youth/venues";
+import { getYouthVenuePool, scoreYouthVenuePublicSignal, type ScoutQualityData } from "@/engine/youth/venues";
 
 interface VenuePoolCase {
   name: string;
@@ -132,13 +132,14 @@ function legacyWeightedShuffle(
   rng: RNG,
   pool: UnsignedYouth[],
   qualityWeight: number,
+  scoutId: string,
 ): UnsignedYouth[] {
   return pool
     .map((youth) => ({
       youth,
       score:
-        (youth.player.potentialAbility / 200) * qualityWeight +
-        rng.next() * (1 - qualityWeight),
+        scoreYouthVenuePublicSignal(youth, scoutId) * qualityWeight
+        + rng.next() * (1 - qualityWeight),
     }))
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.youth);
@@ -160,7 +161,7 @@ function legacyReferencePool(rng: RNG, testCase: VenuePoolCase): string[] {
   );
   const qualityWeight = computeQualityWeightReference(testCase.scoutQualityData);
 
-  return legacyWeightedShuffle(rng, testCase.filtered, qualityWeight)
+  return legacyWeightedShuffle(rng, testCase.filtered, qualityWeight, testCase.scout.id)
     .slice(0, poolSize)
     .map((player) => player.id);
 }
@@ -402,8 +403,46 @@ describe("youth venue pool invariants", () => {
       },
     );
 
-    expect(pool.map((player) => player.id)).toEqual(["tie-a", "tie-b"]);
+    expect(pool.map((player) => player.id)).toEqual(["tie-c", "tie-b"]);
     expect(nextIntValues).toHaveLength(1);
     expect(nextValues).toHaveLength(3);
+  });
+
+  it("does not read hidden potential when ranking a venue pool", () => {
+    const quality = {
+      intuition: 14,
+      regionalKnowledge: 55,
+      specializationLevel: 10,
+      isYouthSpecialist: true,
+    };
+    const visible = { visibility: 20, buzzLevel: 40, country: "england", regionId: "england-north" };
+    const low = makeYouth("low-pa", 1, visible);
+    const high = makeYouth("high-pa", 200, visible);
+    Object.defineProperty(low.player, "potentialAbility", {
+      get() {
+        throw new Error("potentialAbility must not be read");
+      },
+    });
+    Object.defineProperty(high.player, "potentialAbility", {
+      get() {
+        throw new Error("potentialAbility must not be read");
+      },
+    });
+
+    expect(scoreYouthVenuePublicSignal(low, "scout-1")).toBe(
+      scoreYouthVenuePublicSignal(high, "scout-1"),
+    );
+    expect(() => getYouthVenuePool(
+      createRNG("pa-blind"),
+      "streetFootball",
+      toRecord([low, high]),
+      scout(),
+      "england-north",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      quality,
+    )).not.toThrow();
   });
 });

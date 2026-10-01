@@ -10,6 +10,7 @@ export interface BatchWeekSummary {
   season: number;
   fatigueChange: number;
   matchesAttended: number;
+  scoutingSessions?: number;
   reportsWritten: number;
   meetingsHeld: number;
   newMessages: number;

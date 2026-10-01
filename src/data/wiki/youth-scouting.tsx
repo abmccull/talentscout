@@ -11,21 +11,20 @@ export const youthScoutingArticles: WikiArticle[] = [
     category: "youth-scouting",
     order: 0,
     summary:
-      "How youth scouting works: grassroots venues, Youth specialization access, scouting statuses, and placement reports.",
+      "Prospects is a case list: last look, open question, next test, and rival heat.",
     searchText:
-      "Unsigned Youth. Youth scouting focuses on players not yet signed to a professional academy. These players appear in grassroots venues, school matches, youth tournaments, and festivals, most of which are only accessible to scouts with the Youth specialization. Unsigned youth appear in the Youth Scouting screen. Each has a scouting status (unobserved, partially observed, fully assessed) and, if you have sufficient observations, a placement report can be written.",
+      "Unsigned Youth. Youth scouting is the question will this kid become. Prospects is a working case list, not a star board. Each case shows the last look, the open question, the next test, and rival heat. Venues pool by public buzz, visibility, and who you already know — never true potential. Write a placement report when the evidence can survive a second context.",
     content: (
       <SectionBlock>
         <Para>
-          Youth scouting focuses on players not yet signed to a professional
-          academy. These players appear in grassroots venues, school matches,
-          youth tournaments, and festivals {"\u2014"} most of which are only
-          accessible to scouts with the Youth specialization.
+          Youth Scout asks one question: will this kid become? Unsigned
+          prospects appear at school matches, grassroots venues, festivals, and
+          follow-ups. Prospects is your working case list, not a star board.
         </Para>
         <Para>
-          Unsigned youth appear in the Youth Scouting screen. Each has a
-          scouting status (unobserved, partially observed, fully assessed) and,
-          if you have sufficient observations, a placement report can be written.
+          Each case shows the last look, the open question, the next test, and
+          whether a rival is already circling. Your read of ability lives inside
+          the dossier as a range, labelled as your read — never as hidden truth.
         </Para>
       </SectionBlock>
     ),
@@ -105,20 +104,19 @@ export const youthScoutingArticles: WikiArticle[] = [
     category: "youth-scouting",
     order: 2,
     summary:
-      "How placed players become alumni, the Alumni Dashboard, and how accurate placements boost reputation.",
+      "Placed kids stay on the Desk as your people over years: debut, loan, released, international.",
     searchText:
-      "Alumni Tracking. Players you have placed in academies become part of your alumni network. The Alumni Dashboard tracks their development over subsequent seasons, letting you see how accurate your potential assessments were. High-accuracy alumni placements that develop into quality professionals are a major source of long-term reputation gains and are counted in your career Discoveries log.",
+      "Alumni Tracking. Players you place become alumni. Desk shows those names as your people over years — debut, loan, released, international — because that is the 30-year scout fantasy. Accurate placements that later debut or stall are how reputation and job pressure actually move. High-achievers can become contacts.",
     content: (
       <SectionBlock>
         <Para>
-          Players you have placed in academies become part of your alumni
-          network. The Alumni Dashboard tracks their development over subsequent
-          seasons, letting you see how accurate your potential assessments were.
+          The first accepted placement becomes a name you live with. Alumni
+          stay on the Desk as your people over years: academy, debut, loan,
+          released, transferred, international.
         </Para>
         <Para>
-          High-accuracy alumni placements that develop into quality professionals
-          are a major source of long-term reputation gains and are counted in
-          your career Discoveries log.
+          That record is the 30-year fantasy. Clubs hire and fire you on those
+          names, not on a skill tree. High-achievers can later become contacts.
         </Para>
       </SectionBlock>
     ),

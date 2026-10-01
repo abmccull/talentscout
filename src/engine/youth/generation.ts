@@ -19,27 +19,33 @@ import type {
 } from "@/engine/core/types";
 import { ALL_POSITIONS } from "@/engine/core/types";
 import { generatePlayer } from "@/engine/players/generation";
+import { estimateAcademyWeeklyWage } from "@/engine/players/wages";
 import type { CountryData } from "@/data/types";
 import { normalizeCountryKey } from "@/lib/country";
 
 /**
- * Selected senior and academy identities simulated in full for one club.
- * The wider football pyramid is abstracted; annual intakes refill openings
- * instead of expanding every detailed roster forever.
+ * Academy places are separate from the senior squad. A full first team must
+ * not suppress the next generation; graduating players release youth places.
  */
-export const SIMULATED_CLUB_PLAYER_CAP = 25;
+export const SIMULATED_ACADEMY_PLAYER_CAP = 12;
 
 export function limitAcademyIntakeToClubCapacity(
   club: Club,
   intake: readonly Player[],
+  weeklyWageHeadroom = Number.POSITIVE_INFINITY,
 ): Player[] {
-  const detailedPlayerIds = new Set([
-    ...club.playerIds,
-    ...(club.academyPlayerIds ?? []),
-    ...(club.loanedOutPlayerIds ?? []),
-  ]);
-  const availablePlaces = Math.max(0, SIMULATED_CLUB_PLAYER_CAP - detailedPlayerIds.size);
-  return intake.slice(0, availablePlaces);
+  const academyPlayerIds = new Set(club.academyPlayerIds ?? []);
+  const availablePlaces = Math.max(0, SIMULATED_ACADEMY_PLAYER_CAP - academyPlayerIds.size);
+  let remainingWages = Math.max(0, weeklyWageHeadroom);
+  const admitted: Player[] = [];
+  for (const player of intake) {
+    if (admitted.length >= availablePlaces) break;
+    const wage = player.wage ?? 0;
+    if (!Number.isFinite(wage) || wage < 0 || !(wage <= remainingWages)) continue;
+    admitted.push(player);
+    remainingWages -= wage;
+  }
+  return admitted;
 }
 
 // =============================================================================
@@ -468,7 +474,9 @@ export function generateRegionalYouth(
 
     // Override PA since generatePlayer re-computes it internally;
     // we want our explicit heavy-tail PA, not the function's PA formula.
-    const player: Player = { ...basePlayer, potentialAbility: pa };
+    // These prospects have no employer. Their first placement sets a real
+    // contract wage; the generic generator's wage estimate is not income.
+    const player: Player = { ...basePlayer, potentialAbility: pa, wage: 0 };
 
     // Apply regional attribute flavour
     const flavouredPlayer = applyCountryBias(player, bias);
@@ -497,13 +505,32 @@ export function generateRegionalYouth(
   return result;
 }
 
+/** Sample unfinished academy readiness on the same ability scale as senior players. */
+export function generateAcademyEntryAbility(
+  rng: RNG,
+  age: number,
+  potential: number,
+  academyRating: number,
+): number {
+  // Entry readiness must share the senior world's ability scale. The former
+  // universal 15–60 bands left even exceptional sixteen-year-olds several
+  // seasons behind ordinary first-team teenagers. Maturity raises readiness,
+  // while a broad individual spread keeps current level from identifying PA.
+  const maturity = 0.42 + (Math.max(14, Math.min(16, age)) - 14) * 0.07;
+  const coaching = Math.max(0, Math.min(20, academyRating)) * 0.35;
+  const readiness = rng.gaussian(potential * maturity + coaching, 14);
+  // No intake arrives finished. Exceptional potential still needs a pathway.
+  return Math.max(1, Math.min(Math.max(1, potential - 12), Math.round(readiness)));
+}
+
 /**
  * Generate the annual academy intake for a club.
  *
  * Count is derived from youthAcademyRating:
- *   floor(rating / 5) + rng.nextInt(0, 1) → 2–5 players
+ *   max(2, floor(rating / 5)) + rng.nextInt(0, 1) → 2–5 players
  *
- * Quality ranges scale with academy rating in four bands.
+ * Potential ranges scale with academy rating in four bands. Readiness also
+ * depends on age and individual variation.
  *
  * @param rng     - Shared RNG instance.
  * @param club    - Club entity (uses youthAcademyRating and id).
@@ -517,25 +544,22 @@ export function generateAcademyIntake(
   country: CountryData,
   season: number,
 ): Player[] {
-  const count = Math.floor(club.youthAcademyRating / 5) + rng.nextInt(0, 1);
+  // Academy quality shapes talent, but even a modest club needs a continuing
+  // cohort. Zero/one-player intakes structurally depleted lower-rated regions.
+  const count = Math.max(2, Math.floor(club.youthAcademyRating / 5)) + rng.nextInt(0, 1);
 
   // Quality bands by youthAcademyRating
-  let caRange: [number, number];
   let paRange: [number, number];
 
   const rating = club.youthAcademyRating;
   if (rating <= 5) {
-    caRange = [15, 35];
     paRange = [40, 100];
   } else if (rating <= 10) {
-    caRange = [20, 45];
     paRange = [60, 130];
   } else if (rating <= 15) {
-    caRange = [25, 50];
     paRange = [80, 160];
   } else {
     // 16–20
-    caRange = [30, 60];
     paRange = [100, 190];
   }
 
@@ -547,11 +571,10 @@ export function generateAcademyIntake(
   for (let i = 0; i < count; i++) {
     const age = rng.nextInt(14, 16);
 
-    // Sample PA in the band, then ensure CA <= PA
+    // Preserve each academy's potential distribution; sample age-sensitive
+    // readiness independently rather than giving every age the same CA band.
     const pa = rng.nextInt(paRange[0], paRange[1]);
-    const caMin = Math.min(caRange[0], pa);
-    const caMax = Math.min(caRange[1], pa);
-    const ca = rng.nextInt(caMin, caMax);
+    const ca = generateAcademyEntryAbility(rng, age, pa, rating);
 
     const firstName = rng.pick(nativePool.firstNames);
     const lastName = rng.pick(nativePool.lastNames);
@@ -572,8 +595,12 @@ export function generateAcademyIntake(
       lastName,
     });
 
-    // Override PA with our explicit band-sampled value
-    players.push({ ...basePlayer, potentialAbility: pa });
+    // Academy registration runs to the senior decision at eighteen. A random
+    // senior contract could expire at fifteen and prematurely feed a child
+    // through the senior wage-renewal market before the pathway is complete.
+    players.push({ ...basePlayer, potentialAbility: pa,
+      wage: estimateAcademyWeeklyWage(ca, club.reputation),
+      contractExpiry: season + (18 - age) });
   }
 
   return players;

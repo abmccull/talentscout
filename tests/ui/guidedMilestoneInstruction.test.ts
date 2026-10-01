@@ -60,12 +60,12 @@ describe("guided milestone blocker copy", () => {
       milestoneId: "submittedReport",
       currentScreen: "reportWriter",
       isYouthDiscoveryHook: true,
-    })).toBe("Select File initial assessment once the five decisions are ready.");
+    })).toBe("Select File initial assessment once the six decisions are ready.");
 
     expect(getGuidedMilestoneInstruction({
       milestoneId: "wroteReport",
       currentScreen: "reportWriter",
       isYouthDiscoveryHook: true,
-    })).toMatch(/five assessment decisions/i);
+    })).toMatch(/six assessment decisions.*your recommendation/i);
   });
 });

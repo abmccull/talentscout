@@ -1,164 +1,81 @@
-# TalentScout rendered design audit
+# TalentScout design audit
 
-**Audit date:** July 28, 2026
-**Candidate:** `a99b5849c8fa0d7efa873ef0124e37c109b093bd`
-**Product type:** Scout-centered football career simulation
-**Primary player goal:** Turn uncertain evidence into defensible scouting decisions and live with their consequences
-**Primary product goal:** Make the first Youth Scout Early Access release understandable, distinctive, trustworthy, and replayable
+2026-09-04 · Youth Scout Career · Reviewed the radio-repair exports and the final guide-recovery acceptance; exact source/build boundaries are in `docs/PRODUCTION_READINESS_REPORT.md`.
 
-## Executive summary
+## Executive assessment
 
-TalentScout has a strong, recognizable design system and a clear professional-scout fantasy. The best screens lead with a decision, explain why it matters, expose the authoritative source, and connect the next action to a longer career thread. The interface is substantially more coherent than a generic management dashboard.
+**Overall: 6.6/10. Base design: 6.8/10. System Cohesion: 6.0/10.**
 
-Fresh desktop/mobile evidence passed for Desk, Planner, Reports, Career, Inbox pressure, contact threads, rival counterplay, and the connected academy-case journey. Six broader accessibility scenarios also passed with no blocking Axe findings. The academy case now explains how the live brief weights the decision before the report is filed.
+TalentScout establishes a recognizable scouting world and makes its central decisions understandable. The opening has a clear primary action, useful optional setup, visible consequences, and a functioning route from observation to a report and follow-up. Recent save and mentor repairs have executed evidence behind them.
 
-The main design limitations are density and proof, not a missing visual identity. Mobile pages remain long; the UI leans heavily on cards and text; partial horizontal rails add scanning cost; imagery carries less meaning than the typographic system; and manual screen-reader, moderated comprehension, audiovisual, physical-device, and populated late-career evidence remain open.
+The presentation remains uneven. Large guidance panels, repeated cards, small supporting text and a crowded Desk make the player work harder to find the current question and next useful action. Cinematic backgrounds and simple flat portraits also imply different levels of finish. This is a usable, distinctive foundation with material polish still to do; passing automated checks does not justify a premium visual score.
 
-## Scores
+Audience assumption: players of a scouting career simulation who want to observe uncertain evidence, make judgments and see relationships and consequences develop. The design goal is to help them understand **what they noticed, what remains uncertain and what they can do next**.
 
-**Overall Design Score:** **8.6/10**
-**Base Design Score:** **8.7/10**
-**System Cohesion Score:** **9.1/10**
+## Evidence and candidate boundary
 
-No formal cap was applied. Accessibility automation is strong, hierarchy is above the cap threshold, components are consistent, and mobile is not three points weaker than desktop.
+The final shared choice layout, readable attribute/country labels, perceived-reflection wording, assessment counters and native radio selection have executed rendered acceptance. The subsequent no-guide recovery has its own source and browser evidence. Earlier failed and interrupted artifacts remain preserved. The separate visual-overhaul checkout is excluded from this score.
 
-## Evidence captured
+| ID | Evidence inspected | Scope |
+|---|---|---|
+| E1 | [Menu desktop](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/main-menu-desktop.png), [menu mobile](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/main-menu-mobile.png) | First viewport, career CTA, inactive Continue/Load, visual identity. |
+| E2 | [Career setup](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/opening-start-desktop.png) | Form focus, optional customization, guide choices and fixed footer. |
+| E3 | [Resumed watch desktop](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-observation-refresh--10ac3-hrough-real-browser-reloads-chromium/resumed-focus-desktop.png), [resumed watch mobile](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-observation-refresh--10ac3-hrough-real-browser-reloads-chromium/resumed-focus-mobile.png) | Saved focus and evidence, mentor, fixed next action; captures wait for actual mentor bounds. |
+| E4 | [Promising interaction](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/tutorial-promising-desktop.png) | Observation reaction, half-time choices, targeted guidance. |
+| E5 | [Discovery desktop](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/opening-decision-desktop.png), [mobile](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/opening-decision-mobile.png), [tablet](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/opening-decision-tablet.png) | Prospect, evidence/question panels, three consequence choices and collapsed mentor. |
+| E6 | [Reflection completion](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-3669b-consequence-through-real-UI-chromium/tutorial-complete-reflection-desktop.png) | Timeline, private note, completion CTA; this is a scrolled state, not the entire reflection. |
+| E7 | [Manual walkthrough journal](C:/Users/hands/OneDrive/Pictures/TalentScout/readiness-20260904/evidence/manual-walkthrough.md) | Root played two first-week careers through different access/follow-up choices, phone assessment, Planner, Desk and save/reload. The second exposed the legacy no-guide navigation lock; after repair the same save recovered and worked at desktop and phone widths. Both transcript captures and the saved files below support the Desk finding. |
+| E8 | [Executed QA evidence](C:/Users/hands/OneDrive/Pictures/TalentScout/readiness-20260904/evidence/opening-qa-evidence.md), [machine-readable run and capture index](C:/Users/hands/OneDrive/Pictures/TalentScout/readiness-20260904/evidence/opening-qa-evidence-index.json) | The final radio opening group passed 11/11 together, one worker and zero retries; see `evidence/final-radio-opening.json`. Includes six accessibility tests and two save-failure/retry tests. |
+| E9 | [Report progress and native choices](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-01a25-s-through-a-real-first-week-chromium/report-mobile-progress-3-of-5.png), [Desk desktop](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-01a25-s-through-a-real-first-week-chromium/week2-desk-desktop-viewport.png), [Desk phone](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-radio-opening/flows-opening-discovery-ho-01a25-s-through-a-real-first-week-chromium/week2-desk-mobile-viewport.png) | Root inspected these saved images. Report outer count correctly reads two remaining at 3/5. Desk captures show the actual secondary guide occupying the right side; they do not claim an unobstructed workspace. |
+| E10 | [Perception and labels acceptance](C:/Users/hands/OneDrive/Pictures/TalentScout/readiness-20260904/evidence/readiness-final-perception-isolated.json), [missed reflection](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-perception-isolated/final-rendered-controlled--142a9-ine-and-persisted-narrative/missed-perceived-reflection-timeline.png) | Both controlled real-cue cases passed, including saved narrative and zero diagnostics. Screenshot shows the limited cue; timeline privacy is established by executed assertions and the manual journal, not a claim that every scrolled panel fits the image. |
+| E11 | [Final Desk desktop](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-guide-opening-recheck/flows-opening-discovery-ho-01a25-s-through-a-real-first-week-chromium/week2-desk-desktop-viewport.png), [final Desk phone](C:/Users/hands/OneDrive/Pictures/TalentScout/talentscout/test-results/readiness-final-guide-opening-recheck/flows-opening-discovery-ho-01a25-s-through-a-real-first-week-chromium/week2-desk-mobile-viewport.png), [guided/unguided recheck](C:/Users/hands/OneDrive/Pictures/TalentScout/readiness-20260904/evidence/final-guide-opening-recheck.json) | Root inspected these unobstructed final-build Desk captures. Both opening cases passed after a focus-readiness test correction and moving the Settings assertion from full-screen Reflection to Report. The first run's other nine cases passed on the same build. Fresh no-guide preference was read from IndexedDB before both reloads; actual radio selection, counters and visible navigation passed. |
 
-- Eight fresh core-workspace screenshots:
-  - desktop/mobile Desk
-  - desktop/mobile Planner
-  - desktop/mobile Reports
-  - desktop/mobile Career
-- Six fresh scouting-ecology screenshots:
-  - desktop/mobile Inbox decision queue
-  - desktop/mobile contact thread
-  - desktop/mobile rival landscape
-- Fresh desktop/mobile academy-case evidence across Desk, dossier, and report writer.
-- Core workspace rendered gate: 1/1 passed.
-- Scouting ecology rendered gate: 1/1 passed.
-- Academy case rendered gate: 1/1 passed.
-- Automated accessibility: 6/6 passed.
-- Low-end browser emulation: 2/2 passed.
-- Packaged Windows supporting runtime instantiates the simulation worker with zero CSP errors.
+Desktop was primarily 1280×720, phone 390×844 and targeted tablet 806×691. Full-page captures can extend beyond those viewport heights and do not by themselves prove the initial scroll position. No generic route capture was substituted for the stateful career journey. Root's first-week walkthrough used visible UI without injected state; some automated checks use test state read-back or controlled setup and are labeled in the evidence record.
 
-The global capture helper could not launch because its Playwright module loader returned an undefined `chromium` binding. The product-specific Playwright visual suites supplied richer stateful evidence and were used for scoring.
+## Scoring method and caps
 
-## Scorecard
+The Base Design Score is the equally weighted mean of the 12 dimensions below: 81.0 / 12 = 6.75, shown as 6.8. Cohesion is judged separately from conflicts across the journey, not calculated from the dimension average. Overall is 75% base plus 25% cohesion: 6.56, shown as 6.6.
 
-| Dimension | Score | Evidence-based assessment |
+No mandatory numerical cap is triggered by the observed scores: accessibility ≥ 4, hierarchy ≥ 5 and component consistency ≥ 5. The acquisition-page task-flow cap does not apply to this game; the task-flow score is also above 5. Indicative desktop execution is 6.7 and mobile 6.0, a gap below the 3-point mobile cap threshold. These device estimates are qualitative, not separate full scorecards. State has redundant text, icons, focus outlines or selected controls; color-only meaning is not established in the inspected flow, so its 7-point cap is not invoked. No measured contrast failure is inferred from the deliberately dimmed tutorial backdrop.
+
+The earlier temporary coverage ceiling is retired: the shared polish now has rendered acceptance and Desk images have been inspected. This remains a design judgment about the recorded local journey, not a release certification or a score for the isolated visual rewrite.
+
+## Scorecard and findings by dimension
+
+| Dimension | /10 | Finding and player impact |
 |---|---:|---|
-| Visual hierarchy | 9.0 | “What matters now,” severity, opportunity cost, source, and next action create a clear reading order. |
-| Layout and spacing | 8.3 | Desktop grouping is strong, but full pages and mobile flows are long; some horizontal rails reveal partial cards and increase scan effort. |
-| Typography | 8.7 | Strong scale, labels, and professional tone. Dense supporting text can become tiring in repeated weekly play. |
-| Color and contrast | 8.5 | Dark surfaces and green/red/yellow states are legible and text-redundant. Automated blocking checks pass. Manual low-vision proof remains open. |
-| Components and states | 8.7 | Cards, badges, panels, buttons, receipts, and empty states share one grammar. The academy-case explanation contract now passes. |
-| Interaction and feedback | 8.6 | Clear CTAs, focus behavior, keyboard support, consequence receipts, and verified packaged worker startup. Long rollover status still merits physical-hardware review. |
-| Information architecture and navigation | 9.0 | Desk, Planner, Prospects, Reports, World, and Career reflect the scout workflow; bottom navigation is consistent on mobile. |
-| Conversion/task-flow design | 8.8 | Empty states lead to the first evidence-producing action and priority cards link to authoritative workspaces. Long mobile paths still impose scrolling cost. |
-| Accessibility and inclusive UX | 8.8 | Six Axe/keyboard/focus scenarios pass across core states. NVDA and VoiceOver critical journeys remain unverified. |
-| Imagery and iconography | 8.3 | Icons are consistent and imagery establishes atmosphere, but most decision meaning still lives in text/card structures. |
-| Brand visual system | 9.0 | Black, emerald, restrained football imagery, uppercase labels, and scout language form a distinctive identity. |
-| Emotional trust and polish | 8.7 | The interface is honest about empty states, uncertainty, and consequences. Human proof of callbacks, pacing, and late-career emotional variation is absent. |
+| Visual hierarchy | 7.0 | The gold career CTA and discovery decision headings make entry and consequence clear. In play, scene labels, mentor instruction, evidence cards and fixed action compete for attention; root's Desk review finds repeated header cards and tips. The current question needs a more consistent visual lead. E1,E3–E5,E7. |
+| Layout and spacing | 6.0 | Single-column phone controls are usable, but discovery combines a large identity section, context panels and three tall cards into a long comparison task. The setup capture shows its fixed footer meeting partially visible guide-choice cards; scrolling succeeds, so this is a comparison/spacing concern rather than a proven blocked control. E2,E5,E8. |
+| Typography | 6.0 | Headings and form focus are clear. Small metadata, uppercase labels, italic mentor instruction and dense supporting lines create too many reading levels. Some mobile player names are truncated; the roster and focus context carry additional identification. E2–E5. |
+| Color and contrast | 6.5 | Gold, dark slate and restrained green create a recognizable palette. The tutorial dimming suppresses the very context the player is judging, while several gray metadata lines have weak visual emphasis. Axe passed the tested scope; this criticism concerns attention and readability, not a claimed WCAG failure. E1,E3–E5,E8. |
+| Components and states | 7.5 | Radio choices, selected rings, locked alternatives, consequence chips and error retry states are coherent and tested. The shared recommended badge now wraps long phone choices normally; actual native radio selection survives editing and responsive layout switches. E9. Repeated framed containers also make routine content feel equally important. E2,E5,E7,E8. |
+| Interaction and feedback | 7.5 | Focus selection, Promising, locked half-time choice, save failure/retry and actual reload all have executed evidence. Escape restores focus after closing the focus sheet; mentor show/hide controls and three tablet choice hit tests pass. Expanded guidance still consumes a large share of the watch view. E3–E5,E7,E8. |
+| Information architecture and navigation | 6.0 | Watch, discovery, report and Planner form an understandable local sequence; six workspaces unlock in week 2. The root's Desk review reports repeated status/context and tips that compete with the next case action. Navigation availability is clearer than the overall information prioritization. E5,E7,E8. |
+| Conversion or task-flow design | 8.0 | A fresh career reaches a meaningful observation, personal choice, initial evidence assessment and booked follow-up. Both private and source-verification paths have evidence. The outer progress counter now tracks all five inner steps, including revisiting a completed decision. Private, source-verification and direct club-contact openings have executed evidence. E9. E2,E5,E7,E8. |
+| Accessibility and inclusive UX | 7.0 | Six broader Axe/keyboard tests and additional opening checks pass without serious/critical violations. Named dialogs, focus return, readable choice labels and non-color-only state improve confidence. Screen-reader interpretation, 200% zoom, long localized text and a broad assistive-technology study are outside this evidence. E2,E5,E8. |
+| Imagery and iconography | 5.5 | Office and pitch backgrounds establish place; consequence icons are easy to recognize. Flat round portraits contrast with the cinematic environments and crowded watch labels obscure some visual identification. The style mismatch is a polish judgment, not a functional defect. E1,E3,E5. |
+| Brand visual system | 7.0 | The private notebook, football setting and restrained gold support a career built on judgment. The interface is most convincing when evidence and open questions dominate; stacked administrative cards on Desk weaken that identity. E1,E5–E7. |
+| Emotional trust and polish | 7.0 | Actual saved progress, explicit uncertainty and visible consequences make the player feel their work matters. Readable labels, consistent progress and perception-limited reflection now reinforce that trust. The remaining repeated Desk instructions and competing guidance still reduce the sense of finish. E9,E10. E3,E6–E8. |
 
-## System cohesion diagnosis
+## Cohesion diagnosis
 
-The interface works as one design grammar:
+**System Cohesion 6.0/10.** The palette and overall setting are connected, and the opening's choices express the game's promise well. The attention rules change too often: the menu is restrained, Watch is dominated by floating guidance, discovery is a cinematic reveal with large consequence cards, and Desk returns to dense status panels and tips. Similar next-step information appears as mentor prose, a fixed footer, a card or a separate progress line. These conflicts reduce cohesion despite stronger isolated screens.
 
-- Visual emphasis maps to player intent: decide, investigate, schedule, file, and review.
-- Similar actions use similar components and consequence language.
-- Navigation matches the work lifecycle.
-- Empty states point toward evidence creation instead of hiding incompleteness.
-- Scout-specific uncertainty and accountability carry through Desk, Reports, relationships, and Career.
+The first-hour opt-out now survives reload and keeps navigation available. Secondary first-week check-ins and first-visit screen guides can still appear and are dismissible. Their timing and footprint remain a P2 guidance issue; the separate visual task is evaluating suppression/defer behavior. This is distinct from the repaired invisible navigation lock.
 
-The main cohesion tension is between decision-first intent and accumulated information density. The first card is usually excellent; secondary panels can expand into a long sequence of similarly weighted cards. On mobile, the page stays coherent but becomes physically demanding.
+## Priorities and acceptance criteria
 
-## Key findings
-
-### 1. Decision hierarchy is the strongest design asset
-
-The Desk opens with one top priority, why it matters, what happens if ignored, its source, and a direct action. This materially reduces management-sim ambiguity.
-
-**Acceptance criteria**
-
-- First viewport names one primary decision.
-- The decision includes reason, risk, source, and next action.
-- Secondary context cannot visually outrank the active decision.
-
-### 2. Mobile is coherent but too long
-
-The mobile Desk preserves hierarchy and bottom navigation, but the complete surface spans several screens. Context, active case, signal rail, progression, and career thread all compete for scroll time.
-
-**Acceptance criteria**
-
-- Primary decision and next action remain in the first two viewports.
-- Secondary context is progressively disclosed.
-- No essential action depends on discovering a partially visible horizontal card.
-- A returning player can reach Planner/Prospects/Reports in one tap.
-
-### 3. Academy-case explanation contract — resolved
-
-The Desk now explains how the linked brief weights the active case. The report flow verifies the recruitment-room identity before moving into “Build the case,” where the presentation room becomes visible.
-
-**Why it matters**
-
-The game’s promise is explainable judgment. If weighting disappears, a club response risks feeling arbitrary.
-
-**Acceptance criteria**
-
-- Active brief shows its weighted priorities before the player files.
-- The same priorities appear in report review and club response.
-- Desktop and mobile visual evidence passes.
-
-### 4. Cards are coherent but overused
-
-Cards are doing priority, context, evidence, progression, relationships, empty states, and explanation. The visual grammar is consistent, but tertiary information can feel like a document rather than a living workplace.
-
-**Acceptance criteria**
-
-- Reserve strong bordered cards for decisions, warnings, and causal artifacts.
-- Use lighter rows, timelines, annotated pitches, and relationship maps for secondary evidence.
-- Preserve keyboard order and text alternatives for spatial treatments.
-
-### 5. Packaged performance is part of interaction quality — source defect resolved
-
-The packaged CSP now permits the same-package weekly worker while keeping frames, child contexts, and objects denied. Fresh Windows supporting evidence finds the worker active with no policy errors.
-
-**Acceptance criteria**
-
-- Packaged telemetry reports `route: worker` for weekly simulation.
-- Unexpected renderer console errors fail the packaged runtime gate.
-- Progress/status remains responsive during season rollover and heavy weeks.
-
-### 6. Accessibility automation is strong; certification is incomplete
-
-Automated coverage includes desktop/mobile workspaces, dialog names, focus traps, keyboard close, focus restoration, political choices, and no blocking Axe findings.
-
-**Acceptance criteria**
-
-- NVDA completes onboarding -> observation -> report -> consequence -> save/load without sighted help.
-- VoiceOver completes the same journey on macOS.
-- No graphical-only evidence, lost context, or motion/audio-only cue remains.
+| Priority | Change | Concrete acceptance |
+|---|---|---|
+| P2 — reduce Desk density | Give the active case and next useful action precedence over repeated headers, status cards and tips. | On 1280×720 and 390×844, identify one current case question and one primary next action in the first viewport. Show each repeated status once; move secondary tips behind one optional reveal. Capture week 2 with an active case and an empty/no-active-case state. This is a recommendation for the next pass, not work claimed complete. |
+| P2 — make guidance quieter | Use the existing compact mentor deliberately when a player is comparing evidence or choices. | Help remains reopenable, tutorials remain enabled and required controls remain clickable with visible keyboard focus. Verify expanded and compact states at 390×844 and 806×691 with long names. Keep the chosen cue/question readable while guidance is visible; preserve the existing focus-return and hit-test regressions. |
+| P2 — shorten comparison cost | Reduce repeated framing and separate decision title/consequence from supplementary detail. | Discovery's three choices retain their distinct costs and uncertainty while using less vertical space. At 200% zoom, every setup/report choice and footer action remains scroll-reachable without persistent occlusion. Measure the rendered state; do not remove consequence information to meet a screen-height target. |
+| P3 — unify image treatment | Choose a coherent portrait/background treatment and improve watch-name legibility. | Compare menu, Watch and discovery side by side at desktop and phone sizes; portraits should feel intentional within the same world. Full prospect identity remains discoverable through an obvious interaction when pitch labels truncate. |
 
 ## Redesign thesis
 
-Keep the current brand and decision-first grammar. The next design improvement should reduce secondary density and turn causal information into more spatial, stateful artifacts:
+Build each screen around one scouting question, the evidence that bears on it and the next consequential action. Use atmosphere to establish place, then let the case breathe. Keep guidance available without making it the main subject; use fewer containers and repeat fewer facts. Preserve uncertainty, player control and the durable consequence trail that the latest executed tests now demonstrate.
 
-- one decisive first card,
-- one visible career thread,
-- one compact evidence surface,
-- progressive disclosure for archive/context,
-- explicit weights and consequences at every handoff.
+## Remaining evidence limits
 
-Do not add more top-level systems to solve this design problem. Improve the presentation and human validation of the systems already present.
-
-## Prioritized recommendations
-
-1. Shorten mobile Desk/Career/Reports with progressive disclosure.
-2. Replace tertiary card stacks with timelines, evidence maps, and relationship/pressure views where they improve comprehension.
-3. Complete manual NVDA/VoiceOver and a 12-player moderated study.
-4. Validate populated late-career screens, sound mix, reduced motion, and minimum-hardware feel in packaged builds.
-7. Reduce `/play` from 906 kB / 1.01 MB first-load JavaScript.
-
-## Final design judgment
-
-TalentScout’s UI is strong enough to support a credible premium Early Access identity. It is not yet design-certified for release under the project’s strict standard because one causal visual journey fails and the required human, assistive-technology, packaged-performance, and late-career-density proof is incomplete.
+This audit evaluates the recorded first-hour and first-week journey, not every late-career state. Broad accessibility tests provide stronger interaction coverage than screenshot coverage for the six workspaces and save errors. Desk density is anchored in the root's manual review and the saved desktop/phone images above, including the visible secondary guide. Broad large-text settings, screen-reader interpretation and every long-loading or late-career state remain outside this visual acceptance. Browser and source checks do not establish installer, Steam, physical hardware or long-term balance readiness.

@@ -6,6 +6,7 @@
  */
 
 import Dexie, { type EntityTable } from "dexie";
+import { reconcileJournalFlagReactions } from "./reflectionJournalMigration";
 import type {
   GameState,
   FreeAgent,
@@ -1673,6 +1674,7 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.placementReports) state.placementReports = {};
   if (!state.gutFeelings) state.gutFeelings = [];
   if (!state.reflectionJournal) state.reflectionJournal = {};
+  state.reflectionJournal = reconcileJournalFlagReactions(state.reflectionJournal);
   if (!state.youthRecruitmentBriefs) state.youthRecruitmentBriefs = {};
   if (!state.recommendationReviews) state.recommendationReviews = {};
   if (!state.alumniRecords) state.alumniRecords = [];

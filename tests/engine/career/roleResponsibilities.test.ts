@@ -23,6 +23,7 @@ function scout(overrides: Partial<Scout> = {}): Scout {
     specializationReputation: 40,
     primarySpecialization: "youth",
     salary: 0,
+    npcScoutIds: [],
     fatigue: 20,
     ...overrides,
   } as Scout;
@@ -78,10 +79,10 @@ function baseState(input: {
       placementFeeRecords: [],
       reportListings: [],
       consultingContracts: [],
-      office: { maxEmployees: 4 } as never,
+      office: { maxEmployees: 4, monthlyCost: 500 } as never,
       employees: input.employees ?? [],
       analystReviews: [],
-      lifestyle: {} as never,
+      lifestyle: { monthlyCost: 1500 } as never,
       completedCourses: [],
       pendingRetainerOffers: [],
       pendingConsultingOffers: [],
@@ -208,7 +209,7 @@ describe("weekly career role responsibilities", () => {
       ],
     });
     beforeWeek.finances!.balance = 2_500;
-    beforeWeek.finances!.retainerContracts = [{ status: "active" } as never];
+    beforeWeek.finances!.retainerContracts = [{ status: "active", monthlyFee: 0 } as never];
 
     const processed = processWeeklyRoleResponsibilities({
       beforeWeek,
@@ -294,7 +295,7 @@ describe("weekly career role responsibilities", () => {
     });
     beforeWeek.finances!.balance = 2_500;
     beforeWeek.finances!.independentTier = 3 as never;
-    beforeWeek.finances!.retainerContracts = [{ status: "active" } as never];
+    beforeWeek.finances!.retainerContracts = [{ status: "active", monthlyFee: 0 } as never];
 
     const processed = processWeeklyRoleResponsibilities({
       beforeWeek,

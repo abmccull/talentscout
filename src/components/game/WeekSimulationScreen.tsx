@@ -13,6 +13,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { DayResult, GameState, ScoutSkill } from "@/engine/core/types";
 import { INTERACTIVE_ACTIVITIES } from "@/engine/observation/types";
 import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
+import { getLiveActivitySummary } from "@/lib/liveActivitySummary";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useAudio } from "@/lib/audio/useAudio";
 import { DELEGATION_POLICIES } from "@/engine/core/weeklyStrategy";
@@ -491,10 +492,14 @@ function DayCard({
             </div>
           </WeekJourneyBeat>
 
-          <WeekJourneyBeat step={2} eyebrow="Context" title="What unfolded" tone="context">
+          <WeekJourneyBeat step={2} eyebrow="Context" title={isConsequenceResolved ? "What unfolded" : "Before your call"} tone="context">
             <div className="space-y-4">
               <div className="space-y-2">
-                {narrativeParts.length > 0 ? (
+                {!isConsequenceResolved ? (
+                  <p className="text-sm leading-relaxed text-zinc-300">
+                    {dayResult.activity?.description ?? "Choose how to approach this assignment."}
+                  </p>
+                ) : narrativeParts.length > 0 ? (
                   narrativeParts.map((part, index) => (
                     <p
                       key={`${part.slice(0, 24)}-${index}`}
@@ -510,7 +515,7 @@ function DayCard({
                 )}
               </div>
 
-              {dayResult.interaction && (
+              {dayResult.interaction && !interactiveSessionCompleted && (
                 <section aria-labelledby={`decision-${dayResult.dayIndex}`}>
                   <h4 id={`decision-${dayResult.dayIndex}`} className="text-xs font-semibold uppercase tracking-[0.14em] text-white">
                     Your call
@@ -642,7 +647,9 @@ function DayCard({
                 <section className="rounded-lg border border-blue-400/20 bg-blue-400/[0.05] p-3" aria-label="Live observation session">
                   <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-200">Live observation</h4>
                   <p className="mt-1 text-xs leading-relaxed text-zinc-300">
-                    Step into the session for deeper reads, extra insight points, and stronger activity outcomes.
+                    {interactiveSessionCompleted
+                      ? "Your live session is complete. Continue to the next day."
+                      : "Step into the session and choose where to direct your attention."}
                   </p>
                   {interactiveSessionCompleted ? (
                     <Badge variant="outline" className="mt-2 border-emerald-500/30 text-emerald-300">
@@ -715,8 +722,8 @@ function DayCard({
                 )}
 
               {xpEntries.length > 0 && (
-                <section aria-label="Skill XP gained">
-                  <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">Skill growth</h4>
+                <section aria-label="Base skill XP before weekly adjustments">
+                  <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">Base skill XP</h4>
                   <div className="flex flex-wrap gap-1.5">
                     {xpEntries.map(([skill, xp]) => (
                       <span key={skill} className="inline-flex items-center rounded-md border border-blue-400/20 bg-blue-400/[0.08] px-2 py-1 text-xs font-medium text-blue-300">
@@ -724,6 +731,9 @@ function DayCard({
                       </span>
                     ))}
                   </div>
+                  <p className="mt-2 text-xs text-zinc-400">
+                    Final XP is awarded at week end, adjusted for work quality, fatigue and repeated activities.
+                  </p>
                 </section>
               )}
 
@@ -1026,7 +1036,19 @@ export function WeekSimulationScreen() {
                   >
                     {currentDayResult ? (
                       <DayCard
-                        dayResult={currentDayResult}
+                        dayResult={(() => {
+                          const live = gameState && currentDayResult.activity
+                            ? getLiveActivitySummary(gameState, currentDayResult.activity, currentDayResult.dayIndex)
+                            : null;
+                          return live ? {
+                            ...currentDayResult,
+                            narrative: live.narrative,
+                            observations: currentDayResult.observations.map((observation) => ({
+                              ...observation,
+                              topAttributes: live.playerEvidence[observation.playerId] ?? "No saved live claim for this player",
+                            })),
+                          } : currentDayResult;
+                        })()}
                         allDayResults={dayResults}
                         currentDay={currentDay}
                         onChooseInteraction={chooseInteractionWithFeedback}
@@ -1048,7 +1070,7 @@ export function WeekSimulationScreen() {
               {isComplete ? (
                 <Button
                   size="lg"
-                  className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                  className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                   onClick={weeklyTransactionError ? fastForwardWithFeedback : () => setScreen("calendar")}
                   disabled={isAdvancingWeek}
                 >
@@ -1057,7 +1079,7 @@ export function WeekSimulationScreen() {
               ) : isLastDay ? (
                 <Button
                   size="lg"
-                  className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                  className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                   onClick={advanceDayWithFeedback}
                   aria-label="Complete the week and process results"
                   disabled={interactionPending || isAdvancingWeek}
@@ -1068,7 +1090,7 @@ export function WeekSimulationScreen() {
                 <>
                   <Button
                     size="lg"
-                    className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                    className="min-h-11 w-full bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 sm:w-auto"
                     onClick={advanceDayWithFeedback}
                     aria-label="Advance to next day"
                     disabled={interactionPending || isAdvancingWeek}

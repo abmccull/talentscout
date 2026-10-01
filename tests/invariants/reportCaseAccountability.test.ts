@@ -458,6 +458,17 @@ describe("report case accountability", () => {
       reportsSubmitted: 0,
     } as unknown as Scout;
 
+    for (const reportsSubmitted of [0, 4, 5, 100]) {
+      const cautiousScout = { ...openingScout, reportsSubmitted };
+      expect(updateReputation(cautiousScout, {
+        type: "reportSubmitted", quality: 100, hasSupportedFinding: false,
+      }).reputation).toBe(10);
+      expect(cautiousScout.reputation).toBe(10);
+      expect(updateReputation(cautiousScout, {
+        type: "reportSubmitted", quality: 100, hasSupportedFinding: true,
+      }).reputation).toBeGreaterThan(10);
+    }
+
     let developingScout = openingScout;
     for (let index = 0; index < 5; index += 1) {
       developingScout = {

@@ -1,5 +1,8 @@
+import { calculateFixtureExpectedGoals, sampleFixtureGoals } from "../match/scoreModel";
+import { calculateTacticalMatchup } from "../match/tactics";
 import type {
   Club,
+  DisciplinaryRecord,
   Fixture,
   League,
   Player,
@@ -36,6 +39,8 @@ export interface AbstractCompetitionWeekInput {
   leagues: Record<string, League>;
   clubs: Record<string, Club>;
   players: Record<string, Player>;
+  /** Current match-week records, after the caller's suspension countdown. */
+  disciplinaryRecords?: Record<string, DisciplinaryRecord>;
   fixtures?: Record<string, Fixture>;
   matchRatings?: Record<string, Record<string, PlayerMatchRating>>;
   /**
@@ -315,6 +320,7 @@ function comparePlayers(left: Player, right: Player): number {
 function getClubRoster(
   club: Club,
   players: Record<string, Player>,
+  disciplinaryRecords: Record<string, DisciplinaryRecord>,
 ): Player[] {
   const seniorRosterIds = uniqueSorted([
     ...club.playerIds,
@@ -324,28 +330,34 @@ function getClubRoster(
   const seniorRoster = seniorRosterIds
     .map((playerId) => players[playerId])
     .filter((player): player is Player => Boolean(player))
-    .filter((player) => player.clubId === club.id);
+    .filter((player) => player.clubId === club.id && !player.injured
+      && (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0);
 
-  if (seniorRoster.length >= 11) {
-    const fit = seniorRoster.filter((player) => !player.injured);
-    return (fit.length >= 11 ? fit : seniorRoster).sort(comparePlayers);
-  }
+  let needsKeeper = !seniorRoster.some(player => positionGroup(player.position) === "gk");
+  let outfieldNeeded = Math.max(0, 10 - seniorRoster.filter(player => positionGroup(player.position) !== "gk").length);
+  if (!needsKeeper && outfieldNeeded === 0) return seniorRoster.sort(comparePlayers);
 
-  // A thin senior list should call up registered academy players. Previously
-  // academy cover was considered only when the senior list was completely
-  // empty, so a club with one remaining senior and a healthy youth squad tried
-  // to play every abstract fixture with that single player.
-  const emergencyRosterIds = uniqueSorted([
-    ...seniorRosterIds,
-    ...(club.academyPlayerIds ?? []),
-  ]);
-  const emergencyRoster = emergencyRosterIds
+  // Eligible academy cover fills real available-player shortages, without
+  // reinstating injured/suspended seniors or automatically selecting children.
+  const seniorIds = new Set(seniorRosterIds);
+  const academy = uniqueSorted(club.academyPlayerIds ?? [])
+    .filter(playerId => !seniorIds.has(playerId))
     .map((playerId) => players[playerId])
     .filter((player): player is Player => Boolean(player))
-    .filter((player) => player.clubId === club.id);
-  const fitEmergencyRoster = emergencyRoster.filter((player) => !player.injured);
-  return (fitEmergencyRoster.length >= 11 ? fitEmergencyRoster : emergencyRoster)
+    .filter(player => player.clubId === club.id && player.age >= 16 && !player.injured
+      && (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0)
     .sort(comparePlayers);
+  for (const player of academy) {
+    if (positionGroup(player.position) === "gk") {
+      if (!needsKeeper) continue;
+      needsKeeper = false;
+    } else {
+      if (outfieldNeeded <= 0) continue;
+      outfieldNeeded -= 1;
+    }
+    seniorRoster.push(player);
+  }
+  return seniorRoster.sort(comparePlayers);
 }
 
 function takeBestPlayers(
@@ -367,8 +379,9 @@ function selectParticipants(
   club: Club,
   players: Record<string, Player>,
   rng: RNG,
+  disciplinaryRecords: Record<string, DisciplinaryRecord>,
 ): Participant[] {
-  const roster = getClubRoster(club, players);
+  const roster = getClubRoster(club, players, disciplinaryRecords);
   if (roster.length === 0) return [];
 
   const selected = new Map<string, Player>();
@@ -376,11 +389,16 @@ function selectParticipants(
   takeBestPlayers(roster, selected, 4, (player) => positionGroup(player.position) === "def");
   takeBestPlayers(roster, selected, 3, (player) => positionGroup(player.position) === "mid");
   takeBestPlayers(roster, selected, 3, (player) => positionGroup(player.position) === "att");
-  takeBestPlayers(roster, selected, 11, () => true);
+  takeBestPlayers(roster, selected, 11, (player) => positionGroup(player.position) !== "gk");
 
   const starters = [...selected.values()].sort(comparePlayers).slice(0, 11);
   const starterIds = new Set(starters.map((player) => player.id));
-  const bench = roster.filter((player) => !starterIds.has(player.id)).slice(0, 5);
+  // Routine tactical substitutions are outfield changes. A reserve keeper must
+  // not gain weekly appearances or fill an outfield vacancy through fallback.
+  // Keeper replacements need a separate injury/dismissal event model.
+  const bench = roster.filter((player) =>
+    !starterIds.has(player.id) && positionGroup(player.position) !== "gk",
+  ).slice(0, 5);
 
   const participants: Participant[] = starters.map((player) => ({
     player,
@@ -433,23 +451,8 @@ function selectParticipants(
 }
 
 function averageStrength(participants: readonly Participant[]): number {
-  if (participants.length === 0) return 80;
-  const total = participants.reduce(
-    (sum, participant) => sum + participant.player.currentAbility,
-    0,
-  );
-  return total / participants.length;
-}
-
-function samplePoisson(lambda: number, rng: RNG): number {
-  const limit = Math.exp(-clamp(lambda, 0.15, 4.5));
-  let product = 1;
-  let draws = 0;
-  while (product > limit && draws < 8) {
-    draws += 1;
-    product *= Math.max(rng.next(), 1e-9);
-  }
-  return Math.max(0, draws - 1);
+  return participants.reduce((sum, participant) =>
+    sum + participant.player.currentAbility * participant.minutesPlayed / 90, 0) / 11;
 }
 
 function pickWeather(season: number, week: number, rng: RNG): Weather {
@@ -640,28 +643,21 @@ function simulateFixture(
   fixtureId: string,
   rng: RNG,
   existingFixture?: Fixture,
+  disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
 ): AbstractPlayedFixture {
-  const homeParticipants = selectParticipants(homeClub, players, new RNG(`${fixtureId}:home`));
-  const awayParticipants = selectParticipants(awayClub, players, new RNG(`${fixtureId}:away`));
+  const homeParticipants = selectParticipants(homeClub, players, new RNG(`${fixtureId}:home`), disciplinaryRecords);
+  const awayParticipants = selectParticipants(awayClub, players, new RNG(`${fixtureId}:away`), disciplinaryRecords);
 
   const homeStrength = averageStrength(homeParticipants);
   const awayStrength = averageStrength(awayParticipants);
-  const homeExpectedGoals = clamp(
-    1.18 + (homeStrength - awayStrength) / 34 + 0.18,
-    0.3,
-    3.6,
-  );
-  const awayExpectedGoals = clamp(
-    1.02 + (awayStrength - homeStrength) / 36,
-    0.2,
-    3.3,
-  );
-  // Do not create goals that cannot be attributed to any active participant.
-  // The lifecycle/intake systems can restore the roster at the next boundary;
-  // the current fixture remains deterministic and recoverable in the meantime.
-  const homeGoals = homeParticipants.length > 0 ? samplePoisson(homeExpectedGoals, rng) : 0;
-  const awayGoals = awayParticipants.length > 0 ? samplePoisson(awayExpectedGoals, rng) : 0;
   const weather = pickWeather(season, week, rng);
+  const matchup = homeClub.tacticalStyle && awayClub.tacticalStyle
+    ? calculateTacticalMatchup(homeClub.tacticalStyle, awayClub.tacticalStyle) : undefined;
+  const expected = calculateFixtureExpectedGoals(homeStrength, awayStrength,
+    matchup ? 1 + matchup.homeModifier * 0.5 : 1,
+    matchup ? 1 + matchup.awayModifier * 0.5 : 1, weather);
+  const homeGoals = sampleFixtureGoals(expected.home, rng);
+  const awayGoals = sampleFixtureGoals(expected.away, rng);
   const playerRatings = {
     ...buildRatings(
       fixtureId,
@@ -773,6 +769,7 @@ export function simulateAbstractCompetitionWeek(
         fixtureId,
         new RNG(fixtureSeed),
         existingFixture,
+        input.disciplinaryRecords,
       );
       fixturesPlayed.push(played);
       matchRatingsByFixture[played.id] = played.playerRatings;

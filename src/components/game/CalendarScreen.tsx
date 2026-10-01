@@ -108,7 +108,6 @@ export function CalendarScreen() {
     dismissWeekSummary,
     getAvailableCalendarActivities,
     pendingCalendarActivity,
-    setPendingCalendarActivity,
     autoSchedule,
     setWeeklyIntent,
     setDelegationPolicy,
@@ -124,7 +123,6 @@ export function CalendarScreen() {
     dismissWeekSummary: state.dismissWeekSummary,
     getAvailableCalendarActivities: state.getAvailableCalendarActivities,
     pendingCalendarActivity: state.pendingCalendarActivity,
-    setPendingCalendarActivity: state.setPendingCalendarActivity,
     autoSchedule: state.autoSchedule,
     setWeeklyIntent: state.setWeeklyIntent,
     setDelegationPolicy: state.setDelegationPolicy,
@@ -144,13 +142,8 @@ export function CalendarScreen() {
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
 
-  // When navigating from PlayerProfile quick actions, clear pending on unmount
-  // so it doesn't persist if the user navigates away without scheduling.
-  // The pending activity is surfaced in the ActivityPanel as a highlighted suggestion.
-  useEffect(() => {
-    return () => { setPendingCalendarActivity(null); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Navigation clears planner focus when leaving this screen. Effect cleanup
+  // also runs during Strict Mode mounting and must not discard incoming focus.
 
   // Week preview panel collapsed state
   const [previewCollapsed, setPreviewCollapsed] = useState(true);
@@ -652,11 +645,11 @@ export function CalendarScreen() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
-                    <span className="text-zinc-500">Matches</span>
-                    <span className="text-white font-semibold">{lastWeekSummary.matchesAttended}</span>
+                    <span className="text-zinc-500">{lastWeekSummary.scoutingSessions === undefined ? "Matches" : "Scouting sessions"}</span>
+                    <span className="text-white font-semibold">{lastWeekSummary.scoutingSessions ?? lastWeekSummary.matchesAttended}</span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
-                    <span className="text-zinc-500">Reports</span>
+                    <span className="text-zinc-500">Reports filed</span>
                     <span className="text-white font-semibold">{lastWeekSummary.reportsWritten}</span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
@@ -758,7 +751,9 @@ export function CalendarScreen() {
             </p>
             <p className="mt-1 max-w-2xl text-sm text-zinc-300">
               {openingShell
-                ? "The second look is on the week. Advance Week opens the board — Prospects, Reports, and Inbox — together."
+                ? slotsUsed > 0
+                  ? "Your work is booked. Add another source of evidence or begin the week."
+                  : "Choose work for your first week. A live observation can test what you have heard about the player."
                 : "Spend seven finite days on the evidence, access, and recovery that matter most."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -815,7 +810,7 @@ export function CalendarScreen() {
             </Tooltip>
             {openingShell && (
               <p className="mt-2 max-w-xs text-right text-xs leading-5 text-zinc-400 sm:ml-auto">
-                Next week the board opens. Stay here until you advance.
+                Choose an open day to add work. Advance Week begins your itinerary.
               </p>
             )}
           </div>
@@ -860,6 +855,32 @@ export function CalendarScreen() {
           </div>
         )}
 
+        {pendingCalendarActivity && !selectedActivity && !activities.some(activity =>
+          activity?.type === pendingCalendarActivity.type && activity.targetId === pendingCalendarActivity.targetId
+        ) && (
+          <section aria-label="Requested scouting work" className="mb-4 flex flex-col gap-3 border-l-2 border-emerald-400 bg-emerald-400/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-white">{pendingCalendarActivity.label}</p>
+              <p className="text-sm text-zinc-300">
+                {pendingFeaturedActivity
+                  ? "Your target is carried over. Choose an open day to book this work."
+                  : "This specific work is no longer available. Review the current opportunities below."}
+              </p>
+            </div>
+            {pendingFeaturedActivity && (
+              <Button className="min-h-11 shrink-0" onClick={() => handleSelectActivity({
+                ...pendingFeaturedActivity,
+                targetId: pendingCalendarActivity.targetId,
+                // Placement still needs the club decision after choosing youth.
+                targetPool: pendingFeaturedActivity.type === "writePlacementReport"
+                  ? pendingFeaturedActivity.targetPool?.filter(target => target.id === pendingCalendarActivity.targetId)
+                  : undefined,
+                description: pendingCalendarActivity.label,
+              })}>Choose a day for this work</Button>
+            )}
+          </section>
+        )}
+
         <PlannerWeekStrip
           dayKeys={DAY_KEYS}
           activities={activities}
@@ -873,8 +894,9 @@ export function CalendarScreen() {
           isWeekBlank={slotsUsed === 0}
           playerNames={bookedPlayerNames}
           openingShell={openingShell}
-          prelude={openingShell ? undefined : (
+          prelude={(
             <div className="grid gap-3 lg:hidden">
+              {!openingShell && (
               <article className="rounded-xl border border-violet-400/20 bg-[linear-gradient(145deg,rgba(38,32,58,0.92),rgba(15,20,27,0.96))] p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -900,6 +922,7 @@ export function CalendarScreen() {
                   <p className="mt-1 text-xs leading-5 text-zinc-300">{featuredPlannerActivitySummary}</p>
                 </div>
               </article>
+              )}
               <PlannerOpportunitySheet
                 open={showMobileOpportunitySheet}
                 activityCount={engineActivities.length}
@@ -918,6 +941,7 @@ export function CalendarScreen() {
                   onLeagueFilterChange={setSelectedLeagueId}
                   resolveClubName={resolveClubName}
                   highlightTargetId={pendingCalendarActivity?.targetId}
+                  highlightActivityType={pendingCalendarActivity?.type}
                   selectedActivity={selectedActivity}
                   openDayCount={openDayCount}
                   onSelectActivity={handleSelectActivity}
@@ -938,7 +962,6 @@ export function CalendarScreen() {
           receiptMessage={plannerReceipt}
         />
 
-        {!openingShell && (
         <section
           data-tutorial-id="calendar-activities"
           aria-labelledby="planner-opportunity-heading"
@@ -973,6 +996,7 @@ export function CalendarScreen() {
                 onLeagueFilterChange={setSelectedLeagueId}
                 resolveClubName={resolveClubName}
                 highlightTargetId={pendingCalendarActivity?.targetId}
+                highlightActivityType={pendingCalendarActivity?.type}
                 selectedActivity={selectedActivity}
                 openDayCount={openDayCount}
                 onSelectActivity={handleSelectActivity}
@@ -1013,7 +1037,6 @@ export function CalendarScreen() {
             />
           </div>
         </section>
-        )}
 
         {/* Week Preview Panel (F16) */}
         {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (
@@ -1275,8 +1298,9 @@ export function CalendarScreen() {
               <span className="font-semibold text-amber-400">
                 {openDayCount}
               </span>{" "}
-              unplanned day(s). Empty days recover a small amount of fatigue but
-              scheduled activities earn XP and progress. Advance anyway?
+              open {openDayCount === 1 ? "day" : "days"}. Empty days provide light recovery.
+              Your booked work will begin and the football world will move forward.
+              This cannot be undone. Advance this week?
             </p>
             <div className="flex justify-end gap-3">
               <Button
@@ -1290,7 +1314,7 @@ export function CalendarScreen() {
                 onClick={() => {
                   setShowEmptyDayWarning(false);
                   playSFX("calendar-slide");
-                  requestWeekAdvance();
+                  confirmWeekAdvance();
                 }}
               >
                 Advance

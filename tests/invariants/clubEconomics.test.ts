@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { Club, ClubFinancialObligation, Player } from "@/engine/core/types";
 import {
   assessClubAffordability,
+  buildClubAffordabilityContext,
   buildTransferAddOnObligations,
   getTransferContingentReserve,
   deriveClubScoutingBudget,
   deriveClubWeeklyWageBudget,
   normalizeClubEconomics,
+  getClubWeeklyCommitmentTotal,
   reapproveAnnualClubEconomics,
   settleRelegationClubObligations,
   settleTriggeredClubObligations,
@@ -52,6 +54,102 @@ function club(
 }
 
 describe("club economics", () => {
+  it("keeps single-club payroll equal to the world index through loans and ownership changes", () => {
+    const clubs = { a: club("a"), b: club("b"), empty: club("empty") };
+    const players = { owned: player("owned", "a", 1200.6), other: player("other", "b", 900) };
+    players.owned.clubId = "b"; // The owner still pays the loaned-out player.
+    for (const wage of [1200.6, 2500, -10]) {
+      players.owned.wage = wage;
+      for (const owner of ["a", "b"]) {
+        players.other.contractClubId = owner;
+        const before = JSON.stringify({ clubs, players });
+        const options = { currentWeek: 46, currentSeason: 13 };
+        const indexed = buildClubAffordabilityContext(clubs, players, options);
+        for (const [id, value] of Object.entries(clubs)) {
+          expect(buildClubAffordabilityContext({ [id]: value }, players, options)[id]).toEqual(indexed[id]);
+        }
+        expect(buildClubAffordabilityContext({}, players, options)).toEqual({});
+        expect(JSON.stringify({ clubs, players })).toBe(before);
+      }
+    }
+  });
+
+  it("includes continuing loan contributions in annual approval without counting the parent's wages twice", () => {
+    const obligation = { id: "loan-wages", type: "loanWageContribution", playerId: "borrowed",
+      creditorClubId: "parent", amount: 40_000, weeklyAmount: 2_000, remainingWeeks: 20,
+      createdWeek: 20, createdSeason: 3, status: "active" } as ClubFinancialObligation;
+    const destination = club("a", { reputation: 1, budget: 0, youthAcademyRating: 1,
+      weeklyWageBudget: 15_000, financialObligations: [obligation,
+        { ...obligation, id: "settled", status: "settled", weeklyAmount: 90_000 }] });
+    const players = { owned: player("owned", "a", 20_000),
+      borrowed: { ...player("borrowed", "parent", 40_000), clubId: "a", onLoan: true } };
+    expect(getClubWeeklyCommitmentTotal(destination, players)).toBe(22_000);
+    expect(deriveClubWeeklyWageBudget(destination, players)).toBe(24_200);
+    expect(reapproveAnnualClubEconomics({ a: destination }, players, 4).a.weeklyWageBudget).toBe(24_200);
+    expect(normalizeClubEconomics(destination, players).weeklyWageBudget).toBe(15_000);
+    expect(destination.weeklyWageBudget).toBe(15_000);
+    expect(obligation.status).toBe("active");
+  });
+
+  it("uses fresh owned payroll after transfers and wage changes when assessing affordability", () => {
+    const destination = club("a");
+    const players = { owned: player("owned", "a", 1200), other: player("other", "b", 900) };
+    // A loan changes physical location without moving the owner's payroll.
+    players.owned.clubId = "b";
+    for (const wage of [1200, 2500, 0]) {
+      players.owned.wage = wage;
+      for (const owner of ["a", "b"]) {
+        players.other.contractClubId = owner;
+        const normalized = normalizeClubEconomics(destination, players);
+        const commitment = getClubWeeklyCommitmentTotal(normalized, players);
+        const result = assessClubAffordability({ club: destination, players,
+          weeklyWageCommitment: 700, releasedWeeklyCommitment: 200, upfrontCost: 500 });
+        expect(result.club).toEqual(normalized);
+        expect(result.currentWeeklyCommitment).toBe(commitment);
+        expect(result.projectedWeeklyCommitment).toBe(commitment + 500);
+        expect(result.remainingWeeklyHeadroom).toBe(normalized.weeklyWageBudget! - commitment - 500);
+        expect(result.remainingBudget).toBe(destination.budget - 500);
+      }
+    }
+  });
+
+  it("awards one recorded board transfer allocation per season without erasing balances", () => {
+    const depleted = club("depleted", { reputation: 10, budget: 0 });
+    const first = reapproveAnnualClubEconomics({ depleted }, {}, 4);
+    expect(first.depleted.budget).toBe(66_000);
+    expect(first.depleted.recruitmentAllocation).toEqual({ season: 4, amount: 66_000, budgetBefore: 0, budgetAfter: 66_000 });
+    const saved = JSON.parse(JSON.stringify(first));
+    saved.depleted.budget -= 10_000;
+    expect(reapproveAnnualClubEconomics(saved, {}, 4)).toEqual(saved);
+    expect(reapproveAnnualClubEconomics(saved, {}, 3)).toEqual(saved);
+    expect(reapproveAnnualClubEconomics(saved, {}, 5).depleted.budget).toBe(122_000);
+    expect(depleted.budget).toBe(0);
+    expect(() => reapproveAnnualClubEconomics({ depleted }, {}, 0)).toThrow();
+  });
+
+  it("retains replacement wage capacity when a low-level club loses its senior squad", () => {
+    const depleted = club("depleted", { reputation: 13, budget: 20_000, youthAcademyRating: 5 });
+    const youth = { academy: player("academy", depleted.id, 500) };
+    const allowance = deriveClubWeeklyWageBudget(depleted, youth);
+    expect(allowance).toBeGreaterThanOrEqual(11_000);
+    const reapproved = reapproveAnnualClubEconomics({ depleted }, youth).depleted;
+    expect(reapproved.weeklyWageBudget).toBe(allowance);
+    expect(reapproved.budget).toBe(depleted.budget);
+    expect(assessClubAffordability({ club: reapproved, players: youth,
+      weeklyWageCommitment: 1000, upfrontCost: 1000 }).affordable).toBe(true);
+    expect(assessClubAffordability({ club: reapproved, players: youth,
+      weeklyWageCommitment: allowance + 1, upfrontCost: 1000 }).affordable).toBe(false);
+  });
+
+  it.each([0, 1, 125, 749])("preserves a spent or partial scouting budget of %i through serialization and normalization", (budget) => {
+    const saved = JSON.parse(JSON.stringify(club("spent", { scoutingBudget: budget }))) as Club;
+    const normalized = normalizeClubEconomics(saved, {});
+    expect(normalized.scoutingBudget).toBe(budget);
+    expect(normalizeClubEconomics(normalized, {}).scoutingBudget).toBe(budget);
+    expect(reapproveAnnualClubEconomics({ spent: normalized }, {}).spent.scoutingBudget)
+      .toBeGreaterThan(budget);
+  });
+
   it("bulk annual reapproval is formula-identical to per-club derivation", () => {
     const players = Object.fromEntries(
       Array.from({ length: 120 }, (_, index) => {

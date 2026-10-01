@@ -1,3 +1,6 @@
+import { buildAcademyPromotionNews } from "@/engine/youth/academyPromotionNews";
+import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { recruitForSeasonOpening } from "@/engine/freeAgents/seasonOpening";
 import type {
   DiscoveryRecord,
   GameState,
@@ -6,7 +9,7 @@ import type {
   ScoutReport,
   UnsignedYouth,
 } from "@/engine/core/types";
-import { getSeasonLength } from "@/engine/core/gameLoop";
+import { getSeasonLength, reconcileClubRosters } from "@/engine/core/gameLoop";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
 import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
 import { generateSeasonEvents } from "@/engine/core/seasonEvents";
@@ -26,6 +29,10 @@ import {
   type TierReviewContext,
 } from "@/engine/career/progression";
 import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
+import {
+  deriveYouthSeasonCaseReview,
+  formatYouthSeasonReviewBody,
+} from "@/engine/youth/youthSeasonReview";
 import {
   attemptCareerTierAdvancement,
   generateBoardDirectives,
@@ -49,6 +56,7 @@ import {
   calculatePerformanceBonusAmount,
   processAnnualAwards,
   reapproveAnnualClubEconomics,
+  buildClubAffordabilityContext,
 } from "@/engine/finance";
 import { generateAnalystCandidate, resolvePredictions } from "@/engine/data";
 import {
@@ -584,13 +592,25 @@ export function processWeeklySeasonRollover(
             : effectiveReview.outcome === "warning"
               ? "You have received a formal warning. Improve your performance next season."
               : "Your contract has been terminated.";
+      const youthCaseReview = newState.scout.primarySpecialization === "youth"
+        ? deriveYouthSeasonCaseReview(newState, completedSeason, { completed: true })
+        : null;
       seasonEndMessages.push({
         id: `review-s${completedSeason}`,
         week: newState.currentWeek,
         season: newState.currentSeason,
         type: "feedback" as const,
         title: `Season ${completedSeason} Performance Review`,
-        body: `Reports submitted: ${review.reportsSubmitted} | Avg craft: ${review.averageQuality}/100\nSuccessful recommendations: ${review.successfulRecommendations}\n${reportAccountability.validatedCases > 0 ? `Validated cases: ${reportAccountability.validatedCases} | Accuracy: ${reportAccountability.averageAccuracy}/100 | Decision value: ${reportAccountability.averageDecisionValue}/100` : "Validated cases: awaiting mature outcomes"}\nReputation change: ${effectiveReview.reputationChange >= 0 ? "+" : ""}${effectiveReview.reputationChange}\n\n${reviewOutcomeText}`,
+        body: [
+          youthCaseReview ? formatYouthSeasonReviewBody(youthCaseReview) : null,
+          `Reports submitted: ${review.reportsSubmitted} | Avg craft: ${review.averageQuality}/100`,
+          `Successful recommendations: ${review.successfulRecommendations}`,
+          reportAccountability.validatedCases > 0
+            ? `Validated cases: ${reportAccountability.validatedCases} | Accuracy: ${reportAccountability.averageAccuracy}/100 | Decision value: ${reportAccountability.averageDecisionValue}/100`
+            : "Validated cases: awaiting mature outcomes",
+          `Reputation change: ${effectiveReview.reputationChange >= 0 ? "+" : ""}${effectiveReview.reputationChange}`,
+          reviewOutcomeText,
+        ].filter(Boolean).join("\n\n"),
         read: false,
         actionRequired: false,
       });
@@ -936,7 +956,7 @@ export function processWeeklySeasonRollover(
       // unused scouting budget to compound forever.
       newState = {
         ...newState,
-        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players),
+        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players, newState.currentSeason),
       };
 
       // Generate new season fixtures for core leagues only (skip secondary talent pools)
@@ -1001,6 +1021,8 @@ export function processWeeklySeasonRollover(
       const youthRng = createRNG(`${gameState.seed}-youth-s${newState.currentSeason}`);
       const newYouth: UnsignedYouth[] = [];
       const newAcademyPlayers: Player[] = [];
+      const academyAffordability = buildClubAffordabilityContext(newState.clubs, newState.players,
+        { currentWeek: newState.currentWeek, currentSeason: newState.currentSeason });
 
       for (const countryKey of newState.countries) {
         const countryData = getCountryDataSync(countryKey);
@@ -1038,6 +1060,8 @@ export function processWeeklySeasonRollover(
               countryData,
               newState.currentSeason,
             ),
+            (academyAffordability[club.id]?.club.weeklyWageBudget ?? 0)
+              - (academyAffordability[club.id]?.currentWeeklyCommitment ?? 0),
           );
           newAcademyPlayers.push(...intake);
         }
@@ -1068,10 +1092,23 @@ export function processWeeklySeasonRollover(
             };
           }
         }
-        newState = { ...newState, players: updatedPlayers, clubs: updatedClubs };
+        // Intake runs after core-tick reconciliation. Apply the same graduation
+        // and emergency call-up rules now, before the new season is exposed.
+        const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers, newState.disciplinaryRecords);
+        const promotionNews = buildAcademyPromotionNews(newState, updatedClubs, reconciledClubs,
+          updatedPlayers, newState.currentWeek, newState.currentSeason);
+        newState = {
+          ...newState,
+          players: updatedPlayers,
+          clubs: reconciledClubs,
+          inbox: [...newState.inbox, ...promotionNews],
+        };
       }
 
       // ── First-team season-end: regenerate directives and update transfer records ──
+      newState = recruitForSeasonOpening(newState,
+        createRNG(`${gameState.seed}-season-opening-market-s${newState.currentSeason}`));
+
       if (newState.scout.primarySpecialization === "firstTeam") {
         // Generate new manager directives for the new season
         if (newState.scout.currentClubId) {
@@ -1146,7 +1183,7 @@ export function processWeeklySeasonRollover(
 
           consolidatedPlayers[pid] = {
             ...player,
-            seasonRatings: [...(player.seasonRatings ?? []), seasonRecord],
+            seasonRatings: [...(player.seasonRatings ?? []), compactSeasonRating(seasonRecord)],
           };
         }
 

@@ -1,3 +1,4 @@
+import { withVisualIdentity } from "./portraits/identity";
 /**
  * Player generation — produces realistic players for the game world.
  * All randomness flows through the provided RNG instance.
@@ -17,6 +18,7 @@ import { generatePersonalityTraits } from "./personality";
 import { generateBehavioralTraits } from "./behavioralTraits";
 import { generatePersonalityProfile } from "./personalityEffects";
 import { getBestRole } from "./roles";
+import { estimatePlayerWeeklyWage } from "./wages";
 import type { ClubData, LeagueData, NamePool, NationalityWeight } from "@/data/types";
 import type { CountryData } from "@/data/types";
 // England data is imported only to supply backward-compatible defaults.
@@ -330,11 +332,6 @@ export function calculateMarketValue(
   return Math.max(5_000, Math.round(base));
 }
 
-function calculateWage(ca: number, clubRep: number): number {
-  const caFactor = Math.pow(ca / 100, 2.2);
-  const weekly = caFactor * 50_000 * (clubRep / 80);
-  return Math.round(weekly / 500) * 500;
-}
 
 // ---------------------------------------------------------------------------
 // Public name-pool utilities
@@ -454,7 +451,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     clubId,
     contractClubId: clubId || undefined,
     contractExpiry: clubId ? currentSeason + rng.nextInt(1, 5) : 0,
-    wage: calculateWage(currentAbility, clubReputation),
+    wage: estimatePlayerWeeklyWage(currentAbility, clubReputation),
     marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position, clubReputation),
     attributes,
     currentAbility,
@@ -486,7 +483,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
   const bestRole = getBestRole(player);
   player.naturalRole = bestRole.role;
 
-  return player;
+  return withVisualIdentity(player);
 }
 
 // ---------------------------------------------------------------------------

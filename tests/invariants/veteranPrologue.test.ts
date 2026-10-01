@@ -12,6 +12,8 @@ import { populateInvestigationPhases } from "@/engine/observation/investigation"
 import { createSession } from "@/engine/observation/session";
 import type { ObservationSession } from "@/engine/observation/types";
 import { createRNG } from "@/engine/rng";
+import { resolveDialogueOptionSelection } from "@/engine/observation/interactionSelection";
+import { generateSessionSummary } from "@/engine/observation/reflection";
 import {
   VETERAN_PROLOGUE_TEMPLATES,
   createVeteranPrologueCase,
@@ -186,6 +188,43 @@ function populatedSession(prologue: VeteranPrologueCase): ObservationSession {
 }
 
 describe("veteran prologue director", () => {
+  it.each([
+    ["contradictory-sources", "Define what the next observation must test"],
+    ["family-discretion", "Mark response to setbacks as the next question"],
+    ["agent-exaggeration", "Define an independent repeatability check"],
+  ] as const)("gives %s relevant inquiry choices that survive play and serialization", (templateId, finalQuestion) => {
+    const prologue = makePrologue(templateId);
+    const original = populatedSession(prologue);
+    const shaped = shapeVeteranPrologueSession(
+      original, unsignedYouth[prologue.openingCase.youthId].player, prologue,
+    );
+    expect(shaped.mode).toBe("investigation");
+    for (const [index, phase] of shaped.phases.entries()) {
+      const node = phase.dialogueNodes![0];
+      expect(node.speaker).toBe(prologue.sourceContactName);
+      expect(node.options).toHaveLength(3);
+      expect(node.options.map((option) => option.riskLevel)).toEqual(["safe", "moderate", "bold"]);
+      for (const option of node.options) {
+        expect(option.text).not.toMatch(/financial package|facilities|clients|tour/i);
+        expect(option.outcome.narrativeText).toContain(prologue.evidenceBeats[index].focused);
+      }
+    }
+    expect(shaped.phases[2].dialogueNodes![0].options[1].text).toBe(finalQuestion);
+    expect(JSON.parse(JSON.stringify(shaped)).phases).toEqual(shaped.phases);
+    let played = { ...shaped, state: "active" as const } as ObservationSession;
+    for (let index = 0; index < played.phases.length; index++) {
+      played = { ...played, currentPhaseIndex: index };
+      const node = played.phases[index].dialogueNodes![0];
+      const choice = resolveDialogueOptionSelection(played, node.id, node.options[1].id);
+      expect(choice.applied).toBe(true);
+      played = choice.session;
+    }
+    const restored = JSON.parse(JSON.stringify(played)) as ObservationSession;
+    expect(generateSessionSummary(restored)).toContain("3 conversation decisions");
+    expect(generateSessionSummary(restored)).not.toContain("nothing concrete");
+    expect(restored.phases[2].dialogueChoiceResolutions).toEqual(played.phases[2].dialogueChoiceResolutions);
+  });
+
   it("is deterministic for the same seed and persona", () => {
     const input = {
       worldSeed: "same-world",

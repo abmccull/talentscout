@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-04",
+  "generationAuthority": "User requested original photorealistic fictional football art and a complete portrait overhaul in this task.",
+  "generator": "OpenAI built-in image generation",
+  "portraitManifest": "docs/portraits/production-manifest.json",
+  "deliveredLineages": 52,
+  "eligibleLineages": 46,
+  "ageImages": 416,
+  "portraitBytes": 2867498,
+  "sourceMasters": [
+    {
+      "atlas": "atlas-01",
+      "sha256": "A9D3C019CE968BC99A3EB39591FEC72D6B3A1643B37CF3FBB3D16AFC213B8FA7",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-02",
+      "sha256": "B560ED8FD9635CC4D0D3182B492F1626A9822A27F1FF6F56871DDF017D5AF047",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-03",
+      "sha256": "8CFBC39A290F723A45BCAED3369D0131576C525F32A11CD5662FBAD72FEDFB38",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-04",
+      "sha256": "32D1ABBDB8712D111BF4CFAA1772AE2DF506A5617CC9D113ADD5FBC1099D3338",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-05",
+      "sha256": "14E15CFEFD80343FB29D049C4AB0B7CE522CE6D5BDD689F5D72FB062671955E8",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-06",
+      "sha256": "71A064BB995EBC261C576919516DB942609C2A711F979196F7B2530639932745",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-07",
+      "sha256": "3B74285770E90D5946294F0F6B49D88C2ACA3C06BBB6D3F2C647B95ED85AF1C3",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-08",
+      "sha256": "43DE6CD2741CB317CA8F3C90D52962AA5CA5A9D3BED3396BCA4B3F9AF181B746",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-09",
+      "sha256": "22A31277F7A6AB2FAE74A9007F9391B0AE2A21CEF08680CA9218A903F055ED40",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-10",
+      "sha256": "C806726152E7F37C60E393A92FF11197FF7F1F710E0B1856ED465B636CB445F5",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-11",
+      "sha256": "074FCDD32453EA92EB2CE316E01FFD1175B680D7AD252F9F2317217BD51950F8",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-12",
+      "sha256": "DB73B762B92943DFD16ED6F2C30CE762EEBE0EA1348CB40DB73A5CA9757F0C0E",
+      "width": 1774,
+      "height": 887
+    },
+    {
+      "atlas": "atlas-13",
+      "sha256": "D620AC6187EE8CBD62892C2B276B54B21D4C1559E8DE2C183C3F3B29DB98544A",
+      "width": 1774,
+      "height": 887
+    }
+  ],
+  "touchline": {
+    "source": "C:\\Users\\hands\\.codex\\generated_images\\01a06e03-2e39-7761-aab4-e2f7ee4afc70\\exec-fe84fa47-c8c0-4ffe-819c-f7ba3952d9bc.png",
+    "sourceSha256": "03d28dd4f1e3d905dcabc37bd8e2a63b3da8dd98a31e9769dc83e626405ddd9c",
+    "sourceWidth": 1716,
+    "sourceHeight": 916,
+    "output": "public/images/backgrounds/activities/touchline-documentary.webp",
+    "outputSha256": "61a7d520e79edfaecfada9133fd5fc343374e7204c6e59c49b91030c9de9bb1f",
+    "bytes": 205564,
+    "briefSummary": "Original documentary football touchline scene, ordinary youth match, overcast daylight, natural grass and unbranded kits; no real person or club requested."
+  },
+  "visualReview": "Fictional generated subjects and unbranded environment. Root reviewed all 13 atlas rows and touchline output; no obvious real-club marks, sponsor text or intended real-person likeness identified. Similarity holds are recorded separately.",
+  "rightsEvidence": "https://openai.com/policies/row-terms-of-use/",
+  "rightsScope": "Provider output ownership terms and project-authored generation inputs; no claim of copyright registrability, exclusivity or owner attestation for other legacy assets."
+}

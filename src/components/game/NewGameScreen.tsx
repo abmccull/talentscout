@@ -802,8 +802,8 @@ export function NewGameScreen() {
                     className={`
                       relative flex items-center justify-center rounded-full transition-all shrink-0
                       h-11 w-11
-                      ${isCurrent ? "bg-emerald-700 text-white" : ""}
-                      ${isCompleted ? "border-2 border-emerald-500 text-emerald-300 cursor-pointer hover:bg-emerald-500/10" : ""}
+                      ${isCurrent ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]" : ""}
+                      ${isCompleted ? "border-2 border-[color:var(--success)] text-[color:var(--success)] cursor-pointer hover:bg-[color:var(--success)]/10" : ""}
                       ${isFuture ? "border-2 border-zinc-600 text-zinc-400 cursor-default" : ""}
                     `}
                   >
@@ -818,7 +818,7 @@ export function NewGameScreen() {
 
                   {/* Connecting line */}
                   {i < steps.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-2 ${i < currentStepIndex ? "bg-emerald-500" : "bg-zinc-800"}`} />
+                    <div className={`flex-1 h-0.5 mx-2 ${i < currentStepIndex ? "bg-[color:var(--success)]" : "bg-zinc-800"}`} />
                   )}
                 </div>
               );
@@ -827,7 +827,7 @@ export function NewGameScreen() {
           {/* Step labels */}
           <div className="hidden sm:flex items-center justify-between mt-2">
             {steps.map((s, i) => (
-              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${i === currentStepIndex ? "text-emerald-300 font-medium" : "text-zinc-400"}`}>
+              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${i === currentStepIndex ? "text-[color:var(--primary)] font-medium" : "text-zinc-400"}`}>
                 {i < steps.length - 1 ? (
                   <span className="inline-block" style={{ width: "calc(100% - 1rem)" }}>{s.label}</span>
                 ) : (
@@ -996,7 +996,7 @@ export function NewGameScreen() {
                         </svg>
                       </div>
                       <div>
-                        <h2 className="font-semibold text-emerald-300 mb-1">Your scouting career starts here</h2>
+                        <h2 className="font-semibold text-[color:var(--primary)] mb-1">Your scouting career starts here</h2>
                         <p className="text-sm text-zinc-300 leading-relaxed">
                           You are a football scout building your career from the ground up. Scout matches,
                           observe players, write reports, and build your reputation — until the biggest
@@ -2163,10 +2163,10 @@ export function NewGameScreen() {
                 onClick={handleStart}
                 disabled={!canStart || isStarting}
                 aria-describedby="start-requirements"
-                className={`min-h-11 cursor-pointer rounded-md px-8 py-2 text-sm font-semibold shadow transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`min-h-11 cursor-pointer rounded-md px-8 py-2 text-sm font-semibold shadow transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--ring)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
                   isNewGamePlusMode
                     ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 hover:from-amber-400 hover:to-yellow-300"
-                    : "bg-emerald-700 text-white hover:bg-emerald-800"
+                    : "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90"
                 }`}
               >
                 {isStarting

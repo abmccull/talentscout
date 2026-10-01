@@ -8,6 +8,7 @@
  * creates run-to-run variation without allowing randomness to overwhelm need.
  */
 
+import { expandClubSeasonHistory } from "./clubSeasonArchive";
 import type {
   Club,
   GameState,
@@ -725,7 +726,8 @@ function resolveHistoricalRecruitmentContext(
   const archivedSeason = Array.isArray(state.worldHistory?.seasons)
     ? state.worldHistory.seasons.find((candidate) => candidate.season === season)
     : undefined;
-  const archivedClub = archivedSeason?.clubs.find((candidate) => candidate.clubId === club.id);
+  const archivedEntry = archivedSeason?.clubs.find((candidate) => candidate.clubId === club.id);
+  const archivedClub = archivedEntry ? expandClubSeasonHistory(archivedEntry) : undefined;
   if (archivedClub && isScoutingPhilosophy(archivedClub.scoutingPhilosophy)) {
     return {
       philosophy: archivedClub.scoutingPhilosophy,

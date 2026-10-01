@@ -3,6 +3,7 @@
 import type { BoardProfile, JobOffer, ManagerProfile, PerformanceReview, Scout } from "@/engine/core/types";
 import type { FinancialRecord } from "@/engine/core/types";
 import type { CareerRoleProfile } from "@/engine/career/roleProfile";
+import { runwayMonths } from "@/engine/finance/cashRunway";
 
 export interface CareerTimelinePreviewItem {
   id: string;
@@ -123,8 +124,8 @@ function deriveRunwaySignal(
       tone: "amber",
     };
   }
-  const monthlyBurn = monthlyExpenses - monthlyIncome;
-  if (monthlyBurn <= 0) {
+  const months = runwayMonths(finances.balance, monthlyIncome, monthlyExpenses);
+  if (months === Infinity) {
     return {
       label: "Runway",
       value: "Cash-flow positive",
@@ -132,7 +133,6 @@ function deriveRunwaySignal(
       tone: "emerald",
     };
   }
-  const months = Math.max(0, finances.balance / monthlyBurn);
   return {
     label: "Runway",
     value: months >= 24 ? "24+ months" : `${months.toFixed(months < 4 ? 1 : 0)} months`,

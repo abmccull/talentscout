@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
+import { captureCareerDevelopmentCohort } from "../support/careerDevelopmentTelemetry";
+import { collectWorldRosterGaps } from "./worldRosterHealth";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import {
   observeWeeklySimulationTelemetry,
@@ -642,6 +644,9 @@ function assertAutonomousCareerHealth(
   const maxBacklog = Math.max(...snapshots.map((snapshot) => snapshot.unresolvedActionBacklog));
   const maxFreeAgentRatio = Math.max(...snapshots.map((snapshot) => snapshot.freeAgentRatio));
   const maxActiveLoanRatio = Math.max(...snapshots.map((snapshot) => snapshot.activeLoanRatio));
+  const maxOutfieldGaps = Math.max(...snapshots.map(snapshot => snapshot.clubsBelowTenOutfieldPlayers));
+  const maxShortSquads = Math.max(...snapshots.map((snapshot) => snapshot.clubsBelowElevenSeniors));
+  const maxMissingKeepers = Math.max(...snapshots.map((snapshot) => snapshot.clubsWithoutSeniorGoalkeeper));
   const acceptedMarketplaceDecisions = (
     telemetry.acceptedMarketplaceBids + telemetry.acceptedExclusiveUpgradeBids
   );
@@ -655,6 +660,9 @@ function assertAutonomousCareerHealth(
     if (maxBacklog > 36) failures.push(`backlog:${maxBacklog}`);
     if (maxFreeAgentRatio > 0.35) failures.push(`freeAgentRatio:${maxFreeAgentRatio}`);
     if (maxActiveLoanRatio > 0.2) failures.push(`activeLoanRatio:${maxActiveLoanRatio}`);
+    if (maxOutfieldGaps > 0) failures.push(`clubsBelowTenOutfieldPlayers:${maxOutfieldGaps}`);
+    if (maxShortSquads > 0) failures.push(`clubsBelowElevenSeniors:${maxShortSquads}`);
+    if (maxMissingKeepers > 0) failures.push(`clubsWithoutSeniorGoalkeeper:${maxMissingKeepers}`);
     if (acceptedMarketplaceDecisions <= 0) failures.push("marketplaceDecisions");
     if (!final.careerPathChosen) failures.push("careerPathChosen");
     if (final.careerTier < 2) failures.push(`careerTier:${final.careerTier}`);
@@ -677,6 +685,9 @@ function assertAutonomousCareerHealth(
   expect(maxBacklog, `seed ${seed} accumulated an unsafe unresolved-action backlog`).toBeLessThanOrEqual(36);
   expect(maxFreeAgentRatio, `seed ${seed} overgrew the free-agent availability ratio`).toBeLessThanOrEqual(0.35);
   expect(maxActiveLoanRatio, `seed ${seed} overgrew the active-loan ratio`).toBeLessThanOrEqual(0.2);
+  expect(maxOutfieldGaps, `seed ${seed} left clubs with fewer than ten outfield players`).toBe(0);
+  expect(maxShortSquads, `seed ${seed} left clubs unable to field eleven senior players`).toBe(0);
+  expect(maxMissingKeepers, `seed ${seed} left clubs without a senior goalkeeper`).toBe(0);
   if (snapshots.length >= 5) {
     expect(
       snapshots.some((snapshot) => snapshot.freeAgents > 0),
@@ -733,6 +744,15 @@ async function simulateCareer(
 
   const initial = useGameStore.getState().gameState;
   if (!initial) throw new Error(`Failed to initialize release soak seed ${seed}`);
+  let developmentCohort = new Set<string>();
+  const developmentRunId = `${seed}:${process.pid}:${Date.now()}`;
+  if (DIAGNOSTIC_CHECKPOINT_PATH) {
+    const capture = captureCareerDevelopmentCohort(initial, developmentCohort);
+    developmentCohort = capture.tracked;
+    await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
+    await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.development.jsonl`,
+      JSON.stringify({ runId: developmentRunId, seed, completedCanonicalTicks: 0, ...capture.snapshot }) + "\n", "utf8");
+  }
   const initialBytes = serializedBytes(initial);
   requestGarbageCollection();
   const initialMemory = collectMemorySample(initial.currentSeason);
@@ -789,6 +809,19 @@ async function simulateCareer(
     // release harness performs several whole-save serialization passes. The
     // worker's V8 ceiling remains the hard guard for spikes between samples.
     const runtimeMemory = collectMemorySample(after.currentSeason);
+    if (DIAGNOSTIC_CHECKPOINT_PATH) {
+      // Keep small completed-week evidence even if a worker dies between
+      // seasonal snapshots. Await writes so instrumentation cannot accumulate
+      // pending work or retain whole game states during a long run.
+      await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
+      await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.progress.jsonl`, JSON.stringify({
+        recordedAt: new Date().toISOString(), pid: process.pid, seed,
+        season: after.currentSeason, week: after.currentWeek,
+        completedCanonicalTicks: canonicalTicks + 1,
+        elapsedMs: elapsed, cpuElapsedMs: cpuElapsed, memory: runtimeMemory,
+        players: Object.keys(after.players).length,
+      }) + "\n", "utf8");
+    }
     peakRuntimeHeapUsedBytes = Math.max(
       peakRuntimeHeapUsedBytes,
       runtimeMemory.heapUsedBytes,
@@ -832,7 +865,17 @@ async function simulateCareer(
       const stabilized = useGameStore.getState().gameState;
       if (!stabilized) throw new Error(`Seed ${seed} lost stabilized state at season boundary`);
       const footprint = assertReleaseInvariants(stabilized, initialBytes);
-      worldHealth.push(collectAutonomousWorldHealth(stabilized, careerTelemetry));
+      const boundaryHealth = collectAutonomousWorldHealth(stabilized, careerTelemetry);
+      worldHealth.push(boundaryHealth);
+      if (DIAGNOSTIC_CHECKPOINT_PATH) {
+        // Persist before final assertions: a later healthy season must not erase
+        // the club, registrations and finances behind an earlier roster gap.
+        await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.world-health.jsonl`, JSON.stringify({
+          runId: developmentRunId, seed, completedCanonicalTicks: canonicalTicks,
+          season: stabilized.currentSeason, week: stabilized.currentWeek,
+          health: boundaryHealth, rosterGaps: collectWorldRosterGaps(stabilized),
+        }) + "\n", "utf8");
+      }
       expect(
         serializedRoundTripDigest(stabilized),
         `seed ${seed} changed during the season ${stabilized.currentSeason} save round trip`,
@@ -846,6 +889,10 @@ async function simulateCareer(
         `seed ${seed} exhausted the unsigned youth pool`,
       ).toBeGreaterThan(0);
       if (DIAGNOSTIC_CHECKPOINT_PATH) {
+        const capture = captureCareerDevelopmentCohort(stabilized, developmentCohort);
+        developmentCohort = capture.tracked;
+        await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.development.jsonl`,
+          JSON.stringify({ runId: developmentRunId, seed, completedCanonicalTicks: canonicalTicks, ...capture.snapshot }) + "\n", "utf8");
         await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
         await writeFile(
           DIAGNOSTIC_CHECKPOINT_PATH,

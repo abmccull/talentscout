@@ -1066,7 +1066,9 @@ export function getAvailableActivities(
         currentSeason: opportunityContext.currentSeason,
       })
     : [];
-  const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, 5);
+  // Targeted follow-ups must remain available for every observed prospect,
+  // including a dossier opened beyond the first five suggested names.
+  const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, Number.POSITIVE_INFINITY);
 
   if (targetedYouth.length > 0 || activeProfessionalCaseOpportunities.length > 0) {
     const youthPoolByPlayerId = new Map<string, TargetOption>();

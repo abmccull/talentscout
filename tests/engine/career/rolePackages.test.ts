@@ -71,6 +71,7 @@ test("club tier 4 package changes the job toward leadership and delegation", () 
 
 test("independent tier 4 package surfaces business and staff risk", () => {
   const result = deriveCareerRolePackage({
+    cashRunwayMonths: 1.5,
     scout: {
       careerPath: "independent",
       careerTier: 4,

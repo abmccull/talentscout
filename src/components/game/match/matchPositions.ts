@@ -92,14 +92,12 @@ export function getPhaseZone(phaseType: string): FormationPosition {
  * @param basePosition    - The player's default formation position (0–100 coords)
  * @param phaseType       - Current phase type string
  * @param isInvolved      - Whether this player is listed in involvedPlayerIds
- * @param isFocused       - Whether this player is the scout's focus target
  * @returns               - Final {x, y} position for rendering on canvas
  */
 export function getPlayerPositionInPhase(
   basePosition: FormationPosition,
   phaseType: string,
   isInvolved: boolean,
-  isFocused: boolean,
 ): FormationPosition {
   if (!isInvolved) {
     // Non-involved players stay at their formation position
@@ -108,8 +106,8 @@ export function getPlayerPositionInPhase(
 
   const zone = getPhaseZone(phaseType);
 
-  // Focused player drifts more toward the action zone
-  const driftFactor = isFocused ? 0.35 : 0.20;
+  // Attention affects highlighting, never the represented football position.
+  const driftFactor = 0.20;
 
   return {
     x: basePosition.x + (zone.x - basePosition.x) * driftFactor,

@@ -23,6 +23,20 @@ function summary(continueScreen?: WeekSummary["continueScreen"]): WeekSummary {
 }
 
 describe("week summary continuation", () => {
+  it("carries a dashboard message target into the inbox and clears it when navigating away", () => {
+    const state = { gameState: {}, currentScreen: "dashboard", activeMatch: null,
+      pendingInboxMessageId: null } as unknown as GameStoreState;
+    const set: SetState = (partial) => Object.assign(state,
+      typeof partial === "function" ? partial(state) : partial);
+    const actions = createNavigationActions(() => state, set);
+    actions.openDashboardTarget({ screen: "inbox", messageId: "message-to-review" });
+    expect(state.currentScreen).toBe("inbox");
+    expect(state.pendingInboxMessageId).toBe("message-to-review");
+    actions.setScreen("dashboard");
+    expect(state.pendingInboxMessageId).toBeNull();
+    actions.openDashboardTarget({ screen: "inbox" });
+    expect(state.pendingInboxMessageId).toBeNull();
+  });
   it("opens the queued season review only after dismissing the summary", () => {
     const setScreen = vi.fn();
     const state = {
@@ -113,6 +127,21 @@ describe("week summary continuation", () => {
       targetId: "player-1",
     });
     expect(state.currentScreen).toBe("calendar");
+
+    const incomingFocus = state.pendingCalendarActivity;
+    actions.setScreen("calendar");
+    expect(state.pendingCalendarActivity).toBe(incomingFocus);
+    actions.openDashboardTarget({
+      screen: "calendar", week: 4, season: 1,
+      playerId: "player-1", focusActivityType: "parentCoachMeeting",
+    });
+    expect(state.pendingCalendarActivity).toMatchObject({
+      type: "parentCoachMeeting", targetId: "player-1",
+    });
+    actions.setScreen("dashboard");
+    expect(state.pendingCalendarActivity).toBeNull();
+    actions.setScreen("calendar");
+    expect(state.pendingCalendarActivity).toBeNull();
 
     actions.openDashboardTarget({ screen: "rivals", opportunityId: "opp-social", playerId: "player-1" });
     expect(state.pendingRivalOpportunityId).toBe("opp-social");

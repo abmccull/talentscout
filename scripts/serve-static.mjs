@@ -18,8 +18,9 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error(`Invalid static server port: ${port}`);
 }
 if (!existsSync(resolve(root, "play.html"))) {
+  const buildCommand = requireE2EBridge ? "npm run build:e2e" : "npm run build";
   throw new Error(
-    `Static export not found at ${root}. Run npm run build:e2e before Playwright.`,
+    `Static export not found at ${root}. Run ${buildCommand} before starting this server.`,
   );
 }
 if (requireE2EBridge && !existsSync(resolve(root, ".e2e-bridge.json"))) {

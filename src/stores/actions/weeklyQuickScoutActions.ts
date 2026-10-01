@@ -1,3 +1,4 @@
+import { getWeeklyWorkCounts } from "@/lib/weeklyWorkCounts";
 /**
  * Fast-forward, delegation, and leadership actions that sit beside the
  * canonical weekly simulation. These actions deliberately delegate their
@@ -17,7 +18,6 @@ import {
   buildDefaultPriorities,
   delegateScoutingTask,
 } from "@/engine/core/quickScout";
-import { getScheduledActivityInstances } from "@/engine/core/calendar";
 import {
   chooseLeadershipResponsibility,
   type LeadershipResponsibilityChoice,
@@ -95,7 +95,6 @@ export function createWeeklyQuickScoutActions(
           get().autoSchedule(policy);
           const scheduled = get().gameState;
           if (!scheduled) break;
-          const scheduledInstances = getScheduledActivityInstances(scheduled.schedule);
 
           get().startWeekSimulation();
           if (!get().weekSimulation) break;
@@ -129,9 +128,7 @@ export function createWeeklyQuickScoutActions(
             week: before.currentWeek,
             season: before.currentSeason,
             fatigueChange: after.scout.fatigue - before.scout.fatigue,
-            matchesAttended: scheduledInstances.filter(({ activity }) => activity.type === "attendMatch").length,
-            reportsWritten: scheduledInstances.filter(({ activity }) => activity.type === "writeReport").length,
-            meetingsHeld: scheduledInstances.filter(({ activity }) => activity.type === "networkMeeting").length,
+            ...getWeeklyWorkCounts(scheduled, after),
             newMessages,
             playersDiscovered: newDiscoveries,
             observationsGenerated: newObservations,

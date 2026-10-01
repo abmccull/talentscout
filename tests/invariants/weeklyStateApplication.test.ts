@@ -1,3 +1,4 @@
+import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
 import { describe, expect, it } from "vitest";
 
 import { generatePlayer } from "@/engine/players/generation";
@@ -196,6 +197,6 @@ describe("weekly state application helpers", () => {
 
     expect(result.updatedMatchRatings["fixture-1"]?.[player.id]?.rating).toBe(7.4);
     expect(result.updatedPlayers[player.id].recentMatchRatings).toHaveLength(2);
-    expect(result.updatedPlayers[player.id].recentMatchRatings?.at(-1)?.fixtureId).toBe("fixture-1");
+    expect(result.updatedPlayers[player.id].recentMatchRatings?.map(expandMatchFormEntry).at(-1)?.fixtureId).toBe("fixture-1");
   });
 });

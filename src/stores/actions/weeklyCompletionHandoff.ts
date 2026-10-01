@@ -1,10 +1,12 @@
+import { revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { isFinancialPeriodClose } from "@/engine/core/annualization";
+import { getWeeklyWorkCounts } from "@/lib/weeklyWorkCounts";
+import { getLiveActivitySummary } from "@/lib/liveActivitySummary";
 import {
-  getScheduledActivityInstances,
   type WeekProcessingResult,
 } from "@/engine/core/calendar";
 import { getSeasonLength, type TickResult } from "@/engine/core/gameLoop";
-import type { Activity, GameState } from "@/engine/core/types";
+import type { GameState } from "@/engine/core/types";
 import type { WeeklySimulationPipeline } from "@/engine/core/weeklySimulationPipeline";
 import { resolveScenarioOutcome } from "@/engine/scenarios";
 import type { TutorialState } from "@/stores/tutorialStore";
@@ -19,20 +21,6 @@ import {
   processWeeklyContextualHint,
   processWeeklyTutorialMilestones,
 } from "./weeklyPresentationEffects";
-
-const YOUTH_SUMMARY_ACTIVITY_TYPES = new Set<Activity["type"]>([
-  "schoolMatch",
-  "grassrootsTournament",
-  "streetFootball",
-  "academyTrialDay",
-  "youthFestival",
-  "youthTournament",
-  "academyVisit",
-  "watchVideo",
-  "followUpSession",
-  "parentCoachMeeting",
-  "trainingVisit",
-]);
 
 export interface WeeklyCompletionHandoffInput {
   beforeWeek: GameState;
@@ -55,15 +43,13 @@ export function completeWeeklyHandoff(
 ): GameState {
   input.pipeline.enter("finalize");
   let state = input.pipeline.complete(input.state);
+  if (input.persistenceEnabled) state = revealKnownGamePortraits(state);
   const beforeWeek = input.beforeWeek;
   const newInboxCount = state.inbox.length - beforeWeek.inbox.length;
   const isPayWeek = isFinancialPeriodClose(
     beforeWeek.currentWeek,
     getSeasonLength(beforeWeek.fixtures, beforeWeek.currentSeason),
   );
-  const youthActivityCount = getScheduledActivityInstances(beforeWeek.schedule).filter(
-    ({ activity }) => YOUTH_SUMMARY_ACTIVITY_TYPES.has(activity.type),
-  ).length;
   const weekSummary: WeekSummary = {
     continueScreen:
       input.tickResult.endOfSeasonTriggered && state.seasonAwardsData
@@ -73,11 +59,7 @@ export function completeWeeklyHandoff(
     reputationChange: state.scout.reputation - beforeWeek.scout.reputation,
     skillXpGained: input.weekResult.skillXpGained as Record<string, number>,
     attributeXpGained: input.weekResult.attributeXpGained as Record<string, number>,
-    matchesAttended: beforeWeek.scout.primarySpecialization === "youth"
-      ? youthActivityCount
-      : input.weekResult.matchesAttended.length,
-    reportsWritten: input.weekResult.reportsWritten.length,
-    meetingsHeld: input.weekResult.meetingsHeld.length,
+    ...getWeeklyWorkCounts(beforeWeek, state),
     newMessages: Math.max(0, newInboxCount),
     rivalAlerts: input.rivalAlertCount,
     financeSummary: isPayWeek && beforeWeek.finances
@@ -89,11 +71,15 @@ export function completeWeeklyHandoff(
           ),
         }
       : null,
-    activityQualities: input.qualityRollsByDay.map(({ dayIndex, result }) => ({
-      activityType: result.activityType,
-      tier: result.tier,
-      narrative: `[${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dayIndex]}] ${result.narrative}`,
-    })),
+    activityQualities: input.qualityRollsByDay.map(({ dayIndex, result }) => {
+      const activity = beforeWeek.schedule.activities[dayIndex];
+      const live = activity ? getLiveActivitySummary(beforeWeek, activity, dayIndex) : null;
+      return {
+        activityType: result.activityType,
+        tier: live?.tier ?? result.tier,
+        narrative: `[${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dayIndex]}] ${live?.narrative ?? result.narrative}`,
+      };
+    }),
     playersDiscovered: Math.max(
       0,
       state.discoveryRecords.length - beforeWeek.discoveryRecords.length,

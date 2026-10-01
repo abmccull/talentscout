@@ -1,5 +1,7 @@
 "use client";
 
+import { resolvePlayerEntity, resolvePlayerDisplayName } from "@/lib/playerResolution";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
@@ -648,6 +650,8 @@ export function RivalsScreen() {
     rivalOrganizationState,
     clubs,
     players,
+    retiredPlayers,
+    playerPortraits,
     rivalActivities,
     observations,
     reports,
@@ -659,6 +663,7 @@ export function RivalsScreen() {
     selectPlayer,
     setScreen,
     resolveRivalOrganizationOpportunity,
+    reviewRivalCampaign,
     pendingRivalOpportunityId,
     setPendingRivalOpportunityId,
   } = useGameStore(
@@ -668,6 +673,8 @@ export function RivalsScreen() {
       rivalOrganizationState: state.gameState?.rivalOrganizationState,
       clubs: state.gameState?.clubs,
       players: state.gameState?.players,
+      retiredPlayers: state.gameState?.retiredPlayers,
+      playerPortraits: state.gameState?.playerPortraits,
       rivalActivities: state.gameState?.rivalActivities,
       observations: state.gameState?.observations,
       reports: state.gameState?.reports,
@@ -679,6 +686,7 @@ export function RivalsScreen() {
       selectPlayer: state.selectPlayer,
       setScreen: state.setScreen,
       resolveRivalOrganizationOpportunity: state.resolveRivalOrganizationOpportunity,
+      reviewRivalCampaign: state.reviewRivalCampaign,
       pendingRivalOpportunityId: state.pendingRivalOpportunityId,
       setPendingRivalOpportunityId: state.setPendingRivalOpportunityId,
     })),
@@ -705,10 +713,10 @@ export function RivalsScreen() {
   );
   const openOpportunities = useMemo(
     () =>
-      rivalOrganizationState
-        ? getOpenRivalOrganizationOpportunities(rivalOrganizationState)
+      rivalOrganizationState && currentSeason != null && currentWeek != null
+        ? getOpenRivalOrganizationOpportunities(rivalOrganizationState, { season: currentSeason, week: currentWeek })
         : [],
-    [rivalOrganizationState],
+    [rivalOrganizationState, currentSeason, currentWeek],
   );
   const activeCampaigns = useMemo(
     () =>
@@ -809,12 +817,11 @@ export function RivalsScreen() {
   }
 
   const getClubName = (clubId: string) => clubs[clubId]?.name ?? "Unknown Club";
-  const getPlayerName = (playerId: string) => {
-    const p = players[playerId];
-    return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
-  };
+  const playerResolutionState = { players, unsignedYouth, retiredPlayers, playerPortraits };
+  const getPlayerName = (playerId: string) => resolvePlayerDisplayName(playerResolutionState, playerId);
   const navigateToPlayer = (playerId: string) => {
-    if (!players[playerId] && !unsignedYouth[playerId]?.player) return;
+    if (!resolvePlayerEntity(playerResolutionState, playerId)
+      && !playerPortraits?.reservations[`person:v1:${playerId}`]) return;
     selectPlayer(playerId);
     setScreen("playerProfile");
   };
@@ -907,7 +914,10 @@ export function RivalsScreen() {
               {campaignsAwaitingResponse > 0 && (
                 <button
                   type="button"
-                  onClick={() => setScreen("inbox")}
+                  onClick={() => {
+                    const campaign = activeCampaigns.find((item) => item.phase === "response");
+                    if (campaign) reviewRivalCampaign(campaign.id);
+                  }}
                   className="min-h-11 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-100 transition hover:border-red-300/45 hover:bg-red-500/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-300"
                 >
                   {campaignsAwaitingResponse} awaiting reply
@@ -923,7 +933,7 @@ export function RivalsScreen() {
                       campaign={campaign}
                       organization={rivalOrganizationState?.organizations[campaign.organizationId]}
                       leadRivalName={rivalScoutsById?.[campaign.leadRivalId]?.name ?? "Unknown rival"}
-                      onOpenInbox={() => setScreen("inbox")}
+                      onOpenInbox={() => campaign.phase === "response" ? reviewRivalCampaign(campaign.id) : setScreen("inbox")}
                       onOpenPlayer={navigateToPlayer}
                     />
                   ))

@@ -160,11 +160,8 @@ export interface ScoutQualityData {
 
 /**
  * Compute a 0–1 quality weight that determines how much the pool
- * selection favours higher-PA youth.
- *
- * - Low weight (~0.1): nearly random — scout can't distinguish talent.
- * - High weight (~0.7): strong bias toward higher PA.
- * - Max (~1.0): almost always sees the best available.
+ * favours publicly knowable kids (buzz, visibility, prior contact).
+ * It must never read hidden ability.
  */
 function computeQualityWeight(data: ScoutQualityData): number {
   // Early-career scouts should still see a mixed pool. Keep the bias toward
@@ -188,6 +185,17 @@ interface WeightedVenueCandidate {
   youth: UnsignedYouth;
   score: number;
   index: number;
+}
+
+/** Public-signal score in [0, 1]. Never reads currentAbility or potentialAbility. */
+export function scoreYouthVenuePublicSignal(
+  youth: UnsignedYouth,
+  scoutId: string,
+): number {
+  const buzz = Math.max(0, Math.min(100, youth.buzzLevel)) / 100;
+  const visibility = Math.max(0, Math.min(100, youth.visibility)) / 100;
+  const known = youth.discoveredBy.includes(scoutId) ? 1 : 0;
+  return buzz * 0.45 + visibility * 0.35 + known * 0.2;
 }
 
 function compareWeightedVenueCandidatesDesc(
@@ -226,6 +234,7 @@ function selectWeightedTopK(
   pool: UnsignedYouth[],
   qualityWeight: number,
   count: number,
+  scoutId: string,
 ): UnsignedYouth[] {
   const selected: WeightedVenueCandidate[] = [];
 
@@ -235,8 +244,8 @@ function selectWeightedTopK(
       youth,
       index,
       score:
-        (youth.player.potentialAbility / 200) * qualityWeight +
-        rng.next() * (1 - qualityWeight),
+        scoreYouthVenuePublicSignal(youth, scoutId) * qualityWeight
+        + rng.next() * (1 - qualityWeight),
     };
 
     if (selected.length < count) {
@@ -383,14 +392,14 @@ export function getYouthVenuePool(
       * presenceMultiplier,
   );
 
-  // If scout quality data is provided, use weighted shuffle to bias toward higher-PA youth.
-  // Otherwise, fall back to pure random shuffle (backwards compatible).
+  // Weighted shuffle uses public buzz, visibility, and prior contact — never hidden ability.
   const sorted = scoutQualityData
     ? selectWeightedTopK(
       rng,
       filtered,
       computeQualityWeight(scoutQualityData),
       poolSize,
+      scout.id,
     )
     : rng.shuffle(filtered);
   return sorted.slice(0, poolSize);

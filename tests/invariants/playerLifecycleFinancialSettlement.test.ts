@@ -8,6 +8,9 @@ import type {
   Player,
 } from "@/engine/core/types";
 import { advanceWeek, type TickResult } from "@/engine/core/gameLoop";
+import { processPlacementOutcome } from "@/engine/youth/placement";
+import { createRNG } from "@/engine/rng";
+import type { PlacementReport } from "@/engine/core/types";
 import {
   resolvePlayerMovements,
   type LifecycleWorldState,
@@ -34,6 +37,7 @@ function player(overrides: Partial<Player> = {}): Player {
     firstName: "Alex",
     lastName: "Prospect",
     age: 22,
+    position: "CM",
     clubId: "a",
     contractClubId: "a",
     contractExpiry: 5,
@@ -98,6 +102,28 @@ function world(
   };
 }
 
+it.each([
+  { endWeek: 1, endSeason: 3 },
+  { endWeek: 41, endSeason: 2 },
+  { endWeek: NaN, endSeason: 2 },
+  { endWeek: 1, endSeason: 2 },
+])("rejects invalid loan return dates before charging or moving the player: %j", end => {
+  const input = world({ p1: player({ contractExpiry: 2 }) }, {
+    a: club("a", { playerIds: ["p1"] }), b: club("b"),
+  });
+  const original = JSON.stringify(input);
+  const deal: LoanDeal = { id: "invalid-term", playerId: "p1", parentClubId: "a", loanClubId: "b",
+    startWeek: 1, startSeason: 2, ...end, loanFee: 5_000, wageContribution: 50, recallClause: false, status: "active" };
+  const result = resolvePlayerMovements(input, [{ type: "loanStart", playerId: "p1", deal }], 1, 2);
+  expect(result.applied).toEqual([]);
+  expect(result.rejected[0]?.reason).toContain("ownership contract");
+  expect(result.state.clubs.a.budget).toBe(input.clubs.a.budget);
+  expect(result.state.clubs.b.budget).toBe(input.clubs.b.budget);
+  expect(result.state.players.p1.clubId).toBe("a");
+  expect(result.state.activeLoans).toEqual([]);
+  expect(JSON.stringify(input)).toBe(original);
+});
+
 function emptyTick(): TickResult {
   return {
     fixturesPlayed: [],
@@ -118,6 +144,89 @@ function emptyTick(): TickResult {
 }
 
 describe("player lifecycle financial settlement", () => {
+  it("does not count an academy signing as a filled first-team vacancy", () => {
+    for (const age of [17, 18]) {
+      const input = world({ p1: player({ age, clubId: "", contractClubId: undefined }) }, {
+        b: club("b", { weeklyWageBudget: 9_500 }),
+      });
+      const result = resolvePlayerMovements(input, [{
+        type: "youthSigning", playerId: "p1", toClubId: "b", wage: 1_000,
+        preserveSquadWageReserve: true,
+      }], 1, 2);
+      expect(result.applied).toHaveLength(age === 18 ? 1 : 0);
+    }
+  });
+
+  it("reserves squad wages across NPC arrivals atomically without imposing NPC policy on user deals", () => {
+    const input = world({ p1: player(), p2: player({ id: "p2" }) }, {
+      a: club("a", { playerIds: ["p1", "p2"] }),
+      b: club("b", { weeklyWageBudget: 7_500 }),
+    });
+    const intents = ["p1", "p2"].map((playerId) => ({
+      type: "permanentTransfer" as const, playerId, fromClubId: "a", toClubId: "b",
+      fee: 100, wage: 2_000, preserveSquadWageReserve: true,
+    }));
+    const result = resolvePlayerMovements(input, intents, 1, 2);
+    expect(result.applied).toHaveLength(1);
+    expect(result.rejected[0]?.reason).toContain("squad completion wage reserve");
+    expect(result.state.clubs.b.budget).toBe(99_900);
+    expect(input.clubs.b.playerIds).toEqual([]);
+    const userResult = resolvePlayerMovements(input, intents.map((intent) => ({
+      ...intent, preserveSquadWageReserve: false,
+    })), 1, 2);
+    expect(userResult.applied).toHaveLength(2);
+  });
+
+  it("uses the actual loan wage contribution for NPC squad planning and permits cheap repairs", () => {
+    const input = world({ p1: player({ wage: 4_000 }) }, {
+      a: club("a", { playerIds: ["p1"] }), b: club("b", { weeklyWageBudget: 6_000 }),
+    });
+    const deal: LoanDeal = {
+      id: "reserve-loan", playerId: "p1", parentClubId: "a", loanClubId: "b",
+      startWeek: 1, startSeason: 2, endWeek: 11, endSeason: 2,
+      loanFee: 100, wageContribution: 50, buyOptionFee: 1_000, recallClause: true, status: "active",
+    };
+    const expensive = resolvePlayerMovements(input, [{
+      type: "loanStart", playerId: "p1", deal, preserveSquadWageReserve: true,
+    }], 1, 2);
+    expect(expensive.applied).toHaveLength(0);
+    expect(expensive.rejected[0]?.reason).toContain("squad completion wage reserve");
+    expect(expensive.state.activeLoans).toHaveLength(0);
+    expect(expensive.state.clubs.b.budget).toBe(100_000);
+    const cheap = resolvePlayerMovements(input, [{
+      type: "loanStart", playerId: "p1", deal: { ...deal, wageContribution: 10 },
+      preserveSquadWageReserve: true,
+    }], 1, 2);
+    expect(cheap.applied).toHaveLength(1);
+    const returned = resolvePlayerMovements(cheap.state, [{
+      type: "loanEnd", playerId: "p1", dealId: deal.id, resolution: "buyOption",
+      outcome: "buy-option-exercised", preserveSquadWageReserve: true,
+    }], 11, 2);
+    expect(returned.applied[0]?.type).toBe("loanReturn");
+    expect(returned.state.activeLoans).toHaveLength(0);
+    expect(returned.state.players.p1.clubId).toBe("a");
+    expect(returned.state.loanHistory[0]?.outcome).toBe("neutral");
+    expect(returned.state.clubs.b.budget).toBe(99_900);
+  });
+
+  it("releases retiring payroll before signings and reserves each accepted arrival in the same batch", () => {
+    const old = player({ id: "old", wage: 1000 });
+    const free = (id: string) => player({ id, clubId: "", contractClubId: undefined, wage: 0 });
+    const initial = world({ old, first: free("first"), second: free("second") },
+      { a: club("a", { playerIds: ["old"], weeklyWageBudget: 1200 }) });
+    const result = resolvePlayerMovements(initial, [
+      { type: "freeAgentSigning", playerId: "first", toClubId: "a", wage: 800, contractLength: 2 },
+      { type: "freeAgentSigning", playerId: "second", toClubId: "a", wage: 800, contractLength: 2 },
+      { type: "retirement", playerId: "old", reason: "career complete" },
+    ], 10, 2);
+    expect(result.applied.map((event) => event.playerId)).toEqual(["old", "first"]);
+    expect(result.rejected.map((event) => event.intent.playerId)).toEqual(["second"]);
+    expect(result.state.players.first.wage).toBe(800);
+    expect(result.state.players.second.clubId).toBe("");
+    expect(initial.players.old.wage).toBe(1000);
+    expect(initial.clubs.a.playerIds).toEqual(["old"]);
+  });
+
   it("charges only the loan fee upfront and persists weekly wage contributions as obligations", () => {
     const input = world(
       {
@@ -618,6 +727,34 @@ describe("player lifecycle financial settlement", () => {
         type: "youthSigning",
       }),
     );
+    // The same pathway must admit an affordable lower-level contract and
+    // commit the identical wage offered by scout-led placement.
+    const smallClub = {
+      ...targetClub, id: "wage-scale-test-club", reputation: 13,
+      // £500 academy contract plus £9,000 for this empty senior squad.
+      budget: 100_000, weeklyWageBudget: 9_500,
+      playerIds: [], academyPlayerIds: [], financialObligations: [],
+    };
+    const affordableYouth = {
+      ...proposedYouth, placedClubId: smallClub.id,
+      player: { ...youth.player, currentAbility: 26, wage: 0 },
+    };
+    const affordableTick: TickResult = {
+      ...emptyTick(),
+      youthAgingResult: {
+        autoSigned: [{ youthId, clubId: smallClub.id }], retired: [],
+        updatedUnsignedYouth: { ...generated.unsignedYouth, [youthId]: affordableYouth },
+      },
+    };
+    const signed = advanceWeek({
+      ...generated, clubs: { ...generated.clubs, [smallClub.id]: smallClub },
+    }, affordableTick);
+    const placement = processPlacementOutcome(
+      createRNG("youth-wage-scale"), { season: generated.currentSeason } as PlacementReport,
+      1, affordableYouth, smallClub,
+    );
+    expect(signed.players[youth.player.id]).toMatchObject({ clubId: smallClub.id, wage: 500 });
+    expect(placement.newPlayer?.wage).toBe(signed.players[youth.player.id].wage);
   }, 60_000);
 
   it("archives a causally linked unsigned youth when the opportunity window closes", async () => {

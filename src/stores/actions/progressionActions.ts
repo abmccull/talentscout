@@ -7,6 +7,7 @@
  * specialization unlocks, international travel, and narrative events.
  */
 import type { GetState, SetState } from "./types";
+import { queueGameplayAutosave, snapshotPersistedGameState } from "./persistGameplayAutosave";
 import { clearTerminalNarrativeInboxActions } from "./narrativeInboxState";
 import type {
   GameState,
@@ -94,7 +95,7 @@ import {
   ensureInternationalAssignmentLiaison,
 } from "@/engine/world/internationalDeliverables";
 import { normalizeCountryKey } from "@/lib/country";
-import { reconcileRivalCampaignDecisions } from "./weeklyRivalCampaigns";
+import { openRivalCampaignResponse, reconcileRivalCampaignDecisions } from "./weeklyRivalCampaigns";
 
 function consequenceFailureMessages(
   state: GameState,
@@ -993,6 +994,7 @@ export function createProgressionActions(get: GetState, set: SetState) {
       const { gameState } = get();
       if (!gameState) return;
       const event = gameState.narrativeEvents.find((e) => e.id === eventId);
+      if (!event || event.acknowledged) return;
       const updatedEvents = acknowledgeEvent(gameState.narrativeEvents, eventId);
       // A5: Apply consequences if the event has them and no choices (auto-apply on acknowledge)
       let updatedState: GameState = {
@@ -1007,6 +1009,23 @@ export function createProgressionActions(get: GetState, set: SetState) {
         updatedState = applyConsequences(updatedState, event.consequences);
       }
       set({ gameState: updatedState });
+      const committed = get();
+      queueGameplayAutosave(snapshotPersistedGameState(
+        updatedState, committed.activeSession, committed.weekSimulation,
+      ), set);
+    },
+
+    reviewRivalCampaign: (campaignId: string) => {
+      const current = get();
+      if (!current.gameState) return;
+      const updated = openRivalCampaignResponse(current.gameState, campaignId);
+      const campaign = updated.rivalOrganizationState.campaignState.campaigns[campaignId];
+      const decision = campaign?.responseDecisionId ? updated.consequenceState.decisions[campaign.responseDecisionId] : undefined;
+      if (!decision || decision.status !== "offered") return;
+      set({ gameState: updated, currentScreen: "inbox" });
+      if (updated !== current.gameState) queueGameplayAutosave(snapshotPersistedGameState(
+        updated, current.activeSession, current.weekSimulation,
+      ), set);
     },
 
     resolveConsequenceDecision: (decisionId: string, optionId: string) => {
@@ -1066,6 +1085,12 @@ export function createProgressionActions(get: GetState, set: SetState) {
           ).concat(consequenceFailureMessages(projected, decisionId, processed.errors)),
         },
       });
+      const committed = get();
+      if (committed.gameState) {
+        queueGameplayAutosave(snapshotPersistedGameState(
+          committed.gameState, committed.activeSession, committed.weekSimulation,
+        ), set);
+      }
     },
 
     resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => {
@@ -1355,6 +1380,10 @@ export function createProgressionActions(get: GetState, set: SetState) {
       }
 
       set({ gameState: finalState });
+      const committed = get();
+      queueGameplayAutosave(snapshotPersistedGameState(
+        finalState, committed.activeSession, committed.weekSimulation,
+      ), set);
     },
   };
 }
