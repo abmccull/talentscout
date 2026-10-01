@@ -27,6 +27,7 @@ import { supabase } from "./supabase";
 import type { GameState } from "@/engine/core/types";
 import { migrateSaveState } from "./db";
 import {
+  assertSupportedSaveSchema,
   createSaveEnvelope,
   extractSavePlayerExperience,
   extractSaveStatePayload,
@@ -116,6 +117,21 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
   ): Promise<void> {
     if (!supabase) throw new Error("Cloud features are not configured");
     const userId = await this.requireAuthenticatedUserId();
+    // Preserve unsupported remote formats before an explicit slot replacement.
+    // Concurrent or old-client writes still require an atomic server guard.
+    const { data: existing, error: preflightError } = await supabase
+      .from("save_slots")
+      .select("state")
+      .eq("user_id", userId)
+      .eq("slot", slot)
+      .maybeSingle<SaveSlotStateRow>();
+    if (preflightError) {
+      throw new Error(`Cloud save preservation check failed: ${preflightError.message}`);
+    }
+    if (existing) {
+      assertSupportedSaveSchema(existing.state);
+    }
+
     const { error } = await supabase.from("save_slots").upsert(
       {
         user_id: userId,

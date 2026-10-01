@@ -1190,10 +1190,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     for (const group of bySlot.values()) {
-      const entry = group.find((candidate) => !candidate.unavailable) ?? group[0];
+      const entry = group.find((candidate) => candidate.unavailable?.reason === "future-version")
+        ?? group.find((candidate) => !candidate.unavailable) ?? group[0];
       if (!entry) continue;
       const damagedLocal = group.find(
-        (candidate) => candidate.source === "local" && candidate.unavailable,
+        (candidate) => candidate.source === "local"
+          && candidate.unavailable?.reason === "unrecoverable-corruption",
       );
       slots.push({
         slot: entry.slot,

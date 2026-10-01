@@ -25,7 +25,7 @@ import {
   setPersistenceFaultInjectorForTests,
   type SaveRecord,
 } from "@/lib/db";
-import { createSaveEnvelope } from "@/lib/saveEnvelope";
+import { CURRENT_SAVE_SCHEMA_VERSION, createSaveEnvelope } from "@/lib/saveEnvelope";
 import {
   clearSavePersistenceTelemetryForTests,
   getRecentSavePersistenceTelemetry,
@@ -72,7 +72,7 @@ async function overwriteHeadWithCorruptRecord(slot: number): Promise<void> {
     transaction.oncomplete = () => resolve();
     transaction.objectStore("saves").put({
       slot,
-      schemaVersion: 999,
+      schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
       savedAt: Date.now(),
       state: null,
     });
@@ -476,7 +476,7 @@ describe.sequential("transactional save journal", () => {
         record: {
           slot: 4,
           savedAt: Number.MAX_SAFE_INTEGER,
-          schemaVersion: 999,
+          schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
           state: null,
         },
       });

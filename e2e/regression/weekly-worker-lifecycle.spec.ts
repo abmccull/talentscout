@@ -10,6 +10,9 @@ async function installRealWorkerDeliveryGate(page: Page) {
     let holdCount = 0;
     let workerSequence = 0;
     const log: any[] = [];
+    const record = (entry: any) => {
+      log.push({ atMs: performance.now(), ...entry });
+    };
     function persistedView(state: any) {
       return {
         seed: state?.seed, week: state?.currentWeek, season: state?.currentSeason,
@@ -37,15 +40,17 @@ async function installRealWorkerDeliveryGate(page: Page) {
       constructor(url: string | URL, options?: WorkerOptions) {
         super(url, options);
         this.gateId = ++workerSequence;
-        log.push({ event: "created", workerId: this.gateId, url: String(url), name: options?.name });
+        record({ event: "created", workerId: this.gateId, url: String(url), name: options?.name });
         // Register before the application listener so it receives the exact
         // original data only when released. All other messages pass through.
         super.addEventListener("message", (event: MessageEvent) => {
+          record({ event: "received", workerId: this.gateId, kind: event.data?.kind,
+            jobId: event.data?.jobId, bypassed: bypass.has(event) });
           if (bypass.has(event) || event.data?.kind !== "weekly-transaction-result" || holdCount === 0) return;
           holdCount -= 1;
           event.stopImmediatePropagation();
           const jobId = event.data.jobId as string;
-          log.push({ event: "held", workerId: this.gateId, jobId, source: event.data.source,
+          record({ event: "held", workerId: this.gateId, jobId, source: event.data.source,
             computeMs: event.data.state?.metrics?.computeMs, responseBytes: event.data.state?.metrics?.responseBytes });
           const timer = window.setTimeout(() => release(jobId, true), 6_000);
           held.set(jobId, { worker: this, event, timer });
@@ -55,14 +60,23 @@ async function installRealWorkerDeliveryGate(page: Page) {
       postMessage(message: any, options?: StructuredSerializeOptions): void;
       postMessage(message: any, transferOrOptions?: Transferable[] | StructuredSerializeOptions): void {
         if (message?.kind === "weekly-transaction-request") {
-          log.push({ event: "requested", workerId: this.gateId, jobId: message.job.id,
+          record({ event: "requested", workerId: this.gateId, jobId: message.job.id,
             source: message.job.source, wireKind: message.state?.kind });
         }
         if (Array.isArray(transferOrOptions)) super.postMessage(message, transferOrOptions);
         else super.postMessage(message, transferOrOptions);
       }
       terminate() {
-        log.push({ event: "terminated", workerId: this.gateId });
+        record({ event: "terminated", workerId: this.gateId });
+        for (const [jobId, entry] of held) {
+          if (entry.worker !== this) continue;
+          // This is an already-queued reply; terminating its producer must
+          // not discard it while the replacement acquires its real job.
+          // Keep a bounded watchdog, matching the active worker deadline.
+          clearTimeout(entry.timer);
+          entry.timer = window.setTimeout(() => release(jobId, true), 8_000);
+          record({ event: "retained-after-termination", workerId: this.gateId, jobId, watchdogMs: 8_000 });
+        }
         super.terminate();
       }
     }
@@ -71,7 +85,7 @@ async function installRealWorkerDeliveryGate(page: Page) {
       if (!entry) throw new Error(`No real worker result is held for ${jobId}`);
       held.delete(jobId);
       clearTimeout(entry.timer);
-      log.push({ event: "released", jobId, automatic });
+      record({ event: "released", jobId, automatic });
       const delivery = new MessageEvent("message", { data: entry.event.data });
       bypass.add(delivery);
       // Re-deliver the unchanged real result even if its owner was terminated.
@@ -80,10 +94,10 @@ async function installRealWorkerDeliveryGate(page: Page) {
     }
     Object.defineProperty(window, "Worker", { configurable: true, value: DeliveryGateWorker });
     (window as any).__WEEKLY_REAL_GATE__ = {
-      holdNext: (count = 1) => { holdCount += count; },
+      holdNext: (count = 1) => { holdCount += count; record({ event: "armed", count, holdCount }); },
       release,
       view: persistedView,
-      snapshot: () => ({ heldJobIds: [...held.keys()], log: [...log] }),
+      snapshot: () => ({ atMs: performance.now(), holdCount, heldJobIds: [...held.keys()], log: [...log] }),
     };
   });
 }
@@ -176,6 +190,19 @@ async function artifact(page: Page, testInfo: TestInfo, name: string, evidence: 
 test.describe("Real weekly worker lifecycle and persistence", () => {
   test.setTimeout(120_000);
   test.beforeEach(async ({ page }) => { await installRealWorkerDeliveryGate(page); });
+  test.afterEach(async ({ page }, testInfo) => {
+    if (testInfo.status === testInfo.expectedStatus) return;
+    const evidence = await Promise.allSettled([
+      gateSnapshot(page), liveView(page), readSlot(page),
+    ]);
+    await testInfo.attach("weekly-worker-failure-state.json", {
+      body: JSON.stringify(Object.fromEntries(evidence.map((result, index) => [
+        ["gate", "live", "autosave"][index], result.status === "fulfilled"
+          ? result.value : { unavailable: String(result.reason) },
+      ])), null, 2),
+      contentType: "application/json",
+    });
+  });
 
   test("busy-window saves and visibility persistence allow the real commit, then manual-slot load restores it", async ({ gamePage, page }, testInfo) => {
     await prepareCareer(gamePage);
@@ -320,12 +347,18 @@ test.describe("Real weekly worker lifecycle and persistence", () => {
       void store.getState().fastForwardWeek();
       return { seed: state.seed, week: state.currentWeek, playerId, scoutId: state.scout.id };
     });
-    await expect.poll(async () => (await gateSnapshot(page)).heldJobIds.length).toBe(2);
+    // The synchronous production calls have posted the replacement job.
+    // Deliver the queued old reply promptly once that new owner exists.
     const gate = await gateSnapshot(page);
-    const newJobId = gate.heldJobIds.find((id: string) => id !== oldJobId) as string;
+    expect(gate.heldJobIds).toContain(oldJobId);
     const requests = gate.log.filter((item: any) => item.event === "requested");
+    expect(requests).toHaveLength(2);
     const oldRequest = requests.find((item: any) => item.jobId === oldJobId);
-    const newRequest = requests.find((item: any) => item.jobId === newJobId);
+    const newRequest = requests.find((item: any) => item.jobId !== oldJobId);
+    const newJobId = newRequest.jobId as string;
+    expect(gate.log).toContainEqual(expect.objectContaining({
+      event: "retained-after-termination", workerId: oldRequest.workerId, jobId: oldJobId,
+    }));
     expect(newRequest.source).toEqual(oldRequest.source);
     expect(newRequest.workerId).not.toBe(oldRequest.workerId);
     expect(newJobId).not.toBe(oldJobId);
@@ -338,11 +371,28 @@ test.describe("Real weekly worker lifecycle and persistence", () => {
     });
     await expect(page.getByRole("button", { name: "View Calendar", exact: true })).toBeDisabled();
     await page.screenshot({ path: testInfo.outputPath("replacement-new-owner-still-busy.png"), fullPage: true });
-    await page.evaluate((id) => (window as any).__WEEKLY_REAL_GATE__.release(id), newJobId);
+    // Only observe the real reply within the existing 8-second ordinary
+    // worker deadline. No added wait or transport work extends that deadline.
+    const beforeReadiness = await gateSnapshot(page);
+    const remainingMs = Math.ceil(8_000 - (beforeReadiness.atMs - newRequest.atMs));
+    expect(remainingMs).toBeGreaterThan(0);
+    await expect.poll(async () => (await gateSnapshot(page)).heldJobIds, {
+      timeout: remainingMs, intervals: [50, 100, 250],
+    }).toContain(newJobId);
+    const readyGate = await gateSnapshot(page);
+    const newHeld = readyGate.log.find((item: any) => item.event === "held" && item.jobId === newJobId);
+    expect(newHeld.atMs - newRequest.atMs).toBeLessThan(8_000);
+    const deliveredAtMs = await page.evaluate(({ id, requestedAtMs }) => {
+      const gate = (window as any).__WEEKLY_REAL_GATE__;
+      const atMs = gate.snapshot().atMs;
+      if (atMs - requestedAtMs >= 8_000) throw new Error("Replacement reply exceeded the production worker deadline");
+      gate.release(id);
+      return atMs;
+    }, { id: newJobId, requestedAtMs: newRequest.atMs });
     await acknowledgeCommit(gamePage, 5);
     expect((await liveView(page)).state).toMatchObject({ firstName: "Replacement", watchlist: [replacement.playerId] });
     expect(await readSlot(page)).toMatchObject({ firstName: "Replacement", week: 5, watchlist: [replacement.playerId] });
-    await artifact(page, testInfo, "worker-replacement-owner-proof", { oldJobId, newJobId, oldRequest, newRequest, replacement, afterOldDelivery });
+    await artifact(page, testInfo, "worker-replacement-owner-proof", { oldJobId, newJobId, oldRequest, newRequest, newHeld, deliveredAtMs, replacement, afterOldDelivery });
     gamePage.expectNoConsoleErrors();
   });
 });

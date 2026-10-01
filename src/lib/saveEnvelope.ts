@@ -48,6 +48,11 @@ export class SaveMigrationError extends Error {
   }
 }
 
+/** Unsupported future formats are preserved, never classified as corruption. */
+export function isFutureSaveMigrationError(error: unknown): error is SaveMigrationError {
+  return error instanceof SaveMigrationError && error.code === "FUTURE_VERSION";
+}
+
 export interface SaveEnvelope<TState = unknown> {
   schemaVersion: number;
   rulesVersion: string;
@@ -63,6 +68,19 @@ type SaveMigration = (envelope: MutableEnvelope) => MutableEnvelope;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Check only version compatibility, without decoding or rewriting opaque payloads. */
+export function assertSupportedSaveSchema(raw: unknown): void {
+  if (!isRecord(raw)) return;
+  const version = raw.schemaVersion;
+  if (typeof version === "number" && Number.isInteger(version)
+    && version > CURRENT_SAVE_SCHEMA_VERSION) {
+    throw new SaveMigrationError(
+      "FUTURE_VERSION",
+      `Save schema ${version} is newer than supported schema ${CURRENT_SAVE_SCHEMA_VERSION}`,
+    );
+  }
 }
 
 /** Legacy records had metadata and state, but no explicit schema fields. */
@@ -310,12 +328,7 @@ export function migrateSaveEnvelope(raw: unknown): SaveEnvelope<unknown> & Recor
     );
   }
 
-  if (suppliedVersion > CURRENT_SAVE_SCHEMA_VERSION) {
-    throw new SaveMigrationError(
-      "FUTURE_VERSION",
-      `Save schema ${suppliedVersion} is newer than supported schema ${CURRENT_SAVE_SCHEMA_VERSION}`,
-    );
-  }
+  assertSupportedSaveSchema(raw);
 
   let working = { ...raw, schemaVersion: suppliedVersion } as MutableEnvelope;
   while (working.schemaVersion < CURRENT_SAVE_SCHEMA_VERSION) {

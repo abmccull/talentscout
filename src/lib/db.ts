@@ -40,6 +40,8 @@ import {
   createLegacySaveRunManifest,
   migrateSaveEnvelope,
   SaveMigrationError,
+  assertSupportedSaveSchema,
+  isFutureSaveMigrationError,
   type SaveEnvelope,
 } from "@/lib/saveEnvelope";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
@@ -134,7 +136,7 @@ export interface SaveRecoveryNotice {
 }
 
 export interface SaveUnavailableNotice {
-  reason: "unrecoverable-corruption";
+  reason: "unrecoverable-corruption" | "future-version";
   message: string;
 }
 
@@ -446,11 +448,14 @@ async function pruneArchives(slot: number): Promise<void> {
   const retainedCandidates: RetentionArchive[] = [];
 
   for (const archive of stored) {
+    // A prior verification flag cannot authorize deleting a format we cannot read.
+    assertSupportedSaveSchema(archive.record);
     let migrated: SaveRecord | null = null;
     if (archive.verified !== true) {
       try {
         migrated = migrateSaveRecord(archive.record);
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         invalidIds.push(archive.id);
         continue;
       }
@@ -606,7 +611,8 @@ export async function saveGameWithResult(
     if (rawCurrent) {
       try {
         current = migrateSaveRecord(rawCurrent);
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         // A corrupt head must never displace the last known-valid generation.
         // It is intentionally not copied into the recoverable archive.
       }
@@ -700,6 +706,7 @@ export async function loadGameWithRecovery(
     mergePersistedPlayerExperience(record.playerExperience);
     return { state: record.state, record };
   } catch (headError) {
+    if (isFutureSaveMigrationError(headError)) throw headError;
     const archives = await db.saveArchives
       .where("[slot+kind]")
       .equals([slot, "previous-generation"])
@@ -724,7 +731,8 @@ export async function loadGameWithRecovery(
               "The newest local save was damaged. A verified earlier generation is available and was selected for this load.",
           },
         };
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         // Continue to the next immutable generation.
       }
     }
@@ -742,7 +750,7 @@ export type SaveListEntry = Omit<SaveRecord, "state"> & {
   unavailable?: SaveUnavailableNotice;
 };
 
-function unavailableSaveEntry(
+export function unavailableSaveEntry(
   raw: unknown,
   error: unknown,
 ): SaveListEntry | null {
@@ -751,6 +759,7 @@ function unavailableSaveEntry(
   const slot = Number.isInteger(record.slot) ? record.slot as number : -1;
   if (slot < 0 || slot > MAX_MANUAL_SLOTS) return null;
   const message = error instanceof Error ? error.message : String(error);
+  const future = isFutureSaveMigrationError(error);
   const specialization = typeof record.specialization === "string"
     ? record.specialization
     : "unknown";
@@ -762,7 +771,7 @@ function unavailableSaveEntry(
       ? record.savedAt
       : 0,
     slot,
-    name: typeof record.name === "string" ? record.name : "Damaged save",
+    name: typeof record.name === "string" ? record.name : future ? "Newer-version save" : "Damaged save",
     season: Number.isInteger(record.season) && (record.season as number) > 0
       ? record.season as number
       : 1,
@@ -777,8 +786,10 @@ function unavailableSaveEntry(
       ? record.reputation
       : 0,
     unavailable: {
-      reason: "unrecoverable-corruption",
-      message: `This save is damaged and no verified recovery generation is available. ${message}`,
+      reason: future ? "future-version" : "unrecoverable-corruption",
+      message: future
+        ? `This save requires a newer version of TalentScout. Update the game to load it. ${message}`
+        : `This save is damaged and no verified recovery generation is available. ${message}`,
     },
   };
 }
@@ -943,7 +954,8 @@ export async function restoreSaveArchive(id: string): Promise<SaveRecord> {
     if (currentRaw) {
       try {
         current = migrateSaveRecord(currentRaw);
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         // Replacing a corrupt head is safe; the corrupt bytes are not copied.
       }
     }

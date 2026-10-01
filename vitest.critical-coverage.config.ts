@@ -23,6 +23,7 @@ export default defineConfig({
       "tests/invariants/standingsIndex.test.ts",
       "tests/persistence/saveEnvelope.test.ts",
       "tests/persistence/saveJournal.test.ts",
+      "tests/persistence/saveJournalFutureEnvelope.test.ts",
     ],
     coverage: {
       provider: "v8",

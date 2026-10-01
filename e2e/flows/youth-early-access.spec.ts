@@ -82,8 +82,9 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
     await page.getByRole("button", { name: /^Focus targets and lenses/ }).click();
     const sheet = page.getByRole("dialog", { name: "Choose your focus" });
     const addFocus = sheet.getByRole("button", { name: `Add focus to ${openingTarget.name}`, exact: true });
-    if (await addFocus.isVisible().catch(() => false)
-      && await addFocus.getAttribute("aria-expanded") !== "true") await addFocus.click();
+    // The selected opening player opens its picker when the sheet mounts.
+    // Wait for that state instead of racing its effect with the toggle.
+    await expect(addFocus).toHaveAttribute("aria-expanded", "true");
     await sheet.getByRole("button", { name: `Use general lens for ${openingTarget.name}`, exact: true }).click();
     await expect(sheet.getByLabel(`general observation lens locked for ${openingTarget.name}`, { exact: true }))
       .toBeVisible();

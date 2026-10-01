@@ -596,7 +596,7 @@ function SaveSlotCard({
             )}
             {save.unavailable && (
               <Badge className="border border-red-400/30 bg-red-400/10 text-[10px] text-red-300">
-                Damaged
+                {save.unavailable.reason === "future-version" ? "Update required" : "Damaged"}
               </Badge>
             )}
             {save.localUnavailable && (

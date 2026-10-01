@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { GameState } from "@/engine/core/types";
 import { deleteSave, migrateSaveRecord, migrateSaveState } from "@/lib/db";
-import { createSaveEnvelope } from "@/lib/saveEnvelope";
+import { CURRENT_SAVE_SCHEMA_VERSION, createSaveEnvelope } from "@/lib/saveEnvelope";
 
 const steamState = vi.hoisted(() => ({
   available: true,
@@ -81,7 +81,7 @@ async function overwriteHeadWithCorruptRecord(slot: number): Promise<void> {
     transaction.oncomplete = () => resolve();
     transaction.objectStore("saves").put({
       slot,
-      schemaVersion: 999,
+      schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
       savedAt: Date.now(),
       state: null,
     });

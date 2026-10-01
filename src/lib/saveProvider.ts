@@ -48,6 +48,7 @@ import {
   processSaveSyncTask,
   restoreSaveArchive,
   migrateSaveRecord,
+  unavailableSaveEntry,
   type SaveArchiveSummary,
   type SaveRecoveryNotice,
   type SaveRecord,
@@ -59,7 +60,11 @@ import {
 import type { GameState } from "@/engine/core/types";
 import { captureException } from "@/lib/deferredErrorReporting";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
-import { SaveMigrationError } from "@/lib/saveEnvelope";
+import {
+  SaveMigrationError,
+  assertSupportedSaveSchema,
+  isFutureSaveMigrationError,
+} from "@/lib/saveEnvelope";
 import { createSaveEnvelope } from "@/lib/saveEnvelope";
 
 // ---------------------------------------------------------------------------
@@ -375,7 +380,8 @@ function parseSteamSaveRecord(raw: string | null): SaveRecord | null {
   if (!raw) return null;
   try {
     return migrateSaveRecord(JSON.parse(raw) as unknown);
-  } catch {
+  } catch (error) {
+    if (isFutureSaveMigrationError(error)) throw error;
     return null;
   }
 }
@@ -490,6 +496,17 @@ class SaveProviderImpl implements SaveProvider {
       const steam = getSteam();
       if (!this.includeSteam || !steam.isAvailable()) {
         throw new Error("Steam Cloud is unavailable. The local save remains queued.");
+      }
+      const existing = await steam.getCloudSave(record.slot);
+      if (existing) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existing) as unknown;
+        } catch {
+          // An explicitly saved supported snapshot may still replace damaged JSON.
+          parsed = null;
+        }
+        assertSupportedSaveSchema(parsed);
       }
       await steam.setCloudSave(record.slot, JSON.stringify(record));
       return;
@@ -644,6 +661,7 @@ class SaveProviderImpl implements SaveProvider {
     try {
       commit = await saveGameWithResult(slot, saveName, state);
     } catch (err) {
+      if (isFutureSaveMigrationError(err)) throw err;
       if (err instanceof SaveMigrationError) {
         throw new Error(
           `SaveProvider.saveState: invalid save data for slot "${slotName}": ${err.message}`,
@@ -725,6 +743,7 @@ class SaveProviderImpl implements SaveProvider {
         recovery: loaded.recovery,
       };
     } catch (err) {
+      if (isFutureSaveMigrationError(err)) throw err;
       console.warn("SaveProvider: IndexedDB load error:", err);
       captureException(err);
       return null;
@@ -746,6 +765,7 @@ class SaveProviderImpl implements SaveProvider {
         record,
       };
     } catch (err) {
+      if (isFutureSaveMigrationError(err)) throw err;
       console.warn("SaveProvider: Steam Cloud load error:", err);
       captureException(err);
       return null;
@@ -780,6 +800,7 @@ class SaveProviderImpl implements SaveProvider {
       });
       return { source: "supabase", record };
     } catch (err) {
+      if (isFutureSaveMigrationError(err)) throw err;
       console.warn("SaveProvider: Supabase load error:", err);
       captureException(err);
       return null;
@@ -840,9 +861,10 @@ class SaveProviderImpl implements SaveProvider {
     const KNOWN_SLOTS = [0, 1, 2, 3, 4, 5] as const;
     const entries: SaveEntry[] = [];
     for (const slot of KNOWN_SLOTS) {
+      let raw: string | null = null;
       try {
         if (await this.hasPendingDelete("steam", slot)) continue;
-        const raw = await steam.getCloudSave(slot);
+        raw = await steam.getCloudSave(slot);
         const record = parseSteamSaveRecord(raw);
         if (!record) continue;
         entries.push({
@@ -858,6 +880,14 @@ class SaveProviderImpl implements SaveProvider {
           savedAt: record.savedAt,
         });
       } catch (error) {
+        if (isFutureSaveMigrationError(error) && raw) {
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          const metadata = unavailableSaveEntry({ ...parsed, slot }, error);
+          if (metadata) {
+            entries.push({ ...metadata, slotName: slotNumberToName(slot), source: "steam" });
+          }
+          continue;
+        }
         console.warn(`SaveProvider: Steam Cloud slot ${slot} list error:`, error);
         captureException(error);
       }
