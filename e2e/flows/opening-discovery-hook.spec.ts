@@ -218,6 +218,11 @@ test.describe("guided opening discovery hook", () => {
 
     const completeReflection = page.getByRole("button", { name: "Complete Reflection" });
     await expect(completeReflection).toBeVisible();
+    await expect(completeReflection).toBeEnabled();
+    // Choosing a radio can reveal that interpretation in the scrollable page.
+    // Exercise the user's scroll to completion before checking its hit area.
+    await completeReflection.scrollIntoViewIfNeeded();
+    await expect(withhold).toBeChecked();
     await expect.poll(async () => completeReflection.evaluate((button) => {
       const rect = button.getBoundingClientRect();
       return rect.top >= 12 && rect.bottom <= window.innerHeight - 12;
@@ -242,6 +247,11 @@ test.describe("guided opening discovery hook", () => {
         Math.min(buttonRect.bottom, mentorRect.bottom) - Math.max(buttonRect.top, mentorRect.top),
       );
       return overlapWidth * overlapHeight === 0;
+    })).toBe(true);
+    await expect.poll(async () => completeReflection.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return hit !== null && button.contains(hit);
     })).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath("tutorial-complete-reflection-desktop.png"),
