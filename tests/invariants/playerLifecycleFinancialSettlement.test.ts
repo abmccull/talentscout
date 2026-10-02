@@ -376,7 +376,7 @@ describe("player lifecycle financial settlement", () => {
     expect(result.state.clubs.a.budget).toBe(118_000);
     expect(result.state.clubs.b.budget).toBe(80_000);
     expect(result.state.clubs.c.budget).toBe(52_000);
-    expect(result.state.clubs.a.financialObligations?.[0]).toMatchObject({
+    expect(expandClubFinancialObligation(result.state.clubs.a.financialObligations?.[0])).toMatchObject({
       id: "sell-on-p1",
       status: "settled",
     });

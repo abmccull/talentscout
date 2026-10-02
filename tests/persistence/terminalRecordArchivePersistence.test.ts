@@ -62,15 +62,15 @@ beforeEach(async () => { await deleteSave(SLOT); });
 afterAll(async () => { await deleteSave(SLOT); });
 
 describe.sequential("terminal archives through actual persistence", () => {
-  it("adds portable 6→7 without changing existing rules, metadata, source or IndexedDB version", () => {
+  it.each([6, 7])("adds portable %s→8 without changing existing rules, metadata, source or IndexedDB version", schemaVersion => {
     const state = career();
-    const legacy = { ...createSaveEnvelope(state, 1_000), schemaVersion: 6,
+    const legacy = { ...createSaveEnvelope(state, 1_000), schemaVersion,
       rulesVersion: "saved-rules", buildVersion: "saved-build",
       customEnvelopeMetadata: { originalExternalId: "remote-save-7" } };
     const before = JSON.stringify(legacy);
     const upgraded = migrateSaveEnvelope(legacy);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(7);
-    expect(upgraded.schemaVersion).toBe(7);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(8);
+    expect(upgraded.schemaVersion).toBe(8);
     expect(upgraded.state).toEqual(state);
     expect(upgraded.rulesVersion).toBe("saved-rules");
     expect(upgraded.buildVersion).toBe("saved-build");
@@ -89,7 +89,7 @@ describe.sequential("terminal archives through actual persistence", () => {
     const commit = await saveGameWithResult(SLOT, "Terminal history", source);
     expect(commit.wrote).toBe(true);
     const head = await readHead();
-    expect(head.schemaVersion).toBe(7);
+    expect(head.schemaVersion).toBe(8);
     expect(head.state.loanHistory).toEqual(canonical.loanHistory);
     expect(head.state.clubs.host.financialObligations).toEqual(canonical.clubs.host.financialObligations);
     expect(commit.payloadBytes).toBe(new TextEncoder().encode(JSON.stringify(head)).byteLength);
@@ -133,12 +133,12 @@ describe.sequential("terminal archives through actual persistence", () => {
 
   it.each([
     { label: "loan-short", loan: [1], obligation: undefined },
-    { label: "loan-future", loan: [2, ...storedLoan().slice(1)], obligation: undefined },
+    { label: "loan-future", loan: [3, ...storedLoan().slice(1)], obligation: undefined },
     { label: "loan-unknown-optional", loan: [...storedLoan().slice(0, 13), { unexpected: "keep-or-refuse" }], obligation: undefined },
     { label: "obligation-negative-mask", loan: undefined, obligation: { id: "bad", obligationArchiveV1: [-1] } },
     { label: "obligation-missing-required", loan: undefined, obligation: { id: "bad", obligationArchiveV1: [0] } },
     { label: "obligation-trailing-column", loan: undefined, obligation: { ...storedObligation(), obligationArchiveV1: [...storedObligation().obligationArchiveV1 as unknown[], "unclaimed"] } },
-    { label: "obligation-future", loan: undefined, obligation: { id: "bad", obligationArchiveV2: [0] } },
+    { label: "obligation-future", loan: undefined, obligation: { id: "bad", obligationArchiveV3: [0] } },
   ])("refuses $label before write, preserving source and an existing valid head", async ({ loan: badLoan, obligation: badObligation }) => {
     await saveGameWithResult(SLOT, "Previous valid terminal career", career());
     const previous = JSON.stringify(await readHead());
@@ -152,8 +152,8 @@ describe.sequential("terminal archives through actual persistence", () => {
     expect(JSON.stringify(source)).toBe(before);
   });
 
-  it("refuses future portable 8 without decoding or rewriting opaque future facts", () => {
-    const future = { ...createSaveEnvelope(career(), 3_000), schemaVersion: 8,
+  it("refuses future portable 9 without decoding or rewriting opaque future facts", () => {
+    const future = { ...createSaveEnvelope(career(), 3_000), schemaVersion: 9,
       state: { opaqueFutureTerminalFacts: { original: ["payment-audit"] } } };
     const before = JSON.stringify(future);
     expect(() => migrateSaveEnvelope(future)).toThrowError(expect.objectContaining<Partial<SaveMigrationError>>({ code: "FUTURE_VERSION" }));

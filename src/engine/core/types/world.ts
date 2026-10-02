@@ -45,7 +45,12 @@ export interface CompactTerminalObligationV1 {
   id: string;
   obligationArchiveV1: [presenceMask: number, ...values: (string | number | null)[]];
 }
-export type StoredClubFinancialObligation = ClubFinancialObligation | CompactTerminalObligationV1;
+/** Undefined bits consume no payload column and restore ordinary own data fields. */
+export interface CompactTerminalObligationV2 {
+  id: string;
+  obligationArchiveV2: [presenceMask: number, undefinedMask: number, ...values: (string | number | null)[]];
+}
+export type StoredClubFinancialObligation = ClubFinancialObligation | CompactTerminalObligationV1 | CompactTerminalObligationV2;
 export type FinancialObligationsStored = StoredClubFinancialObligation[];
 
 export interface Club {

@@ -1,4 +1,4 @@
-// Unexecuted leaf API contract draft; apply after existing-API behavioral baselines.
+// Preceding leaf contract: retain v1 coverage and remove only superseded undefined fallback assertions.
 import { describe, expect, it } from "vitest";
 import type { ClubFinancialObligation, LoanDeal } from "@/engine/core/types";
 import { compactLoanDeal, expandLoanDeal, compactClubFinancialObligation, expandClubFinancialObligation,
@@ -50,7 +50,7 @@ describe("lossless terminal archive leaf contracts", () => {
     expect(expandLoanDeal(source)).toBe(source);
   });
 
-  it("keeps null, owned undefined, missing required and custom loan facts as original fallback objects", () => {
+  it("keeps null, missing required and custom loan facts as original fallback objects", () => {
     const rows: LoanDeal[] = [
       { ...fullLoan(), customAudit: { externalId: "audit-1" } } as LoanDeal,
       { ...fullLoan(), performanceRecord: { ...fullLoan().performanceRecord!, authoredMetric: [1, 2] } } as LoanDeal,
@@ -59,7 +59,6 @@ describe("lossless terminal archive leaf contracts", () => {
     ];
     for (const key of OPTIONAL) {
       rows.push({ ...loan(), [key]: null } as unknown as LoanDeal);
-      rows.push({ ...loan(), [key]: undefined } as LoanDeal);
     }
     const missing = { ...loan() } as Partial<LoanDeal>; delete missing.playerId;
     rows.push(missing as LoanDeal);
@@ -97,10 +96,10 @@ describe("lossless terminal archive leaf contracts", () => {
     expect(decodedNullable).toEqual(nullable);
   });
 
-  it("keeps ordinary/active/unknown/custom obligation identity and explicit owned undefined fallback", () => {
+  it("keeps ordinary/active/unknown/custom obligation identity", () => {
     const full = obligation();
     const rows = [{ ...full, status: "active" }, { ...full, status: "custom-status" },
-      { ...full, authoredAudit: { externalPaymentId: "keep" } }, { ...full, amount: undefined },
+      { ...full, authoredAudit: { externalPaymentId: "keep" } },
       { ...full, createdWeek: null }, { ...full, type: "custom-clause" },
       { ...full, obligationArchiveV1: ["authored-extension"] },
     ] as unknown as ClubFinancialObligation[];

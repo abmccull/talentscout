@@ -95,7 +95,7 @@ function removableEmployeeReportState(authority: unknown): GameState {
 }
 
 describe("prospect follow-up persistent delivery compatibility", () => {
-  it("writes schema 7 and upgrades schema 5 without changing simulation versions or source bytes", () => {
+  it("writes schema 8 and upgrades schema 5 without changing simulation versions or source bytes", () => {
     const state = stateWithCase();
     const record = {
       ...createSaveEnvelope(state, 1_000), schemaVersion: 5,
@@ -104,8 +104,8 @@ describe("prospect follow-up persistent delivery compatibility", () => {
     };
     const original = JSON.stringify(record);
     const upgraded = migrateSaveEnvelope(record);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(7);
-    expect(upgraded.schemaVersion).toBe(7);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(8);
+    expect(upgraded.schemaVersion).toBe(8);
     expect(upgraded.rulesVersion).toBe("historical-rules");
     expect(upgraded.buildVersion).toBe("historical-build");
     expect(upgraded.savedAt).toBe(1_000);
@@ -310,9 +310,9 @@ describe("prospect follow-up persistent delivery compatibility", () => {
     expect(JSON.stringify(source)).toBe(original);
   });
 
-  it("rejects the next unsupported schema 8 while leaving opaque authority recoverable", () => {
+  it("rejects the next unsupported schema 9 while leaving opaque authority recoverable", () => {
     const source = {
-      ...createSaveEnvelope(stateWithCase(), 4_000), schemaVersion: 8,
+      ...createSaveEnvelope(stateWithCase(), 4_000), schemaVersion: 9,
       state: { opaqueFutureDeliveryAuthority: { preserve: ["future-earned-proof"] } },
     };
     const original = JSON.stringify(source);

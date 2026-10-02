@@ -1638,7 +1638,14 @@ export type CompactTerminalLoanV1 = [
   loanFee: number, wageContribution: number, recallClause: boolean,
   status: Exclude<LoanDealStatus, "active">, optional: CompactLoanOptionalV1,
 ];
-export type StoredLoanDeal = LoanDeal | CompactTerminalLoanV1;
+/** Optional own-undefined values survive JSON through a separate presence mask. */
+export type CompactTerminalLoanV2 = [
+  version: 2, id: string, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: Exclude<LoanDealStatus, "active">, undefinedMask: number, optional: CompactLoanOptionalV1,
+];
+export type StoredLoanDeal = LoanDeal | CompactTerminalLoanV1 | CompactTerminalLoanV2;
 export type LoanHistoryStored = StoredLoanDeal[];
 
 export interface LoanPerformanceRecord {

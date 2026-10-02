@@ -1,5 +1,6 @@
 import type {
   CompactTerminalLoanV1,
+  CompactTerminalLoanV2,
   LoanDeal,
   LoanPerformanceRecord,
   StoredLoanDeal,
@@ -7,6 +8,7 @@ import type {
 import type {
   ClubFinancialObligation,
   CompactTerminalObligationV1,
+  CompactTerminalObligationV2,
   StoredClubFinancialObligation,
 } from "../core/types/world";
 export type { StoredLoanDeal } from "../core/types";
@@ -36,7 +38,8 @@ const REQUIRED_OBLIGATION_FIELDS = new Set<string>(OBLIGATION_REQUIRED);
 const OBLIGATION_TYPES = new Set(["loanWageContribution", "appearanceBonus", "performanceBonus", "relegationClause", "sellOnClause"]);
 const TERMINAL_OBLIGATIONS = new Set(["settled", "expired"]);
 const OBLIGATION_TEXT_OPTIONAL = new Set(["creditorClubId", "trigger"]);
-const OBLIGATION_ENVELOPE_FIELDS = new Set(["id", "obligationArchiveV1"]);
+const OBLIGATION_ENVELOPE_FIELDS_V1 = new Set(["id", "obligationArchiveV1"]);
+const OBLIGATION_ENVELOPE_FIELDS_V2 = new Set(["id", "obligationArchiveV2"]);
 const REQUIRED_OBLIGATION_MASK = 899;
 const OBLIGATION_MASK_LIMIT = 2 ** OBLIGATION_FIELDS.length;
 const utf8Encoder = new TextEncoder();
@@ -56,19 +59,26 @@ function dataRecord(value: unknown, allowed: ReadonlySet<string>): value is Reco
   return Reflect.ownKeys(value).every(key => {
     if (typeof key !== "string" || !allowed.has(key)) return false;
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    return descriptor !== undefined && descriptor.enumerable && own(descriptor, "value");
+    return descriptor !== undefined && descriptor.enumerable && descriptor.writable
+      && descriptor.configurable && own(descriptor, "value");
   });
 }
 
 function denseArray(value: unknown, expectedLength?: number): value is unknown[] {
   if (!Array.isArray(value) || (expectedLength !== undefined && value.length !== expectedLength)
     || Object.getPrototypeOf(value) !== Array.prototype) return false;
+  const length = Object.getOwnPropertyDescriptor(value, "length");
+  // Array length has different normal flags from a payload index. Its writable
+  // flag must still survive ordinary fallback or recognized-archive refusal.
+  if (!length || !own(length, "value") || !length.writable
+    || length.enumerable || length.configurable) return false;
   const keys = Reflect.ownKeys(value);
   if (keys.length !== value.length + 1 || keys[value.length] !== "length") return false;
   for (let index = 0; index < value.length; index += 1) {
     if (keys[index] !== String(index)) return false;
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-    if (!descriptor || !descriptor.enumerable || !own(descriptor, "value")) return false;
+    if (!descriptor || !descriptor.enumerable || !descriptor.writable
+      || !descriptor.configurable || !own(descriptor, "value")) return false;
   }
   return true;
 }
@@ -84,7 +94,7 @@ function knownMonitoring(value: unknown): value is string[] {
   return true;
 }
 
-function knownLoan(value: unknown): value is LoanDeal {
+function knownLoan(value: unknown, allowOptionalUndefined = false): value is LoanDeal {
   if (!dataRecord(value, LOAN_KEYS) || !LOAN_REQUIRED.every(key => own(value, key))
     || !member(value.status, TERMINAL_LOANS)
     || !["id", "playerId", "parentClubId", "loanClubId"].every(key => typeof value[key] === "string")
@@ -93,6 +103,7 @@ function knownLoan(value: unknown): value is LoanDeal {
   for (const key of LOAN_OPTIONAL) {
     if (!own(value, key)) continue;
     const payload = value[key];
+    if (allowOptionalUndefined && payload === undefined) continue;
     if (key === "buyOptionFee" || key === "startCurrentAbility") {
       if (!finite(payload)) return false;
     } else if (key === "outcome") {
@@ -108,13 +119,14 @@ function knownLoan(value: unknown): value is LoanDeal {
   return true;
 }
 
-function knownObligation(value: unknown): value is ClubFinancialObligation {
+function knownObligation(value: unknown, allowOptionalUndefined = false): value is ClubFinancialObligation {
   if (!dataRecord(value, OBLIGATION_KEYS) || !OBLIGATION_REQUIRED.every(key => own(value, key))
     || typeof value.id !== "string" || typeof value.playerId !== "string"
     || !member(value.type, OBLIGATION_TYPES) || !member(value.status, TERMINAL_OBLIGATIONS)
     || !finite(value.createdWeek) || !finite(value.createdSeason)) return false;
   for (const key of OBLIGATION_FIELDS) {
     if (REQUIRED_OBLIGATION_FIELDS.has(key) || !own(value, key) || value[key] === null) continue;
+    if (allowOptionalUndefined && value[key] === undefined) continue;
     if (OBLIGATION_TEXT_OPTIONAL.has(key)) {
       if (typeof value[key] !== "string") return false;
     } else if (!finite(value[key])) return false;
@@ -135,15 +147,27 @@ export function expandLoanDeal(entry: StoredLoanDeal | undefined): LoanDeal | un
 export function expandLoanDeal(entry: StoredLoanDeal | null | undefined): LoanDeal | null | undefined;
 export function expandLoanDeal(entry: StoredLoanDeal | null | undefined): LoanDeal | null | undefined {
   if (!Array.isArray(entry)) return entry;
-  if (!denseArray(entry, 14) || entry[0] !== 1) {
+  if (!denseArray(entry)
+    || (entry[0] !== 1 && entry[0] !== 2)
+    || entry.length !== (entry[0] === 1 ? 14 : 15)) {
     throw new InvalidTerminalRecordArchiveError("Invalid or unsupported terminal loan archive");
   }
-  const optional = entry[13];
+  const version = entry[0];
+  const undefinedMask = version === 2 ? entry[13] : 0;
+  if (typeof undefinedMask !== "number" || !Number.isInteger(undefinedMask)
+    || undefinedMask < 0 || undefinedMask >= 2 ** LOAN_OPTIONAL.length) {
+    throw new InvalidTerminalRecordArchiveError("Invalid terminal loan undefined mask");
+  }
+  const optional = entry[version === 2 ? 14 : 13];
   if (!dataRecord(optional, OPTIONAL_LOAN_FIELDS)) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal loan optional archive");
   }
   const optionalEntries: [string, unknown][] = [];
   for (const [key, payload] of Object.entries(optional)) {
+    const bit = 2 ** LOAN_OPTIONAL.indexOf(key as typeof LOAN_OPTIONAL[number]);
+    if (payload === undefined || (undefinedMask & bit) !== 0) {
+      throw new InvalidTerminalRecordArchiveError("Invalid terminal loan optional ownership");
+    }
     if (key === "performanceRecord") {
       if (!denseArray(payload, 7) || !payload.every(finite)) {
         throw new InvalidTerminalRecordArchiveError("Invalid terminal loan performance archive");
@@ -153,11 +177,14 @@ export function expandLoanDeal(entry: StoredLoanDeal | null | undefined): LoanDe
       optionalEntries.push([key, payload]);
     }
   }
+  LOAN_OPTIONAL.forEach((key, index) => {
+    if ((undefinedMask & 2 ** index) !== 0) optionalEntries.push([key, undefined]);
+  });
   const expanded = Object.fromEntries([
     ...LOAN_REQUIRED.map((key, index): [string, unknown] => [key, entry[index + 1]]),
     ...optionalEntries,
   ]);
-  if (!knownLoan(expanded)) {
+  if (!knownLoan(expanded, version === 2)) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal loan archive payload");
   }
   return expanded;
@@ -172,12 +199,19 @@ export function compactLoanDeal(entry: StoredLoanDeal | null | undefined): Store
     expandLoanDeal(entry);
     return entry;
   }
-  if (!knownLoan(entry)) return entry;
+  if (!knownLoan(entry, true)) return entry;
+  let undefinedMask = 0;
+  LOAN_OPTIONAL.forEach((key, index) => {
+    if (own(entry, key) && entry[key] === undefined) undefinedMask += 2 ** index;
+  });
   const optional = Object.fromEntries(Object.entries(entry)
-    .filter(([key]) => OPTIONAL_LOAN_FIELDS.has(key))
+    .filter(([key, payload]) => OPTIONAL_LOAN_FIELDS.has(key) && payload !== undefined)
     .map(([key, payload]) => [key, key === "performanceRecord"
       ? PERFORMANCE_KEYS.map(field => (payload as LoanPerformanceRecord)[field]) : payload]));
   // Screening deliberately packs every eligible terminal loan, even if larger.
+  if (undefinedMask !== 0) {
+    return [2, ...LOAN_REQUIRED.map(key => entry[key]), undefinedMask, optional] as CompactTerminalLoanV2;
+  }
   return [1, ...LOAN_REQUIRED.map(key => entry[key]), optional] as CompactTerminalLoanV1;
 }
 
@@ -187,12 +221,14 @@ export function expandClubFinancialObligation(entry: StoredClubFinancialObligati
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation | null | undefined): ClubFinancialObligation | null | undefined;
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation | null | undefined): ClubFinancialObligation | null | undefined {
   if (!obligationArchiveShaped(entry)) return entry as ClubFinancialObligation | null | undefined;
-  if (!dataRecord(entry, OBLIGATION_ENVELOPE_FIELDS)
-    || !own(entry, "id") || !own(entry, "obligationArchiveV1") || typeof entry.id !== "string") {
+  const isV2 = own(entry, "obligationArchiveV2");
+  const archiveKey = isV2 ? "obligationArchiveV2" : "obligationArchiveV1";
+  if (!dataRecord(entry, isV2 ? OBLIGATION_ENVELOPE_FIELDS_V2 : OBLIGATION_ENVELOPE_FIELDS_V1)
+    || !own(entry, "id") || !own(entry, archiveKey) || typeof entry.id !== "string") {
     throw new InvalidTerminalRecordArchiveError("Invalid or unsupported terminal obligation archive");
   }
-  const row = entry.obligationArchiveV1;
-  if (!denseArray(row) || row.length < 1) {
+  const row = entry[archiveKey];
+  if (!denseArray(row) || row.length < (isV2 ? 2 : 1)) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation archive array");
   }
   const mask = row[0];
@@ -200,12 +236,26 @@ export function expandClubFinancialObligation(entry: StoredClubFinancialObligati
     || mask >= OBLIGATION_MASK_LIMIT || (mask & REQUIRED_OBLIGATION_MASK) !== REQUIRED_OBLIGATION_MASK) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation presence mask");
   }
+  const undefinedMask = isV2 ? row[1] : 0;
+  if (typeof undefinedMask !== "number" || !Number.isInteger(undefinedMask)
+    || undefinedMask < 0 || undefinedMask >= OBLIGATION_MASK_LIMIT
+    || (undefinedMask & mask) !== undefinedMask
+    || (undefinedMask & REQUIRED_OBLIGATION_MASK) !== 0) {
+    throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation undefined mask");
+  }
   const entries: [string, unknown][] = [["id", entry.id]];
-  let offset = 1;
+  let offset = isV2 ? 2 : 1;
   for (let index = 0; index < OBLIGATION_FIELDS.length; index += 1) {
     if ((mask & 2 ** index) === 0) continue;
+    if ((undefinedMask & 2 ** index) !== 0) {
+      entries.push([OBLIGATION_FIELDS[index], undefined]);
+      continue;
+    }
     if (offset >= row.length) {
       throw new InvalidTerminalRecordArchiveError("Missing terminal obligation archive payload");
+    }
+    if (row[offset] === undefined) {
+      throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation unmasked payload");
     }
     entries.push([OBLIGATION_FIELDS[index], row[offset]]);
     offset += 1;
@@ -214,7 +264,7 @@ export function expandClubFinancialObligation(entry: StoredClubFinancialObligati
     throw new InvalidTerminalRecordArchiveError("Unexpected terminal obligation archive payload");
   }
   const expanded = Object.fromEntries(entries);
-  if (!knownObligation(expanded)) {
+  if (!knownObligation(expanded, isV2)) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation archive payload");
   }
   return expanded;
@@ -229,16 +279,20 @@ export function compactClubFinancialObligation(entry: StoredClubFinancialObligat
     expandClubFinancialObligation(entry as StoredClubFinancialObligation);
     return entry as StoredClubFinancialObligation;
   }
-  if (!knownObligation(entry)) return entry;
+  if (!knownObligation(entry, true)) return entry;
   let mask = 0;
+  let undefinedMask = 0;
   const payload: (string | number | null)[] = [];
   OBLIGATION_FIELDS.forEach((key, index) => {
     if (own(entry, key)) {
       mask += 2 ** index;
-      payload.push(entry[key] as string | number | null);
+      if (entry[key] === undefined) undefinedMask += 2 ** index;
+      else payload.push(entry[key] as string | number | null);
     }
   });
-  const packed: CompactTerminalObligationV1 = { id: entry.id, obligationArchiveV1: [mask, ...payload] };
+  const packed: CompactTerminalObligationV1 | CompactTerminalObligationV2 = undefinedMask === 0
+    ? { id: entry.id, obligationArchiveV1: [mask, ...payload] }
+    : { id: entry.id, obligationArchiveV2: [mask, undefinedMask, ...payload] };
   const originalBytes = utf8Encoder.encode(JSON.stringify(entry)).byteLength;
   const packedBytes = utf8Encoder.encode(JSON.stringify(packed)).byteLength;
   return packedBytes < originalBytes ? packed : entry;

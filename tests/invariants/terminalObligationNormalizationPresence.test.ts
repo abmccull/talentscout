@@ -1,7 +1,8 @@
-// Unexecuted failure-first presence boundary; imports only existing ef5920c APIs.
+// Preceding presence boundary; imports only existing 440ce97 APIs.
 import { describe, expect, it } from "vitest";
 import type { Club, ClubFinancialObligation } from "@/engine/core/types";
 import { normalizeClubEconomics } from "@/engine/finance/clubEconomics";
+import { expandClubFinancialObligation, type StoredClubFinancialObligation } from "@/engine/finance/terminalRecordArchive";
 const FIELDS = ["amount", "percentage", "weeklyAmount", "remainingWeeks"] as const;
 function row(): ClubFinancialObligation {
   return { id: "terminal-presence", type: "appearanceBonus", playerId: "p1",
@@ -22,17 +23,24 @@ describe("terminal normalization and original optional presence", () => {
     for (const key of FIELDS) expect(Object.hasOwn(source, key)).toBe(false);
     expect(JSON.stringify(source)).toBe(before);
   });
-  it.each(FIELDS)("retains explicitly owned undefined %s as ordinary fallback", (field) => {
+  it.each(FIELDS)("retains explicitly owned undefined %s through the v2 boundary", (field) => {
     const source = Object.assign(row(), { [field]: undefined });
-    const actual = normalized(source) as Record<string, unknown>;
+    const before = Object.getOwnPropertyDescriptors(source);
+    const stored = normalized(source) as StoredClubFinancialObligation;
+    expect(stored).toHaveProperty("obligationArchiveV2");
+    const actual = expandClubFinancialObligation(JSON.parse(JSON.stringify(stored)) as StoredClubFinancialObligation) as unknown as Record<string, unknown>;
     expect(actual).toEqual(source);
     expect(Object.hasOwn(actual, field)).toBe(true);
     expect(actual[field]).toBeUndefined();
+    expect(Object.getOwnPropertyDescriptor(actual, field)).toEqual({ value: undefined, enumerable: true, writable: true, configurable: true });
     for (const key of FIELDS.filter(key => key !== field)) expect(Object.hasOwn(actual, key)).toBe(false);
+    expect(Object.getOwnPropertyDescriptors(source)).toEqual(before);
   });
   it("retains the existing null-to-undefined numeric normalization with own presence", () => {
     const source: Record<string, unknown> = { ...row(), amount: null, percentage: null, weeklyAmount: null, remainingWeeks: null };
-    const actual = normalized(source as unknown as ClubFinancialObligation) as Record<string, unknown>;
+    const stored = normalized(source as unknown as ClubFinancialObligation) as StoredClubFinancialObligation;
+    expect(stored).toEqual({ id: source.id, obligationArchiveV2: [1019, 120, "appearanceBonus", "p1", 1, 2, "settled"] });
+    const actual = expandClubFinancialObligation(JSON.parse(JSON.stringify(stored)) as StoredClubFinancialObligation) as unknown as Record<string, unknown>;
     expect(actual).toMatchObject({ id: source.id, status: "settled" });
     for (const key of FIELDS) { expect(Object.hasOwn(actual, key)).toBe(true); expect(actual[key]).toBeUndefined(); }
     for (const key of FIELDS) expect(source[key]).toBeNull();

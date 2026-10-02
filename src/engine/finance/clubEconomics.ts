@@ -302,6 +302,21 @@ export function normalizeClubEconomics(
   );
 }
 
+function sameObligationFacts(before: ClubFinancialObligation, after: ClubFinancialObligation): boolean {
+  const keys = Reflect.ownKeys(before);
+  if (keys.length !== Reflect.ownKeys(after).length) return false;
+  return keys.every((key) => {
+    const previous = Object.getOwnPropertyDescriptor(before, key);
+    const next = Object.getOwnPropertyDescriptor(after, key);
+    return previous !== undefined && next !== undefined
+      && Object.hasOwn(previous, "value") && Object.hasOwn(next, "value")
+      && Object.is(previous.value, next.value)
+      && previous.enumerable === next.enumerable
+      && previous.writable === next.writable
+      && previous.configurable === next.configurable;
+  });
+}
+
 function normalizeClubEconomicsFromRoster(
   club: Club,
   roster: ClubRosterEconomics,
@@ -319,11 +334,14 @@ function normalizeClubEconomicsFromRoster(
   const scoutingBudget = Number.isFinite(club.scoutingBudget)
     ? Math.max(0, Math.round(club.scoutingBudget ?? 0))
     : deriveClubScoutingBudgetFromRoster(club, roster);
-  const financialObligations = (club.financialObligations ?? []).map((obligation, index) =>
-    compactClubFinancialObligation(normalizeObligation(
-      club.id, expandClubFinancialObligation(obligation), index, currentWeek, currentSeason,
-    )),
-  );
+  const financialObligations = (club.financialObligations ?? []).map((obligation, index) => {
+    const decoded = expandClubFinancialObligation(obligation);
+    const normalized = normalizeObligation(club.id, decoded, index, currentWeek, currentSeason);
+    // Preserve stored identity only after the existing domain normalization.
+    // JSON equality would erase absent versus owned-undefined distinctions.
+    if (decoded !== obligation && sameObligationFacts(decoded, normalized)) return obligation;
+    return compactClubFinancialObligation(normalized);
+  });
 
   return {
     ...club,
