@@ -2,6 +2,7 @@ import type { GameState } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
 import { assessClubAffordabilityFromContext, buildClubAffordabilityContext } from "@/engine/finance/clubEconomics";
 import { createFreeAgentSigningResolver, getLifecycleWorld, withLifecycleWorld } from "@/engine/world/playerLifecycle";
+import { compactPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { NPC_ACCEPTANCE_CHANCE, scoreFreeAgentClubInterest } from "./pool";
 import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "./squadPlanning";
 import { recruitOpeningGoalkeeperLoans } from "./openingLoans";
@@ -21,6 +22,7 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
     // optional cover and bench depth spend the remaining recruitment funds.
     if (phase === "keeperCover") state = recruitOpeningGoalkeeperLoans(state, rng);
     let resolveSigning: ReturnType<typeof createFreeAgentSigningResolver> | undefined;
+    let signedInPhase = false;
     for (const clubId of clubOrder) {
       const attempted = attempts.get(clubId)!;
       let affordabilityContext: ReturnType<typeof buildClubAffordabilityContext>[string] | undefined;
@@ -72,7 +74,8 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
           preserveSquadWageReserve: true, reason: "Season-opening squad vacancy agreement",
         });
         if (resolution.applied.length > 0) {
-          state = withLifecycleWorld(state, resolution.state);
+          state = withLifecycleWorld(state, resolution.state, { compactMovementHistory: false });
+          signedInPhase = true;
           affordabilityContext = undefined;
           if (agent.discoveredByScout) {
             state = { ...state, inbox: [...(state.inbox ?? []), {
@@ -86,6 +89,11 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
         }
       }
     }
+    // The resolver owns the materialized ledger throughout this phase. Pack
+    // its final accepted world before loans, the next resolver or the caller.
+    if (signedInPhase) state = { ...state,
+      playerMovementHistory: compactPlayerMovementHistory(state.playerMovementHistory ?? []),
+    };
   }
   return state;
 }

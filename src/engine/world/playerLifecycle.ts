@@ -377,10 +377,13 @@ export function getLifecycleWorld(state: GameState): LifecycleWorldState {
   };
 }
 
-/** Merge an authoritative lifecycle slice back into a GameState. */
+/** Merge an authoritative lifecycle slice back into a GameState.
+ * A synchronous batch may defer history packing until its phase boundary.
+ */
 export function withLifecycleWorld(
   state: GameState,
   lifecycle: LifecycleWorldState,
+  options: { compactMovementHistory?: boolean } = {},
 ): GameState {
   return {
     ...state,
@@ -390,7 +393,9 @@ export function withLifecycleWorld(
     loanHistory: lifecycle.loanHistory,
     retiredPlayers: lifecycle.retiredPlayers,
     retiredPlayerIds: lifecycle.retiredPlayerIds,
-    playerMovementHistory: compactPlayerMovementHistory(lifecycle.playerMovementHistory),
+    playerMovementHistory: options.compactMovementHistory === false
+      ? lifecycle.playerMovementHistory
+      : compactPlayerMovementHistory(lifecycle.playerMovementHistory),
     freeAgentPool: lifecycle.freeAgentPool,
   };
 }
