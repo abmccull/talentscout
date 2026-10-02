@@ -1,11 +1,13 @@
 import type {
   Club,
   ClubFinancialObligation,
+  StoredClubFinancialObligation,
   Player,
   PlayerMatchRating,
   TransferAddOn,
 } from "@/engine/core/types";
 import { estimatePlayerWeeklyWage } from "@/engine/players/wages";
+import { compactClubFinancialObligation, expandClubFinancialObligation } from "./terminalRecordArchive";
 
 const MIN_WEEKLY_WAGE_BUDGET = 800;
 // Elite first-team squads can carry several million pounds of weekly payroll.
@@ -120,7 +122,7 @@ function normalizeObligation(
     ? obligation.status
     : "active";
 
-  return {
+  const normalized: ClubFinancialObligation = {
     ...obligation,
     id: obligation.id || `${clubId}_obligation_${index}`,
     playerId: obligation.playerId,
@@ -137,6 +139,14 @@ function normalizeObligation(
       : currentSeason,
     status: normalizedStatus,
   };
+  // Preserve original optional ownership for closed rows. Active normalization
+  // retains its existing shape, including computed undefined properties.
+  if (normalizedStatus !== "active") {
+    for (const key of ["amount", "percentage", "weeklyAmount", "remainingWeeks"] as const) {
+      if (normalized[key] === undefined && !Object.hasOwn(obligation, key)) delete normalized[key];
+    }
+  }
+  return normalized;
 }
 
 export function getClubWeeklyWageCommitment(
@@ -147,7 +157,8 @@ export function getClubWeeklyWageCommitment(
 }
 
 export function getClubWeeklyObligationCommitment(club: Club): number {
-  return (club.financialObligations ?? []).reduce((sum, obligation) => {
+  return (club.financialObligations ?? []).reduce((sum, storedObligation) => {
+    const obligation = expandClubFinancialObligation(storedObligation);
     if (obligation.status !== "active") return sum;
     if (!Number.isFinite(obligation.weeklyAmount) || (obligation.weeklyAmount ?? 0) <= 0) {
       return sum;
@@ -309,7 +320,9 @@ function normalizeClubEconomicsFromRoster(
     ? Math.max(0, Math.round(club.scoutingBudget ?? 0))
     : deriveClubScoutingBudgetFromRoster(club, roster);
   const financialObligations = (club.financialObligations ?? []).map((obligation, index) =>
-    normalizeObligation(club.id, obligation, index, currentWeek, currentSeason),
+    compactClubFinancialObligation(normalizeObligation(
+      club.id, expandClubFinancialObligation(obligation), index, currentWeek, currentSeason,
+    )),
   );
 
   return {
@@ -586,9 +599,10 @@ export function settleWeeklyClubObligations(
   for (const clubId of Object.keys(nextClubs)) {
     const club = nextClubs[clubId];
     let budget = club.budget;
-    const nextObligations: ClubFinancialObligation[] = [];
+    const nextObligations: StoredClubFinancialObligation[] = [];
 
-    for (const obligation of club.financialObligations ?? []) {
+    for (const storedObligation of club.financialObligations ?? []) {
+      const obligation = expandClubFinancialObligation(storedObligation);
       if (
         obligation.status !== "active"
         || !Number.isFinite(obligation.weeklyAmount)
@@ -599,20 +613,20 @@ export function settleWeeklyClubObligations(
           && obligation.lastProcessedSeason === currentSeason
         )
       ) {
-        nextObligations.push(obligation);
+        nextObligations.push(storedObligation);
         continue;
       }
 
       const outstandingAmount = activeObligationAmount(obligation);
       if (outstandingAmount <= 0) {
-        nextObligations.push({
+        nextObligations.push(compactClubFinancialObligation({
           ...obligation,
           amount: 0,
           status: "settled",
           remainingWeeks: 0,
           lastProcessedWeek: currentWeek,
           lastProcessedSeason: currentSeason,
-        });
+        }));
         settledObligationIds.push(obligation.id);
         continue;
       }
@@ -635,14 +649,14 @@ export function settleWeeklyClubObligations(
 
       const remainingAmount = Math.max(0, outstandingAmount - payment);
       if (remainingAmount <= 0) {
-        nextObligations.push({
+        nextObligations.push(compactClubFinancialObligation({
           ...obligation,
           amount: 0,
           remainingWeeks: 0,
           status: "settled",
           lastProcessedWeek: currentWeek,
           lastProcessedSeason: currentSeason,
-        });
+        }));
         settledObligationIds.push(obligation.id);
         continue;
       }
@@ -703,7 +717,8 @@ export function settleTriggeredClubObligations(
     const relevantFixtures = fixtures.filter((fixture) =>
       fixture.homeClubId === clubId || fixture.awayClubId === clubId
     );
-    const obligations = (club.financialObligations ?? []).map((obligation) => {
+    const obligations = (club.financialObligations ?? []).map((storedObligation) => {
+      const obligation = expandClubFinancialObligation(storedObligation);
       if (
         obligation.status !== "active"
         || obligation.triggeredSeason !== undefined
@@ -715,7 +730,7 @@ export function settleTriggeredClubObligations(
           obligation.lastTriggerEvaluationWeek === currentWeek
           && obligation.lastTriggerEvaluationSeason === currentSeason
         )
-      ) return obligation;
+      ) return storedObligation;
 
       let appearances = obligation.appearancesRecorded ?? 0;
       let goals = obligation.goalsRecorded ?? 0;
@@ -759,14 +774,14 @@ export function settleTriggeredClubObligations(
       const remaining = due - payment;
       if (remaining <= 0) {
         settledObligationIds.push(obligation.id);
-        return {
+        return compactClubFinancialObligation({
           ...obligation,
           ...progress,
           amount: 0,
           status: "settled" as const,
           triggeredWeek: currentWeek,
           triggeredSeason: currentSeason,
-        };
+        });
       }
       return {
         ...obligation,
@@ -804,12 +819,13 @@ export function settleRelegationClubObligations(
     const club = nextClubs[clubId];
     if (!club) continue;
     let budget = club.budget;
-    const obligations = (club.financialObligations ?? []).map((obligation) => {
+    const obligations = (club.financialObligations ?? []).map((storedObligation) => {
+      const obligation = expandClubFinancialObligation(storedObligation);
       if (
         obligation.type !== "relegationClause"
         || obligation.status !== "active"
         || obligation.triggeredSeason !== undefined
-      ) return obligation;
+      ) return storedObligation;
 
       const due = Math.max(0, Math.round(obligation.amount ?? 0));
       const payment = Math.min(due, Math.max(0, budget));
@@ -829,13 +845,13 @@ export function settleRelegationClubObligations(
       const remaining = due - payment;
       if (remaining <= 0) {
         settledObligationIds.push(obligation.id);
-        return {
+        return compactClubFinancialObligation({
           ...obligation,
           amount: 0,
           status: "settled" as const,
           triggeredWeek: currentWeek,
           triggeredSeason: currentSeason,
-        };
+        });
       }
       return {
         ...obligation,

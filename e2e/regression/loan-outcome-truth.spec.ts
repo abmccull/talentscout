@@ -1,4 +1,6 @@
 import { test, expect, type GamePage } from "../fixtures";
+import { expandClubFinancialObligation, expandLoanDeal } from "@/engine/finance/terminalRecordArchive";
+import type { StoredClubFinancialObligation, StoredLoanDeal } from "@/engine/core/types";
 
 type FundingCase = "affordable" | "reserve-blocked" | "payroll-blocked" | "ordinary";
 const LOAN_ID = "review-loan-outcome";
@@ -8,7 +10,7 @@ const FINAL_LOAN_WAGE = 3_000;
 
 // Failure-first contract: seed a disposable local career checkpoint, then use
 // the browser calendar's actual weekly worker and the public save/load boundary.
-// No engine helper is imported or substituted by this regression.
+// The weekly engine is not substituted; production decoders inspect stored facts.
 async function seedExpiringLoan(gamePage: GamePage, funding: FundingCase) {
   await gamePage.goto();
   await gamePage.injectState({ currentWeek: 12, currentSeason: 1,
@@ -122,7 +124,7 @@ async function seedExpiringLoan(gamePage: GamePage, funding: FundingCase) {
 }
 
 async function readLoanFacts(gamePage: GamePage, borrowerId: string, parentId: string) {
-  return gamePage.page.evaluate(({ loanId, playerId, borrowerId, parentId }) => {
+  const facts = await gamePage.page.evaluate(({ loanId, playerId, borrowerId, parentId }) => {
     const store = (window as any).__GAME_STORE__;
     const state = store.getState().gameState;
     const player = state.players[playerId];
@@ -135,15 +137,21 @@ async function readLoanFacts(gamePage: GamePage, borrowerId: string, parentId: s
       sellerRoster: state.clubs[parentId].playerIds.includes(playerId),
       loanedIn: state.clubs[borrowerId].loanedInPlayerIds?.includes(playerId) ?? false,
       loanedOut: state.clubs[parentId].loanedOutPlayerIds?.includes(playerId) ?? false,
-      obligations: state.clubs[borrowerId].financialObligations?.filter((entry: any) => entry.playerId === playerId) ?? [],
+      obligations: state.clubs[borrowerId].financialObligations ?? [],
       active: state.activeLoans.filter((deal: any) => deal.id === loanId),
-      history: state.loanHistory.filter((deal: any) => deal.id === loanId),
+      history: state.loanHistory ?? [],
       movements: state.playerMovementHistory.filter((movement: any) => movement.loanDealId === loanId),
       recommendation: state.loanRecommendations.find((entry: any) => entry.loanDealId === loanId),
       messages: state.inbox.filter((message: any) => message.relatedId === playerId &&
         /Loan (Buy Option Exercised|Return|Recall|Outcome):/.test(message.title)),
     };
   }, { loanId: LOAN_ID, playerId: PLAYER_ID, borrowerId, parentId });
+  return { ...facts,
+    obligations: (facts.obligations as StoredClubFinancialObligation[])
+      .map(entry => expandClubFinancialObligation(entry)).filter(entry => entry.playerId === PLAYER_ID),
+    history: (facts.history as StoredLoanDeal[])
+      .map(deal => expandLoanDeal(deal)).filter(deal => deal.id === LOAN_ID),
+  };
 }
 
 test.describe("Committed loan outcome truth", () => {

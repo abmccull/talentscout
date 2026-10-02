@@ -384,7 +384,7 @@ export interface Player {
     updatedSeason: number;
   };
   currentInjury?: Injury;
-  injuryHistory?: InjuryHistory;
+  injuryHistory?: StoredInjuryHistory;
   personalityTraits: PersonalityTrait[];
   personalityRevealed: PersonalityTrait[];
   naturalRole?: PlayerRole;
@@ -394,7 +394,7 @@ export interface Player {
   recentMatchRatings: MatchFormEntry[];
   seasonRatings: SeasonRatingEntry[];
   developmentHistory?: import("../../players/developmentHistoryArchive").ArchivedDevelopmentHistoryEntry[];
-  personalityProfile?: PersonalityProfile;
+  personalityProfile?: StoredPersonalityProfile;
   disciplinaryRecord?: DisciplinaryRecord;
   loanParentClubId?: string;
   loanEndWeek?: number;
@@ -493,6 +493,11 @@ export interface PersonalityProfile {
   revealedTraits: PersonalityTrait[];
 }
 
+/** Full version-one profile. Column order is a persisted contract. */
+export type StoredPersonalityProfile = PersonalityProfile
+  | ["pp", 1, PersonalityArchetype, PersonalityTrait[], number, number, number,
+    number, boolean, PersonalityTrait[]];
+
 // =============================================================================
 // INJURY SYSTEM
 // =============================================================================
@@ -532,6 +537,11 @@ export interface InjuryHistory {
   injuryProneness: number;
   reinjuryWindowWeeksLeft: number;
 }
+
+/** Full wrapper facts; incident payloads remain unchanged. */
+export type StoredInjuryHistory = InjuryHistory
+  | ["ih", 1, string, ArchivedInjury[], number, number, number]
+  | ["ih-own", 1, ArchivedInjury[], number, number, number];
 
 /** Scheduled IDs inherit their exact season and week from the containing form row. */
 export type MatchFormFixtureRef = string | [leagueId: string, fixtureOrdinal: number];

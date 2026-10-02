@@ -3,6 +3,7 @@ import type {
   FreeAgentPool,
   GameState,
   LoanDeal,
+  StoredLoanDeal,
   LoanOutcome,
   Player,
   PlayerMovementEvent,
@@ -10,6 +11,7 @@ import type {
   TransferAddOn,
 } from "@/engine/core/types";
 import { loanFitsOwnershipContract } from "./loanContract";
+import { compactClubFinancialObligation, compactLoanDeal, expandClubFinancialObligation } from "../finance/terminalRecordArchive";
 import {
   gameWeeksBetweenWithSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
@@ -29,7 +31,7 @@ export interface LifecycleWorldState {
   players: Record<string, Player>;
   clubs: Record<string, Club>;
   activeLoans: LoanDeal[];
-  loanHistory: LoanDeal[];
+  loanHistory: StoredLoanDeal[];
   retiredPlayers: Record<string, Player>;
   retiredPlayerIds: string[];
   playerMovementHistory: PlayerMovementEvent[];
@@ -132,7 +134,8 @@ function weeklyPlayerObligationCommitment(
   obligationType?: "loanWageContribution",
 ): number {
   if (!club) return 0;
-  return (club.financialObligations ?? []).reduce((sum, obligation) => {
+  return (club.financialObligations ?? []).reduce((sum, storedObligation) => {
+    const obligation = expandClubFinancialObligation(storedObligation);
     if (obligation.status !== "active" || obligation.playerId !== playerId) return sum;
     if (obligationType && obligation.type !== obligationType) return sum;
     return sum + Math.max(0, obligation.weeklyAmount ?? 0);
@@ -146,16 +149,17 @@ function markPlayerObligations(
   obligationType?: "loanWageContribution",
 ): Club | undefined {
   if (!club) return club;
-  const updated = (club.financialObligations ?? []).map((obligation) => {
-    if (obligation.playerId !== playerId || obligation.status !== "active") return obligation;
-    if (obligationType && obligation.type !== obligationType) return obligation;
-    return {
+  const updated = (club.financialObligations ?? []).map((storedObligation) => {
+    const obligation = expandClubFinancialObligation(storedObligation);
+    if (obligation.playerId !== playerId || obligation.status !== "active") return storedObligation;
+    if (obligationType && obligation.type !== obligationType) return storedObligation;
+    return compactClubFinancialObligation({
       ...obligation,
       amount: 0,
       weeklyAmount: obligation.weeklyAmount,
       remainingWeeks: 0,
       status,
-    };
+    });
   });
   return { ...club, financialObligations: updated };
 }
@@ -177,12 +181,13 @@ function settleTransferSellOnClauses(
 
   let remainingProceeds = transferFee;
   const settlements: NonNullable<PlayerMovementEvent["financialSettlements"]> = [];
-  const obligations = (seller.financialObligations ?? []).map((obligation) => {
+  const obligations = (seller.financialObligations ?? []).map((storedObligation) => {
+    const obligation = expandClubFinancialObligation(storedObligation);
     if (
       obligation.status !== "active"
       || obligation.type !== "sellOnClause"
       || obligation.playerId !== playerId
-    ) return obligation;
+    ) return storedObligation;
 
     const percentage = Math.max(0, Math.min(50, obligation.percentage ?? 0));
     const hasExternalCreditor = Boolean(
@@ -209,12 +214,12 @@ function settleTransferSellOnClauses(
       creditorClubId: obligation.creditorClubId,
       obligationId: obligation.id,
     });
-    return {
+    return compactClubFinancialObligation({
       ...obligation,
       amount: 0,
       remainingWeeks: 0,
       status: "settled" as const,
-    };
+    });
   });
   clubs[sellerClubId] = { ...seller, financialObligations: obligations };
   return { clubs, sellerNetProceeds: remainingProceeds, settlements };
@@ -513,11 +518,11 @@ function applyPlayerMovements(
       state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       if (activeLoan) {
         state.activeLoans = state.activeLoans.filter((deal) => deal.id !== activeLoan.id);
-        state.loanHistory.push({
+        state.loanHistory.push(compactLoanDeal({
           ...activeLoan,
           status: "terminated",
           outcome: "terminated",
-        });
+        }));
         state.clubs[activeLoan.loanClubId] = markPlayerObligations(
           state.clubs[activeLoan.loanClubId],
           player.id,
@@ -584,11 +589,11 @@ function applyPlayerMovements(
       );
       if (activeLoan) {
         state.activeLoans = state.activeLoans.filter((deal) => deal.id !== activeLoan.id);
-        state.loanHistory.push({
+        state.loanHistory.push(compactLoanDeal({
           ...activeLoan,
           status: "terminated",
           outcome: "terminated",
-        });
+        }));
         state.clubs[activeLoan.loanClubId] = markPlayerObligations(
           state.clubs[activeLoan.loanClubId],
           player.id,
@@ -922,11 +927,11 @@ function applyPlayerMovements(
         };
         state.players[player.id] = boughtPlayer;
         state.clubs = registerAtClub(state.clubs, boughtPlayer, deal.loanClubId);
-        state.loanHistory.push({
+        state.loanHistory.push(compactLoanDeal({
           ...deal,
           status: "completed",
           outcome: "buy-option-exercised",
-        });
+        }));
         movement = eventFor("loanBuyOption", intent, currentWeek, currentSeason,
           state.playerMovementHistory.length + applied.length, {
             fromClubId: deal.parentClubId,
@@ -944,11 +949,11 @@ function applyPlayerMovements(
         state.players[player.id] = returnedPlayer;
         state.clubs = registerAtClub(state.clubs, returnedPlayer, deal.parentClubId);
         const recalled = intent.resolution === "recall";
-        state.loanHistory.push({
+        state.loanHistory.push(compactLoanDeal({
           ...deal,
           status: recalled ? "recalled" : "completed",
           outcome: recalled ? "recalled-early" : declineNPCBuyOption ? "neutral" : (intent.outcome ?? "neutral"),
-        });
+        }));
         movement = eventFor(recalled ? "loanRecall" : "loanReturn",
           declineNPCBuyOption ? { ...intent, reason: "Loan completed; NPC declined buy option to preserve squad funds" } : intent,
           currentWeek, currentSeason, state.playerMovementHistory.length + applied.length, {

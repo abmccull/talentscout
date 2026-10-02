@@ -10,6 +10,7 @@ import type {
 import { advanceWeek, type TickResult } from "@/engine/core/gameLoop";
 import { processPlacementOutcome } from "@/engine/youth/placement";
 import { createRNG } from "@/engine/rng";
+import { expandClubFinancialObligation, expandLoanDeal } from "@/engine/finance/terminalRecordArchive";
 import type { PlacementReport } from "@/engine/core/types";
 import {
   resolvePlayerMovements,
@@ -205,7 +206,7 @@ describe("player lifecycle financial settlement", () => {
     expect(returned.applied[0]?.type).toBe("loanReturn");
     expect(returned.state.activeLoans).toHaveLength(0);
     expect(returned.state.players.p1.clubId).toBe("a");
-    expect(returned.state.loanHistory[0]?.outcome).toBe("neutral");
+    expect(expandLoanDeal(returned.state.loanHistory[0])?.outcome).toBe("neutral");
     expect(returned.state.clubs.b.budget).toBe(99_900);
   });
 
@@ -333,8 +334,8 @@ describe("player lifecycle financial settlement", () => {
         status: "active",
       }),
     ]);
-    expect(result.state.clubs.b.financialObligations?.[0]?.weeklyAmount).toBeUndefined();
-    expect(result.state.clubs.b.financialObligations?.[1]?.weeklyAmount).toBeUndefined();
+    expect(expandClubFinancialObligation(result.state.clubs.b.financialObligations?.[0])?.weeklyAmount).toBeUndefined();
+    expect(expandClubFinancialObligation(result.state.clubs.b.financialObligations?.[1])?.weeklyAmount).toBeUndefined();
   });
 
   it("settles a persisted sell-on clause exactly when the player moves again", () => {

@@ -1,3 +1,4 @@
+import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
 import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
 /**
@@ -1115,7 +1116,7 @@ export function completeAcademyRecommendationReview(
   const placementDate = { week: placementMovement.week, season: placementMovement.season };
   const ratings = canonicalRatings((input.player.seasonRatings ?? []).map(expandSeasonRating), placementMovement.season, horizon);
   const injuries = injuriesInWindow(
-    (input.player.injuryHistory?.injuries ?? []).map(entry => expandHistoricalInjury(entry, input.player.id)),
+    (expandPlayerInjuryHistory(input.player.injuryHistory, input.player.id)?.injuries ?? []).map(entry => expandHistoricalInjury(entry, input.player.id)),
     placementDate,
     dueDate,
     seasonLength,

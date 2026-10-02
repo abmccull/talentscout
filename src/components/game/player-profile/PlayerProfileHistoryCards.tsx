@@ -1,3 +1,4 @@
+import { expandPlayerInjuryHistory } from "../../../engine/players/playerStateArchive";
 import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
 import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
@@ -42,7 +43,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 export function InjuryStatusCard({ player }: { player: Player }) {
   const currentInjury = player.currentInjury;
-  const history = player.injuryHistory;
+  const history = expandPlayerInjuryHistory(player.injuryHistory, player.id);
   const injuries = (history?.injuries ?? []).map(entry => expandHistoricalInjury(entry, player.id));
   const totalWeeksMissed = history?.totalWeeksMissed ?? 0;
   const recurringConcern = hasObservableRecurringInjuryConcern(history);

@@ -1,4 +1,6 @@
 import { archivePlayerSeasonRatings } from "../players/seasonRatingArchive";
+import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
+import { expandClubFinancialObligation } from "../finance/terminalRecordArchive";
 import { calculateFixtureExpectedGoals, sampleFixtureGoals } from "../match/scoreModel";
 import { buildAcademyPromotionNews } from "../youth/academyPromotionNews";
 import { assignFormationPlayers, calculateLineupStrength } from "../firstTeam/lineupAssignment";
@@ -900,6 +902,7 @@ export function simulateHistoricalWorldMatchWeeks(
     }
 
     for (const [playerId, player] of Object.entries(updatedPlayers)) {
+      const injuryHistory = expandPlayerInjuryHistory(player.injuryHistory, player.id);
       if (player.injured && player.injuryWeeksRemaining > 0) {
         const remaining = player.injuryWeeksRemaining - 1;
         const recovered = remaining === 0;
@@ -912,21 +915,21 @@ export function simulateHistoricalWorldMatchWeeks(
             : player.currentInjury
               ? { ...player.currentInjury, weeksRemaining: remaining }
               : undefined,
-          injuryHistory: recovered && player.injuryHistory
-            ? { ...player.injuryHistory, reinjuryWindowWeeksLeft: 4 }
+          injuryHistory: recovered && injuryHistory
+            ? { ...injuryHistory, reinjuryWindowWeeksLeft: 4 }
             : player.injuryHistory,
         };
       } else if (
         !player.injured
-        && player.injuryHistory
-        && player.injuryHistory.reinjuryWindowWeeksLeft > 0
+        && injuryHistory
+        && injuryHistory.reinjuryWindowWeeksLeft > 0
       ) {
         updatedPlayers[playerId] = {
           ...player,
           injuryHistory: {
-            ...player.injuryHistory,
+            ...injuryHistory,
             reinjuryWindowWeeksLeft:
-              player.injuryHistory.reinjuryWindowWeeksLeft - 1,
+              injuryHistory.reinjuryWindowWeeksLeft - 1,
           },
         };
       }
@@ -2885,7 +2888,8 @@ export function advanceWeek(
 
   for (const deal of tickResult.loanReturns ?? []) {
     const loanClub = updatedClubs[deal.loanClubId];
-    const releasedLoanContribution = (loanClub?.financialObligations ?? []).reduce((sum, obligation) => {
+    const releasedLoanContribution = (loanClub?.financialObligations ?? []).reduce((sum, storedObligation) => {
+      const obligation = expandClubFinancialObligation(storedObligation);
       if (
         obligation.status !== "active"
         || obligation.type !== "loanWageContribution"

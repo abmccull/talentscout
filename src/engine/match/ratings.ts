@@ -1,3 +1,4 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
 import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
 /**
  * Player Match Rating Engine
@@ -198,7 +199,7 @@ export function calculatePlayerMatchRating(
   rating += positionBonuses(player.position, stats);
 
   // Step 5: Personality big-match modifier
-  rating = applyPersonalityToMatchRating(player.personalityProfile, rating, isImportantMatch);
+  rating = applyPersonalityToMatchRating(expandPlayerPersonalityProfile(player.personalityProfile), rating, isImportantMatch);
 
   // Step 6: Clamp and round
   rating = round1(clamp(rating, 1.0, 10.0));
@@ -505,7 +506,7 @@ export function computeFormFromRatings(
   else form = -3;
 
   // Apply personality form volatility modifier
-  return applyPersonalityToForm(player?.personalityProfile, form);
+  return applyPersonalityToForm(expandPlayerPersonalityProfile(player?.personalityProfile), form);
 }
 
 // =============================================================================

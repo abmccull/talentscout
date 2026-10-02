@@ -1,4 +1,5 @@
 import { computeFormFromRatings } from "../../match/ratings";
+import { expandPlayerInjuryHistory } from "../../players/playerStateArchive";
 import {
   applyDevelopmentAbilityChange,
   hasSemanticImprovement,
@@ -155,14 +156,15 @@ export function applyWeeklyFormAndAvailability(
   }
 
   for (const [id, player] of Object.entries(nextPlayers)) {
+    const history = expandPlayerInjuryHistory(player.injuryHistory, player.id);
     if (player.injured && player.injuryWeeksRemaining > 0) {
       const newRemaining = player.injuryWeeksRemaining - 1;
       const justRecovered = newRemaining === 0;
       const updatedCurrentInjury = player.currentInjury
         ? { ...player.currentInjury, weeksRemaining: newRemaining }
         : undefined;
-      const updatedHistory = justRecovered && player.injuryHistory
-        ? { ...player.injuryHistory, reinjuryWindowWeeksLeft: 4 }
+      const updatedHistory = justRecovered && history
+        ? { ...history, reinjuryWindowWeeksLeft: 4 }
         : player.injuryHistory;
 
       nextPlayers[id] = {
@@ -172,12 +174,12 @@ export function applyWeeklyFormAndAvailability(
         currentInjury: justRecovered ? undefined : updatedCurrentInjury,
         injuryHistory: updatedHistory,
       };
-    } else if (!player.injured && player.injuryHistory && player.injuryHistory.reinjuryWindowWeeksLeft > 0) {
+    } else if (!player.injured && history && history.reinjuryWindowWeeksLeft > 0) {
       nextPlayers[id] = {
         ...player,
         injuryHistory: {
-          ...player.injuryHistory,
-          reinjuryWindowWeeksLeft: player.injuryHistory.reinjuryWindowWeeksLeft - 1,
+          ...history,
+          reinjuryWindowWeeksLeft: history.reinjuryWindowWeeksLeft - 1,
         },
       };
     }

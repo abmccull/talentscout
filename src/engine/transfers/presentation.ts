@@ -1,9 +1,11 @@
 import type {
   LoanDeal,
+  StoredLoanDeal,
   Player,
   PlayerMovementEvent,
   TransferAddOn,
 } from "@/engine/core/types";
+import { expandLoanDeal } from "../finance/terminalRecordArchive";
 
 type TransferAgreementRole = NonNullable<LoanDeal["agreedPlayingTime"]>;
 type MovementSettlement = NonNullable<PlayerMovementEvent["financialSettlements"]>[number];
@@ -213,10 +215,11 @@ export function buildRetirementOutlookPresentation(
 
 export function buildPlayerMovementPresentation(input: {
   movement: PlayerMovementEvent;
-  loanDeal?: LoanDeal;
+  loanDeal?: StoredLoanDeal;
   resolveClubName?: (clubId: string | undefined) => string | undefined;
 }): PlayerMovementPresentation {
-  const { movement, loanDeal, resolveClubName } = input;
+  const { movement, resolveClubName } = input;
+  const loanDeal = expandLoanDeal(input.loanDeal);
   const fromName = clubName(movement.fromClubId, resolveClubName);
   const toName = clubName(movement.toClubId, resolveClubName);
   const details: string[] = [];

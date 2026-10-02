@@ -1,3 +1,4 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
 import type { GameState, Player, Position } from "@/engine/core/types";
 import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
 import { getCurrentSeasonAppearances } from "@/engine/transfers/appearanceLedger";
@@ -106,7 +107,7 @@ export function calculateTransferMotivation(
       : coverage >= 2 ? 25
         : 5;
   const personalityPressure = clamp(
-    ((player.personalityProfile?.transferWillingness ?? 0.45) - 0.18) * 100,
+    ((expandPlayerPersonalityProfile(player.personalityProfile)?.transferWillingness ?? 0.45) - 0.18) * 100,
   );
   const playerLevel = player.currentAbility / 2;
   const ambitionPressure = clamp(

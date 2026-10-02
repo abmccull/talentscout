@@ -1623,6 +1623,24 @@ export interface LoanDeal {
   performanceRecord?: LoanPerformanceRecord;
 }
 
+/** Complete v1 terminal archive; active deals remain ordinary domain records. */
+export type CompactLoanPerformanceV1 = [
+  appearances: number, goals: number, assists: number, avgRating: number,
+  developmentDelta: number, parentClubSatisfaction: number, loanClubSatisfaction: number,
+];
+export type CompactLoanOptionalV1 =
+  Omit<Pick<LoanDeal, "buyOptionFee" | "outcome" | "agreedPlayingTime"
+    | "startCurrentAbility" | "monitoringWeeks" | "scoutId" | "performanceRecord">, "performanceRecord">
+  & { performanceRecord?: CompactLoanPerformanceV1 };
+export type CompactTerminalLoanV1 = [
+  version: 1, id: string, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: Exclude<LoanDealStatus, "active">, optional: CompactLoanOptionalV1,
+];
+export type StoredLoanDeal = LoanDeal | CompactTerminalLoanV1;
+export type LoanHistoryStored = StoredLoanDeal[];
+
 export interface LoanPerformanceRecord {
   appearances: number;
   goals: number;
@@ -2070,7 +2088,7 @@ export interface GameState {
   /** Currently active loan deals across the league. */
   activeLoans?: LoanDeal[];
   /** Completed/terminated loan deals for history. */
-  loanHistory?: LoanDeal[];
+  loanHistory?: LoanHistoryStored;
   /** Loan recommendations made by the scout. */
   loanRecommendations?: LoanRecommendation[];
 }

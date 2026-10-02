@@ -1,3 +1,4 @@
+import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
 import { expandDevelopmentHistoryEntry, type ArchivedDevelopmentHistoryEntry } from "../players/developmentHistoryArchive";
 import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
 import type {
@@ -799,7 +800,7 @@ function healthFactor(player: Player): FactorDraft {
     );
   }
 
-  const visibleInjuries = player.injuryHistory?.injuries ?? [];
+  const visibleInjuries = expandPlayerInjuryHistory(player.injuryHistory, player.id)?.injuries ?? [];
   const recentSerious = visibleInjuries
     .slice(-3)
     .map(entry => expandHistoricalInjury(entry, player.id))

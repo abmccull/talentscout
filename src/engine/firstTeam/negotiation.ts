@@ -1,3 +1,4 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
 /**
  * Transfer Negotiation Engine (F4)
  *
@@ -536,7 +537,7 @@ export function evaluateNegotiationOutcome(
 ): { accepted: boolean; reason: string } {
   // Use the personality system to evaluate willingness
   const willingness = evaluateTransferWillingness(
-    player.personalityProfile,
+    expandPlayerPersonalityProfile(player.personalityProfile),
     fromClub.reputation,
     toClub.reputation,
     player.age,

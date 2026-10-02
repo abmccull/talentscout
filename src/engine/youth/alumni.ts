@@ -1,6 +1,6 @@
 import { hasRecordedSeniorAppearance, isSourcedAlumniEvent } from "./alumniEvidence";
 import { getFixtureSeason } from "@/engine/world/fixtures";
-import { collectCanonicalAppearances, summarizeCanonicalAppearances, type CanonicalPlayerPerformance } from "@/engine/match/canonicalPerformance";
+import { collectCanonicalAppearances, summarizeCanonicalAppearances } from "@/engine/match/canonicalPerformance";
 /**
  * Alumni tracking — long-term payoff loop for placed youth.
  *
@@ -71,18 +71,6 @@ function hasCareerUpdateInSeason(
   return record.careerUpdates.some(
     (u) => u.type === type && u.season === season,
   );
-}
-
-function getSeasonPlayerTotals(
-  season: number,
-  fixtures: CanonicalFixtures,
-  matchRatings: CanonicalRatings,
-): Map<string, CanonicalPlayerPerformance> {
-  return new Map([...collectCanonicalAppearances(fixtures, matchRatings, season)]
-    .flatMap(([playerId, appearances]) => {
-      const totals = summarizeCanonicalAppearances(appearances);
-      return totals ? [[playerId, totals] as const] : [];
-    }));
 }
 
 function deriveAlumniStatus(
@@ -336,7 +324,9 @@ export function generateAlumniSeasonSummary(
   fixtures: CanonicalFixtures,
   matchRatings: CanonicalRatings,
 ): AlumniRecord {
-  const seasonTotals = getSeasonPlayerTotals(season, fixtures, matchRatings).get(player.id);
+  const seasonTotals = summarizeCanonicalAppearances(
+    collectCanonicalAppearances(fixtures, matchRatings, season).get(player.id),
+  );
   if (!seasonTotals || seasonTotals.appearances === 0) return record;
 
   const avgRating = seasonTotals.averageRating;

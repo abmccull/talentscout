@@ -1,3 +1,4 @@
+import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
 import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { matchFormRating } from "@/engine/players/matchFormArchive";
 import type { Club, GameState, Player } from "@/engine/core/types";
@@ -142,7 +143,7 @@ function injuryPressure(player: Player): number {
       : player.injuryWeeksRemaining >= 12 ? 28
         : 14
     : 0;
-  const history = player.injuryHistory;
+  const history = expandPlayerInjuryHistory(player.injuryHistory, player.id);
   if (!history) return currentInjuryPressure;
 
   let score = currentInjuryPressure;

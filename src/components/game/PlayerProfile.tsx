@@ -1,4 +1,6 @@
 "use client";
+import { expandPlayerInjuryHistory, expandPlayerPersonalityProfile } from "../../engine/players/playerStateArchive";
+import { expandLoanDeal } from "../../engine/finance/terminalRecordArchive";
 
 import { PlayerAgeTimeline } from "./PlayerAgeTimeline";
 import { ArchivedPlayerProfile } from "./player-profile/ArchivedPlayerProfile";
@@ -222,11 +224,12 @@ function PlayerProfileContent() {
   if (!resolvedPlayer) return null;
 
   const player = resolvedPlayer.player;
+  const personalityProfile = expandPlayerPersonalityProfile(player.personalityProfile);
   const isRetired = resolvedPlayer.isRetired;
   const developmentEnvironment = isRetired
     ? undefined
     : projectPlayerDevelopmentEnvironment(gameState, player);
-  const recurringInjuryConcern = hasObservableRecurringInjuryConcern(player.injuryHistory);
+  const recurringInjuryConcern = hasObservableRecurringInjuryConcern(expandPlayerInjuryHistory(player.injuryHistory, player.id));
   const canonicalPlayerId = resolvedPlayer.playerId;
   const unsignedYouthRecord = resolvedPlayer.unsignedYouth;
   const relatedPlayerIds = new Set(
@@ -332,7 +335,8 @@ function PlayerProfileContent() {
     .filter((event) => event.playerId === player.id)
     .sort((a, b) => b.season - a.season || b.week - a.week);
   const loanDealsById = new Map(
-    [...(gameState.activeLoans ?? []), ...(gameState.loanHistory ?? [])].map((deal) => [deal.id, deal] as const),
+    [...(gameState.activeLoans ?? []), ...(gameState.loanHistory ?? [])]
+      .map((deal) => expandLoanDeal(deal)).map((deal) => [deal.id, deal] as const),
   );
 
   // Aggregate readings from all observations
@@ -1673,21 +1677,21 @@ function PlayerProfileContent() {
             )}
 
             {/* Personality Profile */}
-            {player.personalityProfile && (
+            {personalityProfile && (
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
                   Character Profile
                 </h2>
                 <Card>
                   <CardContent className="px-4 pb-4 pt-4">
-                    {player.personalityProfile.hiddenUntilRevealed ? (
+                    {personalityProfile.hiddenUntilRevealed ? (
                       <div className="text-center py-2">
                         <p className="text-xs text-zinc-500">
                           Character type not yet identified. Continue observing to uncover their personality.
                         </p>
-                        {player.personalityProfile.revealedTraits.length > 0 && (
+                        {personalityProfile.revealedTraits.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-2 justify-center">
-                            {player.personalityProfile.revealedTraits.map((trait) => (
+                            {personalityProfile.revealedTraits.map((trait) => (
                               <span
                                 key={trait}
                                 className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
@@ -1697,9 +1701,9 @@ function PlayerProfileContent() {
                             ))}
                           </div>
                         )}
-                        {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
+                        {personalityProfile.traits.length > personalityProfile.revealedTraits.length && (
                           <div className="mt-2 flex justify-center gap-1">
-                            {Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
+                            {Array.from({ length: personalityProfile.traits.length - personalityProfile.revealedTraits.length }).map((_, i) => (
                               <span
                                 key={`q-${i}`}
                                 className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
@@ -1713,14 +1717,14 @@ function PlayerProfileContent() {
                     ) : (
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <Tooltip content={ARCHETYPE_DESCRIPTIONS[player.personalityProfile.archetype]} side="top">
+                          <Tooltip content={ARCHETYPE_DESCRIPTIONS[personalityProfile.archetype]} side="top">
                             <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 cursor-help underline decoration-dotted underline-offset-2">
-                              {ARCHETYPE_LABELS[player.personalityProfile.archetype]}
+                              {ARCHETYPE_LABELS[personalityProfile.archetype]}
                             </span>
                           </Tooltip>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {player.personalityProfile.revealedTraits.map((trait) => (
+                          {personalityProfile.revealedTraits.map((trait) => (
                             <span
                               key={trait}
                               className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
@@ -1728,8 +1732,8 @@ function PlayerProfileContent() {
                               {trait.replace(/([A-Z])/g, " $1").trim()}
                             </span>
                           ))}
-                          {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
-                            Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
+                          {personalityProfile.traits.length > personalityProfile.revealedTraits.length && (
+                            Array.from({ length: personalityProfile.traits.length - personalityProfile.revealedTraits.length }).map((_, i) => (
                               <span
                                 key={`h-${i}`}
                                 className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
@@ -1742,26 +1746,26 @@ function PlayerProfileContent() {
                         <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500">Transfer Willingness</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : player.personalityProfile.transferWillingness >= 0.4 ? "text-amber-400" : "text-emerald-400"}`}>
-                              {player.personalityProfile.transferWillingness >= 0.7 ? "High" : player.personalityProfile.transferWillingness >= 0.4 ? "Medium" : "Low"}
+                            <span className={`text-xs font-medium ${personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : personalityProfile.transferWillingness >= 0.4 ? "text-amber-400" : "text-emerald-400"}`}>
+                              {personalityProfile.transferWillingness >= 0.7 ? "High" : personalityProfile.transferWillingness >= 0.4 ? "Medium" : "Low"}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500">Dressing Room</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : player.personalityProfile.dressingRoomImpact >= 0 ? "text-zinc-300" : "text-red-400"}`}>
-                              {player.personalityProfile.dressingRoomImpact >= 2 ? "Positive" : player.personalityProfile.dressingRoomImpact >= 0 ? "Neutral" : "Negative"}
+                            <span className={`text-xs font-medium ${personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : personalityProfile.dressingRoomImpact >= 0 ? "text-zinc-300" : "text-red-400"}`}>
+                              {personalityProfile.dressingRoomImpact >= 2 ? "Positive" : personalityProfile.dressingRoomImpact >= 0 ? "Neutral" : "Negative"}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500">Consistency</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : player.personalityProfile.formVolatility <= 0.6 ? "text-amber-400" : "text-red-400"}`}>
-                              {player.personalityProfile.formVolatility <= 0.3 ? "Very Consistent" : player.personalityProfile.formVolatility <= 0.6 ? "Moderate" : "Volatile"}
+                            <span className={`text-xs font-medium ${personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : personalityProfile.formVolatility <= 0.6 ? "text-amber-400" : "text-red-400"}`}>
+                              {personalityProfile.formVolatility <= 0.3 ? "Very Consistent" : personalityProfile.formVolatility <= 0.6 ? "Moderate" : "Volatile"}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500">Big Match</span>
-                            <span className={`text-xs font-medium ${player.personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : player.personalityProfile.bigMatchModifier >= 0 ? "text-zinc-300" : "text-red-400"}`}>
-                              {player.personalityProfile.bigMatchModifier >= 2 ? "Thrives" : player.personalityProfile.bigMatchModifier >= 1 ? "Rises" : player.personalityProfile.bigMatchModifier >= 0 ? "Neutral" : "Struggles"}
+                            <span className={`text-xs font-medium ${personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : personalityProfile.bigMatchModifier >= 0 ? "text-zinc-300" : "text-red-400"}`}>
+                              {personalityProfile.bigMatchModifier >= 2 ? "Thrives" : personalityProfile.bigMatchModifier >= 1 ? "Rises" : personalityProfile.bigMatchModifier >= 0 ? "Neutral" : "Struggles"}
                             </span>
                           </div>
                         </div>

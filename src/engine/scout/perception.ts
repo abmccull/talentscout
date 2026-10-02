@@ -1,3 +1,4 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
 /**
  * Perception Model — three-layer scouting accuracy system.
  *
@@ -767,10 +768,11 @@ export function observePlayerLight(
   const psychoSkill = scout.skills.psychologicalRead;
   let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
   if (!liveEvidence && player.personalityProfile) {
-    const updated = progressivePersonalityReveal(rng, player.personalityProfile, playerObsCount, psychoSkill);
-    if (updated !== player.personalityProfile) {
+    const personalityProfile = expandPlayerPersonalityProfile(player.personalityProfile);
+    const updated = progressivePersonalityReveal(rng, personalityProfile, playerObsCount, psychoSkill);
+    if (updated !== personalityProfile) {
       updatedPersonalityProfile = updated;
-      if (!updated.hiddenUntilRevealed && player.personalityProfile.hiddenUntilRevealed) {
+      if (!updated.hiddenUntilRevealed && personalityProfile.hiddenUntilRevealed) {
         notes.push(`Character profile emerging: this player appears to be a "${updated.archetype}" personality type.`);
       }
     }
@@ -929,10 +931,11 @@ export function observePlayer(
   const matchPsychoSkill = scout.skills.psychologicalRead;
   let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
   if (player.personalityProfile) {
-    const updated = progressivePersonalityReveal(rng, player.personalityProfile, matchObsCount, matchPsychoSkill);
-    if (updated !== player.personalityProfile) {
+    const personalityProfile = expandPlayerPersonalityProfile(player.personalityProfile);
+    const updated = progressivePersonalityReveal(rng, personalityProfile, matchObsCount, matchPsychoSkill);
+    if (updated !== personalityProfile) {
       updatedPersonalityProfile = updated;
-      if (!updated.hiddenUntilRevealed && player.personalityProfile.hiddenUntilRevealed) {
+      if (!updated.hiddenUntilRevealed && personalityProfile.hiddenUntilRevealed) {
         notes.push(`Character profile emerging: this player appears to be a "${updated.archetype}" personality type.`);
       }
     }

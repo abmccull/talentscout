@@ -40,6 +40,14 @@ export interface ClubFinancialObligation {
   lastTriggerEvaluationSeason?: number;
 }
 
+/** Presence-mask archive retains optional null values before normalization. */
+export interface CompactTerminalObligationV1 {
+  id: string;
+  obligationArchiveV1: [presenceMask: number, ...values: (string | number | null)[]];
+}
+export type StoredClubFinancialObligation = ClubFinancialObligation | CompactTerminalObligationV1;
+export type FinancialObligationsStored = StoredClubFinancialObligation[];
+
 export interface Club {
   id: string;
   name: string;
@@ -51,7 +59,7 @@ export interface Club {
   recruitmentAllocation?: { season: number; amount: number; budgetBefore: number; budgetAfter: number };
   weeklyWageBudget?: number;
   scoutingBudget?: number;
-  financialObligations?: ClubFinancialObligation[];
+  financialObligations?: FinancialObligationsStored;
   scoutingPhilosophy: ScoutingPhilosophy;
   managerId: string;
   playerIds: string[];

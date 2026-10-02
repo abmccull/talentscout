@@ -71,6 +71,8 @@ import {
   reconcileProspectFollowUpDeliveries,
 } from "@/engine/youth/prospectFollowUpDelivery";
 import { SaveMigrationError } from "@/lib/saveEnvelope";
+import { assertPlayerStateArchives, InvalidPlayerStateArchiveError } from "@/engine/players/playerStateArchive";
+import { expandClubFinancialObligation, expandLoanDeal, InvalidTerminalRecordArchiveError } from "@/engine/finance/terminalRecordArchive";
 
 type LegacyContactInteraction = Omit<ContactInteraction, "occurredAt"> & {
   occurredAt?: GameDate;
@@ -851,17 +853,23 @@ function migrateScoutEmploymentContract(state: GameState): void {
  * The caller has already cloned and validated the state.
  */
 export function applyGameplaySaveMigrations(state: GameState): GameState {
-  normalizeRequiredStateShape(state);
   // Validate before employee-report cleanup can delete a legacy case. Preserve
   // which authorities were already initialized before report reconstruction.
   const initializedDeliveryCases = new Set<string>();
   try {
+    assertPlayerStateArchives(state);
+    for (const loan of state.loanHistory ?? []) expandLoanDeal(loan);
+    for (const club of Object.values(state.clubs ?? {})) {
+      for (const obligation of club.financialObligations ?? []) expandClubFinancialObligation(obligation);
+    }
+    normalizeRequiredStateShape(state);
     for (const [key, scoutingCase] of Object.entries(state.scoutingCases ?? {})) {
       assertProspectFollowUpDeliveryAuthority(scoutingCase);
       if (scoutingCase.prospectFollowUpDeliveries !== undefined) initializedDeliveryCases.add(key);
     }
   } catch (error) {
-    if (error instanceof InvalidProspectFollowUpDeliveryError) {
+    if (error instanceof InvalidProspectFollowUpDeliveryError || error instanceof InvalidPlayerStateArchiveError
+      || error instanceof InvalidTerminalRecordArchiveError) {
       throw new SaveMigrationError("CORRUPT_SAVE", error.message);
     }
     throw error;

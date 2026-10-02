@@ -1,14 +1,15 @@
 import type {
-  Club, GameState, InboxMessage, LoanDeal, LoanOutcome,
+  Club, GameState, InboxMessage, StoredLoanDeal, LoanOutcome,
   LoanRecommendation, Player, PlayerMovementEvent,
 } from "../types";
 import type { RNG } from "../../rng/index";
 import { processLoanOutcomeReputation } from "../../firstTeam/loanIntegration";
+import { expandLoanDeal } from "../../finance/terminalRecordArchive";
 
 export interface LoanClosureFeedbackInput {
   scout: GameState["scout"];
-  previousLoanHistory: readonly LoanDeal[];
-  loanHistory: readonly LoanDeal[];
+  previousLoanHistory: readonly StoredLoanDeal[];
+  loanHistory: readonly StoredLoanDeal[];
   movements: readonly PlayerMovementEvent[];
   recommendations: readonly LoanRecommendation[];
   players: Record<string, Player>;
@@ -24,8 +25,11 @@ export function projectAppliedLoanClosures(input: LoanClosureFeedbackInput, rng:
   reputationDelta: number;
   xpAward: number;
 } {
-  const previousIds = new Set(input.previousLoanHistory.map((deal) => deal.id));
-  const deals = new Map(input.loanHistory.map((deal) => [deal.id, deal]));
+  const previousIds = new Set(input.previousLoanHistory.map((deal) => expandLoanDeal(deal).id));
+  const deals = new Map(input.loanHistory.map((storedDeal) => {
+    const deal = expandLoanDeal(storedDeal);
+    return [deal.id, deal] as const;
+  }));
   const processedIds = new Set<string>();
   const messages: InboxMessage[] = [];
   const updatedRecommendations = [...input.recommendations];

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { expandClubFinancialObligation, expandLoanDeal } from "@/engine/finance/terminalRecordArchive";
 import type {
   Club,
   FreeAgent,
@@ -211,12 +212,12 @@ describe("authoritative player lifecycle", () => {
     });
     expect(bought.state.clubs.a.budget).toBe(121_000);
     expect(bought.state.clubs.b.budget).toBe(79_000);
-    expect(bought.state.clubs.b.financialObligations?.[0]).toMatchObject({
+    expect(expandClubFinancialObligation(bought.state.clubs.b.financialObligations?.[0])).toMatchObject({
       type: "loanWageContribution",
       status: "expired",
     });
     expect(bought.state.activeLoans).toEqual([]);
-    expect(bought.state.loanHistory[0].outcome).toBe("buy-option-exercised");
+    expect(expandLoanDeal(bought.state.loanHistory[0]).outcome).toBe("buy-option-exercised");
   });
 
   it("allows the owning club to renew a player while he remains on loan", () => {

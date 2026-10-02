@@ -1,3 +1,4 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
 /**
  * Contract Expiry Processing — season-end engine that decides which players
  * are renewed, released (→ free agent pool), or retired.
@@ -379,7 +380,7 @@ function renewalWageExpectation(
   const moraleMultiplier = morale >= 7 ? 1.05
     : morale <= 3 ? 0.96
       : 1;
-  const transferWillingness = player.personalityProfile?.transferWillingness ?? 0.5;
+  const transferWillingness = expandPlayerPersonalityProfile(player.personalityProfile)?.transferWillingness ?? 0.5;
   const personalityMultiplier = transferWillingness >= 0.75 ? 1.08
     : transferWillingness <= 0.25 ? 0.96
       : 1;
@@ -410,7 +411,7 @@ function playerRenewalAcceptanceChance(
 ): number {
   const morale = player.morale ?? 5;
   const coverage = positionCoverage(player, club, state);
-  const transferWillingness = player.personalityProfile?.transferWillingness ?? 0.5;
+  const transferWillingness = expandPlayerPersonalityProfile(player.personalityProfile)?.transferWillingness ?? 0.5;
   let chance = 0.48;
 
   chance += Math.max(-0.15, Math.min(0.15, (morale - 5) * 0.05));

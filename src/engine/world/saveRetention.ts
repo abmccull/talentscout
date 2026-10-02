@@ -2,6 +2,7 @@ import { packDevelopmentHistoryEntry } from "../players/developmentHistoryArchiv
 import { compactMatchFormEntry } from "@/engine/players/matchFormArchive";
 import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { compactClubSeasonHistory } from "./clubSeasonArchive";
+import { compactClubFinancialObligation, compactLoanDeal, expandLoanDeal } from "../finance/terminalRecordArchive";
 import type {
   FinancialRecord,
   Fixture,
@@ -13,6 +14,7 @@ import type {
 import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
 import { compactPlayerDevelopmentHistory } from "@/engine/world/developmentEnvironment";
 import { compactInjuryArchive, expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { compactPlayerInjuryHistory, compactPlayerPersonalityProfile, expandPlayerInjuryHistory } from "../players/playerStateArchive";
 import { compactVisualIdentity } from "@/engine/players/portraits/identity";
 import { withoutDisciplineMirror } from "@/engine/match/disciplineRecords";
 import {
@@ -286,7 +288,7 @@ function compactPlayerRecord(
     ? player.seasonRatings : compactedSeasons;
   const recentMatchRatings = compactedForm.every((entry, index) => entry === player.recentMatchRatings?.[index])
     ? player.recentMatchRatings : compactedForm;
-  const injuryHistory = player.injuryHistory;
+  const injuryHistory = expandPlayerInjuryHistory(player.injuryHistory, player.id);
   const injuryCutoff = Math.max(
     1,
     currentSeason - PLAYER_INJURY_DETAIL_RETENTION_SEASONS + 1,
@@ -311,8 +313,12 @@ function compactPlayerRecord(
       ? injuryHistory
       : { ...injuryHistory, injuries: retainedInjuries }
     : injuryHistory;
-  const compactedInjuryHistory = retainedInjuryHistory
+  const compactedIncidents = retainedInjuryHistory
     ? compactInjuryArchive(retainedInjuryHistory) : undefined;
+  const compactedInjuryHistory = Array.isArray(player.injuryHistory) && compactedIncidents === injuryHistory
+    ? player.injuryHistory
+    : compactPlayerInjuryHistory(compactedIncidents, player.id);
+  const personalityProfile = compactPlayerPersonalityProfile(player.personalityProfile);
 
   if (
     visualIdentity === player.visualIdentity
@@ -320,6 +326,7 @@ function compactPlayerRecord(
     && seasonRatings === player.seasonRatings
     && developmentHistory === player.developmentHistory
     && compactedInjuryHistory === player.injuryHistory
+    && personalityProfile === player.personalityProfile
   ) {
     return player;
   }
@@ -330,6 +337,7 @@ function compactPlayerRecord(
     seasonRatings,
     ...(developmentHistory ? { developmentHistory } : {}),
     ...(compactedInjuryHistory ? { injuryHistory: compactedInjuryHistory } : {}),
+    ...(personalityProfile ? { personalityProfile } : {}),
   };
 }
 
@@ -525,6 +533,7 @@ export function collectCausallyReferencedPlayerIds(state: GameState): Set<string
     .filter((record) => record.scoutId !== undefined)
     .forEach((record) => add(record.playerId));
   (state.loanHistory ?? [])
+    .map((deal) => expandLoanDeal(deal))
     .filter((record) => record.scoutId !== undefined)
     .forEach((record) => add(record.playerId));
   (state.loanRecommendations ?? []).forEach((record) => add(record.playerId));
@@ -1126,6 +1135,16 @@ export function compactLongCareerHistory(state: GameState): GameState {
 
   const compacted: GameState = {
     ...state,
+    ...(state.loanHistory != null ? { loanHistory: state.loanHistory.map((deal) => compactLoanDeal(deal)) } : {}),
+    ...(state.clubs != null ? {
+      clubs: Object.fromEntries(Object.entries(state.clubs).map(([clubId, club]) => [
+        clubId,
+        club.financialObligations == null ? club : {
+          ...club,
+          financialObligations: club.financialObligations.map((obligation) => compactClubFinancialObligation(obligation)),
+        },
+      ])),
+    } : {}),
     players,
     observations,
     finances,

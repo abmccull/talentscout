@@ -18,7 +18,7 @@ import {
   type PlayerExperienceRecord,
 } from "@/lib/playerExperience";
 
-export const CURRENT_SAVE_SCHEMA_VERSION = 6;
+export const CURRENT_SAVE_SCHEMA_VERSION = 7;
 export const CURRENT_RULES_VERSION = RUN_RULES_VERSION;
 export const CURRENT_BUILD_VERSION =
   process.env.NEXT_PUBLIC_BUILD_VERSION ?? "development";
@@ -265,6 +265,12 @@ const migrateV5ToV6: SaveMigration = (legacy) => ({
   schemaVersion: 6,
 });
 
+/** Allows lossless player and terminal financial archives without changing rules. */
+const migrateV6ToV7: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 7,
+});
+
 /** Ordered by the version they consume. Never mutate an existing migration. */
 const SAVE_MIGRATIONS: Readonly<Record<number, SaveMigration>> = Object.freeze({
   0: migrateV0ToV1,
@@ -273,6 +279,7 @@ const SAVE_MIGRATIONS: Readonly<Record<number, SaveMigration>> = Object.freeze({
   3: migrateV3ToV4,
   4: migrateV4ToV5,
   5: migrateV5ToV6,
+  6: migrateV6ToV7,
 });
 
 function assertEnvelopeShape(raw: Record<string, unknown>): asserts raw is MutableEnvelope {

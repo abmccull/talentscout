@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import type { GameState, Player } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 import { recruitForSeasonOpening } from "@/engine/freeAgents/seasonOpening";
+import { expandClubFinancialObligation } from "@/engine/finance/terminalRecordArchive";
 
 function world(): GameState {
   const players: Record<string, Player> = {};
@@ -41,7 +42,10 @@ it("arranges an opening loan with no free agents, preserving ownership and settl
   expect(result.clubs.parent.playerIds.filter(id => result.players[id].position === "GK")).toHaveLength(2);
   expect(result.clubs.host.budget).toBe(state.clubs.host.budget - deal.loanFee);
   expect(result.clubs.parent.budget).toBe(state.clubs.parent.budget + deal.loanFee);
-  expect(result.clubs.host.financialObligations?.some(o => o.playerId === "keeper" && o.weeklyAmount === Math.round(500 * deal.wageContribution / 100))).toBe(true);
+  expect(result.clubs.host.financialObligations?.some(stored => {
+    const obligation = expandClubFinancialObligation(stored);
+    return obligation.playerId === "keeper" && obligation.weeklyAmount === Math.round(500 * deal.wageContribution / 100);
+  })).toBe(true);
   expect(result.inbox).toHaveLength(1);
   expect(result.freeAgentPool).toEqual(state.freeAgentPool);
   expect(JSON.stringify(state)).toBe(knownOriginal);

@@ -1,6 +1,7 @@
 import { expandDevelopmentHistoryEntry } from "@/engine/players/developmentHistoryArchive";
 import { expandPlayerMovementSummary } from "@/engine/world/worldHistoryTypes";
 import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { expandPlayerInjuryHistory } from "@/engine/players/playerStateArchive";
 import { getPlayerDevelopmentHistoryOutcome } from "@/engine/world/developmentEnvironment";
 import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
@@ -1143,7 +1144,7 @@ describe("long-career save retention", () => {
     });
 
     const compacted = compactLongCareerHistory(legacy);
-    const retained = compacted.players.player.injuryHistory!;
+    const retained = expandPlayerInjuryHistory(compacted.players.player.injuryHistory!, compacted.players.player.id);
 
     expect(retained.injuries.map((entry) => expandHistoricalInjury(entry, retained.playerId).id)).toEqual([
       "active-historical",
