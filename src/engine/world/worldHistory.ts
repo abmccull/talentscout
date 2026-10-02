@@ -1,3 +1,4 @@
+import type { StoredPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { collectCanonicalAppearances, summarizeCanonicalAppearances, type CanonicalAppearance } from "@/engine/match/canonicalPerformance";
 /**
  * Compact, authoritative multi-season world history.
@@ -84,7 +85,7 @@ export interface WorldSeasonHistory {
    * Optional for legacy saves; migration fills it from the raw ledger when
    * that source is still available.
    */
-  playerMovementSummaries?: StoredPlayerMovementSummary[];
+  playerMovementSummaries?: StoredPlayerMovementSummaries;
 }
 
 export interface WorldHistoryState {

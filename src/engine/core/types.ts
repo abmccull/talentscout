@@ -1,3 +1,4 @@
+import type { MovementRowsArchiveV1, StoredObservationSituationSnapshot } from "./types/historyStorage";
 /**
  * Core type definitions for the TalentScout game engine.
  *
@@ -115,6 +116,7 @@ import type {
   League,
   LeagueCoverageTier,
   ScoutingPhilosophy,
+  StableFinancialIdentity,
   StandingEntry,
   Weather,
 } from "./types/world";
@@ -436,7 +438,7 @@ export interface Observation {
    * Persisted, player-visible conditions that shaped this evidence. Optional
    * for legacy saves and deliberately contains no hidden player truth.
    */
-  situation?: import("../observation/situations").ObservationSituationSnapshot;
+  situation?: import("../observation/situations").ObservationSituationSnapshot | StoredObservationSituationSnapshot;
   abilityReading?: AbilityReading;
   /**
    * A personality trait uncovered during this observation session.
@@ -1645,7 +1647,23 @@ export type CompactTerminalLoanV2 = [
   loanFee: number, wageContribution: number, recallClause: boolean,
   status: Exclude<LoanDealStatus, "active">, undefinedMask: number, optional: CompactLoanOptionalV1,
 ];
-export type StoredLoanDeal = LoanDeal | CompactTerminalLoanV1 | CompactTerminalLoanV2;
+/** Versioned ordinals mirror the closed tables in terminalRecordArchive. */
+export type CompactLoanOptionalV41 = Omit<CompactLoanOptionalV1, "outcome" | "agreedPlayingTime">
+  & { outcome?: 0 | 1 | 2 | 3 | 4 | 5; agreedPlayingTime?: 0 | 1 | 2 | 3 };
+export type CompactTerminalLoanV41 = [
+  version: 41, id: StableFinancialIdentity, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: 0 | 1 | 2, optional: CompactLoanOptionalV41,
+];
+export type CompactTerminalLoanV42 = [
+  version: 42, id: StableFinancialIdentity, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: 0 | 1 | 2, undefinedMask: number, optional: CompactLoanOptionalV41,
+];
+export type StoredLoanDeal = LoanDeal | CompactTerminalLoanV1 | CompactTerminalLoanV2
+  | CompactTerminalLoanV41 | CompactTerminalLoanV42;
 export type LoanHistoryStored = StoredLoanDeal[];
 
 export interface LoanPerformanceRecord {
@@ -1982,7 +2000,7 @@ export interface GameState {
   /** Full archived entities for retired/exited players, keyed by player ID. */
   retiredPlayers: Record<string, Player>;
   /** Append-only canonical history of all player lifecycle movements. */
-  playerMovementHistory: PlayerMovementEvent[];
+  playerMovementHistory: PlayerMovementEvent[] | MovementRowsArchiveV1;
   /** Bounded, authoritative cross-entity archive written at season rollover. */
   worldHistory?: import("../world/worldHistory").WorldHistoryState;
   /** Authoritative club recruitment-philosophy changes resolved at season start. */

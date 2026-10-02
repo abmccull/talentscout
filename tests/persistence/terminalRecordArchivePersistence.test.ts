@@ -27,6 +27,15 @@ function storedObligation(): Record<string, unknown> {
   return { id: "saved-obligation", obligationArchiveV1: [25_599,
     "loanWageContribution", "history-player", "parent", 0, 12.5, 0, 0, 1, 1, "expired", 12, 1] };
 }
+// Independently authored current emission fixtures; old fixtures above remain load inputs.
+function emittedLoan41(): unknown[] {
+  return [41, "saved-loan", "history-player", "parent", "host", 1, 1, 12, 1, 500, 40, false,
+    0, { outcome: 1, monitoringWeeks: ["1:4", "1:4"], scoutId: "saved-scout" }];
+}
+function emittedObligation31(): Record<string, unknown> {
+  return { id: "saved-obligation", obligationArchiveV31: [25_599,
+    0, "history-player", "parent", 0, 12.5, 0, 0, 1, 1, 1, 12, 1] };
+}
 function club(id: string): Club {
   return { id, name: id, shortName: id, leagueId: "saved-league", reputation: 55,
     budget: 50_000, scoutingPhilosophy: "academyFirst", managerId: "saved-manager",
@@ -69,8 +78,8 @@ describe.sequential("terminal archives through actual persistence", () => {
       customEnvelopeMetadata: { originalExternalId: "remote-save-7" } };
     const before = JSON.stringify(legacy);
     const upgraded = migrateSaveEnvelope(legacy);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(8);
-    expect(upgraded.schemaVersion).toBe(8);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(9);
+    expect(upgraded.schemaVersion).toBe(9);
     expect(upgraded.state).toEqual(state);
     expect(upgraded.rulesVersion).toBe("saved-rules");
     expect(upgraded.buildVersion).toBe("saved-build");
@@ -84,12 +93,12 @@ describe.sequential("terminal archives through actual persistence", () => {
   it("stores real canonical tuples/masks and duplicate row order in the actual head, JSON load and recovery load", async () => {
     const source = career(), before = JSON.stringify(source);
     const canonical = migrateSaveState(source);
-    expect(canonical.loanHistory).toEqual([storedLoan(), storedLoan()]);
-    expect(canonical.clubs.host.financialObligations).toEqual([storedObligation(), storedObligation()]);
+    expect(canonical.loanHistory).toEqual([emittedLoan41(), emittedLoan41()]);
+    expect(canonical.clubs.host.financialObligations).toEqual([emittedObligation31(), emittedObligation31()]);
     const commit = await saveGameWithResult(SLOT, "Terminal history", source);
     expect(commit.wrote).toBe(true);
     const head = await readHead();
-    expect(head.schemaVersion).toBe(8);
+    expect(head.schemaVersion).toBe(9);
     expect(head.state.loanHistory).toEqual(canonical.loanHistory);
     expect(head.state.clubs.host.financialObligations).toEqual(canonical.clubs.host.financialObligations);
     expect(commit.payloadBytes).toBe(new TextEncoder().encode(JSON.stringify(head)).byteLength);
@@ -118,12 +127,12 @@ describe.sequential("terminal archives through actual persistence", () => {
       customEnvelopeMetadata: { providerReference: "persist-original" } };
     const before = JSON.stringify(record);
     const loaded = migrateSaveRecord(JSON.parse(before));
-    expect(loaded.state.loanHistory).toEqual([storedLoan(), customLoan, storedLoan()]);
-    expect(loaded.state.clubs.host.financialObligations?.[0]).toEqual(storedObligation());
+    expect(loaded.state.loanHistory).toEqual([emittedLoan41(), customLoan, emittedLoan41()]);
+    expect(loaded.state.clubs.host.financialObligations?.[0]).toEqual(emittedObligation31());
     expect(loaded.state.clubs.host.financialObligations?.[1]).toMatchObject({
       id: "custom-obligation", status: "expired", customAudit: { externalId: "audit-2" },
     });
-    expect(loaded.state.clubs.host.financialObligations?.[2]).toEqual(storedObligation());
+    expect(loaded.state.clubs.host.financialObligations?.[2]).toEqual(emittedObligation31());
     expect(loaded.storageRevision).toBe(12);
     expect(loaded.savedAt).toBe(2_000);
     expect(loaded).toHaveProperty("customEnvelopeMetadata", record.customEnvelopeMetadata);
@@ -153,7 +162,7 @@ describe.sequential("terminal archives through actual persistence", () => {
   });
 
   it("refuses future portable 9 without decoding or rewriting opaque future facts", () => {
-    const future = { ...createSaveEnvelope(career(), 3_000), schemaVersion: 9,
+    const future = { ...createSaveEnvelope(career(), 3_000), schemaVersion: 10,
       state: { opaqueFutureTerminalFacts: { original: ["payment-audit"] } } };
     const before = JSON.stringify(future);
     expect(() => migrateSaveEnvelope(future)).toThrowError(expect.objectContaining<Partial<SaveMigrationError>>({ code: "FUTURE_VERSION" }));

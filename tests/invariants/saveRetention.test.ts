@@ -1,3 +1,5 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
+import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { expandDevelopmentHistoryEntry } from "@/engine/players/developmentHistoryArchive";
 import { expandPlayerMovementSummary } from "@/engine/world/worldHistoryTypes";
 import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
@@ -218,11 +220,11 @@ describe("long-career save retention", () => {
 
     const compacted = compactLongCareerHistory(legacy);
 
-    expect(compacted.playerMovementHistory.map((movement) => movement.id)).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id)).toEqual([
       "recent-renewal",
     ]);
     expect(compacted.worldHistory?.seasons[0].players[0].movementEventIds).toEqual(["transfer"]);
-    expect(compacted.worldHistory?.seasons[0].playerMovementSummaries?.map(expandPlayerMovementSummary)).toEqual([{
+    expect(expandPlayerMovementSummaries(compacted.worldHistory?.seasons[0].playerMovementSummaries ?? []).map(expandPlayerMovementSummary)).toEqual([{
       id: "transfer",
       playerId: "player",
       type: "permanentTransfer",
@@ -284,7 +286,7 @@ describe("long-career save retention", () => {
     const compacted = compactLongCareerHistory(legacy);
     const archive = compacted.worldHistory!.seasons[0];
 
-    expect(archive.playerMovementSummaries?.map(expandPlayerMovementSummary)).toEqual([
+    expect(expandPlayerMovementSummaries(archive.playerMovementSummaries ?? []).map(expandPlayerMovementSummary)).toEqual([
       {
         id: "archived-causal",
         playerId: "causal-player",
@@ -294,7 +296,7 @@ describe("long-career save retention", () => {
         toClubId: "loan-club",
       },
     ]);
-    expect(compacted.playerMovementHistory.map((movement) => movement.id).sort()).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id).sort()).toEqual([
       "archived-causal",
       "unarchived-old",
     ]);
@@ -352,10 +354,10 @@ describe("long-career save retention", () => {
 
     const compacted = compactLongCareerHistory(legacy);
 
-    expect(compacted.worldHistory?.seasons[0].playerMovementSummaries?.map(
+    expect(expandPlayerMovementSummaries(compacted.worldHistory?.seasons[0].playerMovementSummaries ?? []).map(
       (summary) => expandPlayerMovementSummary(summary).id,
     )).toEqual(["causal-transfer"]);
-    expect(compacted.playerMovementHistory.map((movement) => movement.id)).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id)).toEqual([
       "causal-transfer",
     ]);
     expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
@@ -634,22 +636,22 @@ describe("long-career save retention", () => {
       ...historical.regionalContext,
       explanation: "Historical regional context.",
     });
-    expect(retained.situation).toMatchObject({
-      id: historical.situation!.id,
-      competitionLevel: historical.situation!.competitionLevel,
-      stakes: historical.situation!.stakes,
-      tacticalFrame: historical.situation!.tacticalFrame,
-      repetitionKey: historical.situation!.repetitionKey,
-      contextTags: historical.situation!.contextTags,
-      reasons: historical.situation!.reasons,
-      biasWarnings: historical.situation!.biasWarnings,
+    expect(expandObservationSituationSnapshot(retained.situation)).toMatchObject({
+      id: expandObservationSituationSnapshot(historical.situation)!.id,
+      competitionLevel: expandObservationSituationSnapshot(historical.situation)!.competitionLevel,
+      stakes: expandObservationSituationSnapshot(historical.situation)!.stakes,
+      tacticalFrame: expandObservationSituationSnapshot(historical.situation)!.tacticalFrame,
+      repetitionKey: expandObservationSituationSnapshot(historical.situation)!.repetitionKey,
+      contextTags: expandObservationSituationSnapshot(historical.situation)!.contextTags,
+      reasons: expandObservationSituationSnapshot(historical.situation)!.reasons,
+      biasWarnings: expandObservationSituationSnapshot(historical.situation)!.biasWarnings,
       atmosphereEventIds: [],
       signalByDomain: {},
       signalByAttribute: {},
       culturalInsightIds: [],
     });
-    expect(retained.situation?.culturalCalendarWindowIds).toBeUndefined();
-    expect(compacted.observations[recent.id]).toEqual(recent);
+    expect(expandObservationSituationSnapshot(retained.situation)?.culturalCalendarWindowIds).toBeUndefined();
+    expect({ ...compacted.observations[recent.id], situation: expandObservationSituationSnapshot(compacted.observations[recent.id].situation) }).toEqual(recent);
     expect(after.collections.observations).toBeLessThan(before.collections.observations * 0.9);
     expect(before.collections.observations - after.collections.observations).toBeGreaterThan(
       50 * 1024,
@@ -778,12 +780,12 @@ describe("long-career save retention", () => {
       active.id,
       causal.id,
     ].sort());
-    expect(compacted.playerMovementHistory.map((movement) => movement.id).sort()).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id).sort()).toEqual([
       "sign-causal",
       "sign-recent",
     ]);
     for (const record of Object.values(compacted.unsignedYouth).filter((entry) => entry.placed)) {
-      expect(compacted.playerMovementHistory.some(
+      expect(expandPlayerMovementHistory(compacted.playerMovementHistory).some(
         (movement) => movement.playerId === record.player.id && movement.type === "youthSigning",
       )).toBe(true);
     }

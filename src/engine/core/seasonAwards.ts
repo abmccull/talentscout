@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 /**
  * Season Awards — pure functions for generating end-of-season awards data.
  *
@@ -367,11 +368,11 @@ function generateLeagueAwards(state: GameState, season: number): LeagueAward[] {
   });
 
   const movements = new Map<string, PlayerMovementArchiveSummary>();
-  for (const stored of archivedSeason?.playerMovementSummaries ?? []) {
+  for (const stored of expandPlayerMovementSummaries(archivedSeason?.playerMovementSummaries ?? [])) {
     const movement = expandPlayerMovementSummary(stored);
     movements.set(movement.id, movement);
   }
-  for (const movement of state.playerMovementHistory ?? []) {
+  for (const movement of expandPlayerMovementHistory(state.playerMovementHistory ?? [])) {
     if (movement.season === season) movements.set(movement.id, movement);
   }
   const biggest = [...movements.values()].filter(movement =>

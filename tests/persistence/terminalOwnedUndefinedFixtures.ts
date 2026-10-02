@@ -69,6 +69,24 @@ export function customObligation() {
   return { ...v1Obligation(), id: "custom-obligation", obligationArchiveV1: ["authored-extension"],
     customAudit: { externalId: "authored-obligation-audit" } };
 }
+// Independent current emission fixtures; no test-side encoder or altered legacy load data.
+export function v41LoanWire(): unknown[] {
+  return [41, "v1-loan", "history-player", "parent", "host", 1, 1, 12, 1, 500, 40, false,
+    0, { outcome: 1, scoutId: "" }];
+}
+export function v42LoanWire(): unknown[] {
+  return [42, "v2-loan", "history-player", "parent", "host", 1, 1, 12, 1, 500, 40, false,
+    0, 33, { outcome: 1, startCurrentAbility: 0,
+      monitoringWeeks: ["1:4", "1:4", "1:5"], performanceRecord: [0, 0, 0, 0, 0, 50, 60] }];
+}
+export function v31ObligationWire(): Record<string, unknown> {
+  return { id: "v1-obligation", obligationArchiveV31: [25_599,
+    0, "history-player", "parent", 0, 12.5, 0, 0, 1, 1, 1, 12, 1] };
+}
+export function v32ObligationWire(): Record<string, unknown> {
+  return { id: "v2-obligation", obligationArchiveV32: [OBLIGATION_PRESENCE, OBLIGATION_UNDEFINED,
+    1, "history-player", null, 0, 1, 1, 0, 12, 1, 0, 0, 0, 0, 0, 0, 12, 1] };
+}
 function club(id: string): Club {
   return { id, name: id, shortName: id, leagueId: "saved-league", reputation: 55,
     budget: 50_000, scoutingPhilosophy: "academyFirst", managerId: "saved-manager",
@@ -127,9 +145,9 @@ export function assertFacts(state: GameState) {
   expect(Object.hasOwn(obligations[0], "trigger")).toBe(false);
 }
 export function assertCanonical(state: GameState) {
-  expect(state.loanHistory).toStrictEqual([v1LoanWire(), v2LoanWire(), customLoan(), v2LoanWire(), v1LoanWire()]);
-  expect(state.clubs.host.financialObligations).toStrictEqual([v1ObligationWire(), v2ObligationWire(),
-    customObligation(), v2ObligationWire(), v1ObligationWire()]);
+  expect(state.loanHistory).toStrictEqual([v41LoanWire(), v42LoanWire(), customLoan(), v42LoanWire(), v41LoanWire()]);
+  expect(state.clubs.host.financialObligations).toStrictEqual([v31ObligationWire(), v32ObligationWire(),
+    customObligation(), v32ObligationWire(), v31ObligationWire()]);
   assertFacts(state);
 }
 export async function database(): Promise<IDBDatabase> {

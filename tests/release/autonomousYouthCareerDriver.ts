@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { canChooseCareerPath } from "@/engine/career/pathChoice";
 import { measureWorldRosterHealth } from "./worldRosterHealth";
 import {
@@ -1057,7 +1058,7 @@ export function collectAutonomousCareerPresentationSignals(
   const placementCallbacks = (state.discoveryRecords ?? []).filter((record) =>
     record.placementSeason != null && record.placementWeek != null
   ).length;
-  const movementCallbacks = (state.playerMovementHistory ?? []).filter((movement) =>
+  const movementCallbacks = expandPlayerMovementHistory(state.playerMovementHistory ?? []).filter((movement) =>
     discoveredPlayerIds.has(movement.playerId)
   ).length;
   return {

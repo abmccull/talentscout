@@ -1,4 +1,5 @@
 "use client";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 
 import { calculateCashRunway } from "@/engine/finance/cashRunway";
 import { useState } from "react";
@@ -459,7 +460,7 @@ export function CareerScreen() {
     reports: gameState.reports,
     recommendationReviews: gameState.recommendationReviews,
     discoveryRecords: gameState.discoveryRecords,
-    playerMovementHistory: gameState.playerMovementHistory,
+    playerMovementHistory: expandPlayerMovementHistory(gameState.playerMovementHistory),
     consequenceState: gameState.consequenceState,
     careerStoryArchive: gameState.careerStoryArchive,
     careerMoments: gameState.careerMoments?.history

@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { expect, it } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
@@ -30,7 +31,7 @@ it("fills a funded vacancy through the lifecycle without advancing the market cl
   expect(result.freeAgentPool.agents).toEqual([]);
   expect(result.freeAgentPool.totalSignedThisSeason).toBe(1);
   expect(state.freeAgentPool.agents[0]).toMatchObject({ weeksInPool: 2, wageExpectation: 500 });
-  expect(result.playerMovementHistory).toHaveLength(1);
+  expect(expandPlayerMovementHistory(result.playerMovementHistory)).toHaveLength(1);
   expect(result.players['p-0']).toEqual(state.players['p-0']);
   expect(JSON.stringify(state)).toBe(original);
   expect(recruitForSeasonOpening(result, new RNG("repeat"))).toBe(result);
@@ -55,7 +56,7 @@ it("cannot allocate the same free agent to competing clubs", () => {
   const rng = new RNG("competing-clubs"); rng.chance = () => true;
   const result = recruitForSeasonOpening(state, rng);
   expect(Object.values(result.clubs).filter(club => club.playerIds.includes("keeper"))).toHaveLength(1);
-  expect(result.playerMovementHistory).toHaveLength(1);
+  expect(expandPlayerMovementHistory(result.playerMovementHistory)).toHaveLength(1);
   expect(result.freeAgentPool.totalSignedThisSeason).toBe(1);
   expect(Object.keys(result.players)).toHaveLength(Object.keys(state.players).length);
 });
@@ -135,7 +136,7 @@ it("seeks a second goalkeeper even when eighteen places are already filled", () 
   const result = recruitForSeasonOpening(state, rng);
   expect(result.clubs.club.playerIds).toHaveLength(19);
   expect(result.clubs.club.playerIds.filter(id => result.players[id].position === "GK")).toHaveLength(2);
-  expect(result.playerMovementHistory).toHaveLength(1);
+  expect(expandPlayerMovementHistory(result.playerMovementHistory)).toHaveLength(1);
   expect(result.clubs.club.budget).toBe(9_000);
   expect(recruitForSeasonOpening(result, new RNG("already-covered"))).toBe(result);
 });

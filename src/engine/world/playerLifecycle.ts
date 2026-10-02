@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory, compactPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type {
   Club,
   FreeAgentPool,
@@ -371,7 +372,7 @@ export function getLifecycleWorld(state: GameState): LifecycleWorldState {
     loanHistory: state.loanHistory ?? [],
     retiredPlayers: state.retiredPlayers ?? {},
     retiredPlayerIds: state.retiredPlayerIds ?? [],
-    playerMovementHistory: state.playerMovementHistory ?? [],
+    playerMovementHistory: expandPlayerMovementHistory(state.playerMovementHistory ?? []),
     freeAgentPool: state.freeAgentPool,
   };
 }
@@ -389,7 +390,7 @@ export function withLifecycleWorld(
     loanHistory: lifecycle.loanHistory,
     retiredPlayers: lifecycle.retiredPlayers,
     retiredPlayerIds: lifecycle.retiredPlayerIds,
-    playerMovementHistory: lifecycle.playerMovementHistory,
+    playerMovementHistory: compactPlayerMovementHistory(lifecycle.playerMovementHistory),
     freeAgentPool: lifecycle.freeAgentPool,
   };
 }

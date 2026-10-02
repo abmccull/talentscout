@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory, compactPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { archivePlayerSeasonRatings } from "../players/seasonRatingArchive";
 import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
 import { expandClubFinancialObligation } from "../finance/terminalRecordArchive";
@@ -999,6 +1000,7 @@ export interface TransferDestinationIndex {
 /** Immutable club facts reused by every transfer candidate in one tick. */
 export function createTransferDestinationIndex(state: GameState): TransferDestinationIndex {
   const clubs = Object.values(state.clubs);
+  const memoryState = { ...state, playerMovementHistory: expandPlayerMovementHistory(state.playerMovementHistory) };
   const primaryPositionCountByClub = new Map<string, ReadonlyMap<Position, number>>();
   const doctrineByClub = new Map<string, ClubRecruitmentDoctrine>();
   const recruitmentMemoryByClub = new Map<string, ClubRecruitmentMemory>();
@@ -1019,7 +1021,7 @@ export function createTransferDestinationIndex(state: GameState): TransferDestin
     }));
     recruitmentMemoryByClub.set(
       club.id,
-      deriveClubRecruitmentMemory(state, club.id),
+      deriveClubRecruitmentMemory(memoryState, club.id),
     );
   }
   return {
@@ -1053,6 +1055,7 @@ export function findTransferDestination(
 
   if (candidates.length === 0) return null;
 
+  let fallbackMemoryState: GameState | undefined;
   const weighted = candidates.map((club) => {
     const country = state.leagues[club.leagueId]?.country ?? "";
     const crossBorder = country !== fromCountry;
@@ -1089,7 +1092,13 @@ export function findTransferDestination(
       : 1;
     const philosophyFit = ageFit * reachFit * pathwayFit * readinessFit;
     const recruitmentMemory = index?.recruitmentMemoryByClub.get(club.id)
-      ?? deriveClubRecruitmentMemory(state, club.id);
+      ?? deriveClubRecruitmentMemory(
+        fallbackMemoryState ??= {
+          ...state,
+          playerMovementHistory: expandPlayerMovementHistory(state.playerMovementHistory),
+        },
+        club.id,
+      );
     const memoryFit = scoreRecruitmentMemoryFit(
       recruitmentMemory,
       player,
@@ -1806,7 +1815,7 @@ export function hasSuccessfulSigningResponseThisWeek(
     }
     const report = state.reports[response.reportId];
     if (!report) return false;
-    return state.playerMovementHistory.some((movement) =>
+    return expandPlayerMovementHistory(state.playerMovementHistory).some((movement) =>
       movement.playerId === report.playerId
       && movement.week === response.week
       && movement.season === response.season
@@ -3458,7 +3467,7 @@ export function advanceWeek(
       activeLoans: updatedActiveLoans,
       loanHistory: updatedLoanHistory,
       loanRecommendations: updatedLoanRecommendations,
-      playerMovementHistory: updatedPlayerMovementHistory,
+      playerMovementHistory: compactPlayerMovementHistory(updatedPlayerMovementHistory),
       worldHistory: updatedWorldHistory,
       alumniRecords: updatedAlumniRecords,
       // Player seasonRatings and WorldHistory now own completed-season facts.
@@ -3516,7 +3525,7 @@ export function advanceWeek(
     activeLoans: updatedActiveLoans,
     loanHistory: updatedLoanHistory,
     loanRecommendations: updatedLoanRecommendations,
-    playerMovementHistory: updatedPlayerMovementHistory,
+    playerMovementHistory: compactPlayerMovementHistory(updatedPlayerMovementHistory),
     alumniRecords: updatedAlumniRecords,
     matchRatings: updatedMatchRatings,
     regionalKnowledge: updatedRegionalKnowledge,

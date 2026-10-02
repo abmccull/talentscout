@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "./situationArchive";
 /**
  * Observation information-gain planner.
  *
@@ -162,7 +163,7 @@ export function summarizeObservationKnowledge(
     const sourcesForContext = contextSources.get(observation.context) ?? new Set<string>();
     sourcesForContext.add(sourceKey);
     contextSources.set(observation.context, sourcesForContext);
-    const repetitionKey = observation.situation?.repetitionKey
+    const repetitionKey = expandObservationSituationSnapshot(observation.situation)?.repetitionKey
       ?? `context:${observation.context}`;
     const sourcesForSituation = situationSources.get(repetitionKey) ?? new Set<string>();
     sourcesForSituation.add(sourceKey);
@@ -368,6 +369,8 @@ function deriveContextChanges(
   second: Observation,
 ): ObservationContextChange[] {
   const changes: ObservationContextChange[] = [];
+  const firstSituation = expandObservationSituationSnapshot(first.situation);
+  const secondSituation = expandObservationSituationSnapshot(second.situation);
   addContextChange(
     changes,
     "context",
@@ -378,33 +381,33 @@ function deriveContextChanges(
   addContextChange(
     changes,
     "competition",
-    first.situation?.competitionLevel,
-    second.situation?.competitionLevel,
+    firstSituation?.competitionLevel,
+    secondSituation?.competitionLevel,
     "The level of opposition changed the translation test.",
   );
   addContextChange(
     changes,
     "stakes",
-    first.situation?.stakes,
-    second.situation?.stakes,
+    firstSituation?.stakes,
+    secondSituation?.stakes,
     "The personal or competitive stakes changed the pressure around each action.",
   );
   addContextChange(
     changes,
     "tacticalFrame",
-    first.situation?.tacticalFrame,
-    second.situation?.tacticalFrame,
+    firstSituation?.tacticalFrame,
+    secondSituation?.tacticalFrame,
     "The team shape asked the player to solve a different football problem.",
   );
   addContextChange(
     changes,
     "country",
-    first.situation?.countryId,
-    second.situation?.countryId,
+    firstSituation?.countryId,
+    secondSituation?.countryId,
     "The regional reference point changed and should be interpreted with local knowledge.",
   );
-  const firstConditions = first.situation?.repetitionKey;
-  const secondConditions = second.situation?.repetitionKey;
+  const firstConditions = firstSituation?.repetitionKey;
+  const secondConditions = secondSituation?.repetitionKey;
   if (
     firstConditions
     && secondConditions

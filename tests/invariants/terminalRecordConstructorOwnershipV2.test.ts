@@ -102,14 +102,14 @@ describe("real financial constructors preserve terminal ownership through closur
     expect(actual.rejected).toEqual([]); expect(actual.applied).toHaveLength(1);
     expect(actual.state.activeLoans).toEqual([]); expect(actual.state.loanHistory).toHaveLength(4);
     const stored = actual.state.loanHistory[3];
-    expect(Array.isArray(stored)).toBe(true); expect((stored as unknown[])[0]).toBe(withOption ? 1 : 2);
+    expect(Array.isArray(stored)).toBe(true); expect((stored as unknown[])[0]).toBe(withOption ? 41 : 42);
     if (!withOption) expect((stored as unknown[])[13]).toBe(1);
     const decoded = expandLoanDeal(json(stored));
     expect(decoded.monitoringWeeks).toEqual(["2:1", "2:1", "2:4"]); expect(decoded.performanceRecord).toEqual(performance);
     if (!withOption) ownUndefined(decoded, "buyOptionFee"); else expect(decoded.buyOptionFee).toBe(actualSetup.deal.buyOptionFee);
     expect(decoded.status).toBe(kind === "recall" ? "recalled" : kind === "return" || kind === "buyOption" ? "completed" : "terminated");
     const wage = actual.state.clubs.host.financialObligations![2];
-    expect(wage).toHaveProperty("obligationArchiveV2");
+    expect(wage).toHaveProperty("obligationArchiveV32");
     const decodedWage = expandClubFinancialObligation(json(wage));
     expect(decodedWage).toMatchObject({ type: "loanWageContribution", playerId: "p1", amount: 0, remainingWeeks: 0, status: "expired", createdWeek: 1, createdSeason: 2 });
     ownUndefined(decodedWage, "percentage"); expect(bytes(wage)).toBeLessThan(bytes(decodedWage));
@@ -184,7 +184,7 @@ describe("real financial constructors preserve terminal ownership through closur
       : settleTriggeredClubObligations(input, fixtures, 2, 2);
     const actual = settle(normalized), control = settle(decodedClubs(normalized));
     expect(actual.processedObligationIds).toEqual([raw.id]); expect(actual.settledObligationIds).toEqual([raw.id]);
-    const stored = actual.clubs.host.financialObligations![1]; expect(stored).toHaveProperty("obligationArchiveV2");
+    const stored = actual.clubs.host.financialObligations![1]; expect(stored).toHaveProperty("obligationArchiveV32");
     const decoded = expandClubFinancialObligation(json(stored));
     expect(decoded).toEqual(expandClubFinancialObligation(control.clubs.host.financialObligations![1]));
     ownUndefined(decoded, "percentage"); expect(decoded).toMatchObject({ amount: 0, status: "settled", createdWeek: 1, createdSeason: 2 });
@@ -221,7 +221,7 @@ describe("real financial constructors preserve terminal ownership through closur
     expect(actual.rejected).toEqual([]); expect(actual.applied).toHaveLength(1);
     expect(actual.applied[0].financialSettlements).toEqual([{ type: "sellOnClause", amount: 125, creditorClubId: "third", obligationId: raw.id }]);
     const rows = actual.state.clubs.parent.financialObligations!;
-    expect(rows[1]).toHaveProperty("obligationArchiveV2"); expect(rows[0]).toBe(prior); expect(rows[2]).toBe(prior);
+    expect(rows[1]).toHaveProperty("obligationArchiveV32"); expect(rows[0]).toBe(prior); expect(rows[2]).toBe(prior);
     const decoded = expandClubFinancialObligation(json(rows[1]));
     expect(decoded).toMatchObject({ amount: 0, remainingWeeks: 0, percentage: 12.5, status: "settled", createdWeek: 1, createdSeason: 2 });
     ownUndefined(decoded, "weeklyAmount"); ownUndefined(decoded, "appearanceThreshold"); ownUndefined(decoded, "goalsRecorded");

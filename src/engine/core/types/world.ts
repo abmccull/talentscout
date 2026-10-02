@@ -50,7 +50,18 @@ export interface CompactTerminalObligationV2 {
   id: string;
   obligationArchiveV2: [presenceMask: number, undefinedMask: number, ...values: (string | number | null)[]];
 }
-export type StoredClubFinancialObligation = ClubFinancialObligation | CompactTerminalObligationV1 | CompactTerminalObligationV2;
+/** Literal ID or exact prefix + same-leaf playerId + suffix; stored leaves only. */
+export type StableFinancialIdentity = string | [prefix: string, suffix: string];
+export interface CompactTerminalObligationV31 {
+  id: StableFinancialIdentity;
+  obligationArchiveV31: [presenceMask: number, ...values: (string | number | null)[]];
+}
+export interface CompactTerminalObligationV32 {
+  id: StableFinancialIdentity;
+  obligationArchiveV32: [presenceMask: number, undefinedMask: number, ...values: (string | number | null)[]];
+}
+export type StoredClubFinancialObligation = ClubFinancialObligation | CompactTerminalObligationV1 | CompactTerminalObligationV2
+  | CompactTerminalObligationV31 | CompactTerminalObligationV32;
 export type FinancialObligationsStored = StoredClubFinancialObligation[];
 
 export interface Club {

@@ -19,6 +19,9 @@ function loan(): LoanDeal {
 function wireLoan(mask: unknown = 1, optional: unknown = {}): unknown[] {
   return [2, "loan:v2", "p1", "parent", "host", 0, 2, 12, 2, 0, 0, false, "completed", mask, optional];
 }
+function emittedLoan42(mask: unknown = 1, optional: unknown = {}): unknown[] {
+  return [42, "loan:v2", "p1", "parent", "host", 0, 2, 12, 2, 0, 0, false, 0, mask, optional];
+}
 function debt(): ClubFinancialObligation {
   return { id: "obligation:v2", type: "appearanceBonus", playerId: "p1", createdWeek: 0, createdSeason: 2, status: "settled" };
 }
@@ -32,7 +35,7 @@ describe("v2 exact optional ownership at the terminal financial leaf", () => {
     const source = { ...loan(), [field]: undefined } as LoanDeal;
     const before = Object.getOwnPropertyDescriptors(source);
     const stored = compactLoanDeal(source);
-    expect(stored).toEqual(wireLoan(mask));
+    expect(stored).toEqual(emittedLoan42(mask));
     const decoded = expandLoanDeal(json(stored));
     expect(decoded).toEqual(source);
     expectUndefined(decoded, field);
@@ -44,7 +47,7 @@ describe("v2 exact optional ownership at the terminal financial leaf", () => {
 
   it.each(["completed", "recalled", "terminated"] as const)("encodes all seven owned undefined optionals for %s and leaves active identity alone", status => {
     const source = Object.assign({ ...loan(), status }, Object.fromEntries(LOAN_OPTIONAL.map(key => [key, undefined])));
-    const expected = wireLoan(127); expected[12] = status;
+    const expected = emittedLoan42(127); expected[12] = { completed: 0, recalled: 1, terminated: 2 }[status];
     const stored = compactLoanDeal(source);
     expect(stored).toEqual(expected);
     const decoded = expandLoanDeal(json(stored));
@@ -61,7 +64,9 @@ describe("v2 exact optional ownership at the terminal financial leaf", () => {
     const before = Object.getOwnPropertyDescriptors(source), monitoring = [...source.monitoringWeeks];
     const expected = wireLoan(1, { outcome: "successful", agreedPlayingTime: "rotation", startCurrentAbility: 0,
       monitoringWeeks: ["2:0", "2:0", "2:12"], scoutId: "", performanceRecord: [26, 0, 7, 7.125, 7.123456789, 86.123456789, 82] });
-    expect(compactLoanDeal(source)).toEqual(expected);
+    const emitted = emittedLoan42(1, { outcome: 0, agreedPlayingTime: 2, startCurrentAbility: 0,
+      monitoringWeeks: ["2:0", "2:0", "2:12"], scoutId: "", performanceRecord: [26, 0, 7, 7.125, 7.123456789, 86.123456789, 82] });
+    expect(compactLoanDeal(source)).toEqual(emitted);
     const decoded = expandLoanDeal(json(expected) as unknown as StoredLoanDeal);
     expect(decoded).toEqual(source); expectUndefined(decoded, "buyOptionFee");
     expect(Object.getOwnPropertyDescriptors(source)).toEqual(before);
@@ -72,7 +77,7 @@ describe("v2 exact optional ownership at the terminal financial leaf", () => {
     const bit = 2 ** index, source = { ...debt(), [field]: undefined } as ClubFinancialObligation;
     const before = Object.getOwnPropertyDescriptors(source);
     const stored = compactClubFinancialObligation(source);
-    expect(stored).toEqual({ id: source.id, obligationArchiveV2: [899 + bit, bit, "appearanceBonus", "p1", 0, 2, "settled"] });
+    expect(stored).toEqual({ id: source.id, obligationArchiveV32: [899 + bit, bit, 1, "p1", 0, 2, 0] });
     const decoded = expandClubFinancialObligation(json(stored));
     expect(decoded).toEqual(source); expectUndefined(decoded, field);
     for (const [absent] of OBLIGATION_OPTIONAL.filter(([key]) => key !== field)) expect(Object.hasOwn(decoded, absent)).toBe(false);
@@ -84,11 +89,12 @@ describe("v2 exact optional ownership at the terminal financial leaf", () => {
   it("retains all optional undefined bits and distinguishes explicit null/zero/empty and absent before economic normalization", () => {
     const all = Object.assign(debt(), Object.fromEntries(OBLIGATION_OPTIONAL.map(([key]) => [key, undefined])));
     const stored = compactClubFinancialObligation(all);
-    expect(stored).toEqual({ id: all.id, obligationArchiveV2: [8_388_607, 8_387_708, "appearanceBonus", "p1", 0, 2, "settled"] });
+    expect(stored).toEqual({ id: all.id, obligationArchiveV32: [8_388_607, 8_387_708, 1, "p1", 0, 2, 0] });
     for (const [key] of OBLIGATION_OPTIONAL) expectUndefined(expandClubFinancialObligation(json(stored)), key);
     const mixed = { ...debt(), creditorClubId: null, amount: 0, percentage: undefined, trigger: "", lastProcessedWeek: null } as unknown as ClubFinancialObligation;
     const expected = { id: mixed.id, obligationArchiveV2: [10_143, 16, "appearanceBonus", "p1", null, 0, 0, 2, "settled", "", null] };
-    expect(compactClubFinancialObligation(mixed)).toEqual(expected);
+    const emitted = { id: mixed.id, obligationArchiveV32: [10_143, 16, 1, "p1", null, 0, 0, 2, 0, "", null] };
+    expect(compactClubFinancialObligation(mixed)).toEqual(emitted);
     const decoded = expandClubFinancialObligation(json(expected) as unknown as StoredClubFinancialObligation);
     expect(decoded).toEqual(mixed); expectUndefined(decoded, "percentage");
     expect(Object.hasOwn(decoded, "weeklyAmount")).toBe(false);
@@ -97,27 +103,28 @@ describe("v2 exact optional ownership at the terminal financial leaf", () => {
 
   it("uses the actual UTF-8 size choice rather than treating undefined as a payload column", () => {
     const source: ClubFinancialObligation = { id: "", type: "sellOnClause", playerId: "", createdWeek: 0, createdSeason: 0, status: "settled", amount: undefined };
-    const candidate = { id: "", obligationArchiveV2: [907, 8, "sellOnClause", "", 0, 0, "settled"] };
+    const candidate = { id: "", obligationArchiveV32: [907, 8, 4, "", 0, 0, 0] };
     const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
     const actual = compactClubFinancialObligation(source);
     if (bytes(candidate) < bytes(source)) expect(actual).toEqual(candidate);
     else expect(actual).toBe(source);
   });
 
-  it("keeps eligible absent/nonundefined v1 emission and refuses undefined smuggled into v1 payloads", () => {
-    const plain = loan(); expect((compactLoanDeal(plain) as unknown[])[0]).toBe(1);
-    const plainDebt = debt(); expect(compactClubFinancialObligation(plainDebt)).toHaveProperty("obligationArchiveV1");
+  it("emits current absent/nonundefined leaves and refuses undefined smuggled into legacy v1 payloads", () => {
+    const plain = loan(); expect((compactLoanDeal(plain) as unknown[])[0]).toBe(41);
+    const plainDebt = debt(); expect(compactClubFinancialObligation(plainDebt)).toHaveProperty("obligationArchiveV31");
     const v1Loan = [1, ...wireLoan().slice(1, 13), { buyOptionFee: undefined }];
     const v1Debt = { id: "o", obligationArchiveV1: [907, "appearanceBonus", "p1", undefined, 0, 2, "settled"] };
     expect(() => expandLoanDeal(v1Loan as unknown as StoredLoanDeal)).toThrow(InvalidTerminalRecordArchiveError);
     expect(() => expandClubFinancialObligation(v1Debt as unknown as StoredClubFinancialObligation)).toThrow(InvalidTerminalRecordArchiveError);
   });
 
-  it("reads a dense v2 zero-mask tuple without converting stored identity to v1", () => {
+  it("reads legacy v2 zero-mask facts, upgrades once to42 and preserves canonical identity", () => {
     const stored = wireLoan(0) as unknown as StoredLoanDeal;
-    expect(expandLoanDeal(json(stored))).toEqual(loan());
-    expect(compactLoanDeal(stored)).toBe(stored);
-    expect((compactLoanDeal(loan()) as unknown[])[0]).toBe(1);
+    const upgraded = compactLoanDeal(stored);
+    expect([expandLoanDeal(json(stored)), upgraded]).toEqual([loan(), emittedLoan42(0)]);
+    expect(compactLoanDeal(upgraded)).toBe(upgraded);
+    expect((compactLoanDeal(loan()) as unknown[])[0]).toBe(41);
   });
 
   it("keeps required undefined, nonfinite and malformed ordinary payloads as identity fallback", () => {

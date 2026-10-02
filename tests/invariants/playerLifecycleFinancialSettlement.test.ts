@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { describe, expect, it, vi } from "vitest";
 import type {
   Club,
@@ -722,7 +723,7 @@ describe("player lifecycle financial settlement", () => {
     });
     expect(advanced.players[youth.player.id]).toBeUndefined();
     expect(advanced.retiredPlayers[youth.player.id]).toBeUndefined();
-    expect(advanced.playerMovementHistory).not.toContainEqual(
+    expect(expandPlayerMovementHistory(advanced.playerMovementHistory)).not.toContainEqual(
       expect.objectContaining({
         playerId: youth.player.id,
         type: "youthSigning",
@@ -809,7 +810,7 @@ describe("player lifecycle financial settlement", () => {
       lastName: youth.player.lastName,
     });
     expect(advanced.retiredPlayerIds).toContain(youth.player.id);
-    expect(advanced.playerMovementHistory).toContainEqual(
+    expect(expandPlayerMovementHistory(advanced.playerMovementHistory)).toContainEqual(
       expect.objectContaining({
         playerId: youth.player.id,
         type: "footballExit",
@@ -881,7 +882,7 @@ describe("player lifecycle financial settlement", () => {
     expect(advanced.players[youth.player.id]).toBeUndefined();
     expect(advanced.retiredPlayers[youth.player.id]).toBeDefined();
     expect(advanced.retiredPlayerIds).toContain(youth.player.id);
-    expect(advanced.playerMovementHistory).toContainEqual(
+    expect(expandPlayerMovementHistory(advanced.playerMovementHistory)).toContainEqual(
       expect.objectContaining({
         playerId: youth.player.id,
         type: "footballExit",

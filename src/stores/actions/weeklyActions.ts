@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 /**
  * Weekly cycle, calendar scheduling, match, day simulation, and season
  * transition actions extracted from gameStore.
@@ -947,7 +948,7 @@ export function createWeeklyActions(
     noteActivityDiagnostic("dueRecommendationReviews", dueRecommendationReviews.length);
     const movementHistoryByPlayerId = new Map<
       string,
-      typeof stateWithScheduleApplied.playerMovementHistory
+      ReturnType<typeof expandPlayerMovementHistory>
     >();
     const careerInterventionsByPlayerId = new Map<
       string,
@@ -959,7 +960,7 @@ export function createWeeklyActions(
         dueRecommendationReviews.map((review) => review.playerId),
       );
       noteActivityDiagnostic("dueRecommendationReviewPlayers", dueReviewPlayerIds.size);
-      for (const movement of stateWithScheduleApplied.playerMovementHistory) {
+      for (const movement of expandPlayerMovementHistory(stateWithScheduleApplied.playerMovementHistory)) {
         if (!dueReviewPlayerIds.has(movement.playerId)) continue;
         const movements = movementHistoryByPlayerId.get(movement.playerId) ?? [];
         movements.push(movement);

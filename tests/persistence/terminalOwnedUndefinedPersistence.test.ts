@@ -13,7 +13,7 @@ import {
 import {
   NAME, SLOT, assertCanonical, journalSnapshot, malformedRows,
   malformedState, ownUndefined, putHead, readHead, recordFor, stateWithRows,
-  v1LoanWire, v1ObligationWire, v2LoanWire, v2ObligationWire,
+  v1LoanWire, v1ObligationWire, v2LoanWire, v2ObligationWire, v41LoanWire, v31ObligationWire,
 } from "./terminalOwnedUndefinedFixtures";
 
 beforeEach(async () => { await deleteSave(SLOT); });
@@ -25,8 +25,8 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     const legacy = recordFor(state, 7);
     const before = structuredClone(legacy);
     const upgraded = migrateSaveEnvelope(legacy);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(8);
-    expect(upgraded).toStrictEqual({ ...legacy, schemaVersion: 8 });
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(9);
+    expect(upgraded).toStrictEqual({ ...legacy, schemaVersion: 9 });
     expect(upgraded.state).toBe(state);
     expect(upgraded.rulesVersion).toBe("pinned-existing-rules");
     expect(upgraded.buildVersion).toBe("pinned-existing-build");
@@ -35,7 +35,7 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     expect(upgraded.playerExperience).toStrictEqual(legacy.playerExperience);
     expect(legacy).toStrictEqual(before);
     const current = createSaveEnvelope(state, 43_000, legacy.playerExperience);
-    expect(current.schemaVersion).toBe(8);
+    expect(current.schemaVersion).toBe(9);
     expect(current.rulesVersion).toBe(CURRENT_RULES_VERSION);
     expect(current.buildVersion).toBe(CURRENT_BUILD_VERSION);
     expect(current.state).toBe(state);
@@ -52,7 +52,7 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     const rawLoaded = migrateSaveState(portable);
     assertCanonical(rawLoaded);
     const loaded = migrateSaveRecord(JSON.parse(JSON.stringify(recordFor(portable))));
-    expect(loaded.schemaVersion).toBe(8);
+    expect(loaded.schemaVersion).toBe(9);
     assertCanonical(loaded.state);
     expect(loaded).toHaveProperty("customEnvelopeMetadata", { providerReference: "original-external-save-id" });
     expect(loaded.rulesVersion).toBe("pinned-existing-rules");
@@ -69,7 +69,7 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     const before = JSON.stringify(raw);
     const first = migrateSaveRecord(raw);
     const second = migrateSaveRecord(JSON.parse(JSON.stringify(first)));
-    expect(first.schemaVersion).toBe(8);
+    expect(first.schemaVersion).toBe(9);
     assertCanonical(first.state);
     assertCanonical(second.state);
     expect(second).toStrictEqual(first);
@@ -77,12 +77,12 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     expect(JSON.stringify(raw)).toBe(before);
   });
 
-  it("keeps valid historical v1 histories valid without converting their archive versions", () => {
+  it("loads valid historical v1 facts and upgrades canonical emitted leaves without losing order", () => {
     const source = stateWithRows("v1");
-    const expectedLoans = [v1LoanWire(), v1LoanWire()];
-    const expectedObligations = [v1ObligationWire(), v1ObligationWire()];
+    const expectedLoans = [v41LoanWire(), v41LoanWire()];
+    const expectedObligations = [v31ObligationWire(), v31ObligationWire()];
     const loaded = migrateSaveRecord(JSON.parse(JSON.stringify(recordFor(source, 7))));
-    expect(loaded.schemaVersion).toBe(8);
+    expect(loaded.schemaVersion).toBe(9);
     expect(loaded.state.loanHistory).toStrictEqual(expectedLoans);
     expect(loaded.state.clubs.host.financialObligations).toStrictEqual(expectedObligations);
     expect(migrateSaveState(loaded.state)).toStrictEqual(loaded.state);
@@ -94,7 +94,7 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     const first = await saveGameWithResult(SLOT, NAME, source);
     expect(first.wrote).toBe(true);
     const head = await readHead();
-    expect(head.schemaVersion).toBe(8);
+    expect(head.schemaVersion).toBe(9);
     assertCanonical(head.state);
     expect(first.payloadBytes).toBe(new TextEncoder().encode(JSON.stringify(head)).byteLength);
     assertCanonical(migrateSaveRecord(JSON.parse(JSON.stringify(head))).state);
@@ -212,7 +212,7 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     assertCanonical(recovered!.state);
     expect(await journalSnapshot()).toStrictEqual(before);
     const restored = await restoreSaveArchive(previous.id);
-    expect(restored.schemaVersion).toBe(8);
+    expect(restored.schemaVersion).toBe(9);
     assertCanonical(restored.state);
     assertCanonical((await readHead()).state);
     // The invalid head is not copied into the verified recovery archive.
@@ -220,9 +220,9 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     expect((await journalSnapshot()).saveSyncQueue).toStrictEqual(before.saveSyncQueue);
   });
 
-  it("refuses portable schema 9 before touching opaque state and preserves a future head during load/save/restore", async () => {
+  it("refuses portable schema 10 before touching opaque state and preserves a future head during load/save/restore", async () => {
     let opaqueReads = 0;
-    const future = { ...recordFor(stateWithRows("v1")), schemaVersion: 9 };
+    const future = { ...recordFor(stateWithRows("v1")), schemaVersion: 10 };
     Object.defineProperty(future, "state", { enumerable: true, configurable: true,
       get() { opaqueReads += 1; throw new Error("opaque future state must not be inspected"); } });
     expect(() => migrateSaveEnvelope(future)).toThrowError(expect.objectContaining<Partial<SaveMigrationError>>({ code: "FUTURE_VERSION" }));
@@ -232,7 +232,7 @@ describe.sequential("owned optional terminal facts at the common persistence bou
     await saveGameWithResult(SLOT, "Supported head", stateWithRows("v1", 15));
     await enqueueSaveSync(await readHead(), "steam");
     const archive = (await listSaveArchives(SLOT))[0];
-    await putHead({ ...await readHead(), schemaVersion: 9,
+    await putHead({ ...await readHead(), schemaVersion: 10,
       state: { opaqueFutureFacts: [null, { preserveExternalId: "future-earned-proof" }] } });
     const before = await journalSnapshot();
     await expect(loadGameWithRecovery(SLOT)).rejects.toMatchObject({ code: "FUTURE_VERSION" });

@@ -133,7 +133,7 @@ describe("terminal archives remain compact through live authoritative publicatio
       expect(actual.state.loanHistory[index]).toBe(source.loanHistory![index]);
     }
     expect(Array.isArray(actual.state.loanHistory[3])).toBe(true);
-    expect(actual.state.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV1");
+    expect(actual.state.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV31");
     expect(expandClubFinancialObligation(actual.state.clubs.host.financialObligations![1])).toMatchObject({
       id: "active-debt", amount: 0, remainingWeeks: 0, status: "expired",
     });
@@ -148,7 +148,7 @@ describe("terminal archives remain compact through live authoritative publicatio
     const actual = settleWeeklyClubObligations(source, 12, 2);
     const expected = settleWeeklyClubObligations(mixedClubs(false), 12, 2);
     expectPriorObligationsStored(actual.clubs, source);
-    expect(actual.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV1");
+    expect(actual.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV31");
     expect(actual.processedObligationIds).toEqual(["active-debt"]);
     expect(actual.settledObligationIds).toEqual(["active-debt"]);
     expect(actual.clubs.parent.budget).toBe(5_200);
@@ -171,7 +171,7 @@ describe("terminal archives remain compact through live authoritative publicatio
     const actual = settleTriggeredClubObligations(source, fixtures, 12, 2);
     const expected = settleTriggeredClubObligations(mixedClubs(false, active), fixtures, 12, 2);
     expectPriorObligationsStored(actual.clubs, source);
-    expect(actual.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV1");
+    expect(actual.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV31");
     expect(expandClubFinancialObligation(actual.clubs.host.financialObligations![1])).toMatchObject({
       appearancesRecorded: 25, goalsRecorded: 0, assistsRecorded: 0, amount: 0, status: "settled",
       triggeredWeek: 12, triggeredSeason: 2, lastTriggerEvaluationWeek: 12, lastTriggerEvaluationSeason: 2,
@@ -190,7 +190,7 @@ describe("terminal archives remain compact through live authoritative publicatio
     const actual = settleRelegationClubObligations(source, new Set(["host"]), 12, 2);
     const expected = settleRelegationClubObligations(mixedClubs(false, active), new Set(["host"]), 12, 2);
     expectPriorObligationsStored(actual.clubs, source);
-    expect(actual.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV1");
+    expect(actual.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV31");
     expect(expandClubFinancialObligation(actual.clubs.host.financialObligations![1])).toMatchObject({
       amount: 0, status: "settled", triggeredWeek: 12, triggeredSeason: 2,
     });
@@ -221,7 +221,7 @@ describe("terminal archives remain compact through live authoritative publicatio
     const expected = resolvePlayerMovements(getLifecycleWorld(setup(false)), [intent], 12, 2);
     expect(actual.applied).toHaveLength(1);
     expect(actual.rejected).toEqual([]);
-    expect(actual.state.clubs.parent.financialObligations![0]).toHaveProperty("obligationArchiveV1");
+    expect(actual.state.clubs.parent.financialObligations![0]).toHaveProperty("obligationArchiveV31");
     expect(actual.applied[0].financialSettlements).toEqual([{ type: "sellOnClause", amount: 125,
       creditorClubId: "third", obligationId: "sell-on" }]);
     expect(actual.state.clubs.parent.budget).toBe(5_875);
@@ -250,7 +250,7 @@ describe("terminal archives remain compact through live authoritative publicatio
     expect(expandLoanDeal(actual.state.loanHistory[3])).toMatchObject({
       id: "new:loan", playerId: "p1", status: "terminated", outcome: "terminated",
     });
-    expect(actual.state.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV1");
+    expect(actual.state.clubs.host.financialObligations![1]).toHaveProperty("obligationArchiveV31");
     expect(decodedWorld(actual.state)).toEqual(decodedWorld(expected.state));
     expect(actual.applied).toEqual(expected.applied);
     for (let index = 0; index < source.loanHistory!.length; index++) {

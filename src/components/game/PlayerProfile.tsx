@@ -1,4 +1,5 @@
 "use client";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { expandPlayerInjuryHistory, expandPlayerPersonalityProfile } from "../../engine/players/playerStateArchive";
 import { expandLoanDeal } from "../../engine/finance/terminalRecordArchive";
 
@@ -331,7 +332,7 @@ function PlayerProfileContent() {
       recommendation.playerId === player.id &&
       (recommendation.status ?? "pending") === "pending",
   );
-  const movementHistory = (gameState.playerMovementHistory ?? [])
+  const movementHistory = expandPlayerMovementHistory(gameState.playerMovementHistory ?? [])
     .filter((event) => event.playerId === player.id)
     .sort((a, b) => b.season - a.season || b.week - a.week);
   const loanDealsById = new Map(

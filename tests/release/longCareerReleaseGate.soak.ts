@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -450,7 +451,7 @@ function validateReferences(state: GameState): string[] {
   }
 
   const youthSigningPlayerIds = new Set(
-    (state.playerMovementHistory ?? [])
+    expandPlayerMovementHistory(state.playerMovementHistory ?? [])
       .filter((movement) => movement.type === "youthSigning")
       .map((movement) => movement.playerId),
   );
@@ -510,7 +511,7 @@ function describePlacedYouthFailures(
         activePlayer: playerId ? state.players[playerId] : undefined,
         retiredPlayer: playerId ? state.retiredPlayers?.[playerId] : undefined,
         movements: playerId
-          ? (state.playerMovementHistory ?? []).filter((movement) => movement.playerId === playerId)
+          ? expandPlayerMovementHistory(state.playerMovementHistory ?? []).filter((movement) => movement.playerId === playerId)
           : [],
         placementReports: Object.values(state.placementReports ?? {}).filter(
           (placement) => placement.unsignedYouthId === youthId,

@@ -1,3 +1,5 @@
+import { assertStoredHistoryArchives } from "./storedHistoryValidation";
+import { assertStoredFinancialArchives } from "./storedFinancialValidation";
 /**
  * IndexedDB persistence layer using Dexie.js.
  *
@@ -27,11 +29,6 @@ import {
 import { createEventDirectorState } from "@/engine/events/eventDirector";
 import type { CountryData } from "@/data/types";
 import { reconcileFinancialLedger } from "@/engine/finance/saveMigration";
-import {
-  expandClubFinancialObligation,
-  expandLoanDeal,
-  InvalidTerminalRecordArchiveError,
-} from "@/engine/finance/terminalRecordArchive";
 import { migrateWorldConditionState } from "@/engine/world/worldConditions";
 import {
   closeOrphanedWorldConditionArcDecisions,
@@ -1504,40 +1501,6 @@ export function migrateSaveRecord(raw: unknown): SaveRecord {
  * The source is never mutated, and a migrated result can safely pass through
  * this function again.
  */
-function assertFinancialArchivesBeforeClone(candidate: Record<string, unknown>): void {
-  const dataValue = (value: unknown, key: string): unknown => {
-    if (value === null || typeof value !== "object") return undefined;
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    return descriptor && Object.hasOwn(descriptor, "value") ? descriptor.value : undefined;
-  };
-  const visitRows = (value: unknown, visit: (row: unknown) => void) => {
-    if (!Array.isArray(value)) return;
-    for (let index = 0; index < value.length; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (descriptor && Object.hasOwn(descriptor, "value")) visit(descriptor.value);
-    }
-  };
-  try {
-    visitRows(dataValue(candidate, "loanHistory"), (row) => {
-      expandLoanDeal(row as NonNullable<GameState["loanHistory"]>[number]);
-    });
-    const clubs = dataValue(candidate, "clubs");
-    if (clubs !== null && typeof clubs === "object" && !Array.isArray(clubs)) {
-      for (const clubId of Object.getOwnPropertyNames(clubs)) {
-        const club = dataValue(clubs, clubId);
-        visitRows(dataValue(club, "financialObligations"), (row) => {
-          expandClubFinancialObligation(row as NonNullable<GameState["clubs"][string]["financialObligations"]>[number]);
-        });
-      }
-    }
-  } catch (error) {
-    if (error instanceof InvalidTerminalRecordArchiveError) {
-      throw new SaveMigrationError("CORRUPT_SAVE", error.message);
-    }
-    throw error;
-  }
-}
-
 export function migrateSaveState(raw: unknown): GameState {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new SaveMigrationError(
@@ -1571,7 +1534,8 @@ export function migrateSaveState(raw: unknown): GameState {
 
   // Clone can invoke getters or erase descriptor flags. Validate recognized
   // financial archives on the original input before any compatibility repair.
-  assertFinancialArchivesBeforeClone(candidate);
+  assertStoredFinancialArchives(candidate);
+  assertStoredHistoryArchives(candidate);
 
   let state: GameState;
   try {

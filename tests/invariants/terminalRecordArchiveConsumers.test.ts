@@ -122,7 +122,8 @@ describe("terminal archives through existing consumers", () => {
     const before = JSON.stringify(original);
     const expected = normalizeClubEconomics(club("host", [terminalObligation(), payable(), terminalObligation()]), {});
     const actual = normalizeClubEconomics(original, {});
-    expect(actual).toEqual(expected);
+    expect({ ...actual, financialObligations: actual.financialObligations?.map(row => expandClubFinancialObligation(row)) })
+      .toEqual({ ...expected, financialObligations: expected.financialObligations?.map(row => expandClubFinancialObligation(row)) });
     expect(actual.financialObligations).toHaveLength(3);
     expect(getClubWeeklyObligationCommitment(actual)).toBe(200);
     expect(normalizeClubEconomics(actual, {})).toEqual(actual);

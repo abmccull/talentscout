@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
 import { describe, expect, it } from "vitest";
 
 import type { CulturalInsight, NewGameConfig } from "@/engine/core/types";
@@ -296,6 +297,6 @@ describe("observation situations", () => {
     expect(averageConfidence(deepObservation.attributeReadings))
       .toBeGreaterThan(averageConfidence(blitzObservation.attributeReadings));
     expect(deepObservation.situation).toEqual(deepDive);
-    expect(blitzObservation.situation?.contextTags).toContain("travel-posture:opportunityBlitz");
+    expect(expandObservationSituationSnapshot(blitzObservation.situation)?.contextTags).toContain("travel-posture:opportunityBlitz");
   });
 });

@@ -1,6 +1,10 @@
 import type {
   CompactTerminalLoanV1,
   CompactTerminalLoanV2,
+  CompactTerminalLoanV41,
+  CompactTerminalLoanV42,
+  CompactLoanOptionalV1,
+  StableFinancialIdentity,
   LoanDeal,
   LoanPerformanceRecord,
   StoredLoanDeal,
@@ -9,6 +13,8 @@ import type {
   ClubFinancialObligation,
   CompactTerminalObligationV1,
   CompactTerminalObligationV2,
+  CompactTerminalObligationV31,
+  CompactTerminalObligationV32,
   StoredClubFinancialObligation,
 } from "../core/types/world";
 export type { StoredLoanDeal } from "../core/types";
@@ -141,12 +147,186 @@ function obligationArchiveShaped(value: unknown): value is Record<string, unknow
   return Object.getOwnPropertyNames(value).some(key => /^obligationArchiveV[0-9]+$/.test(key));
 }
 
+// Versioned closed authorities: never infer aliases or reorder a table in-place.
+const LOAN_STATUS_CODES = ["completed", "recalled", "terminated"] as const;
+const LOAN_OUTCOME_CODES = ["successful", "neutral", "unsuccessful", "buy-option-exercised", "recalled-early", "terminated"] as const;
+const LOAN_ROLE_CODES = ["key", "regular", "rotation", "prospect"] as const;
+const OBLIGATION_TYPE_CODES = ["loanWageContribution", "appearanceBonus", "performanceBonus", "relegationClause", "sellOnClause"] as const;
+const OBLIGATION_STATUS_CODES = ["settled", "expired"] as const;
+const OBLIGATION_ENVELOPE_FIELDS_V31 = new Set(["id", "obligationArchiveV31"]);
+const OBLIGATION_ENVELOPE_FIELDS_V32 = new Set(["id", "obligationArchiveV32"]);
+
+function enumCode(value: unknown, table: readonly string[]): number {
+  const code = typeof value === "string" ? table.indexOf(value) : -1;
+  if (code < 0) throw new InvalidTerminalRecordArchiveError("Unknown financial enum value");
+  return code;
+}
+
+function enumText(value: unknown, table: readonly string[]): string {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || Object.is(value, -0)
+    || value < 0 || value >= table.length) {
+    throw new InvalidTerminalRecordArchiveError("Invalid financial enum code");
+  }
+  return table[value];
+}
+
+function jsonBytes(value: unknown): number {
+  return utf8Encoder.encode(JSON.stringify(value)).byteLength;
+}
+
+function factorFinancialId(id: string, playerId: string): StableFinancialIdentity {
+  if (playerId === "") return id;
+  const at = id.indexOf(playerId);
+  if (at < 0) return id;
+  const parts: [string, string] = [id.slice(0, at), id.slice(at + playerId.length)];
+  return jsonBytes(parts) < jsonBytes(id) ? parts : id;
+}
+
+function restoreFinancialId(value: unknown, playerId: unknown): string {
+  if (typeof playerId !== "string") {
+    throw new InvalidTerminalRecordArchiveError("Invalid financial player identity");
+  }
+  if (typeof value === "string") return value;
+  if (playerId === "" || !denseArray(value, 2) || !value.every(part => typeof part === "string")) {
+    throw new InvalidTerminalRecordArchiveError("Invalid financial identity parts");
+  }
+  return (value[0] as string) + playerId + (value[1] as string);
+}
+
+// Selection must not erase negative zero, prototypes, descriptors or cycles.
+// Recognition/validation happens first; this guard selects exact fallback only.
+function losslessLeafJSON(value: unknown, ancestors: ReadonlySet<object> = new Set()): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return finite(value) && !Object.is(value, -0);
+  if (typeof value !== "object" || ancestors.has(value)) return false;
+  if (Array.isArray(value)) {
+    if (!denseArray(value)) return false;
+  } else if (Object.getPrototypeOf(value) !== Object.prototype
+    || !dataRecord(value, new Set(Object.getOwnPropertyNames(value)))) return false;
+  const next = new Set(ancestors);
+  next.add(value);
+  return Object.keys(value).every(key => losslessLeafJSON(Object.getOwnPropertyDescriptor(value, key)!.value, next));
+}
+
+function restoreStableLoan(entry: unknown[]): CompactTerminalLoanV1 | CompactTerminalLoanV2 {
+  const isV2 = entry[0] === 42;
+  if (!denseArray(entry, isV2 ? 15 : 14)) {
+    throw new InvalidTerminalRecordArchiveError("Invalid stable terminal loan archive");
+  }
+  if (isV2 && Object.is(entry[13], -0)) {
+    throw new InvalidTerminalRecordArchiveError("Invalid stable terminal loan undefined mask");
+  }
+  const optional = entry[isV2 ? 14 : 13];
+  if (!dataRecord(optional, OPTIONAL_LOAN_FIELDS) || Object.getPrototypeOf(optional) !== Object.prototype) {
+    throw new InvalidTerminalRecordArchiveError("Invalid stable terminal loan optional archive");
+  }
+  const restored: unknown[] = [...entry];
+  restored[0] = isV2 ? 2 : 1;
+  restored[1] = restoreFinancialId(entry[1], entry[2]);
+  restored[12] = enumText(entry[12], LOAN_STATUS_CODES);
+  restored[isV2 ? 14 : 13] = Object.fromEntries(Object.entries(optional).map(([key, payload]) => [key,
+    key === "outcome" ? enumText(payload, LOAN_OUTCOME_CODES)
+      : key === "agreedPlayingTime" ? enumText(payload, LOAN_ROLE_CODES) : payload]));
+  // The existing ordinary v1/v2 decoder validates all other masks/full facts.
+  return restored as CompactTerminalLoanV1 | CompactTerminalLoanV2;
+}
+
+function upgradeStableLoan(entry: CompactTerminalLoanV1 | CompactTerminalLoanV2): StoredLoanDeal {
+  if (!losslessLeafJSON(entry)) return entry;
+  const packed: unknown[] = [...entry];
+  packed[0] = entry[0] === 1 ? 41 : 42;
+  packed[1] = factorFinancialId(entry[1], entry[2]);
+  packed[12] = enumCode(entry[12], LOAN_STATUS_CODES);
+  const optional = entry[entry[0] === 1 ? 13 : 14] as CompactLoanOptionalV1;
+  packed[packed.length - 1] = Object.fromEntries(Object.entries(optional).map(([key, payload]) => [key,
+    key === "outcome" ? enumCode(payload, LOAN_OUTCOME_CODES)
+      : key === "agreedPlayingTime" ? enumCode(payload, LOAN_ROLE_CODES) : payload]));
+  return jsonBytes(packed) < jsonBytes(entry)
+    ? packed as CompactTerminalLoanV41 | CompactTerminalLoanV42 : entry;
+}
+
+function walkStableObligation(row: unknown[], isV2: boolean, visit: (field: string, offset: number) => void): void {
+  if (!denseArray(row) || row.length < (isV2 ? 2 : 1)) {
+    throw new InvalidTerminalRecordArchiveError("Invalid stable terminal obligation payload");
+  }
+  const mask = row[0];
+  const undefinedMask = isV2 ? row[1] : 0;
+  if (typeof mask !== "number" || !Number.isInteger(mask) || Object.is(mask, -0) || mask < 0
+    || mask >= OBLIGATION_MASK_LIMIT || (mask & REQUIRED_OBLIGATION_MASK) !== REQUIRED_OBLIGATION_MASK) {
+    throw new InvalidTerminalRecordArchiveError("Invalid stable terminal obligation presence mask");
+  }
+  if (typeof undefinedMask !== "number" || !Number.isInteger(undefinedMask) || Object.is(undefinedMask, -0)
+    || undefinedMask < 0 || undefinedMask >= OBLIGATION_MASK_LIMIT
+    || (undefinedMask & mask) !== undefinedMask || (undefinedMask & REQUIRED_OBLIGATION_MASK) !== 0) {
+    throw new InvalidTerminalRecordArchiveError("Invalid stable terminal obligation undefined mask");
+  }
+  let offset = isV2 ? 2 : 1;
+  for (let index = 0; index < OBLIGATION_FIELDS.length; index += 1) {
+    const bit = 2 ** index;
+    if ((mask & bit) === 0 || (undefinedMask & bit) !== 0) continue;
+    if (offset >= row.length || row[offset] === undefined) {
+      throw new InvalidTerminalRecordArchiveError("Missing or unmasked stable terminal obligation payload");
+    }
+    visit(OBLIGATION_FIELDS[index], offset);
+    offset += 1;
+  }
+  if (offset !== row.length) {
+    throw new InvalidTerminalRecordArchiveError("Extra stable terminal obligation payload");
+  }
+}
+
+function restoreStableObligation(entry: Record<string, unknown>): CompactTerminalObligationV1 | CompactTerminalObligationV2 {
+  const isV1 = own(entry, "obligationArchiveV31"), isV2 = own(entry, "obligationArchiveV32");
+  const key = isV2 ? "obligationArchiveV32" : "obligationArchiveV31";
+  if (isV1 === isV2 || !dataRecord(entry, isV2 ? OBLIGATION_ENVELOPE_FIELDS_V32 : OBLIGATION_ENVELOPE_FIELDS_V31)
+    || Object.getPrototypeOf(entry) !== Object.prototype || !own(entry, "id") || !own(entry, key)) {
+    throw new InvalidTerminalRecordArchiveError("Invalid stable terminal obligation envelope");
+  }
+  const row = entry[key];
+  if (!denseArray(row)) throw new InvalidTerminalRecordArchiveError("Invalid stable terminal obligation array");
+  const restoredValues: unknown[] = [...row];
+  walkStableObligation(row, isV2, (field, offset) => {
+    if (field === "type") restoredValues[offset] = enumText(row[offset], OBLIGATION_TYPE_CODES);
+    else if (field === "status") restoredValues[offset] = enumText(row[offset], OBLIGATION_STATUS_CODES);
+  });
+  const id = restoreFinancialId(entry.id, restoredValues[isV2 ? 3 : 2]);
+  const originalKey = isV2 ? "obligationArchiveV2" : "obligationArchiveV1";
+  const restored = Object.fromEntries(Object.keys(entry).map(field => [field === "id" ? "id" : originalKey,
+    field === "id" ? id : restoredValues]));
+  return restored as unknown as CompactTerminalObligationV1 | CompactTerminalObligationV2;
+}
+
+function upgradeStableObligation(entry: CompactTerminalObligationV1 | CompactTerminalObligationV2): StoredClubFinancialObligation {
+  if (!losslessLeafJSON(entry)) return entry;
+  const isV2 = own(entry, "obligationArchiveV2");
+  const row = isV2 ? (entry as CompactTerminalObligationV2).obligationArchiveV2
+    : (entry as CompactTerminalObligationV1).obligationArchiveV1;
+  const values: unknown[] = [...row];
+  const playerId = row[isV2 ? 3 : 2];
+  if (typeof playerId !== "string") throw new InvalidTerminalRecordArchiveError("Invalid financial player identity");
+  const id = factorFinancialId(entry.id, playerId);
+  walkStableObligation(row, isV2, (field, offset) => {
+    if (field === "type") values[offset] = enumCode(row[offset], OBLIGATION_TYPE_CODES);
+    else if (field === "status") values[offset] = enumCode(row[offset], OBLIGATION_STATUS_CODES);
+  });
+  const key = isV2 ? "obligationArchiveV32" : "obligationArchiveV31";
+  const packed = Object.fromEntries(Object.keys(entry).map(field => [field === "id" ? "id" : key,
+    field === "id" ? id : values]));
+  return jsonBytes(packed) < jsonBytes(entry)
+    ? packed as unknown as CompactTerminalObligationV31 | CompactTerminalObligationV32 : entry;
+}
+
+
 export function expandLoanDeal(entry: StoredLoanDeal): LoanDeal;
 export function expandLoanDeal<T extends null | undefined>(entry: T): T;
 export function expandLoanDeal(entry: StoredLoanDeal | undefined): LoanDeal | undefined;
 export function expandLoanDeal(entry: StoredLoanDeal | null | undefined): LoanDeal | null | undefined;
 export function expandLoanDeal(entry: StoredLoanDeal | null | undefined): LoanDeal | null | undefined {
   if (!Array.isArray(entry)) return entry;
+  if (!denseArray(entry)) {
+    throw new InvalidTerminalRecordArchiveError("Invalid terminal loan archive descriptors");
+  }
+  if (entry[0] === 41 || entry[0] === 42) return expandLoanDeal(restoreStableLoan(entry));
   if (!denseArray(entry)
     || (entry[0] !== 1 && entry[0] !== 2)
     || entry.length !== (entry[0] === 1 ? 14 : 15)) {
@@ -197,7 +377,7 @@ export function compactLoanDeal(entry: StoredLoanDeal | null | undefined): Store
 export function compactLoanDeal(entry: StoredLoanDeal | null | undefined): StoredLoanDeal | null | undefined {
   if (Array.isArray(entry)) {
     expandLoanDeal(entry);
-    return entry;
+    return entry[0] === 41 || entry[0] === 42 ? entry : upgradeStableLoan(entry);
   }
   if (!knownLoan(entry, true)) return entry;
   let undefinedMask = 0;
@@ -210,9 +390,9 @@ export function compactLoanDeal(entry: StoredLoanDeal | null | undefined): Store
       ? PERFORMANCE_KEYS.map(field => (payload as LoanPerformanceRecord)[field]) : payload]));
   // Screening deliberately packs every eligible terminal loan, even if larger.
   if (undefinedMask !== 0) {
-    return [2, ...LOAN_REQUIRED.map(key => entry[key]), undefinedMask, optional] as CompactTerminalLoanV2;
+    return upgradeStableLoan([2, ...LOAN_REQUIRED.map(key => entry[key]), undefinedMask, optional] as CompactTerminalLoanV2);
   }
-  return [1, ...LOAN_REQUIRED.map(key => entry[key]), optional] as CompactTerminalLoanV1;
+  return upgradeStableLoan([1, ...LOAN_REQUIRED.map(key => entry[key]), optional] as CompactTerminalLoanV1);
 }
 
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation): ClubFinancialObligation;
@@ -221,6 +401,9 @@ export function expandClubFinancialObligation(entry: StoredClubFinancialObligati
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation | null | undefined): ClubFinancialObligation | null | undefined;
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation | null | undefined): ClubFinancialObligation | null | undefined {
   if (!obligationArchiveShaped(entry)) return entry as ClubFinancialObligation | null | undefined;
+  if (own(entry, "obligationArchiveV31") || own(entry, "obligationArchiveV32")) {
+    return expandClubFinancialObligation(restoreStableObligation(entry));
+  }
   const isV2 = own(entry, "obligationArchiveV2");
   const archiveKey = isV2 ? "obligationArchiveV2" : "obligationArchiveV1";
   if (!dataRecord(entry, isV2 ? OBLIGATION_ENVELOPE_FIELDS_V2 : OBLIGATION_ENVELOPE_FIELDS_V1)
@@ -277,7 +460,9 @@ export function compactClubFinancialObligation(entry: StoredClubFinancialObligat
 export function compactClubFinancialObligation(entry: StoredClubFinancialObligation | null | undefined): StoredClubFinancialObligation | null | undefined {
   if (obligationArchiveShaped(entry)) {
     expandClubFinancialObligation(entry as StoredClubFinancialObligation);
-    return entry as StoredClubFinancialObligation;
+    return own(entry, "obligationArchiveV31") || own(entry, "obligationArchiveV32")
+      ? entry as StoredClubFinancialObligation
+      : upgradeStableObligation(entry as unknown as CompactTerminalObligationV1 | CompactTerminalObligationV2);
   }
   if (!knownObligation(entry, true)) return entry;
   let mask = 0;
@@ -293,7 +478,6 @@ export function compactClubFinancialObligation(entry: StoredClubFinancialObligat
   const packed: CompactTerminalObligationV1 | CompactTerminalObligationV2 = undefinedMask === 0
     ? { id: entry.id, obligationArchiveV1: [mask, ...payload] }
     : { id: entry.id, obligationArchiveV2: [mask, undefinedMask, ...payload] };
-  const originalBytes = utf8Encoder.encode(JSON.stringify(entry)).byteLength;
-  const packedBytes = utf8Encoder.encode(JSON.stringify(packed)).byteLength;
-  return packedBytes < originalBytes ? packed : entry;
+  const candidate = upgradeStableObligation(packed);
+  return jsonBytes(candidate) < jsonBytes(entry) ? candidate : entry;
 }

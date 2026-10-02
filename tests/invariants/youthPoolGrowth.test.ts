@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
@@ -132,7 +133,7 @@ describe("unsigned-youth population integrity", () => {
     });
     expect(after.retiredPlayerIds).toContain(youth.player.id);
     expect(after.reports[reportId].playerId).toBe(youth.player.id);
-    expect(after.playerMovementHistory).toContainEqual(expect.objectContaining({
+    expect(expandPlayerMovementHistory(after.playerMovementHistory)).toContainEqual(expect.objectContaining({
       playerId: youth.player.id,
       type: "footballExit",
     }));
@@ -256,7 +257,7 @@ describe("unsigned-youth population integrity", () => {
       contractClubId: targetClub.id,
     });
     expect(after.players[youth.player.id].wage).toBeGreaterThan(0);
-    expect(after.playerMovementHistory).toContainEqual(expect.objectContaining({
+    expect(expandPlayerMovementHistory(after.playerMovementHistory)).toContainEqual(expect.objectContaining({
       playerId: youth.player.id,
       type: "youthSigning",
       toClubId: targetClub.id,

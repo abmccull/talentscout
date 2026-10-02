@@ -155,17 +155,17 @@ describe.sequential("player archive canonical save and refusal contracts", () =>
     expect(JSON.stringify(raw)).toBe(before);
   });
 
-  it("persists schema8 canonical rows through actual journal save, raw read-back and load/save", async () => {
+  it("persists schema9 canonical rows through actual journal save, raw read-back and load/save", async () => {
     const raw = state();
     const before = JSON.stringify(raw);
     const expected = owners(raw).map(semanticFacts);
     const saved = await saveGame(0, "Player archive facts", raw);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(8);
-    expect(saved.schemaVersion).toBe(8);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(9);
+    expect(saved.schemaVersion).toBe(9);
     assertPacked(saved.state);
     expect(owners(saved.state).map(semanticFacts)).toEqual(expected);
     const persisted = await readRaw() as typeof saved;
-    expect(persisted.schemaVersion).toBe(8);
+    expect(persisted.schemaVersion).toBe(9);
     assertPacked(persisted.state);
     const loaded = await loadGame(0);
     expect(loaded).not.toBeNull();
@@ -239,10 +239,10 @@ describe.sequential("player archive canonical save and refusal contracts", () =>
     const old = { ...saved, schemaVersion, state: state() };
     const oldBytes = JSON.stringify(old);
     const migrated = migrateSaveRecord(old);
-    expect(migrated.schemaVersion).toBe(8);
+    expect(migrated.schemaVersion).toBe(9);
     assertPacked(migrated.state);
     expect(JSON.stringify(old)).toBe(oldBytes);
-    const future = { ...saved, schemaVersion: 9, state: { ...saved.state, futureOpaqueFacts: [null, "keep"] } };
+    const future = { ...saved, schemaVersion: 10, state: { ...saved.state, futureOpaqueFacts: [null, "keep"] } };
     await putRaw(future);
     const before = JSON.stringify(await readRaw());
     await expect(loadGame(0)).rejects.toMatchObject({ code: "FUTURE_VERSION" });

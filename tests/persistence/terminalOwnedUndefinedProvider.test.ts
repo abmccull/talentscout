@@ -5,7 +5,7 @@ import { deleteSave, enqueueSaveSync, saveGameWithResult } from "@/lib/db";
 import { createSaveProvider } from "@/lib/saveProvider";
 import {
   NAME, SLOT, SLOT_NAME, assertCanonical, journalSnapshot, malformedRows,
-  malformedState, readHead, recordFor, stateWithRows,
+  malformedState, readHead, recordFor, stateWithRows, v41LoanWire,
 } from "./terminalOwnedUndefinedFixtures";
 
 const steamState = vi.hoisted(() => ({ blobs: new Map<number, string>() }));
@@ -32,11 +32,11 @@ describe.sequential("owned undefined through the actual local/mock save-provider
     const provider = createSaveProvider({ includeSteam: true });
     const commit = await provider.saveState(SLOT_NAME, source, NAME, { waitForCloud: true });
     expect(commit.wrote).toBe(true);
-    expect(commit.record.schemaVersion).toBe(8);
+    expect(commit.record.schemaVersion).toBe(9);
     assertCanonical(commit.record.state);
     expect(steamMock.setCloudSave).toHaveBeenCalledTimes(1);
     const mirrored = JSON.parse(steamState.blobs.get(SLOT)!);
-    expect(mirrored.schemaVersion).toBe(8);
+    expect(mirrored.schemaVersion).toBe(9);
     assertCanonical(mirrored.state);
     const local = await provider.loadFromSource(SLOT_NAME, "local");
     const remote = await provider.loadFromSource(SLOT_NAME, "steam");
@@ -61,7 +61,7 @@ describe.sequential("owned undefined through the actual local/mock save-provider
     const provider = createSaveProvider({ includeSteam: false });
     await provider.save(SLOT_NAME, portable, NAME);
     const head = await readHead();
-    expect(head.schemaVersion).toBe(8);
+    expect(head.schemaVersion).toBe(9);
     assertCanonical(head.state);
     const loaded = await provider.load(SLOT_NAME);
     assertCanonical(loaded!.state);
@@ -98,17 +98,17 @@ describe.sequential("owned undefined through the actual local/mock save-provider
     const provider = createSaveProvider({ includeSteam: true });
     await expect(provider.loadFromSource(SLOT_NAME, "steam")).resolves.toBeNull();
     const local = await provider.loadFromSource(SLOT_NAME, "local");
-    expect(local?.state.loanHistory).toStrictEqual(stateWithRows("v1").loanHistory);
+    expect(local?.state.loanHistory).toStrictEqual([v41LoanWire(), v41LoanWire()]);
     expect(await journalSnapshot()).toStrictEqual(journal);
     expect(steamState.blobs.get(SLOT)).toBe(remoteBytes);
     expect(steamMock.setCloudSave).not.toHaveBeenCalled();
   });
 
-  it("refuses portable schema 9 with opaque remote facts before selecting or rewriting a supported local branch", async () => {
+  it("refuses portable schema 10 with opaque remote facts before selecting or rewriting a supported local branch", async () => {
     await saveGameWithResult(SLOT, "Valid local", stateWithRows("v1"));
     await enqueueSaveSync(await readHead(), "steam");
     const journal = await journalSnapshot();
-    const remoteBytes = JSON.stringify({ ...recordFor(stateWithRows("v1"), 9),
+    const remoteBytes = JSON.stringify({ ...recordFor(stateWithRows("v1"), 10),
       state: { opaqueFutureFacts: { externalReference: "future-earned-proof", original: [null, "keep"] } } });
     steamState.blobs.set(SLOT, remoteBytes);
     const provider = createSaveProvider({ includeSteam: true });

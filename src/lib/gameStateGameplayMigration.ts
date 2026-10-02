@@ -1,3 +1,5 @@
+import { assertStoredHistoryArchives } from "./storedHistoryValidation";
+import { assertStoredFinancialArchives } from "./storedFinancialValidation";
 import { migrateVisualIdentities } from "@/engine/players/portraits/state";
 import type {
   ActionableGossipItem,
@@ -72,7 +74,6 @@ import {
 } from "@/engine/youth/prospectFollowUpDelivery";
 import { SaveMigrationError } from "@/lib/saveEnvelope";
 import { assertPlayerStateArchives, InvalidPlayerStateArchiveError } from "@/engine/players/playerStateArchive";
-import { expandClubFinancialObligation, expandLoanDeal, InvalidTerminalRecordArchiveError } from "@/engine/finance/terminalRecordArchive";
 
 type LegacyContactInteraction = Omit<ContactInteraction, "occurredAt"> & {
   occurredAt?: GameDate;
@@ -857,19 +858,16 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
   // which authorities were already initialized before report reconstruction.
   const initializedDeliveryCases = new Set<string>();
   try {
+    assertStoredHistoryArchives(state);
     assertPlayerStateArchives(state);
-    for (const loan of state.loanHistory ?? []) expandLoanDeal(loan);
-    for (const club of Object.values(state.clubs ?? {})) {
-      for (const obligation of club.financialObligations ?? []) expandClubFinancialObligation(obligation);
-    }
+    assertStoredFinancialArchives(state);
     normalizeRequiredStateShape(state);
     for (const [key, scoutingCase] of Object.entries(state.scoutingCases ?? {})) {
       assertProspectFollowUpDeliveryAuthority(scoutingCase);
       if (scoutingCase.prospectFollowUpDeliveries !== undefined) initializedDeliveryCases.add(key);
     }
   } catch (error) {
-    if (error instanceof InvalidProspectFollowUpDeliveryError || error instanceof InvalidPlayerStateArchiveError
-      || error instanceof InvalidTerminalRecordArchiveError) {
+    if (error instanceof InvalidProspectFollowUpDeliveryError || error instanceof InvalidPlayerStateArchiveError) {
       throw new SaveMigrationError("CORRUPT_SAVE", error.message);
     }
     throw error;

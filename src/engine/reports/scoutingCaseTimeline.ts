@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { describeAlumniHistory, isSourcedAlumniEvent } from "../youth/alumniEvidence";
 import { expandLoanDeal } from "../finance/terminalRecordArchive";
 import type {
@@ -350,7 +351,7 @@ export function buildScoutingCaseTimeline(
     });
   }
 
-  const movements = (state.playerMovementHistory ?? []).filter((movement) =>
+  const movements = expandPlayerMovementHistory(state.playerMovementHistory ?? []).filter((movement) =>
     movement.playerId === scoutingCase.playerId
     && isOnOrAfter(
       movement.season,

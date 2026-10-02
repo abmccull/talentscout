@@ -28,13 +28,18 @@ function obligation(): ClubFinancialObligation {
 const json = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 describe("lossless terminal archive leaf contracts", () => {
-  it.each(["completed", "recalled", "terminated"] as const)("preserves full %s loan facts through exact v1 JSON tuples", (status) => {
+  it.each(["completed", "recalled", "terminated"] as const)("preserves full %s loan facts through exact current tuples and legacy v1 reads", (status) => {
     const source = { ...fullLoan(), status }, before = JSON.stringify(source);
     const stored = compactLoanDeal(source);
-    expect(stored).toEqual([1, source.id, "p1", "parent", "host", 0, 2, 12, 2, 0, 0, false, status,
+    const legacy = [1, source.id, "p1", "parent", "host", 0, 2, 12, 2, 0, 0, false, status,
       { buyOptionFee: 123.456789012345, outcome: "successful", agreedPlayingTime: "rotation",
         startCurrentAbility: 73.123456789, monitoringWeeks: ["2:0", "2:0", "2:12"], scoutId: "",
-        performanceRecord: [26, 5, 7, 7.125, 7.123456789, 86, 82] }]);
+        performanceRecord: [26, 5, 7, 7.125, 7.123456789, 86, 82] }];
+    expect([stored, expandLoanDeal(legacy as unknown as StoredLoanDeal)]).toEqual([[41, source.id, "p1", "parent", "host", 0, 2, 12, 2, 0, 0, false,
+      { completed: 0, recalled: 1, terminated: 2 }[status],
+      { buyOptionFee: 123.456789012345, outcome: 0, agreedPlayingTime: 2,
+        startCurrentAbility: 73.123456789, monitoringWeeks: ["2:0", "2:0", "2:12"], scoutId: "",
+        performanceRecord: [26, 5, 7, 7.125, 7.123456789, 86, 82] }], source]);
     expect(expandLoanDeal(json(stored))).toEqual(source);
     expect(compactLoanDeal(stored)).toBe(stored);
     expect(JSON.stringify(source)).toBe(before);
@@ -73,9 +78,12 @@ describe("lossless terminal archive leaf contracts", () => {
   it.each(["settled", "expired"] as const)("preserves every %s obligation fact in the full mask payload", (status) => {
     const source = { ...obligation(), status }, before = JSON.stringify(source);
     const stored = compactClubFinancialObligation(source);
-    expect(stored).toEqual({ id: source.id, obligationArchiveV1: [8_388_607,
+    const legacy = { id: source.id, obligationArchiveV1: [8_388_607,
       "performanceBonus", "p1", "", 0, 12.123456789, 0, 0, 0, 2, status, "",
-      3, 2, 4, 2, 0, 7, 9, 26, 7, 9, 4, 2] });
+      3, 2, 4, 2, 0, 7, 9, 26, 7, 9, 4, 2] };
+    expect([stored, expandClubFinancialObligation(legacy as unknown as StoredClubFinancialObligation)]).toEqual([{ id: source.id, obligationArchiveV31: [8_388_607,
+      2, "p1", "", 0, 12.123456789, 0, 0, 0, 2, { settled: 0, expired: 1 }[status], "",
+      3, 2, 4, 2, 0, 7, 9, 26, 7, 9, 4, 2] }, source]);
     expect(expandClubFinancialObligation(json(stored))).toEqual(source);
     expect(compactClubFinancialObligation(stored)).toBe(stored);
     expect(JSON.stringify(source)).toBe(before);

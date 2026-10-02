@@ -1,4 +1,5 @@
 "use client";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -972,7 +973,7 @@ export function ReportHistory() {
         scoutingCases: gameState.scoutingCases,
         reportDeliveries: gameState.reportDeliveries,
         clubDecisions: gameState.clubDecisions,
-        playerMovementHistory: gameState.playerMovementHistory,
+        playerMovementHistory: expandPlayerMovementHistory(gameState.playerMovementHistory),
         finances: gameState.finances
           ? { reportListings: gameState.finances.reportListings }
           : undefined,

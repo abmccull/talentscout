@@ -1,4 +1,5 @@
 "use client";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 
 import { getCoursePlannerStatusModel } from "@/engine/career/courses";
 import type {
@@ -285,7 +286,7 @@ export function buildCareerTimeline(input: {
           tone: "blue" as const,
         };
       }),
-    ...(gameState.playerMovementHistory ?? [])
+    ...expandPlayerMovementHistory(gameState.playerMovementHistory ?? [])
       .filter((movement) => discoveredPlayerIds.has(movement.playerId))
       .map((movement) => {
         const player =

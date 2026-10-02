@@ -1,3 +1,5 @@
+import { expandObservationSituationSnapshot, compactObservationSituationSnapshot } from "@/engine/observation/situationArchive";
+import { expandPlayerMovementHistory, compactPlayerMovementHistory, expandPlayerMovementSummaries, compactPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { packDevelopmentHistoryEntry } from "../players/developmentHistoryArchive";
 import { compactMatchFormEntry } from "@/engine/players/matchFormArchive";
 import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
@@ -210,7 +212,7 @@ function projectWorldHistoryMovementSummaries(
 
   const migrateSeason = (season: WorldSeasonHistory): WorldSeasonHistory => {
     const summariesById = new Map<string, PlayerMovementArchiveSummary>();
-    for (const stored of season.playerMovementSummaries ?? []) {
+    for (const stored of expandPlayerMovementSummaries(season.playerMovementSummaries ?? [])) {
       const summary = expandPlayerMovementSummary(stored);
       if (!summary.id || !summary.playerId || !isMaterialMovementSummary(summary)) continue;
       summariesById.set(summary.id, summary);
@@ -383,7 +385,11 @@ function compactHistoricalObservation(
     1,
     currentSeason - OBSERVATION_DETAIL_RETENTION_SEASONS + 1,
   );
-  if (observation.season >= detailCutoff) return observation;
+  if (observation.season >= detailCutoff) {
+    if (!observation.situation) return observation;
+    const situation = compactObservationSituationSnapshot(observation.situation);
+    return situation === observation.situation ? observation : { ...observation, situation };
+  }
 
   const {
     updatedPersonalityProfile: _appliedPersonalitySnapshot,
@@ -409,7 +415,7 @@ function compactHistoricalObservation(
   const {
     culturalCalendarWindowIds: _sourceCalendarWindowIds,
     ...visibleSituation
-  } = observation.situation;
+  } = expandObservationSituationSnapshot(observation.situation);
   const situation: ObservationSituationSnapshot = {
     ...visibleSituation,
     atmosphereEventIds: [],
@@ -420,7 +426,7 @@ function compactHistoricalObservation(
 
   return {
     ...observationArchive,
-    situation,
+    situation: compactObservationSituationSnapshot(situation),
   };
 }
 
@@ -791,7 +797,7 @@ export function findSaveRetentionReferenceViolations(state: GameState): string[]
   const failures: string[] = [];
   const fixtureIds = new Set(Object.keys(state.fixtures ?? {}));
   const movementsById = new Map(
-    (state.playerMovementHistory ?? []).map((movement) => [movement.id, movement]),
+    expandPlayerMovementHistory(state.playerMovementHistory ?? []).map((movement) => [movement.id, movement]),
   );
   const requireFixture = (fixtureId: string | undefined, source: string): void => {
     if (fixtureId && !fixtureIds.has(fixtureId)) {
@@ -818,7 +824,7 @@ export function findSaveRetentionReferenceViolations(state: GameState): string[]
 
   for (const season of state.worldHistory?.seasons ?? []) {
     const summaryById = new Map<string, PlayerMovementArchiveSummary>();
-    for (const stored of season.playerMovementSummaries ?? []) {
+    for (const stored of expandPlayerMovementSummaries(season.playerMovementSummaries ?? [])) {
       const summary = expandPlayerMovementSummary(stored);
       if (summaryById.has(summary.id)) {
         failures.push(
@@ -1010,14 +1016,14 @@ export function compactLongCareerHistory(state: GameState): GameState {
   );
   let worldHistory = projectWorldHistoryMovementSummaries(
     state.worldHistory,
-    state.playerMovementHistory ?? [],
+    expandPlayerMovementHistory(state.playerMovementHistory ?? []),
   );
   // Record projection coverage before tiering the public archive. This lets a
   // closed, non-causal background move age out of both the raw ledger and the
   // old public summary without weakening the legacy-save safety rule below.
   const projectedArchivedMovementIds = new Set(
     worldHistory?.seasons.flatMap((season) =>
-      season.playerMovementSummaries?.map((summary) => expandPlayerMovementSummary(summary).id) ?? [],
+      expandPlayerMovementSummaries(season.playerMovementSummaries ?? []).map((summary) => expandPlayerMovementSummary(summary).id),
     ) ?? [],
   );
   worldHistory = worldHistory
@@ -1064,7 +1070,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
             : WORLD_HISTORY_ARCHIVE_PLAYER_LIMIT,
         );
         const retainedPlayerIds = new Set(players.map((player) => player.playerId));
-        const playerMovementSummaries = season.playerMovementSummaries?.map(expandPlayerMovementSummary).filter(
+        const playerMovementSummaries = expandPlayerMovementSummaries(season.playerMovementSummaries ?? []).map(expandPlayerMovementSummary).filter(
           (summary) =>
             keepsFullMovementDetail
             || retainedPlayerIds.has(summary.playerId)
@@ -1074,13 +1080,13 @@ export function compactLongCareerHistory(state: GameState): GameState {
           ...season,
           players,
           ...(playerMovementSummaries && playerMovementSummaries.length > 0
-            ? { playerMovementSummaries: playerMovementSummaries.map(compactPlayerMovementSummary) }
+            ? { playerMovementSummaries: compactPlayerMovementSummaries(playerMovementSummaries.map(compactPlayerMovementSummary)) }
             : { playerMovementSummaries: undefined }),
         };
       }),
     };
   }
-  const playerMovementHistory = (state.playerMovementHistory ?? []).filter(
+  const playerMovementHistory = expandPlayerMovementHistory(state.playerMovementHistory ?? []).filter(
     (movement) => {
       // Renewals do not enter the permanent archive. Their active-contract
       // meaning remains useful only for the current and immediately previous
@@ -1109,7 +1115,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
   );
 
   const retainedRetiredPlayerIds = new Set(causalPlayerIds);
-  for (const movement of state.playerMovementHistory ?? []) {
+  for (const movement of expandPlayerMovementHistory(state.playerMovementHistory ?? [])) {
     if (
       (movement.type === "retirement" || movement.type === "footballExit")
       && movement.season >= renewalDetailCutoff
@@ -1148,7 +1154,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
     players,
     observations,
     finances,
-    playerMovementHistory,
+    playerMovementHistory: compactPlayerMovementHistory(playerMovementHistory),
     worldHistory,
     retiredPlayers,
     retiredPlayerIds,

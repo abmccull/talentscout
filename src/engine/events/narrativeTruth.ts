@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { isSourcedAlumniEvent } from "../youth/alumniEvidence";
 import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import type {
@@ -421,7 +422,7 @@ function findReportedMovement(
     "freeAgentSigning",
     "youthSigning",
   ]);
-  const movements = [...(state.playerMovementHistory ?? [])]
+  const movements = [...expandPlayerMovementHistory(state.playerMovementHistory ?? [])]
     .filter((movement) => movementTypes.has(movement.type) && Boolean(movement.toClubId))
     .sort((left, right) =>
       right.season - left.season

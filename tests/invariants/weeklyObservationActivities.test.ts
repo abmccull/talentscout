@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Activity, GameState, Observation, WeekSimulationState } from "@/engine/core/types";
 import type { WeeklySimulationDiagnosticValue } from "@/engine/core/weeklySimulationTelemetry";
@@ -296,9 +297,9 @@ describe("weekly observation transaction", () => {
     expect(first).toEqual(second);
     expect(generated.length).toBe(first.observationsGenerated);
     expect(generated.every((observation) => Boolean(
-      observation.situation?.id
-      && observation.situation.repetitionKey
-      && observation.situation.activityType === "schoolMatch",
+      expandObservationSituationSnapshot(observation.situation)?.id
+      && expandObservationSituationSnapshot(observation.situation)?.repetitionKey
+      && expandObservationSituationSnapshot(observation.situation)?.activityType === "schoolMatch",
     ))).toBe(true);
     expect(JSON.stringify(state)).toBe(before);
   }, 30_000);

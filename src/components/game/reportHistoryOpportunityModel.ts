@@ -1,3 +1,5 @@
+import type { StoredPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type {
   ClubDecision,
   Fixture,
@@ -54,7 +56,7 @@ interface OpportunityHistoryState {
   scoutingCases?: Record<string, ScoutingCase>;
   reportDeliveries: Record<string, ReportDelivery>;
   clubDecisions?: Record<string, ClubDecision>;
-  playerMovementHistory?: PlayerMovementEvent[];
+  playerMovementHistory?: StoredPlayerMovementHistory;
   finances?: {
     reportListings?: ReportListing[];
   };
@@ -204,7 +206,7 @@ export function buildReportOpportunityHistory(
     scoutingCases: state.scoutingCases,
     reportDeliveries: state.reportDeliveries,
     clubDecisions: state.clubDecisions,
-    playerMovementHistory: state.playerMovementHistory,
+    playerMovementHistory: expandPlayerMovementHistory(state.playerMovementHistory ?? []),
     finances: {
       reportListings: state.finances?.reportListings ?? [],
     },
