@@ -104,8 +104,8 @@ describe("prospect follow-up persistent delivery compatibility", () => {
     };
     const original = JSON.stringify(record);
     const upgraded = migrateSaveEnvelope(record);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(9);
-    expect(upgraded.schemaVersion).toBe(9);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(10);
+    expect(upgraded.schemaVersion).toBe(10);
     expect(upgraded.rulesVersion).toBe("historical-rules");
     expect(upgraded.buildVersion).toBe("historical-build");
     expect(upgraded.savedAt).toBe(1_000);
@@ -312,7 +312,7 @@ describe("prospect follow-up persistent delivery compatibility", () => {
 
   it("rejects the next unsupported schema 10 while leaving opaque authority recoverable", () => {
     const source = {
-      ...createSaveEnvelope(stateWithCase(), 4_000), schemaVersion: 10,
+      ...createSaveEnvelope(stateWithCase(), 4_000), schemaVersion: 11,
       state: { opaqueFutureDeliveryAuthority: { preserve: ["future-earned-proof"] } },
     };
     const original = JSON.stringify(source);

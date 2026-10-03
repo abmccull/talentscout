@@ -1663,7 +1663,15 @@ export type CompactTerminalLoanV42 = [
   status: 0 | 1 | 2, undefinedMask: number, optional: CompactLoanOptionalV41,
 ];
 export type StoredLoanDeal = LoanDeal | CompactTerminalLoanV1 | CompactTerminalLoanV2
-  | CompactTerminalLoanV41 | CompactTerminalLoanV42;
+  | CompactTerminalLoanV41 | CompactTerminalLoanV42 | CompactTerminalLoanV44;
+/** Ordered optional ordinals (0..6) and exact values, with separate undefined ownership. */
+export type CompactTerminalLoanV44 = [
+  version: 44, id: StableFinancialIdentity, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: 0 | 1 | 2, undefinedMask: number, optionalOrder: string,
+  ...optionalValues: (string | number | string[] | [number, number, number, number, number, number, number])[],
+];
 export type LoanHistoryStored = StoredLoanDeal[];
 
 export interface LoanPerformanceRecord {

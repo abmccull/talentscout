@@ -18,7 +18,7 @@ import {
   type PlayerExperienceRecord,
 } from "@/lib/playerExperience";
 
-export const CURRENT_SAVE_SCHEMA_VERSION = 9;
+export const CURRENT_SAVE_SCHEMA_VERSION = 10;
 export const CURRENT_RULES_VERSION = RUN_RULES_VERSION;
 export const CURRENT_BUILD_VERSION =
   process.env.NEXT_PUBLIC_BUILD_VERSION ?? "development";
@@ -283,6 +283,12 @@ const migrateV8ToV9: SaveMigration = (legacy) => ({
   schemaVersion: 9,
 });
 
+/** Allows ordered terminal-loan optional tails without changing rules or facts. */
+const migrateV9ToV10: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 10,
+});
+
 /** Ordered by the version they consume. Never mutate an existing migration. */
 const SAVE_MIGRATIONS: Readonly<Record<number, SaveMigration>> = Object.freeze({
   0: migrateV0ToV1,
@@ -294,6 +300,7 @@ const SAVE_MIGRATIONS: Readonly<Record<number, SaveMigration>> = Object.freeze({
   6: migrateV6ToV7,
   7: migrateV7ToV8,
   8: migrateV8ToV9,
+  9: migrateV9ToV10,
 });
 
 function assertEnvelopeShape(raw: Record<string, unknown>): asserts raw is MutableEnvelope {

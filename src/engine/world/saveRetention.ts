@@ -4,7 +4,7 @@ import { packDevelopmentHistoryEntry } from "../players/developmentHistoryArchiv
 import { compactMatchFormEntry } from "@/engine/players/matchFormArchive";
 import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { compactClubSeasonHistory } from "./clubSeasonArchive";
-import { compactClubFinancialObligation, compactLoanDeal, expandLoanDeal } from "../finance/terminalRecordArchive";
+import { compactClubFinancialObligation, compactLoanDealForStorage, expandLoanDeal } from "../finance/terminalRecordArchive";
 import type {
   FinancialRecord,
   Fixture,
@@ -1141,7 +1141,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
 
   const compacted: GameState = {
     ...state,
-    ...(state.loanHistory != null ? { loanHistory: state.loanHistory.map((deal) => compactLoanDeal(deal)) } : {}),
+    ...(state.loanHistory != null ? { loanHistory: state.loanHistory.map((deal) => compactLoanDealForStorage(deal)) } : {}),
     ...(state.clubs != null ? {
       clubs: Object.fromEntries(Object.entries(state.clubs).map(([clubId, club]) => [
         clubId,

@@ -42,8 +42,8 @@ describe.sequential("stable terminal financial identities through actual persist
   });
   it.each([6,7,8])("migrates schema%i additively with unchanged rules/metadata and coded facts",schemaVersion=>{
     const source=career(),envelope={...createSaveEnvelope(source,42000),schemaVersion,rulesVersion:"pinned-rules",buildVersion:"pinned-build",customEnvelopeMetadata:{externalId:"original-reference"}};
-    const before=JSON.stringify(envelope),actual=migrateSaveEnvelope(envelope);expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(9);
-    expect(actual.schemaVersion).toBe(9);expect(actual.rulesVersion).toBe("pinned-rules");expect(actual.buildVersion).toBe("pinned-build");
+    const before=JSON.stringify(envelope),actual=migrateSaveEnvelope(envelope);expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(10);
+    expect(actual.schemaVersion).toBe(10);expect(actual.rulesVersion).toBe("pinned-rules");expect(actual.buildVersion).toBe("pinned-build");
     expect(actual.savedAt).toBe(42000);expect(actual.customEnvelopeMetadata).toEqual(envelope.customEnvelopeMetadata);
     expect(logical(actual.state as GameState)).toStrictEqual(logical(source));expect(JSON.stringify(envelope)).toBe(before);
   });

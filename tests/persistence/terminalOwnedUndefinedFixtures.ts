@@ -79,6 +79,13 @@ export function v42LoanWire(): unknown[] {
     0, 33, { outcome: 1, startCurrentAbility: 0,
       monitoringWeeks: ["1:4", "1:4", "1:5"], performanceRecord: [0, 0, 0, 0, 0, 50, 60] }];
 }
+export function v44LoanWire(): unknown[] {
+  return [44, "v1-loan", "history-player", "parent", "host", 1, 1, 12, 1, 500, 40, false, 0, 0, "15", 1, ""];
+}
+export function v44OwnedLoanWire(): unknown[] {
+  return [44, "v2-loan", "history-player", "parent", "host", 1, 1, 12, 1, 500, 40, false,
+    0, 33, "1346", 1, 0, ["1:4", "1:4", "1:5"], [0, 0, 0, 0, 0, 50, 60]];
+}
 export function v31ObligationWire(): Record<string, unknown> {
   return { id: "v1-obligation", obligationArchiveV31: [25_599,
     0, "history-player", "parent", 0, 12.5, 0, 0, 1, 1, 1, 12, 1] };
@@ -145,7 +152,7 @@ export function assertFacts(state: GameState) {
   expect(Object.hasOwn(obligations[0], "trigger")).toBe(false);
 }
 export function assertCanonical(state: GameState) {
-  expect(state.loanHistory).toStrictEqual([v41LoanWire(), v42LoanWire(), customLoan(), v42LoanWire(), v41LoanWire()]);
+  expect(state.loanHistory).toStrictEqual([v44LoanWire(), v44OwnedLoanWire(), customLoan(), v44OwnedLoanWire(), v44LoanWire()]);
   expect(state.clubs.host.financialObligations).toStrictEqual([v31ObligationWire(), v32ObligationWire(),
     customObligation(), v32ObligationWire(), v31ObligationWire()]);
   assertFacts(state);

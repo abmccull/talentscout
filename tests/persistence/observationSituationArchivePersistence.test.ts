@@ -52,7 +52,7 @@ describe.sequential("observation archive common persistence contracts", () => {
   it.each([8, 9])("loads schema%s complete hand-wire facts with additive9 and unchanged rules/metadata", schema => {
     const raw = recordFor(career(jsonBound(wire())), schema); const before = structuredClone(raw);
     const loaded = migrateSaveRecord(raw);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(9); expect(loaded.schemaVersion).toBe(9);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(10); expect(loaded.schemaVersion).toBe(10);
     assertFacts(loaded.state, snapshot());
     expect(loaded.rulesVersion).toBe(raw.rulesVersion); expect(loaded.buildVersion).toBe(raw.buildVersion);
     expect(loaded.savedAt).toBe(42_000); expect(loaded.storageRevision).toBe(12);
@@ -84,7 +84,7 @@ describe.sequential("observation archive common persistence contracts", () => {
     const source = career({ ...snapshot(), weather: undefined }); const before = structuredClone(source);
     const commit = await saveGameWithResult(SLOT, NAME, source); expect(commit.wrote).toBe(true);
     const head = (await journal()).saves.find(value => (value as SaveRecord).slot === SLOT) as SaveRecord;
-    expect(head.schemaVersion).toBe(9);
+    expect(head.schemaVersion).toBe(10);
     expect(head.state.observations.archived.situation).toStrictEqual(optionalWire(weather, undefined));
     const restored = await loadGameWithRecovery(SLOT); expect(restored).not.toBeNull();
     assertFacts(restored!.state, { ...snapshot(), weather: undefined });
@@ -122,7 +122,7 @@ describe.sequential("observation archive common persistence contracts", () => {
   );
 
   it("gives future portable schema10 precedence over a recognized hostile tag without cloning", () => {
-    const raw = recordFor(career(), 10); let reads = 0; const archive = wire();
+    const raw = recordFor(career(), 11); let reads = 0; const archive = wire();
     Object.defineProperty(archive, TAG, { enumerable: true, configurable: true, get() { reads++; throw Error("tag read"); } });
     raw.state.observations.archived.situation = archive as unknown as Observation["situation"];
     const clone = vi.spyOn(globalThis, "structuredClone");

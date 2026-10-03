@@ -32,6 +32,10 @@ function emittedLoan41(): unknown[] {
   return [41, "saved-loan", "history-player", "parent", "host", 1, 1, 12, 1, 500, 40, false,
     0, { outcome: 1, monitoringWeeks: ["1:4", "1:4"], scoutId: "saved-scout" }];
 }
+function emittedLoan44(): unknown[] {
+  return [44, "saved-loan", "history-player", "parent", "host", 1, 1, 12, 1, 500, 40, false,
+    0, 0, "145", 1, ["1:4", "1:4"], "saved-scout"];
+}
 function emittedObligation31(): Record<string, unknown> {
   return { id: "saved-obligation", obligationArchiveV31: [25_599,
     0, "history-player", "parent", 0, 12.5, 0, 0, 1, 1, 1, 12, 1] };
@@ -78,8 +82,8 @@ describe.sequential("terminal archives through actual persistence", () => {
       customEnvelopeMetadata: { originalExternalId: "remote-save-7" } };
     const before = JSON.stringify(legacy);
     const upgraded = migrateSaveEnvelope(legacy);
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(9);
-    expect(upgraded.schemaVersion).toBe(9);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(10);
+    expect(upgraded.schemaVersion).toBe(10);
     expect(upgraded.state).toEqual(state);
     expect(upgraded.rulesVersion).toBe("saved-rules");
     expect(upgraded.buildVersion).toBe("saved-build");
@@ -93,12 +97,12 @@ describe.sequential("terminal archives through actual persistence", () => {
   it("stores real canonical tuples/masks and duplicate row order in the actual head, JSON load and recovery load", async () => {
     const source = career(), before = JSON.stringify(source);
     const canonical = migrateSaveState(source);
-    expect(canonical.loanHistory).toEqual([emittedLoan41(), emittedLoan41()]);
+    expect(canonical.loanHistory).toEqual([emittedLoan44(), emittedLoan44()]);
     expect(canonical.clubs.host.financialObligations).toEqual([emittedObligation31(), emittedObligation31()]);
     const commit = await saveGameWithResult(SLOT, "Terminal history", source);
     expect(commit.wrote).toBe(true);
     const head = await readHead();
-    expect(head.schemaVersion).toBe(9);
+    expect(head.schemaVersion).toBe(10);
     expect(head.state.loanHistory).toEqual(canonical.loanHistory);
     expect(head.state.clubs.host.financialObligations).toEqual(canonical.clubs.host.financialObligations);
     expect(commit.payloadBytes).toBe(new TextEncoder().encode(JSON.stringify(head)).byteLength);
@@ -127,7 +131,7 @@ describe.sequential("terminal archives through actual persistence", () => {
       customEnvelopeMetadata: { providerReference: "persist-original" } };
     const before = JSON.stringify(record);
     const loaded = migrateSaveRecord(JSON.parse(before));
-    expect(loaded.state.loanHistory).toEqual([emittedLoan41(), customLoan, emittedLoan41()]);
+    expect(loaded.state.loanHistory).toEqual([emittedLoan44(), customLoan, emittedLoan44()]);
     expect(loaded.state.clubs.host.financialObligations?.[0]).toEqual(emittedObligation31());
     expect(loaded.state.clubs.host.financialObligations?.[1]).toMatchObject({
       id: "custom-obligation", status: "expired", customAudit: { externalId: "audit-2" },
@@ -162,7 +166,7 @@ describe.sequential("terminal archives through actual persistence", () => {
   });
 
   it("refuses future portable 9 without decoding or rewriting opaque future facts", () => {
-    const future = { ...createSaveEnvelope(career(), 3_000), schemaVersion: 10,
+    const future = { ...createSaveEnvelope(career(), 3_000), schemaVersion: 11,
       state: { opaqueFutureTerminalFacts: { original: ["payment-audit"] } } };
     const before = JSON.stringify(future);
     expect(() => migrateSaveEnvelope(future)).toThrowError(expect.objectContaining<Partial<SaveMigrationError>>({ code: "FUTURE_VERSION" }));

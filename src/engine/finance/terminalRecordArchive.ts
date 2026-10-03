@@ -3,6 +3,7 @@ import type {
   CompactTerminalLoanV2,
   CompactTerminalLoanV41,
   CompactTerminalLoanV42,
+  CompactTerminalLoanV44,
   CompactLoanOptionalV1,
   StableFinancialIdentity,
   LoanDeal,
@@ -251,6 +252,26 @@ function upgradeStableLoan(entry: CompactTerminalLoanV1 | CompactTerminalLoanV2)
     ? packed as CompactTerminalLoanV41 | CompactTerminalLoanV42 : entry;
 }
 
+/** V44 preserves the V42 defined-key order and its separate undefined mask. */
+function restoreOrderedLoan(entry: unknown[]): CompactTerminalLoanV42 {
+  const mask = entry[13], order = entry[14];
+  if (typeof mask !== "number" || !Number.isInteger(mask) || Object.is(mask, -0)
+    || mask < 0 || mask >= 2 ** LOAN_OPTIONAL.length
+    || typeof order !== "string" || !/^[0-6]{0,7}$/.test(order)
+    || new Set(order).size !== order.length || entry.length !== 15 + order.length) {
+    throw new InvalidTerminalRecordArchiveError("Invalid ordered terminal loan archive");
+  }
+  const optional = Object.fromEntries([...order].map((ordinal, index) => {
+    const field = Number(ordinal), payload = entry[15 + index];
+    if ((mask & 2 ** field) !== 0 || payload === undefined) {
+      throw new InvalidTerminalRecordArchiveError("Invalid ordered terminal loan ownership");
+    }
+    return [LOAN_OPTIONAL[field], payload];
+  }));
+  // The existing stable reader retains all required, enum and nested fact checks.
+  return [42, ...entry.slice(1, 13), mask, optional] as CompactTerminalLoanV42;
+}
+
 function walkStableObligation(row: unknown[], isV2: boolean, visit: (field: string, offset: number) => void): void {
   if (!denseArray(row) || row.length < (isV2 ? 2 : 1)) {
     throw new InvalidTerminalRecordArchiveError("Invalid stable terminal obligation payload");
@@ -332,6 +353,7 @@ export function expandLoanDeal(entry: StoredLoanDeal | null | undefined): LoanDe
   if (!denseArray(entry)) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal loan archive descriptors");
   }
+  if (entry[0] === 44) return expandLoanDeal(restoreOrderedLoan(entry));
   if (entry[0] === 41 || entry[0] === 42) return expandLoanDeal(restoreStableLoan(entry));
   if (!denseArray(entry)
     || (entry[0] !== 1 && entry[0] !== 2)
@@ -383,7 +405,7 @@ export function compactLoanDeal(entry: StoredLoanDeal | null | undefined): Store
 export function compactLoanDeal(entry: StoredLoanDeal | null | undefined): StoredLoanDeal | null | undefined {
   if (Array.isArray(entry)) {
     expandLoanDeal(entry);
-    return entry[0] === 41 || entry[0] === 42 ? entry : upgradeStableLoan(entry);
+    return entry[0] === 41 || entry[0] === 42 || entry[0] === 44 ? entry : upgradeStableLoan(entry);
   }
   if (!knownLoan(entry, true)) return entry;
   let undefinedMask = 0;
@@ -399,6 +421,31 @@ export function compactLoanDeal(entry: StoredLoanDeal | null | undefined): Store
     return upgradeStableLoan([2, ...LOAN_REQUIRED.map(key => entry[key]), undefinedMask, optional] as CompactTerminalLoanV2);
   }
   return upgradeStableLoan([1, ...LOAN_REQUIRED.map(key => entry[key]), optional] as CompactTerminalLoanV1);
+}
+
+/** Production retention upgrades accumulated history without changing public V41/V42 identity. */
+export function compactLoanDealForStorage(entry: StoredLoanDeal): StoredLoanDeal;
+export function compactLoanDealForStorage<T extends null | undefined>(entry: T): T;
+export function compactLoanDealForStorage(entry: StoredLoanDeal | undefined): StoredLoanDeal | undefined;
+export function compactLoanDealForStorage(entry: StoredLoanDeal | null | undefined): StoredLoanDeal | null | undefined;
+export function compactLoanDealForStorage(entry: StoredLoanDeal | null | undefined): StoredLoanDeal | null | undefined {
+  if (!Array.isArray(entry)) {
+    if (!knownLoan(entry, true) || Object.getPrototypeOf(entry) !== Object.prototype) return entry;
+    const stored = compactLoanDeal(entry);
+    return losslessLeafJSON(stored) ? compactLoanDealForStorage(stored) : entry;
+  }
+  // Recognized archives must validate before fallback or identity selection.
+  expandLoanDeal(entry);
+  if (entry[0] === 44 || !losslessLeafJSON(entry)) return entry;
+  const stable = compactLoanDeal(entry);
+  if (!Array.isArray(stable) || (stable[0] !== 41 && stable[0] !== 42)) return entry;
+  const isV2 = stable[0] === 42;
+  const optional = stable[isV2 ? 14 : 13] as CompactLoanOptionalV1;
+  const entries = Object.entries(optional);
+  const order = entries.map(([key]) => String(LOAN_OPTIONAL.indexOf(key as typeof LOAN_OPTIONAL[number]))).join("");
+  const packed = [44, ...stable.slice(1, 13), isV2 ? stable[13] : 0, order,
+    ...entries.map(([, value]) => value)] as CompactTerminalLoanV44;
+  return jsonBytes(packed) < jsonBytes(entry) ? packed : entry;
 }
 
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation): ClubFinancialObligation;
