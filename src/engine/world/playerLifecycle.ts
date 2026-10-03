@@ -401,9 +401,9 @@ export function withLifecycleWorld(
 }
 
 /**
- * Apply lifecycle changes atomically. Each player can resolve at most one
- * intent per call; higher-priority terminal transitions win deterministic
- * conflicts (for example retirement over renewal).
+ * Apply lifecycle changes atomically. Each player resolves one transition,
+ * except an actual loan return can be followed by one expired-owner decision.
+ * Higher-priority terminal transitions win conflicts, such as retirement.
  */
 interface PlayerMovementContext {
   state: LifecycleWorldState;
@@ -498,12 +498,26 @@ function applyPlayerMovements(
   const applied: PlayerMovementEvent[] = [];
   const rejected: RejectedPlayerMovement[] = [];
   const reserved = new Set<string>();
+  const returnedExpiredContractOwners = new Map<string, string>();
+  const validContractCalendar = [currentWeek, currentSeason, seasonLength].every(Number.isSafeInteger)
+    && currentSeason >= 1 && seasonLength >= 1 && currentWeek >= 1 && currentWeek <= seasonLength;
+  const hasExpiredOwnershipContract = (player: Player) => validContractCalendar
+    && Number.isSafeInteger(player.contractExpiry) && player.contractExpiry >= 0
+    && (player.contractExpiry < currentSeason
+      || (player.contractExpiry === currentSeason && currentWeek === seasonLength));
   const ordered = intents
     .map((intent, index) => ({ intent, index }))
     .sort((a, b) => PRIORITY[b.intent.type] - PRIORITY[a.intent.type] || a.index - b.index);
 
   for (const { intent } of ordered) {
-    if (reserved.has(intent.playerId)) {
+    const returnedOwner = returnedExpiredContractOwners.get(intent.playerId);
+    const currentPlayer = state.players[intent.playerId];
+    const followsReturnedExpiry = returnedOwner !== undefined && currentPlayer
+      && !currentPlayer.onLoan && hasExpiredOwnershipContract(currentPlayer)
+      && contractOwner(currentPlayer) === returnedOwner
+      && ((intent.type === "release" && intent.fromClubId === returnedOwner)
+        || (intent.type === "contractRenewal" && intent.clubId === returnedOwner));
+    if (reserved.has(intent.playerId) && !followsReturnedExpiry) {
       reject(rejected, intent, "another lifecycle transition already resolved this tick");
       continue;
     }
@@ -954,6 +968,12 @@ function applyPlayerMovements(
         };
         state.players[player.id] = returnedPlayer;
         state.clubs = registerAtClub(state.clubs, returnedPlayer, deal.parentClubId);
+        clubMemberships.set(player.id, new Set([deal.parentClubId]));
+        // Returning ends the loan, not the parent's expired contract. Allow
+        // its already planned owner decision to settle once against live funds.
+        if (contractOwner(player) === deal.parentClubId && hasExpiredOwnershipContract(player)) {
+          returnedExpiredContractOwners.set(player.id, deal.parentClubId);
+        }
         const recalled = intent.resolution === "recall";
         state.loanHistory.push(compactLoanDeal({
           ...deal,
@@ -977,6 +997,7 @@ function applyPlayerMovements(
       const updatedPlayer = state.players[player.id];
       const nextOwner = updatedPlayer && contractOwner(updatedPlayer);
       if (nextOwner) payroll.set(nextOwner, (payroll.get(nextOwner) ?? 0) + wage(updatedPlayer));
+      if (intent.type !== "loanEnd") returnedExpiredContractOwners.delete(intent.playerId);
       reserved.add(intent.playerId);
       applied.push(movement);
     }

@@ -173,6 +173,8 @@ export interface TickResult {
   }>;
   freeAgentRemovedPlayerIds?: string[];
   midSeasonReleases?: FreeAgent[];
+  /** Prospective discovery feedback, reconciled against settled availability. */
+  freeAgentDiscoveryMessageIds?: string[];
   contractExpiryResult?: {
     renewals: Array<{
       playerId: string;
@@ -181,6 +183,8 @@ export interface TickResult {
       wage: number;
     }>;
     releasedPlayers: FreeAgent[];
+    /** Prospective release feedback, reconciled against the owning club's applied release. */
+    releaseMessages?: InboxMessage[];
   };
   loanDeals?: LoanDeal[];
   loanReturns?: LoanDeal[];

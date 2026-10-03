@@ -1051,6 +1051,14 @@ export function processWeeklySeasonRollover(
           return league?.country.toLowerCase() === countryData.name.toLowerCase();
         });
         for (const club of countryClubs) {
+          // Discretionary intake must leave funds for an actual playing eleven.
+          // Only already registered cover counts; loaned-out payroll is still
+          // charged by the authoritative affordability context below.
+          const registered = [...new Set(club.playerIds)].map(id => newState.players[id])
+            .filter(player => player && player.clubId === club.id && player.age >= 16 && player.position);
+          const outfield = registered.filter(player => player.position !== "GK").length;
+          const playingReserve = Math.max(0, 10 - outfield) * 500
+            + (registered.some(player => player.position === "GK") ? 0 : 1_000);
           const intake = limitAcademyIntakeToClubCapacity(
             club,
             generateAcademyIntake(
@@ -1059,8 +1067,8 @@ export function processWeeklySeasonRollover(
               countryData,
               newState.currentSeason,
             ),
-            (academyAffordability[club.id]?.club.weeklyWageBudget ?? 0)
-              - (academyAffordability[club.id]?.currentWeeklyCommitment ?? 0),
+            Math.max(0, (academyAffordability[club.id]?.club.weeklyWageBudget ?? 0)
+              - (academyAffordability[club.id]?.currentWeeklyCommitment ?? 0) - playingReserve),
           );
           newAcademyPlayers.push(...intake);
         }

@@ -126,7 +126,7 @@ import {
   applyRelegationResult,
 } from "../world/relegation";
 import type { RelegationResult } from "../world/relegation";
-import { processContractExpiries } from "../freeAgents/expiry";
+import { createContractReleaseFeedback, processContractExpiries } from "../freeAgents/expiry";
 import { tickFreeAgentPool } from "../freeAgents/pool";
 import { projectSeasonEndRecruitmentState } from "../freeAgents/seasonEndPlanning";
 import { discoverFreeAgents } from "../freeAgents/discovery";
@@ -2457,6 +2457,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   let freeAgentNPCSignings: TickResult["freeAgentNPCSignings"];
   let freeAgentRemovedPlayerIds: string[] | undefined;
   let midSeasonReleases: FreeAgent[] | undefined;
+  let freeAgentDiscoveryMessageIds: string[] | undefined;
   let contractExpiryResult: {
     renewals: Array<{
       playerId: string;
@@ -2465,19 +2466,22 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       wage: number;
     }>;
     releasedPlayers: FreeAgent[];
+    releaseMessages: TickResult["newMessages"];
   } | undefined;
 
   if (state.freeAgentPool) {
     let recruitmentState = state;
     if (endOfSeasonTriggered) {
       const retiringPlayerIds = new Set(playerRetirements?.retiredPlayerIds ?? []);
-      const expiryResult = processContractExpiries(state, rng);
+      const retirementPlanningState = projectSeasonEndRecruitmentState(state,
+        retiringPlayerIds, [], retiringPlayerIds);
+      const expiryResult = processContractExpiries(retirementPlanningState, rng);
       const renewals = expiryResult.renewals.filter(renewal => !retiringPlayerIds.has(renewal.playerId));
       const releasedPlayers = expiryResult.releasedPlayers.filter(released => !retiringPlayerIds.has(released.playerId));
       newMessages.push(...expiryResult.messages);
-      contractExpiryResult = { renewals, releasedPlayers };
-      recruitmentState = projectSeasonEndRecruitmentState(state,
-        new Set([...retiringPlayerIds, ...releasedPlayers.map(player => player.playerId)]), renewals);
+      contractExpiryResult = { renewals, releasedPlayers, releaseMessages: expiryResult.messages };
+      recruitmentState = projectSeasonEndRecruitmentState(retirementPlanningState,
+        new Set(releasedPlayers.map(player => player.playerId)), renewals);
     }
     // Plan against known departures and renewal wages. Only existing pool
     // members can sign; today's releases are introduced after recruitment.
@@ -2510,6 +2514,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       rng,
     );
     updatedFreeAgentPool = discoveryResult.updatedPool;
+    freeAgentDiscoveryMessageIds = discoveryResult.messages.map(message => message.id);
     newMessages.push(...discoveryResult.messages);
   }
 
@@ -2561,6 +2566,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     freeAgentRemovedPlayerIds,
     midSeasonReleases,
     contractExpiryResult,
+    freeAgentDiscoveryMessageIds,
     // Loan system
     loanDeals: loanPhase.loanDealResult.deals.length > 0 ? loanPhase.loanDealResult.deals : undefined,
     loanReturns: loanPhase.loanReturnResult.deals.length > 0 ? loanPhase.loanReturnResult.deals : undefined,
@@ -3054,6 +3060,44 @@ export function advanceWeek(
     state.currentSeason,
     getSeasonLength(state.fixtures, state.currentSeason),
   );
+  const renewalFallbackMessages: TickResult["newMessages"] = [];
+  const seasonLength = getSeasonLength(state.fixtures, state.currentSeason);
+  // A refused agreement does not extend the old contract. Release only an
+  // actually expired, unchanged owner after all higher-priority moves settle.
+  if (tickResult.endOfSeasonTriggered && state.currentWeek === seasonLength
+    && Number.isSafeInteger(state.currentSeason) && state.currentSeason >= 1
+    && Number.isSafeInteger(state.currentWeek) && Number.isSafeInteger(seasonLength) && seasonLength >= 1) {
+    const expiredRenewals = new Map(lifecycleResolution.rejected.flatMap(({ intent }) => {
+      if (intent.type !== "contractRenewal") return [];
+      const player = lifecycleResolution.state.players[intent.playerId];
+      const owner = player && (player.contractClubId ?? player.loanParentClubId ?? player.clubId);
+      if (!player || player.onLoan || player.clubId !== intent.clubId || owner !== intent.clubId
+        || !Number.isSafeInteger(player.contractExpiry) || player.contractExpiry < 0
+        || player.contractExpiry > state.currentSeason) return [];
+      return [[player.id, { player, clubId: intent.clubId }] as const];
+    }));
+    if (expiredRenewals.size > 0) {
+      const fallback = resolvePlayerMovements(lifecycleResolution.state,
+        [...expiredRenewals.values()].map(({ player, clubId }) => ({
+          type: "release" as const, playerId: player.id, fromClubId: clubId,
+          reason: "Expired contract released after renewal was declined",
+        })), state.currentWeek, state.currentSeason, seasonLength);
+      const feedbackRng = createRNG(`${state.seed}-contract-expiry-fallback-s${state.currentSeason}w${state.currentWeek}`);
+      for (const movement of fallback.applied) {
+        const original = expiredRenewals.get(movement.playerId);
+        const club = original && fallback.state.clubs[original.clubId];
+        if (movement.type !== "release" || !original || !club || movement.fromClubId !== original.clubId) continue;
+        const feedback = createContractReleaseFeedback(original.player, club, state, feedbackRng);
+        fallback.state.freeAgentPool.agents = [
+          ...fallback.state.freeAgentPool.agents.filter(agent => agent.playerId !== movement.playerId), feedback.agent,
+        ];
+        renewalFallbackMessages.push(...feedback.messages);
+      }
+      lifecycleResolution = { state: fallback.state,
+        applied: [...lifecycleResolution.applied, ...fallback.applied],
+        rejected: [...lifecycleResolution.rejected, ...fallback.rejected] };
+    }
+  }
   const committedYouthSigningPlayerIds = new Set(
     lifecycleResolution.applied
       .filter((movement) => movement.type === "youthSigning")
@@ -3101,6 +3145,11 @@ export function advanceWeek(
   let updatedRetiredPlayerIds = lifecycleResolution.state.retiredPlayerIds;
   const updatedPlayerMovementHistory = lifecycleResolution.state.playerMovementHistory;
   let lifecycleFreeAgentPool = lifecycleResolution.state.freeAgentPool;
+  const appliedReleaseOwners = new Map(lifecycleResolution.applied
+    .filter(movement => movement.type === "release")
+    .map(movement => [movement.playerId, movement.fromClubId]));
+  lifecycleFreeAgentPool = { ...lifecycleFreeAgentPool,
+    totalReleasedThisSeason: (state.freeAgentPool?.totalReleasedThisSeason ?? 0) + appliedReleaseOwners.size };
   if (rejectedStagedYouthPlayerIds.length > 0) {
     updatedPlayers = { ...updatedPlayers };
     for (const playerId of rejectedStagedYouthPlayerIds) {
@@ -3290,7 +3339,20 @@ export function advanceWeek(
   // ---- Inbox ----
   const existingMessageIds = new Set(state.inbox.map((message) => message.id));
   const updatedInbox = [...state.inbox];
-  for (const message of [...tickResult.newMessages, ...loanClosureFeedback.messages, ...alumniResult.newMessages]) {
+  const plannedReleaseOwners = new Map((tickResult.contractExpiryResult?.releasedPlayers ?? [])
+    .map(agent => [agent.playerId, agent.releasedFrom]));
+  const releaseMessageIds = new Set(tickResult.contractExpiryResult?.releaseMessages?.map(message => message.id) ?? []);
+  const discoveryMessageIds = new Set(tickResult.freeAgentDiscoveryMessageIds ?? []);
+  const availableFreeAgentIds = new Set(lifecycleFreeAgentPool.agents.filter(agent => {
+    const player = updatedPlayers[agent.playerId];
+    return agent.status === "available" && player && !player.clubId && !player.onLoan
+      && !(player.contractClubId ?? player.loanParentClubId ?? player.clubId);
+  }).map(agent => agent.playerId));
+  for (const message of [...tickResult.newMessages, ...renewalFallbackMessages, ...loanClosureFeedback.messages, ...alumniResult.newMessages]) {
+    if (releaseMessageIds.has(message.id) && (!message.relatedId
+      || !plannedReleaseOwners.has(message.relatedId)
+      || appliedReleaseOwners.get(message.relatedId) !== plannedReleaseOwners.get(message.relatedId))) continue;
+    if (discoveryMessageIds.has(message.id) && (!message.relatedId || !availableFreeAgentIds.has(message.relatedId))) continue;
     if (existingMessageIds.has(message.id)) continue;
     existingMessageIds.add(message.id);
     updatedInbox.push(message);

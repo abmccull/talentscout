@@ -227,32 +227,9 @@ export function processContractExpiries(
       }
     }
 
-    // Release to free agent pool
-    const countryKey =
-      normalizeCountryKey(state.leagues[club.leagueId]?.country)
-      ?? countryKeyFromNationality(player.nationality)
-      ?? "england";
-    const freeAgent = createFreeAgentFromPlayer(
-      player,
-      club,
-      state.currentSeason,
-      countryKey,
-    );
-    releasedPlayers.push(freeAgent);
-
-    // Notable release message (CA > 65)
-    if (player.currentAbility > 65) {
-      messages.push({
-        id: makeMessageId("fa_release", rng),
-        week: state.currentWeek,
-        season: state.currentSeason,
-        type: "event",
-        title: `${player.firstName} ${player.lastName} Released`,
-        body: `${player.firstName} ${player.lastName} (${player.age}, ${player.position}) has been released by ${club.name} and is available as a free agent.`,
-        read: false,
-        actionRequired: false,
-      });
-    }
+    const release = createContractReleaseFeedback(player, club, state, rng);
+    releasedPlayers.push(release.agent);
+    messages.push(...release.messages);
   }
 
   return {
@@ -260,6 +237,32 @@ export function processContractExpiries(
     renewedPlayerIds,
     renewals,
     messages,
+  };
+}
+
+/** Shared prospective release terms; callers publish only applied releases. */
+export function createContractReleaseFeedback(
+  player: Player,
+  club: Club,
+  state: Pick<GameState, "leagues" | "currentWeek" | "currentSeason">,
+  rng: RNG,
+): { agent: FreeAgent; messages: InboxMessage[] } {
+  const countryKey = normalizeCountryKey(state.leagues[club.leagueId]?.country)
+    ?? countryKeyFromNationality(player.nationality) ?? "england";
+  return {
+    agent: createFreeAgentFromPlayer(player, club, state.currentSeason, countryKey),
+    messages: player.currentAbility > 65 ? [{
+      id: makeMessageId("fa_release", rng),
+      week: state.currentWeek,
+      season: state.currentSeason,
+      type: "event",
+      title: `${player.firstName} ${player.lastName} Released`,
+      body: `${player.firstName} ${player.lastName} (${player.age}, ${player.position}) has been released by ${club.name} and is available as a free agent.`,
+      read: false,
+      actionRequired: false,
+      relatedId: player.id,
+      relatedEntityType: "player",
+    }] : [],
   };
 }
 
