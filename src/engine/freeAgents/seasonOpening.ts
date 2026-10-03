@@ -34,6 +34,9 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
         const keeperCount = squad.filter(player => player.position === "GK").length;
         const needsKeeper = keeperCount < (phase === "keeperCover" ? 2 : 1);
         const needsOutfield = squad.filter(player => player.position !== "GK").length < 10;
+        // Optional backup cover must leave the funds for an unresolved playing
+        // vacancy. A missing first keeper can still use this phase.
+        if (phase === "keeperCover" && keeperCount > 0 && needsOutfield) break;
         // Use the ordinary market's thirty-player registration ceiling.
         if (squad.length >= 30) break;
         if (phase === "eleven" ? !needsKeeper && !needsOutfield
