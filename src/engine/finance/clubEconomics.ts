@@ -317,6 +317,35 @@ function sameObligationFacts(before: ClubFinancialObligation, after: ClubFinanci
   });
 }
 
+interface NormalizedClubEconomicsResult {
+  club: Club;
+  weeklyObligationCommitment: number;
+}
+
+// Reuse is confined to the current synchronous assessment. Authored accessors
+// or exotic collection behavior keep the original post-normalization read:
+// they can mutate an earlier retained archive during a later row or Club spread.
+function hasPlainDataProperties(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Reflect.ownKeys(value).every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && Object.hasOwn(descriptor, "value");
+  });
+}
+
+function hasPlainDataArrayEntries(value: unknown[]): boolean {
+  if (Object.getPrototypeOf(value) !== Array.prototype) return false;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== value.length + 1) return false;
+  return keys.every((key, index) => {
+    if (key !== (index === value.length ? "length" : String(index))) return false;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && Object.hasOwn(descriptor, "value");
+  });
+}
+
 function normalizeClubEconomicsFromRoster(
   club: Club,
   roster: ClubRosterEconomics,
@@ -325,6 +354,18 @@ function normalizeClubEconomicsFromRoster(
     currentSeason?: number;
   } = {},
 ): Club {
+  return normalizeClubEconomicsResultFromRoster(club, roster, options).club;
+}
+
+function normalizeClubEconomicsResultFromRoster(
+  club: Club,
+  roster: ClubRosterEconomics,
+  options: {
+    currentWeek?: number;
+    currentSeason?: number;
+  } = {},
+  collectWeeklyCommitment = false,
+): NormalizedClubEconomicsResult {
   const currentWeek = options.currentWeek ?? 1;
   const currentSeason = options.currentSeason ?? 1;
   const weeklyWageBudget = Number.isFinite(club.weeklyWageBudget)
@@ -334,20 +375,44 @@ function normalizeClubEconomicsFromRoster(
   const scoutingBudget = Number.isFinite(club.scoutingBudget)
     ? Math.max(0, Math.round(club.scoutingBudget ?? 0))
     : deriveClubScoutingBudgetFromRoster(club, roster);
-  const financialObligations = (club.financialObligations ?? []).map((obligation, index) => {
+  // Derive legacy budgets from raw obligations above, before collecting the
+  // distinct normalized commitment used by the immediate affordability caller.
+  const sourceObligations = club.financialObligations ?? [];
+  let canReuseCommitment = collectWeeklyCommitment
+    && hasPlainDataProperties(club)
+    && typeof club.id === "string"
+    && hasPlainDataArrayEntries(sourceObligations);
+  let weeklyObligationCommitment = 0;
+  const financialObligations = sourceObligations.map((obligation, index) => {
+    // This remains the public validating decode of each original stored row.
     const decoded = expandClubFinancialObligation(obligation);
+    if (collectWeeklyCommitment && decoded === obligation && !hasPlainDataProperties(decoded)) {
+      canReuseCommitment = false;
+    }
     const normalized = normalizeObligation(club.id, decoded, index, currentWeek, currentSeason);
+    if (collectWeeklyCommitment && normalized.status === "active"
+      && Number.isFinite(normalized.weeklyAmount) && (normalized.weeklyAmount ?? 0) > 0) {
+      weeklyObligationCommitment += Math.max(0, Math.round(normalized.weeklyAmount ?? 0));
+    }
     // Preserve stored identity only after the existing domain normalization.
     // JSON equality would erase absent versus owned-undefined distinctions.
     if (decoded !== obligation && sameObligationFacts(decoded, normalized)) return obligation;
     return compactClubFinancialObligation(normalized);
   });
 
-  return {
+  const normalizedClub: Club = {
     ...club,
     weeklyWageBudget,
     scoutingBudget,
     financialObligations,
+  };
+  return {
+    club: normalizedClub,
+    weeklyObligationCommitment: collectWeeklyCommitment
+      ? canReuseCommitment
+        ? weeklyObligationCommitment
+        : getClubWeeklyObligationCommitment(normalizedClub)
+      : 0,
   };
 }
 
@@ -463,11 +528,11 @@ export function buildClubAffordabilityContext(
     const roster = rosterEconomics
       ? rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS
       : getClubRosterEconomics(clubId, players);
-    const normalizedClub = normalizeClubEconomicsFromRoster(club, roster, options);
+    const normalized = normalizeClubEconomicsResultFromRoster(club, roster, options, true);
     context[clubId] = {
-      club: normalizedClub,
+      club: normalized.club,
       currentWeeklyCommitment:
-        roster.weeklyWageCommitment + getClubWeeklyObligationCommitment(normalizedClub),
+        roster.weeklyWageCommitment + normalized.weeklyObligationCommitment,
     };
   }
   return context;
@@ -490,11 +555,11 @@ export function assessClubAffordability(
   // Both normalization and affordability need the same owned-roster totals.
   // Compute them once per assessment; do not cache across lifecycle mutations.
   const roster = getClubRosterEconomics(request.club.id, request.players);
-  const normalizedClub = normalizeClubEconomicsFromRoster(request.club, roster);
+  const normalized = normalizeClubEconomicsResultFromRoster(request.club, roster, {}, true);
   const currentWeeklyCommitment = roster.weeklyWageCommitment
-    + getClubWeeklyObligationCommitment(normalizedClub);
+    + normalized.weeklyObligationCommitment;
   return assessNormalizedClubAffordability(
-    normalizedClub,
+    normalized.club,
     currentWeeklyCommitment,
     request,
   );

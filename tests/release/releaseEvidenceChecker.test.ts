@@ -142,16 +142,23 @@ function releaseNeutralEnvironment(overrides: Record<string, string> = {}) {
 }
 
 function check(cwd: string, overrides: Record<string, string> = {}) {
-  const env = releaseNeutralEnvironment(overrides);
+  const generatedDirectory = join(cwd, "artifacts", "release", "generated");
+  mkdirSync(generatedDirectory, { recursive: true });
+  const outputPath = join(
+    mkdtempSync(join(generatedDirectory, "check-")),
+    "release-evidence-check.json",
+  );
+  const env = releaseNeutralEnvironment({
+    ...overrides,
+    RELEASE_EVIDENCE_OUTPUT: outputPath,
+  });
   const result = spawnSync(process.execPath, [checker, "--report-only"], {
     cwd,
     env,
     encoding: "utf8",
   });
   expect(result.status).toBe(0);
-  return JSON.parse(
-    readFileSync(join(cwd, "artifacts", "release", "release-evidence-check.json"), "utf8"),
-  );
+  return JSON.parse(readFileSync(outputPath, "utf8"));
 }
 
 function planReleaseSoak(

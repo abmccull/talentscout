@@ -126,7 +126,13 @@ function knownLoan(value: unknown, allowOptionalUndefined = false): value is Loa
 }
 
 function knownObligation(value: unknown, allowOptionalUndefined = false): value is ClubFinancialObligation {
-  if (!dataRecord(value, OBLIGATION_KEYS) || !OBLIGATION_REQUIRED.every(key => own(value, key))
+  return dataRecord(value, OBLIGATION_KEYS) && knownObligationFacts(value, allowOptionalUndefined);
+}
+
+// This fact check also serves the private object constructed by the decoder.
+// Caller-supplied records still take the complete structural guard above.
+function knownObligationFacts(value: Record<string, unknown>, allowOptionalUndefined = false): value is Record<string, unknown> & ClubFinancialObligation {
+  if (!OBLIGATION_REQUIRED.every(key => own(value, key))
     || typeof value.id !== "string" || typeof value.playerId !== "string"
     || !member(value.type, OBLIGATION_TYPES) || !member(value.status, TERMINAL_OBLIGATIONS)
     || !finite(value.createdWeek) || !finite(value.createdSeason)) return false;
@@ -400,9 +406,18 @@ export function expandClubFinancialObligation<T extends null | undefined>(entry:
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation | undefined): ClubFinancialObligation | undefined;
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation | null | undefined): ClubFinancialObligation | null | undefined;
 export function expandClubFinancialObligation(entry: StoredClubFinancialObligation | null | undefined): ClubFinancialObligation | null | undefined {
+  return expandClubFinancialObligationInternal(entry, false);
+}
+
+// Only stable restoration creates the private tuple trusted by this call.
+// Public V1/V2 callers never bypass their original descriptor guard.
+function expandClubFinancialObligationInternal(
+  entry: StoredClubFinancialObligation | null | undefined,
+  internallyGeneratedRow: boolean,
+): ClubFinancialObligation | null | undefined {
   if (!obligationArchiveShaped(entry)) return entry as ClubFinancialObligation | null | undefined;
   if (own(entry, "obligationArchiveV31") || own(entry, "obligationArchiveV32")) {
-    return expandClubFinancialObligation(restoreStableObligation(entry));
+    return expandClubFinancialObligationInternal(restoreStableObligation(entry), true);
   }
   const isV2 = own(entry, "obligationArchiveV2");
   const archiveKey = isV2 ? "obligationArchiveV2" : "obligationArchiveV1";
@@ -410,8 +425,14 @@ export function expandClubFinancialObligation(entry: StoredClubFinancialObligati
     || !own(entry, "id") || !own(entry, archiveKey) || typeof entry.id !== "string") {
     throw new InvalidTerminalRecordArchiveError("Invalid or unsupported terminal obligation archive");
   }
-  const row = entry[archiveKey];
-  if (!denseArray(row) || row.length < (isV2 ? 2 : 1)) {
+  const payload = entry[archiveKey];
+  if (!internallyGeneratedRow && !denseArray(payload)) {
+    throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation archive array");
+  }
+  // The internal path owns this fresh spread array; every original stable
+  // tuple/envelope/identity check already ran in unchanged restoration order.
+  const row = payload as unknown[];
+  if (row.length < (isV2 ? 2 : 1)) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation archive array");
   }
   const mask = row[0];
@@ -447,6 +468,14 @@ export function expandClubFinancialObligation(entry: StoredClubFinancialObligati
     throw new InvalidTerminalRecordArchiveError("Unexpected terminal obligation archive payload");
   }
   const expanded = Object.fromEntries(entries);
+  if (internallyGeneratedRow) {
+    // Closed field names and ordinary descriptors are supplied by this call.
+    // Required ownership and every type/value/null/undefined rule still run.
+    if (!knownObligationFacts(expanded, isV2)) {
+      throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation archive payload");
+    }
+    return expanded;
+  }
   if (!knownObligation(expanded, isV2)) {
     throw new InvalidTerminalRecordArchiveError("Invalid terminal obligation archive payload");
   }

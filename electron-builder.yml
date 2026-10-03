@@ -51,6 +51,10 @@ asarUnpack:
 # steam_appid.txt is required on every platform so Steamworks can locate the
 # app. Keep it in extraResources (bundled inside the app package).
 extraResources:
+  - from: public/licenses
+    to: licenses
+    filter:
+      - "*.txt"
   - from: .
     to: .
     filter:

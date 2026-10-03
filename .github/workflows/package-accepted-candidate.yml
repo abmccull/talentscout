@@ -388,6 +388,21 @@ jobs:
         working-directory: candidate
         run: node ../scripts/assert-packaged-runtime-slim.mjs --app-dir dist/win-unpacked
 
+      - name: Capture Windows fonts from all immutable distributable contents
+        working-directory: candidate
+        env:
+          FONT_CAPTURE_7ZIP_PATH: ${{ vars.WINDOWS_FONT_CAPTURE_7ZIP_PATH }}
+          FONT_CAPTURE_7ZIP_SHA256: ${{ vars.WINDOWS_FONT_CAPTURE_7ZIP_SHA256 }}
+        run: node ../scripts/accepted-package-font-handoff.mjs capture windows
+
+      - name: Upload Windows package font capture
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: font-capture-windows
+          path: candidate/artifacts/release/generated/font-captures/windows/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -514,6 +529,25 @@ jobs:
           xcrun stapler validate steam-stage/macos/TalentScout.app
           spctl --assess --type execute --verbose=2 steam-stage/macos/TalentScout.app
 
+      - name: Capture macOS fonts from all immutable distributable contents
+        working-directory: candidate
+        env:
+          FONT_CAPTURE_7ZIP_PATH: ${{ vars.MACOS_FONT_CAPTURE_7ZIP_PATH }}
+          FONT_CAPTURE_7ZIP_SHA256: ${{ vars.MACOS_FONT_CAPTURE_7ZIP_SHA256 }}
+          FONT_CAPTURE_HDIUTIL_PATH: ${{ vars.MACOS_FONT_CAPTURE_HDIUTIL_PATH }}
+          FONT_CAPTURE_HDIUTIL_SHA256: ${{ vars.MACOS_FONT_CAPTURE_HDIUTIL_SHA256 }}
+          FONT_CAPTURE_PLUTIL_PATH: ${{ vars.MACOS_FONT_CAPTURE_PLUTIL_PATH }}
+          FONT_CAPTURE_PLUTIL_SHA256: ${{ vars.MACOS_FONT_CAPTURE_PLUTIL_SHA256 }}
+        run: node ../scripts/accepted-package-font-handoff.mjs capture macos
+
+      - name: Upload macOS package font capture
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: font-capture-macos
+          path: candidate/artifacts/release/generated/font-captures/macos/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -601,6 +635,23 @@ jobs:
       - name: Verify packaged Linux dependency boundary
         working-directory: candidate
         run: node ../scripts/assert-packaged-runtime-slim.mjs --app-dir dist/linux-unpacked
+
+      - name: Capture Linux fonts from all immutable distributable contents
+        working-directory: candidate
+        env:
+          FONT_CAPTURE_7ZIP_PATH: ${{ vars.LINUX_FONT_CAPTURE_7ZIP_PATH }}
+          FONT_CAPTURE_7ZIP_SHA256: ${{ vars.LINUX_FONT_CAPTURE_7ZIP_SHA256 }}
+          FONT_CAPTURE_UNSQUASHFS_PATH: ${{ vars.LINUX_FONT_CAPTURE_UNSQUASHFS_PATH }}
+          FONT_CAPTURE_UNSQUASHFS_SHA256: ${{ vars.LINUX_FONT_CAPTURE_UNSQUASHFS_SHA256 }}
+        run: node ../scripts/accepted-package-font-handoff.mjs capture linux
+
+      - name: Upload Linux package font capture
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: font-capture-linux
+          path: candidate/artifacts/release/generated/font-captures/linux/
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -738,6 +789,27 @@ jobs:
           name: steam-linux
           path: candidate/dist/linux-unpacked
 
+      - name: Download exact Windows package font capture
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: font-capture-windows
+          path: candidate/artifacts/release/generated/font-capture-inputs/windows
+
+      - name: Download exact macOS package font capture
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: font-capture-macos
+          path: candidate/artifacts/release/generated/font-capture-inputs/macos
+
+      - name: Download exact Linux package font capture
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: font-capture-linux
+          path: candidate/artifacts/release/generated/font-capture-inputs/linux
+
       - name: Validate release package artifacts
         if: inputs.verification_only != true
         working-directory: candidate
@@ -845,6 +917,11 @@ jobs:
           fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
           NODE
 
+      - name: Validate and stage all accepted distributable font bytes
+        if: inputs.verification_only != true
+        working-directory: candidate
+        run: node ../scripts/accepted-package-font-handoff.mjs stage
+
       - name: Stage accepted candidate evidence
         shell: bash
         env:
@@ -884,6 +961,7 @@ jobs:
             cp candidate/artifacts/release/release-artifact-inventory.json candidate-bundle/artifacts/release/release-artifact-inventory.json
             cp candidate/artifacts/release/promotion-files.txt candidate-bundle/artifacts/release/promotion-files.txt
             cp candidate/artifacts/release/generated/steam-depot-inventories.json candidate-bundle/artifacts/release/generated/steam-depot-inventories.json
+            cp -R candidate/artifacts/release/generated/font-handoff candidate-bundle/artifacts/release/generated/font-handoff
           fi
           if [ -d candidate/release-artifacts ]; then
             cp -R candidate/release-artifacts candidate-bundle/release-artifacts
@@ -891,6 +969,8 @@ jobs:
           node <<'NODE'
           const fs = require("node:fs");
           const path = require("node:path");
+
+          const crypto = require("node:crypto");
 
           const output = path.resolve(
             "candidate-bundle",
@@ -921,6 +1001,12 @@ jobs:
             steamDepotInventoryPath: process.env.VERIFICATION_ONLY === "true"
               ? null
               : "artifacts/release/generated/steam-depot-inventories.json",
+            fontHandoff: process.env.VERIFICATION_ONLY === "true" ? null : {
+              path: "artifacts/release/generated/font-handoff/index.json",
+              sha256: crypto.createHash("sha256").update(fs.readFileSync(path.resolve(
+                "candidate-bundle", "artifacts", "release", "generated", "font-handoff", "index.json",
+              ))).digest("hex"),
+            },
             generatedAt: new Date().toISOString(),
           }, null, 2)}\n`, "utf8");
           NODE

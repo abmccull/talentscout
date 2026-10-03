@@ -1,25 +1,74 @@
 {
-  "schemaVersion": 1,
-  "status": "owner-attested-approved",
+  "schemaVersion": 2,
+  "status": "review-required",
   "lastReviewed": "2026-07-13",
-  "reviewInstructions": "The release owner attested commercial ownership on 2026-07-13. Re-review any replaced or newly added asset and attach its source evidence before release.",
+  "reviewInstructions": "Historical records are retained. Reconcile exact current asset hashes, post-July additions, provider/vender output rights and shipping-generated fonts before any release approval. Wildcard membership cannot extend a review to new or replaced bytes.",
   "assetGroups": [
     {
       "id": "meshy-generated-images",
       "paths": [
-        "public/images/avatars/*.png",
-        "public/images/backgrounds/**/*.png",
-        "public/images/branding/*.png"
+        "public/images/avatars/scout-1.png",
+        "public/images/avatars/scout-2.png",
+        "public/images/avatars/scout-3.png",
+        "public/images/avatars/scout-4.png",
+        "public/images/avatars/scout-5.png",
+        "public/images/avatars/scout-6.png",
+        "public/images/backgrounds/activities/academy.png",
+        "public/images/backgrounds/activities/conference.png",
+        "public/images/backgrounds/activities/data-room.png",
+        "public/images/backgrounds/activities/free-day.png",
+        "public/images/backgrounds/activities/grassroots.png",
+        "public/images/backgrounds/activities/meeting.png",
+        "public/images/backgrounds/activities/rest.png",
+        "public/images/backgrounds/activities/school-match.png",
+        "public/images/backgrounds/activities/street-football.png",
+        "public/images/backgrounds/activities/training.png",
+        "public/images/backgrounds/activities/video-room.png",
+        "public/images/backgrounds/activities/youth-festival.png",
+        "public/images/backgrounds/agency-office.png",
+        "public/images/backgrounds/career-journey.png",
+        "public/images/backgrounds/dashboard-office.png",
+        "public/images/backgrounds/discoveries-trophy.png",
+        "public/images/backgrounds/international.png",
+        "public/images/backgrounds/loading.png",
+        "public/images/backgrounds/match-atmosphere.png",
+        "public/images/backgrounds/menu-bg-1.png",
+        "public/images/backgrounds/menu-bg-2.png",
+        "public/images/backgrounds/negotiation-boardroom.png",
+        "public/images/backgrounds/network-lounge.png",
+        "public/images/backgrounds/reports-desk.png",
+        "public/images/backgrounds/rivals-binoculars.png",
+        "public/images/backgrounds/season-end.png",
+        "public/images/backgrounds/training-classroom.png",
+        "public/images/backgrounds/world-map.png",
+        "public/images/branding/icon-binoculars.png",
+        "public/images/branding/icon-notebook.png",
+        "public/images/branding/icon-whistle-badge.png"
       ],
       "source": "scripts/generate-images.mjs",
       "generator": "Meshy AI Text-to-Image API",
-      "rightsStatus": "approved",
+      "rightsStatus": "reviewRequired",
       "evidence": [
-        "docs/release/asset-rights-attestation.md"
+        {
+          "path": "docs/release/asset-rights-attestation.md",
+          "sha256": "91847ddb32854c09f2d0ef0d06c7c25b76b2e7d201cba7dba318e6b0da75eabd",
+          "kind": "supportingRecord"
+        }
       ],
       "notes": [
         "Archive prompts, generation dates, provider plan, and applicable terms before release.",
-        "public/images/backgrounds/reports-desk.png requires a specific fictional-brand and third-party-IP visual review."
+        "public/images/backgrounds/reports-desk.png requires a specific fictional-brand and third-party-IP visual review.",
+        "Current commercial clearance remains unresolved. Historical supporting records alone do not bind all current output bytes to an applicable approval.",
+        "Post-July youth files are classified separately because their retained metadata claims Grok Imagine; metadata is not authenticated provider or rights evidence."
+      ],
+      "historicalEvidence": [
+        "docs/release/asset-rights-attestation.md"
+      ],
+      "reviewedAssets": [],
+      "historicalPaths": [
+        "public/images/avatars/*.png",
+        "public/images/backgrounds/**/*.png",
+        "public/images/branding/*.png"
       ]
     },
     {
@@ -38,11 +87,52 @@
       "generator": "OpenAI built-in image generation with project-authored Sharp composition",
       "rightsStatus": "approved",
       "evidence": [
-        "docs/release/steam-store-art-provenance.md"
+        {
+          "path": "docs/release/steam-store-art-provenance.md",
+          "sha256": "10ac770256a430d5ecd2a94d68f6baea283e8f3305625df1f5f64c01b83c7adf",
+          "kind": "rightsReview"
+        }
       ],
       "notes": [
         "Source-master and final-output SHA-256 hashes are recorded in the evidence document.",
         "Visual review found no real club marks, sponsor marks, identifiable people, or third-party characters."
+      ],
+      "historicalEvidence": [
+        "docs/release/steam-store-art-provenance.md"
+      ],
+      "reviewedAssets": [
+        {
+          "path": "public/images/steam/steam-header-capsule.png",
+          "sha256": "da4d5b8748b3ae7a829d9160b3d766e2251902a2d446fa403a95052b251a47c9"
+        },
+        {
+          "path": "public/images/steam/steam-library-capsule-v2.png",
+          "sha256": "bbde5295b7f6d699147047c01b402947d74242211d0929a6f334657a381a4dbd"
+        },
+        {
+          "path": "public/images/steam/steam-library-hero.png",
+          "sha256": "725640c40a097befd5c20f590b82ca322c27a1d01979a935d0243f3a6fb7ec81"
+        },
+        {
+          "path": "public/images/steam/steam-logo-transparent.png",
+          "sha256": "03ccb8565872b501f74ee10e8d4829d9bf36a9b9753955f0d25038d98dde1791"
+        },
+        {
+          "path": "public/images/steam/steam-main-capsule.png",
+          "sha256": "d5e680537beca9927dc5eff2b19003b793f0e65be90bd9f4d15bab973d86d774"
+        },
+        {
+          "path": "public/images/steam/steam-page-background.png",
+          "sha256": "05ea5db649485bf75b94027903000131534afd6b326d812af832682be92c6684"
+        },
+        {
+          "path": "public/images/steam/steam-small-capsule.png",
+          "sha256": "278b776f5eb775a42512840d04b6c4b0cd5afeb73bea333b5d79e77b02430f01"
+        },
+        {
+          "path": "public/images/steam/steam-store-hero-v2.png",
+          "sha256": "7b7f78cc0d2d4e0303a588a6a1aa45c2fe3a3c376aac0beeb9c09e4486ec8347"
+        }
       ]
     },
     {
@@ -54,12 +144,64 @@
       "generator": "Project-authored Playwright capture of the candidate UI",
       "rightsStatus": "projectSource",
       "evidence": [
-        "git history",
-        "docs/release/steam-store-art-provenance.md"
+        {
+          "path": "e2e/visual/steam-store-screenshots.spec.ts",
+          "sha256": "6da8d45a3391c65167060483bb70419c9ea3c366c467c0ef4af699aef0d2c8fb",
+          "kind": "projectSource"
+        },
+        {
+          "path": "docs/release/steam-store-art-provenance.md",
+          "sha256": "10ac770256a430d5ecd2a94d68f6baea283e8f3305625df1f5f64c01b83c7adf",
+          "kind": "supportingRecord"
+        },
+        {
+          "path": "artifacts/release/asset-provenance-audit.json",
+          "sha256": "9e9c028ef96b9b537af353587a31f9513689f99a9de47a5d888420306901963d",
+          "kind": "projectOutputInventory"
+        }
       ],
       "notes": [
         "Screenshots must be captured from deterministic fictional game state at 1920x1080.",
-        "The Steam store asset validator enforces the canonical eight screenshot paths and dimensions."
+        "The Steam store asset validator enforces the canonical eight screenshot paths and dimensions.",
+        "Exact output hashes are retained from the unchanged September stored audit; this projectSource record does not assert package acceptance or screenshot recapture."
+      ],
+      "historicalEvidence": [
+        "git history",
+        "docs/release/steam-store-art-provenance.md"
+      ],
+      "reviewedAssets": [
+        {
+          "path": "public/images/steam/screenshots/01-dashboard.png",
+          "sha256": "367a9013ac08abefe4a60085c1fa98948234cf1735c598d7dd96fd007dc643e4"
+        },
+        {
+          "path": "public/images/steam/screenshots/02-observation.png",
+          "sha256": "bfb3c06fafdb260a4f7cc21baab4641ba8350386a276f9ffdd11aa91ea2e074b"
+        },
+        {
+          "path": "public/images/steam/screenshots/03-report-writer.png",
+          "sha256": "79e700dc7d213ccf5ba77950852151d4db54915cbd99699a4827ae805c1766ef"
+        },
+        {
+          "path": "public/images/steam/screenshots/04-prospects.png",
+          "sha256": "88d7092c707b79fb24fb420169a638a7210c622e01c3af438aa42baaea2661e6"
+        },
+        {
+          "path": "public/images/steam/screenshots/05-world-map.png",
+          "sha256": "fad97f1b251c1cef03f4d10fe2406cecc6ed20d32514be4f9554da5f06228398"
+        },
+        {
+          "path": "public/images/steam/screenshots/06-rivals.png",
+          "sha256": "4bc3e341d9ceb9dc7117b641c68bbaf7345b1ce3e647eae4d5e7a7fce0594af2"
+        },
+        {
+          "path": "public/images/steam/screenshots/07-career-progression.png",
+          "sha256": "f3ca5f516f7c090b9d5399ed7768fd46751772d1c904c03b2989a2c8bdd0f4b8"
+        },
+        {
+          "path": "public/images/steam/screenshots/08-calendar.png",
+          "sha256": "475e13139df49040a694301336c97566e34a1aeaa2f6d3d8c8a8883ede99d1a2"
+        }
       ]
     },
     {
@@ -74,14 +216,23 @@
         "scripts/generate-music.mjs"
       ],
       "generator": "ElevenLabs Sound Generation and Music APIs",
-      "rightsStatus": "approved",
+      "rightsStatus": "reviewRequired",
       "evidence": [
-        "docs/release/asset-rights-attestation.md"
+        {
+          "path": "docs/release/asset-rights-attestation.md",
+          "sha256": "91847ddb32854c09f2d0ef0d06c7c25b76b2e7d201cba7dba318e6b0da75eabd",
+          "kind": "supportingRecord"
+        }
       ],
       "notes": [
         "Archive prompt plans, generation dates, provider plan, and applicable commercial-use terms before release.",
-        "Review music for vocal, likeness, and unintended copyrighted-material similarity risks."
-      ]
+        "Review music for vocal, likeness, and unintended copyrighted-material similarity risks.",
+        "Current commercial clearance remains unresolved. Historical supporting records alone do not bind all current output bytes to an applicable approval."
+      ],
+      "historicalEvidence": [
+        "docs/release/asset-rights-attestation.md"
+      ],
+      "reviewedAssets": []
     },
     {
       "id": "procedural-svg-identity",
@@ -94,11 +245,29 @@
       "generator": null,
       "rightsStatus": "projectSource",
       "evidence": [
-        "git history"
+        {
+          "path": "src/components/game/PlayerAvatar.tsx",
+          "sha256": "42507be84582f6aa852c8908a0a66d50e5c6b4d5e30cce4f050f1deb1a705149",
+          "kind": "projectSource"
+        },
+        {
+          "path": "src/components/game/ClubCrest.tsx",
+          "sha256": "88cd281ccaef5d12b582d43886193068fc0849fc97ab8bbe51744b546fbec243",
+          "kind": "projectSource"
+        },
+        {
+          "path": "src/lib/avatarGenerator.ts",
+          "sha256": "80def85ef2bd9449a85fce2ee75a57317d8858076926461499d9c84dfc5ee860",
+          "kind": "projectSource"
+        }
       ],
       "notes": [
         "Keep shapes and marks fictional; add regression review if real club or sponsor marks are introduced."
-      ]
+      ],
+      "historicalEvidence": [
+        "git history"
+      ],
+      "reviewedAssets": []
     },
     {
       "id": "humgen-rendered-portraits",
@@ -108,16 +277,35 @@
       ],
       "source": "tools/blender/humgen_production.py",
       "generator": "Local Blender Cycles using user-supplied Human Generator assets",
-      "rightsStatus": "approved",
+      "rightsStatus": "reviewRequired",
       "evidence": [
+        {
+          "path": "docs/HUMGEN_FULL_SETUP.md",
+          "sha256": "1575f46462ccf4693461b4033645f4e99da139855262b2f3bc5e2d67db72190b",
+          "kind": "supportingRecord"
+        },
+        {
+          "path": "docs/HUMGEN_GAME_INTEGRATION.md",
+          "sha256": "fbd06668ba784853a93c4788034ea888fed6b46c7dbe147330266186e0a94dd9",
+          "kind": "supportingRecord"
+        },
+        {
+          "path": "docs/portraits/humgen-v2-curated-review.json",
+          "sha256": "e6b9fb4be3a8c9dc64e29e4af41f183bf5853230324272449fa0ef467e629d22",
+          "kind": "supportingRecord"
+        }
+      ],
+      "notes": [
+        "User supplied the asset downloads following the commercial-license discussion and authorized game implementation.",
+        "Only rendered images are bundled. Vendor models, textures, add-on code and editable scenes remain local authoring assets.",
+        "Current commercial clearance remains unresolved. Historical supporting records alone do not bind all current output bytes to an applicable approval."
+      ],
+      "historicalEvidence": [
         "docs/HUMGEN_FULL_SETUP.md",
         "docs/HUMGEN_GAME_INTEGRATION.md",
         "docs/portraits/humgen-v2-curated-review.json"
       ],
-      "notes": [
-        "User supplied the asset downloads following the commercial-license discussion and authorized game implementation.",
-        "Only rendered images are bundled. Vendor models, textures, add-on code and editable scenes remain local authoring assets."
-      ]
+      "reviewedAssets": []
     },
     {
       "id": "openai-documentary-football-art",
@@ -129,16 +317,233 @@
         "scripts/package-portraits.cjs"
       ],
       "generator": "OpenAI built-in image generation; project-authored offline Sharp crop and WebP encoding",
-      "rightsStatus": "approved",
+      "rightsStatus": "reviewRequired",
       "evidence": [
-        "docs/portraits/asset-generation-evidence.json",
-        "docs/portraits/ORIGINAL_ART_PROVENANCE.md"
+        {
+          "path": "docs/portraits/asset-generation-evidence.json",
+          "sha256": "0f5bd5b6d5c6d8576b519209e0d92c9eadaa4b04781ee30204bd9b7fbe38733e",
+          "kind": "supportingRecord"
+        },
+        {
+          "path": "docs/portraits/ORIGINAL_ART_PROVENANCE.md",
+          "sha256": "a8a72ae8cd53c79d5d3763e58091aa1b691104697475eb33d5924afd89ec618f",
+          "kind": "supportingRecord"
+        }
       ],
       "notes": [
         "Original fictional subjects and football environment created for this user-authorized overhaul.",
         "Approval is based on documented original generation, visual review and provider output-ownership terms; it does not extend the July owner attestation to new assets.",
-        "Six photographic lineages remain excluded from new allocation for art quality/likeness reasons; existing bindings preserve their immutable images."
+        "Six photographic lineages remain excluded from new allocation for art quality/likeness reasons; existing bindings preserve their immutable images.",
+        "Current commercial clearance remains unresolved. Historical supporting records alone do not bind all current output bytes to an applicable approval."
+      ],
+      "historicalEvidence": [
+        "docs/portraits/asset-generation-evidence.json",
+        "docs/portraits/ORIGINAL_ART_PROVENANCE.md"
+      ],
+      "reviewedAssets": []
+    },
+    {
+      "id": "post-july-youth-images",
+      "paths": [
+        "public/images/avatars/youth-01.png",
+        "public/images/avatars/youth-02.png",
+        "public/images/avatars/youth-03.png",
+        "public/images/avatars/youth-04.png",
+        "public/images/avatars/youth-05.png",
+        "public/images/avatars/youth-06.png",
+        "public/images/avatars/youth-07.png",
+        "public/images/avatars/youth-08.png",
+        "public/images/avatars/youth-09.png",
+        "public/images/avatars/youth-10.png",
+        "public/images/avatars/youth-11.png",
+        "public/images/avatars/youth-12.png",
+        "public/images/avatars/youth-13.png",
+        "public/images/avatars/youth-14.png",
+        "public/images/avatars/youth-15.png",
+        "public/images/avatars/youth-16.png"
+      ],
+      "generator": "Retained embedded metadata claims Grok Imagine; generation/model/account/entitlement unresolved",
+      "rightsStatus": "reviewRequired",
+      "reviewedAssets": [],
+      "evidence": [],
+      "notes": [
+        "Sixteen files were introduced after the July owner declaration. Do not reuse that older Meshy approval or self-signed local C2PA metadata as commercial clearance."
+      ]
+    },
+    {
+      "id": "web-and-shell-icons",
+      "paths": [
+        "public/favicon.ico",
+        "public/favicon.png",
+        "build/icon.icns",
+        "build/icon.ico",
+        "build/icon.png"
+      ],
+      "rightsStatus": "reviewRequired",
+      "reviewedAssets": [],
+      "evidence": [],
+      "notes": [
+        "Existing five source inputs were outside the old audit. Reconcile authorship/source and exact review hashes; project-authored output does not require a vendor subscription."
+      ]
+    },
+    {
+      "id": "project-steam-achievement-inputs",
+      "paths": [
+        "build/achievements/ACADEMY_GOLD.png",
+        "build/achievements/ACADEMY_GOLD_locked.png",
+        "build/achievements/AGAINST_ALL_ODDS.png",
+        "build/achievements/AGAINST_ALL_ODDS_locked.png",
+        "build/achievements/AGENCY_EMPIRE.png",
+        "build/achievements/AGENCY_EMPIRE_locked.png",
+        "build/achievements/ALL_ACTIVITIES.png",
+        "build/achievements/ALL_ACTIVITIES_locked.png",
+        "build/achievements/ALL_CONTINENTS.png",
+        "build/achievements/ALL_CONTINENTS_locked.png",
+        "build/achievements/ALL_PERKS_TREE.png",
+        "build/achievements/ALL_PERKS_TREE_locked.png",
+        "build/achievements/ALUMNI_15.png",
+        "build/achievements/ALUMNI_15_locked.png",
+        "build/achievements/ALUMNI_5.png",
+        "build/achievements/ALUMNI_5_locked.png",
+        "build/achievements/ALUMNI_INTERNATIONAL.png",
+        "build/achievements/ALUMNI_INTERNATIONAL_locked.png",
+        "build/achievements/BIG_SPENDER.png",
+        "build/achievements/BIG_SPENDER_locked.png",
+        "build/achievements/BLIND_FAITH.png",
+        "build/achievements/BLIND_FAITH_locked.png",
+        "build/achievements/CONTACTS_15.png",
+        "build/achievements/CONTACTS_15_locked.png",
+        "build/achievements/CONTACTS_5.png",
+        "build/achievements/CONTACTS_5_locked.png",
+        "build/achievements/COUNTRIES_10.png",
+        "build/achievements/COUNTRIES_10_locked.png",
+        "build/achievements/COUNTRIES_15.png",
+        "build/achievements/COUNTRIES_15_locked.png",
+        "build/achievements/COUNTRIES_3.png",
+        "build/achievements/COUNTRIES_3_locked.png",
+        "build/achievements/COUNTRIES_6.png",
+        "build/achievements/COUNTRIES_6_locked.png",
+        "build/achievements/DISCOVERIES_15.png",
+        "build/achievements/DISCOVERIES_15_locked.png",
+        "build/achievements/DISCOVERIES_5.png",
+        "build/achievements/DISCOVERIES_5_locked.png",
+        "build/achievements/DUAL_MASTERY.png",
+        "build/achievements/DUAL_MASTERY_locked.png",
+        "build/achievements/EQUIPMENT_MAXED.png",
+        "build/achievements/EQUIPMENT_MAXED_locked.png",
+        "build/achievements/FIRST_CONTACT.png",
+        "build/achievements/FIRST_CONTACT_locked.png",
+        "build/achievements/FIRST_EMPLOYEE.png",
+        "build/achievements/FIRST_EMPLOYEE_locked.png",
+        "build/achievements/FIRST_EQUIPMENT.png",
+        "build/achievements/FIRST_EQUIPMENT_locked.png",
+        "build/achievements/FIRST_MATCH.png",
+        "build/achievements/FIRST_MATCH_locked.png",
+        "build/achievements/FIRST_OBSERVATION.png",
+        "build/achievements/FIRST_OBSERVATION_locked.png",
+        "build/achievements/FIRST_PERK.png",
+        "build/achievements/FIRST_PERK_locked.png",
+        "build/achievements/FIRST_REPORT.png",
+        "build/achievements/FIRST_REPORT_locked.png",
+        "build/achievements/FIRST_WEEK.png",
+        "build/achievements/FIRST_WEEK_locked.png",
+        "build/achievements/FIRST_YOUTH.png",
+        "build/achievements/FIRST_YOUTH_locked.png",
+        "build/achievements/FULL_HOUSE.png",
+        "build/achievements/FULL_HOUSE_locked.png",
+        "build/achievements/GENERATIONAL_TALENT.png",
+        "build/achievements/GENERATIONAL_TALENT_locked.png",
+        "build/achievements/HIGH_ACCURACY.png",
+        "build/achievements/HIGH_ACCURACY_locked.png",
+        "build/achievements/HOME_MASTERY.png",
+        "build/achievements/HOME_MASTERY_locked.png",
+        "build/achievements/MARATHON.png",
+        "build/achievements/MARATHON_locked.png",
+        "build/achievements/MASTERY_PERK.png",
+        "build/achievements/MASTERY_PERK_locked.png",
+        "build/achievements/MATCHES_100.png",
+        "build/achievements/MATCHES_100_locked.png",
+        "build/achievements/MATCHES_25.png",
+        "build/achievements/MATCHES_25_locked.png",
+        "build/achievements/MATCHES_50.png",
+        "build/achievements/MATCHES_50_locked.png",
+        "build/achievements/MAX_SPEC.png",
+        "build/achievements/MAX_SPEC_locked.png",
+        "build/achievements/OBSERVATIONS_200.png",
+        "build/achievements/OBSERVATIONS_200_locked.png",
+        "build/achievements/OBSERVATIONS_50.png",
+        "build/achievements/OBSERVATIONS_500.png",
+        "build/achievements/OBSERVATIONS_500_locked.png",
+        "build/achievements/OBSERVATIONS_50_locked.png",
+        "build/achievements/PERFECT_RECORD.png",
+        "build/achievements/PERFECT_RECORD_locked.png",
+        "build/achievements/REACH_TIER_2.png",
+        "build/achievements/REACH_TIER_2_locked.png",
+        "build/achievements/REACH_TIER_3.png",
+        "build/achievements/REACH_TIER_3_locked.png",
+        "build/achievements/REACH_TIER_4.png",
+        "build/achievements/REACH_TIER_4_locked.png",
+        "build/achievements/REACH_TIER_5.png",
+        "build/achievements/REACH_TIER_5_locked.png",
+        "build/achievements/REP_100.png",
+        "build/achievements/REP_100_locked.png",
+        "build/achievements/REP_50.png",
+        "build/achievements/REP_50_locked.png",
+        "build/achievements/REP_75.png",
+        "build/achievements/REP_75_locked.png",
+        "build/achievements/REPORTS_10.png",
+        "build/achievements/REPORTS_100.png",
+        "build/achievements/REPORTS_100_locked.png",
+        "build/achievements/REPORTS_10_locked.png",
+        "build/achievements/REPORTS_25.png",
+        "build/achievements/REPORTS_25_locked.png",
+        "build/achievements/REPORTS_50.png",
+        "build/achievements/REPORTS_50_locked.png",
+        "build/achievements/SAVINGS_100K.png",
+        "build/achievements/SAVINGS_100K_locked.png",
+        "build/achievements/SAVINGS_500K.png",
+        "build/achievements/SAVINGS_500K_locked.png",
+        "build/achievements/SEASON_1.png",
+        "build/achievements/SEASON_10.png",
+        "build/achievements/SEASON_10_locked.png",
+        "build/achievements/SEASON_1_locked.png",
+        "build/achievements/SEASON_3.png",
+        "build/achievements/SEASON_3_locked.png",
+        "build/achievements/SEASON_5.png",
+        "build/achievements/SEASON_5_locked.png",
+        "build/achievements/SECONDARY_SPEC.png",
+        "build/achievements/SECONDARY_SPEC_locked.png",
+        "build/achievements/SPEEDRUN.png",
+        "build/achievements/SPEEDRUN_locked.png",
+        "build/achievements/STREAK_5.png",
+        "build/achievements/STREAK_5_locked.png",
+        "build/achievements/SURVIVED_FIRING.png",
+        "build/achievements/SURVIVED_FIRING_locked.png",
+        "build/achievements/TABLE_POUND.png",
+        "build/achievements/TABLE_POUND_locked.png",
+        "build/achievements/TRIPLE_STORYLINE.png",
+        "build/achievements/TRIPLE_STORYLINE_locked.png",
+        "build/achievements/WATCHLIST_10.png",
+        "build/achievements/WATCHLIST_10_locked.png",
+        "build/achievements/WONDERKID_FOUND.png",
+        "build/achievements/WONDERKID_FOUND_locked.png"
+      ],
+      "rightsStatus": "reviewRequired",
+      "reviewedAssets": [],
+      "evidence": [
+        {
+          "path": "scripts/generate-achievement-icons.mjs",
+          "sha256": "dbe959a7d72700af512fb80210551d938511f1b826a3cf7c236f52338b3df52c",
+          "kind": "projectSource"
+        }
+      ],
+      "notes": [
+        "Existing project-authored generator is preserved as evidence. Regenerate/compare or reconcile existing exact output record before assigning current input hashes to projectSource approval. These are Steam submission inputs, not asserted app.asar payload."
       ]
     }
+  ],
+  "assetRoots": [
+    "public",
+    "build"
   ]
 }

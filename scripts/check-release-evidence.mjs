@@ -1,8 +1,10 @@
+import { validateAcceptedFontHandoff } from "./accepted-package-font-handoff.mjs";
+import { auditAssetProvenance, listShippingFontFiles, readOrdinaryFile, safeRelativePath, writeOwnedReport } from "./audit-asset-provenance.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { access, readFile, stat } from "node:fs/promises";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -1214,6 +1216,96 @@ async function validateReleaseException(gateId, gate) {
   return result;
 }
 
+async function validateAssetCommercialRights(gate) {
+  const result = { status: "Unverified", failures: [], sourceAudit: null, shippingReview: null };
+  result.sourceAudit = await auditAssetProvenance(root);
+  if (result.sourceAudit.status !== "pass") {
+    result.status = "Failed";
+    result.failures.push(`source asset audit remains blocked (${result.sourceAudit.summary.blockerCount} blockers)`);
+  }
+  const policy = gate.shippingAssetReview;
+  if (!policy) {
+    result.failures.push("shipping asset review is missing; a source inventory cannot clear generated fonts or packages");
+    return result;
+  }
+  try {
+    if (!safeRelativePath(policy.path) || !hashPattern.test(String(policy.sha256 ?? ""))) {
+      throw new Error("shipping asset review requires an ordinary path and SHA-256");
+    }
+    const bytes = await readOrdinaryFile(root, policy.path);
+    if (createHash("sha256").update(bytes).digest("hex") !== policy.sha256.toLowerCase()) {
+      throw new Error("shipping asset review hash changed");
+    }
+    const review = JSON.parse(bytes.toString("utf8"));
+    result.shippingReview = { path: policy.path, sha256: policy.sha256.toLowerCase(), review };
+    if (review.schemaVersion !== 1 || review.evidenceKind !== "shipping-asset-rights-review"
+      || review.status !== "Passed" || review.scope !== "source-assets-and-shipping-generated-fonts"
+      || review.candidateCommitSha !== candidateSha || review.candidateTreeSha !== currentTreeSha
+      || typeof review.reviewer !== "string" || !review.reviewer.trim()
+      || !Number.isFinite(Date.parse(review.reviewedAt)) || Date.parse(review.reviewedAt) > Date.now()
+      || review.assetProvenanceManifestSha256 !== result.sourceAudit.manifestSha256
+      || !packageManifestPath || !packageManifest || packageResults.length === 0
+      || packageResults.some((entry) => entry.status !== "Passed")
+      || review.packageManifestSha256 !== await sha256(packageManifestPath)) {
+      throw new Error("shipping asset review is not bound to the current candidate, source manifest and verified package hashes");
+    }
+    const acceptedHandoff = await validateAcceptedFontHandoff(root, {
+      candidateSha, candidateTreeSha: currentTreeSha, packageManifestPath, workflowRunId: requiredWorkflowRunId,
+    });
+    const actualFonts = acceptedHandoff ? acceptedHandoff.fonts : await listShippingFontFiles(root);
+    result.shippingReview.fontTransport = acceptedHandoff
+      ? { path: acceptedHandoff.path, sha256: acceptedHandoff.sha256, scope: acceptedHandoff.scope, allDistributableContentsBound: true }
+      : { scope: "local-nonaccepted-export-supporting-review", allDistributableContentsBound: false };
+    if (acceptedHandoff) {
+      if (review.fontHandoffSha256 !== acceptedHandoff.sha256 || review.fontInventoryScope !== acceptedHandoff.scope
+        || !Array.isArray(review.notices) || review.notices.length !== acceptedHandoff.notices.length) {
+        throw new Error("shipping review is not bound to all accepted distributable fonts and notices");
+      }
+      const noticesSeen = new Set();
+      for (const notice of review.notices) {
+        const actual = acceptedHandoff.notices.find((entry) => entry.platform === notice.platform && entry.path === notice.path);
+        if (!actual || noticesSeen.has(notice.path.toLowerCase()) || notice.sha256 !== actual.sha256
+          || notice.bytes !== actual.bytes || notice.memberPath !== actual.memberPath || notice.source !== actual.source) {
+          throw new Error("shipping review notice inventory is incomplete or changed");
+        }
+        noticesSeen.add(notice.path.toLowerCase());
+      }
+    }
+    if (!Array.isArray(review.fonts) || review.fonts.length !== actualFonts.length) {
+      throw new Error("shipping asset review font inventory is incomplete");
+    }
+    const seen = new Set();
+    for (const font of review.fonts) {
+      if (!safeRelativePath(font?.path) || !hashPattern.test(String(font?.sha256 ?? ""))
+        || seen.has(font.path.toLowerCase())) throw new Error("shipping asset review contains an invalid or duplicate font");
+      seen.add(font.path.toLowerCase());
+      const actual = actualFonts.find((entry) => entry.path === font.path);
+      if (!actual || actual.sha256 !== font.sha256.toLowerCase()
+        || (acceptedHandoff && (font.platform !== actual.platform || font.bytes !== actual.bytes
+          || font.memberPath !== actual.memberPath || font.source !== actual.source))) throw new Error(`shipping font bytes changed: ${font.path}`);
+      const license = font.license;
+      if (license?.kind !== "fontLicenseNotice" || !safeRelativePath(license?.path)
+        || !hashPattern.test(String(license?.sha256 ?? ""))) throw new Error(`font license notice is unsupported: ${font.path}`);
+      if (acceptedHandoff && !acceptedHandoff.notices.some((notice) => notice.platform === font.platform
+        && notice.path === license.path && notice.sha256 === license.sha256.toLowerCase())) {
+        throw new Error(`font license notice was not retained from its accepted platform packages: ${font.path}`);
+      }
+      if (createHash("sha256").update(await readOrdinaryFile(root, license.path)).digest("hex") !== license.sha256.toLowerCase()) {
+        throw new Error(`font license notice changed: ${license.path}`);
+      }
+    }
+    // Complete local structural checks retain their original diagnostics before
+    // requiring every actual distributable for commercial-rights acceptance.
+    if (!acceptedHandoff) {
+      result.failures.push("accepted all-five-package font/notice handoff required; completed local review is supporting evidence only");
+    } else if (result.failures.length === 0) result.status = "Passed";
+  } catch (error) {
+    result.status = "Failed";
+    result.failures.push(`shipping asset review: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return result;
+}
+
 const gateResults = [];
 for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
   if (!allowedStatuses.has(gate.status)) {
@@ -1246,6 +1338,17 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
   if (releaseException && releaseException.status !== "Accepted") {
     failures.push(`${gateId} release exception: ${releaseException.failures.join(", ")}`);
   }
+  const assetReview = gateId === "assetCommercialRights"
+    ? await validateAssetCommercialRights(gate)
+    : null;
+  if (assetReview) {
+    effectiveStatus = gate.status === "Passed" && assetReview.status === "Passed"
+      ? "Passed"
+      : gate.status === "Failed" || assetReview.status === "Failed"
+        ? "Failed"
+        : "Unverified";
+    for (const failure of assetReview.failures) failures.push(`${gateId}: ${failure}`);
+  }
   const effectiveEvidenceCount =
     (gate.evidence?.length ?? 0)
     + (generatedEvidence?.status === "Passed" ? 1 : 0)
@@ -1266,6 +1369,7 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
     evidence: gate.evidence ?? [],
     missingEvidence,
     generatedEvidence,
+    assetReview,
     resolution: exceptionApplied ? "AcceptedRisk" : effectiveStatus,
     exceptionApplied,
     releaseException,
@@ -1307,8 +1411,18 @@ const report = {
   acceptedRisks,
   failures,
 };
-await mkdir(dirname(outputPath), { recursive: true });
-await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+function declaredPolicyInputs(value) {
+  if (typeof value === "string") return [value.replaceAll("<candidate-sha>", candidateSha)];
+  if (Array.isArray(value)) return value.flatMap(declaredPolicyInputs);
+  if (value && typeof value === "object") return Object.values(value).flatMap(declaredPolicyInputs);
+  return [];
+}
+await writeOwnedReport(root, outputPath, report, {
+  allowCanonicalRelease: true,
+  inputPaths: [statusPath, resolve(root, "package.json"), packageManifestPath,
+    ...declaredPolicyInputs(statusDocument),
+    ...gateResults.flatMap((gate) => gate.assetReview?.sourceAudit?.inputPaths ?? [])],
+});
 console.info(`RELEASE_EVIDENCE_CHECK ${JSON.stringify({ status: report.status, failures: failures.length })}`);
 console.info(`Evidence: ${relative(root, outputPath)}`);
 if (!reportOnly && failures.length > 0) {
