@@ -376,7 +376,9 @@ function assertCandidateUnchanged() {
 async function runWorker(seedIndex, suffix = "run") {
   assertCandidateUnchanged();
   const workerOutput = workerOutputPath(seedIndex, suffix);
-  const temporaryWorkerOutput = `${workerOutput}.partial-${process.pid}-${randomUUID()}.json`;
+  const workerRunId = randomUUID();
+  const temporaryWorkerOutput = `${workerOutput}.partial-${process.pid}-${workerRunId}.json`;
+  const workerProgressOutput = `${workerOutput}.progress-${workerRunId}.jsonl`;
   const startedAt = Date.now();
   console.info(
     `SOAK_WORKER_START seed=${seedIndex}/${seedCount} suffix=${suffix} active=${[
@@ -408,10 +410,36 @@ async function runWorker(seedIndex, suffix = "run") {
             SOAK_OUTPUT: temporaryWorkerOutput,
             SOAK_WORKER_MODE: "true",
             SOAK_DIAGNOSTIC_ONLY: "false",
+            SOAK_WORKER_PROGRESS_RUN_ID: workerRunId,
+            SOAK_WORKER_PROGRESS_PHASE: suffix,
+            SOAK_WORKER_PROGRESS_OUTPUT: workerOutput,
+            SOAK_WORKER_PROGRESS_PATH: workerProgressOutput,
+            SOAK_WORKER_PROGRESS_DRIVER_PID: String(process.pid),
           },
           stdio: ["ignore", "pipe", "pipe"],
         },
       );
+      child.once("spawn", () => {
+        const vitestPid = child.pid;
+        if (!Number.isSafeInteger(vitestPid) || (vitestPid ?? 0) <= 0) {
+          rejectWorker(new Error("Actual spawned Vitest PID is unavailable"));
+          return;
+        }
+        console.info(`SOAK_WORKER_PROCESS_IDENTITY ${JSON.stringify({
+          schemaVersion: 1,
+          evidenceKind: "long-career-release-worker-process-identity-v1",
+          workerRunId,
+          phase: suffix,
+          seedIndex,
+          seed: expectedSeed(seedIndex),
+          driverPid: process.pid,
+          vitestPid,
+          canonicalOutput: workerOutput,
+          temporaryOutput: temporaryWorkerOutput,
+          progressPath: workerProgressOutput,
+          spawnedAtUtc: new Date().toISOString(),
+        })}`);
+      });
       child.stdout?.on("data", (chunk) => {
         const text = chunk.toString();
         workerStdout = retainDiagnosticTail(workerStdout, text);

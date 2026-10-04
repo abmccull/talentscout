@@ -1,7 +1,7 @@
 import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
@@ -89,6 +89,98 @@ const MAX_SINGLE_BATCH_WALL_MS = Number.parseInt(
 );
 const DIAGNOSTIC_ONLY = process.env.SOAK_DIAGNOSTIC_ONLY === "true";
 const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
+
+interface WorkerProgressContext {
+  workerRunId: string;
+  phase: "run" | "determinism-replay";
+  seedIndex: number;
+  driverPid: number;
+  canonicalOutput: string;
+  progressPath: string;
+}
+
+function readWorkerProgressContext(): WorkerProgressContext | undefined {
+  const names = [
+    "SOAK_WORKER_PROGRESS_RUN_ID", "SOAK_WORKER_PROGRESS_PHASE",
+    "SOAK_WORKER_PROGRESS_OUTPUT", "SOAK_WORKER_PROGRESS_PATH",
+    "SOAK_WORKER_PROGRESS_DRIVER_PID",
+  ] as const;
+  if (!names.some((name) => process.env[name] !== undefined)) return undefined;
+  const seedCountText = process.env.SOAK_SEEDS ?? "20";
+  const seedStartText = process.env.SOAK_SEED_START ?? "1";
+  if (!WORKER_MODE || RELEASE_SEED_COUNT !== 1 || !Number.isSafeInteger(RELEASE_SEED_START)
+    || seedCountText !== "1" || !/^[1-9][0-9]*$/.test(seedStartText)
+    || Number(seedStartText) !== RELEASE_SEED_START
+    || RELEASE_SEED_START <= 0 || names.some((name) => !process.env[name])) {
+    throw new Error("Dedicated progress requires one real worker and all private identity inputs");
+  }
+  if (DIAGNOSTIC_ONLY || process.env.SOAK_DIAGNOSTIC_CHECKPOINT_PATH !== undefined) {
+    throw new Error("Dedicated progress requires release assertions and no shared diagnostic checkpoint");
+  }
+  const temporaryOutput = process.env.SOAK_OUTPUT;
+  const workerRunId = process.env.SOAK_WORKER_PROGRESS_RUN_ID!;
+  const phase = process.env.SOAK_WORKER_PROGRESS_PHASE!;
+  const canonicalOutput = process.env.SOAK_WORKER_PROGRESS_OUTPUT!;
+  const progressPath = process.env.SOAK_WORKER_PROGRESS_PATH!;
+  const driverPidText = process.env.SOAK_WORKER_PROGRESS_DRIVER_PID!;
+  const driverPid = Number(driverPidText);
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(workerRunId)
+    || (phase !== "run" && phase !== "determinism-replay")
+    || !/^[1-9][0-9]*$/.test(driverPidText) || !Number.isSafeInteger(driverPid)
+    || temporaryOutput === undefined || !isAbsolute(temporaryOutput)
+    || temporaryOutput !== resolve(temporaryOutput) || temporaryOutput !== OUTPUT_PATH
+    || !isAbsolute(canonicalOutput) || canonicalOutput !== resolve(canonicalOutput)
+    || !isAbsolute(progressPath) || progressPath !== resolve(progressPath)
+    || basename(canonicalOutput) !== `seed-${String(RELEASE_SEED_START).padStart(2, "0")}-${phase}.json`
+    || progressPath !== `${canonicalOutput}.progress-${workerRunId}.jsonl`
+    || [canonicalOutput, progressPath, temporaryOutput ?? ""].some((path) => path.includes("\0")
+      || (process.platform === "win32" && path.split(/[\\/]/).slice(1)
+        .some((part) => part.endsWith(" ") || part.endsWith(".") || part.includes(":"))))
+    || OUTPUT_PATH !== `${canonicalOutput}.partial-${driverPid}-${workerRunId}.json`) {
+    throw new Error("Dedicated progress identity/output route differs from the real driver");
+  }
+  return { workerRunId, phase, seedIndex: RELEASE_SEED_START, driverPid, canonicalOutput, progressPath };
+}
+
+const workerProgress = readWorkerProgressContext();
+let workerProgressStartedAtUtc: string | undefined;
+
+async function appendWorkerProgress(
+  event: "started" | "week" | "career-complete",
+  seed: string, season: number, week: number, completedCanonicalTicks: number,
+  calendarWeeksSpanned: number, digest: string | null = null,
+): Promise<void> {
+  if (!workerProgress) return;
+  if (seed !== `release-soak-${String(workerProgress.seedIndex).padStart(2, "0")}`
+    || ![process.pid, process.ppid, season, week].every((value) => Number.isSafeInteger(value) && value > 0)
+    || ![completedCanonicalTicks, calendarWeeksSpanned].every((value) => Number.isSafeInteger(value) && value >= 0)
+    || completedCanonicalTicks !== calendarWeeksSpanned
+    || (event === "career-complete" ? !/^[a-f0-9]{64}$/.test(digest ?? "") : digest !== null)) {
+    throw new Error("Actual dedicated progress facts are invalid");
+  }
+  if (event === "started") {
+    if (workerProgressStartedAtUtc !== undefined || completedCanonicalTicks !== 0) {
+      throw new Error("Dedicated worker progress was already started");
+    }
+    workerProgressStartedAtUtc = new Date().toISOString();
+  } else if (workerProgressStartedAtUtc === undefined) {
+    throw new Error("Dedicated worker progress has not started");
+  }
+  const row = {
+    schemaVersion: 1, evidenceKind: "long-career-release-worker-progress-v1",
+    workerRunId: workerProgress.workerRunId, phase: workerProgress.phase,
+    seedIndex: workerProgress.seedIndex, seed, driverPid: workerProgress.driverPid,
+    vitestPid: process.ppid, workerPid: process.pid,
+    canonicalOutput: workerProgress.canonicalOutput, temporaryOutput: OUTPUT_PATH,
+    progressPath: workerProgress.progressPath, workerStartedAtUtc: workerProgressStartedAtUtc,
+    recordedAtUtc: new Date().toISOString(), event, completedCanonicalTicks, calendarWeeksSpanned,
+    season, week, digest,
+  };
+  const raw = `${JSON.stringify(row)}\n`;
+  if (event === "started") await writeFile(workerProgress.progressPath, raw, { encoding: "utf8", flag: "wx" });
+  else await appendFile(workerProgress.progressPath, raw, "utf8");
+}
+
 // Heap samples are taken after an explicit collection so the release gate
 // measures retained game state instead of garbage from its own repeated
 // full-save serialization and round-trip assertions. RSS remains the guard
@@ -757,6 +849,9 @@ async function simulateCareer(
 
   const initial = useGameStore.getState().gameState;
   if (!initial) throw new Error(`Failed to initialize release soak seed ${seed}`);
+  if (workerProgress) {
+    await appendWorkerProgress("started", seed, initial.currentSeason, initial.currentWeek, 0, 0);
+  }
   let developmentCohort = new Set<string>();
   const developmentRunId = `${seed}:${process.pid}:${Date.now()}`;
   if (DIAGNOSTIC_CHECKPOINT_PATH) {
@@ -834,6 +929,10 @@ async function simulateCareer(
         elapsedMs: elapsed, cpuElapsedMs: cpuElapsed, memory: runtimeMemory,
         players: Object.keys(after.players).length,
       }) + "\n", "utf8");
+    }
+    if (workerProgress) {
+      await appendWorkerProgress("week", seed, after.currentSeason, after.currentWeek,
+        canonicalTicks + 1, calendarWeeksSpanned + 1);
     }
     peakRuntimeHeapUsedBytes = Math.max(
       peakRuntimeHeapUsedBytes,
@@ -995,6 +1094,11 @@ async function simulateCareer(
     finalMemory.heapUsedBytes - initialMemory.heapUsedBytes,
     `seed ${seed} retained excessive heap across the career`,
   ).toBeLessThanOrEqual(MAX_POST_GC_HEAP_GROWTH_BYTES);
+
+  if (workerProgress) {
+    await appendWorkerProgress("career-complete", seed, stabilizedFinalState.currentSeason,
+      stabilizedFinalState.currentWeek, canonicalTicks, calendarWeeksSpanned, finalDigest);
+  }
 
   return {
     seed,
