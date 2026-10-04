@@ -1,5 +1,6 @@
 import { buildAcademyPromotionNews } from "@/engine/youth/academyPromotionNews";
 import { recruitForSeasonOpening } from "@/engine/freeAgents/seasonOpening";
+import { buildPlayingSquadQuoteIndex, getPlayingSquadWeeklyReserve } from "@/engine/freeAgents/squadPlanning";
 import type {
   DiscoveryRecord,
   GameState,
@@ -955,7 +956,7 @@ export function processWeeklySeasonRollover(
       // unused scouting budget to compound forever.
       newState = {
         ...newState,
-        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players, newState.currentSeason),
+        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players, newState.currentSeason, newState.freeAgentPool.agents),
       };
 
       // Generate new season fixtures for core leagues only (skip secondary talent pools)
@@ -1022,6 +1023,7 @@ export function processWeeklySeasonRollover(
       const newAcademyPlayers: Player[] = [];
       const academyAffordability = buildClubAffordabilityContext(newState.clubs, newState.players,
         { currentWeek: newState.currentWeek, currentSeason: newState.currentSeason });
+      const academyQuotes = buildPlayingSquadQuoteIndex(newState.freeAgentPool.agents, newState.players);
 
       for (const countryKey of newState.countries) {
         const countryData = getCountryDataSync(countryKey);
@@ -1054,11 +1056,7 @@ export function processWeeklySeasonRollover(
           // Discretionary intake must leave funds for an actual playing eleven.
           // Only already registered cover counts; loaned-out payroll is still
           // charged by the authoritative affordability context below.
-          const registered = [...new Set(club.playerIds)].map(id => newState.players[id])
-            .filter(player => player && player.clubId === club.id && player.age >= 16 && player.position);
-          const outfield = registered.filter(player => player.position !== "GK").length;
-          const playingReserve = Math.max(0, 10 - outfield) * 500
-            + (registered.some(player => player.position === "GK") ? 0 : 1_000);
+          const playingReserve = getPlayingSquadWeeklyReserve(club, newState.players, academyQuotes);
           const intake = limitAcademyIntakeToClubCapacity(
             club,
             generateAcademyIntake(

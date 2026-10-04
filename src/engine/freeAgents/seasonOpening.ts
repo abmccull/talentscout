@@ -4,7 +4,7 @@ import { assessClubAffordabilityFromContext, buildClubAffordabilityContext } fro
 import { createFreeAgentSigningResolver, getLifecycleWorld, withLifecycleWorld } from "@/engine/world/playerLifecycle";
 import { compactPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { NPC_ACCEPTANCE_CHANCE, scoreFreeAgentClubInterest } from "./pool";
-import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "./squadPlanning";
+import { buildPlayingSquadQuoteIndex, canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed, getPlayingSquadWeeklyReserve } from "./squadPlanning";
 import { recruitOpeningGoalkeeperLoans } from "./openingLoans";
 
 /** A bounded recruitment window after annual funding and academy intake.
@@ -22,6 +22,7 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
     // optional cover and bench depth spend the remaining recruitment funds.
     if (phase === "keeperCover") state = recruitOpeningGoalkeeperLoans(state, rng);
     let resolveSigning: ReturnType<typeof createFreeAgentSigningResolver> | undefined;
+    const quotes = buildPlayingSquadQuoteIndex(state.freeAgentPool.agents, state.players);
     let signedInPhase = false;
     for (const clubId of clubOrder) {
       const attempted = attempts.get(clubId)!;
@@ -47,7 +48,7 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
           { currentWeek: state.currentWeek, currentSeason: state.currentSeason })[clubId];
         const candidates = state.freeAgentPool.agents.flatMap(agent => {
           const player = state.players[agent.playerId];
-          if (agent.status !== "available" || attempted.has(agent.playerId) || agent.releasedFrom === clubId
+          if (quotes.byPlayerId.get(agent.playerId) !== agent || attempted.has(agent.playerId) || agent.releasedFrom === clubId
             || !player || player.clubId || player.contractClubId || player.loanParentClubId || player.onLoan || player.age < 18
             || (needsKeeper ? player.position !== "GK"
               : needsOutfield ? player.position === "GK"
@@ -58,7 +59,8 @@ export function recruitForSeasonOpening(initial: GameState, rng: RNG): GameState
           });
           if (!affordability.affordable || !canFundSquadCompletion(affordability.remainingWeeklyHeadroom,
             squad.length + 1, agent.wageExpectation, getGoalkeeperRecruitmentNeed(player, club, state.players),
-            getEmergencySquadVacancies(player, club, state.players), player.age)) return [];
+            getEmergencySquadVacancies(player, club, state.players), player.age,
+            getPlayingSquadWeeklyReserve(club, state.players, quotes, player, attempted))) return [];
           const weight = scoreFreeAgentClubInterest(player, club, state, agent);
           return weight >= 0.25 ? [{ item: agent, weight: weight * (phase === "depth" && player.position === "GK" && keeperCount < 2 ? 2 : 1) }] : [];
         });

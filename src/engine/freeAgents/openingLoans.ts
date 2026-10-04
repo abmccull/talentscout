@@ -4,7 +4,7 @@ import { getSeasonLength } from "@/engine/core/gameDate";
 import { assessClubAffordabilityFromContext, buildClubAffordabilityContext } from "@/engine/finance/clubEconomics";
 import { calculateLoanTerms, findLoanDestination, isLoanEligible, retainsFirstTeamAfterLoan } from "@/engine/world/loans";
 import { getLifecycleWorld, resolvePlayerMovements, withLifecycleWorld } from "@/engine/world/playerLifecycle";
-import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "./squadPlanning";
+import { buildPlayingSquadQuoteIndex, canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed, getPlayingSquadWeeklyReserve } from "./squadPlanning";
 import { NPC_ACCEPTANCE_CHANCE } from "./pool";
 
 /** A targeted opening-window approach, rather than the weekly chance to list
@@ -26,6 +26,7 @@ export function recruitOpeningSquadLoans(initial: GameState, rng: RNG): GameStat
   });
   if (!targets.length) return state;
   const seasonLength = getSeasonLength(state.fixtures ?? {}, state.currentSeason);
+  const quotes = buildPlayingSquadQuoteIndex(state.freeAgentPool.agents, state.players);
   const reserves = Object.values(state.players).filter(p => p.age >= 18);
   const reserveIds = {
     keeper: reserves.filter(p => p.position === "GK").map(p => p.id).sort(),
@@ -56,7 +57,8 @@ export function recruitOpeningSquadLoans(initial: GameState, rng: RNG): GameStat
             { upfrontCost: terms.loanFee, weeklyObligationCommitment: contribution });
           return financial.affordable && canFundSquadCompletion(financial.remainingWeeklyHeadroom,
             new Set([...club.playerIds, id]).size, contribution, getGoalkeeperRecruitmentNeed(player, club, state.players),
-            getEmergencySquadVacancies(player, club, state.players), player.age);
+            getEmergencySquadVacancies(player, club, state.players), player.age,
+            getPlayingSquadWeeklyReserve(club, state.players, quotes, player));
         });
         if (!destination || !terms) continue;
         approaches++;
@@ -67,7 +69,7 @@ export function recruitOpeningSquadLoans(initial: GameState, rng: RNG): GameStat
           performanceRecord: { appearances: 0, goals: 0, assists: 0, avgRating: 6, developmentDelta: 0,
             parentClubSatisfaction: 50, loanClubSatisfaction: 50 } };
         const resolution = resolvePlayerMovements(getLifecycleWorld(state),
-          [{ type: "loanStart", playerId: id, deal, reason: "Season-opening squad vacancy agreement" }],
+          [{ type: "loanStart", playerId: id, deal, preserveSquadWageReserve: true, reason: "Season-opening squad vacancy agreement" }],
           state.currentWeek, state.currentSeason, seasonLength);
         if (!resolution.applied.length) continue;
         state = withLifecycleWorld(state, resolution.state);

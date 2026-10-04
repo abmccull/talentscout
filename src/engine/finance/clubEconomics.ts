@@ -5,8 +5,10 @@ import type {
   Player,
   PlayerMatchRating,
   TransferAddOn,
+  FreeAgent,
 } from "@/engine/core/types";
 import { estimatePlayerWeeklyWage } from "@/engine/players/wages";
+import { buildPlayingSquadQuoteIndex, getPlayingSquadWeeklyReserve } from "@/engine/freeAgents/squadPlanning";
 import { compactClubFinancialObligation, expandClubFinancialObligation } from "./terminalRecordArchive";
 
 const MIN_WEEKLY_WAGE_BUDGET = 800;
@@ -177,14 +179,17 @@ export function getClubWeeklyCommitmentTotal(
 export function deriveClubWeeklyWageBudget(
   club: Club,
   players: Record<string, Player>,
+  agents: readonly FreeAgent[] = [],
 ): number {
   const roster = getClubRosterEconomics(club.id, players);
-  return deriveClubWeeklyWageBudgetFromRoster(club, roster);
+  return deriveClubWeeklyWageBudgetFromRoster(club, roster,
+    getPlayingSquadWeeklyReserve(club, players, buildPlayingSquadQuoteIndex(agents, players)));
 }
 
 function deriveClubWeeklyWageBudgetFromRoster(
   club: Club,
   roster: ClubRosterEconomics,
+  playingWeeklyReserve = 0,
 ): number {
   // Borrowed players' wages are paid through obligations, not owned payroll.
   // Annual approval must recognize the same commitments as recruitment does.
@@ -202,9 +207,9 @@ function deriveClubWeeklyWageBudgetFromRoster(
     + Math.min(25_000, Math.max(0, club.budget) * 0.00025);
 
   return clamp(
-    roundToNearest(
-      Math.max(committedWages * 1.1, structuralAllowance, plannedSquadPayroll),
-      50,
+    Math.max(
+      roundToNearest(Math.max(committedWages * 1.1, structuralAllowance, plannedSquadPayroll), 50),
+      Math.ceil((committedWages + playingWeeklyReserve) / 50) * 50,
     ),
     MIN_WEEKLY_WAGE_BUDGET,
     MAX_WEEKLY_WAGE_BUDGET,
@@ -230,8 +235,10 @@ export function reapproveAnnualClubEconomics(
   clubs: Record<string, Club>,
   players: Record<string, Player>,
   season?: number,
+  agents: readonly FreeAgent[] = [],
 ): Record<string, Club> {
   const rosterEconomics = buildClubRosterEconomicsIndex(players);
+  const quotes = buildPlayingSquadQuoteIndex(agents, players);
   const reapproved: Record<string, Club> = {};
   for (const [clubId, club] of Object.entries(clubs)) {
     if (season !== undefined && (!Number.isInteger(season) || season < 1)) {
@@ -249,7 +256,8 @@ export function reapproveAnnualClubEconomics(
     );
     reapproved[clubId] = {
       ...club,
-      weeklyWageBudget: deriveClubWeeklyWageBudgetFromRoster(club, roster),
+      weeklyWageBudget: deriveClubWeeklyWageBudgetFromRoster(club, roster,
+        getPlayingSquadWeeklyReserve(club, players, quotes)),
       scoutingBudget: annualScoutingBudget + carryover,
     };
     if (season !== undefined) {

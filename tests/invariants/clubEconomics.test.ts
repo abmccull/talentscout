@@ -84,8 +84,10 @@ describe("club economics", () => {
     const players = { owned: player("owned", "a", 20_000),
       borrowed: { ...player("borrowed", "parent", 40_000), clubId: "a", onLoan: true } };
     expect(getClubWeeklyCommitmentTotal(destination, players)).toBe(22_000);
-    expect(deriveClubWeeklyWageBudget(destination, players)).toBe(24_200);
-    expect(reapproveAnnualClubEconomics({ a: destination }, players, 4).a.weeklyWageBudget).toBe(24_200);
+    // No registered roles in this fixture: preserve the £22k commitments and
+    // the £6k fallback for one goalkeeper plus ten outfield players.
+    expect(deriveClubWeeklyWageBudget(destination, players)).toBe(28_000);
+    expect(reapproveAnnualClubEconomics({ a: destination }, players, 4).a.weeklyWageBudget).toBe(28_000);
     expect(normalizeClubEconomics(destination, players).weeklyWageBudget).toBe(15_000);
     expect(destination.weeklyWageBudget).toBe(15_000);
     expect(obligation.status).toBe("active");

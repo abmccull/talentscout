@@ -17,7 +17,7 @@ import {
   gameWeeksBetweenWithSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
-import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "@/engine/freeAgents/squadPlanning";
+import { buildPlayingSquadQuoteIndex, canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed, getPlayingSquadWeeklyReserve, type PlayingSquadQuoteIndex } from "@/engine/freeAgents/squadPlanning";
 import {
   assessClubAffordabilityFromContext,
   type ClubAffordabilityRequest,
@@ -457,12 +457,15 @@ export function createFreeAgentSigningResolver(
   currentSeason: number,
 ): (intent: Extract<PlayerMovementIntent, { type: "freeAgentSigning" }>) => LifecycleResolution {
   let context: PlayerMovementContext | undefined;
+  // This phase only removes accepted agents. Ownership is rechecked on every
+  // offer, so prepare prices once rather than sorting the pool per approach.
+  const phaseQuotes = buildPlayingSquadQuoteIndex(input.freeAgentPool.agents, input.players);
   return (intent) => {
     const prepared = context ?? preparePlayerMovementContext(input, currentWeek, currentSeason);
     const previousPool = prepared.state.freeAgentPool;
     const playerId = prepared.state.players[intent.playerId]?.id ?? intent.playerId;
     const result = applyPlayerMovements(
-      prepared, [intent], currentWeek, currentSeason, LEGACY_SEASON_LENGTH_WEEKS,
+      prepared, [intent], currentWeek, currentSeason, LEGACY_SEASON_LENGTH_WEEKS, phaseQuotes,
     );
     if (result.applied.length === 0) {
       // Ordinary recruitment discards a refused resolution, including its
@@ -484,6 +487,7 @@ function applyPlayerMovements(
   currentWeek: number,
   currentSeason: number,
   seasonLength: number,
+  phaseQuotes?: PlayingSquadQuoteIndex,
 ): LifecycleResolution {
   const state = context.state;
   const payroll = context.payroll;
@@ -496,6 +500,15 @@ function applyPlayerMovements(
         + getClubWeeklyObligationCommitment(request.club),
     }, request);
   const applied: PlayerMovementEvent[] = [];
+  let quoteAgents = state.freeAgentPool.agents;
+  let quotes = phaseQuotes;
+  const playingReserve = (club: Club, proposed: Player, proposedSeniorRegistration = false) => {
+    if (!quotes || (!phaseQuotes && quoteAgents !== state.freeAgentPool.agents)) {
+      quoteAgents = state.freeAgentPool.agents;
+      quotes = buildPlayingSquadQuoteIndex(quoteAgents, state.players);
+    }
+    return getPlayingSquadWeeklyReserve(club, state.players, quotes, proposed, undefined, proposedSeniorRegistration);
+  };
   const rejected: RejectedPlayerMovement[] = [];
   const reserved = new Set<string>();
   const returnedExpiredContractOwners = new Map<string, string>();
@@ -659,7 +672,7 @@ function applyPlayerMovements(
       if (intent.preserveSquadWageReserve && !canFundSquadCompletion(
         affordability.remainingWeeklyHeadroom,
         new Set([...target.playerIds, ...(player.age >= 18 ? [player.id] : [])]).size, signedWage,
-        getGoalkeeperRecruitmentNeed(player, target, state.players), getEmergencySquadVacancies(player, target, state.players), player.age,
+        getGoalkeeperRecruitmentNeed(player, target, state.players), getEmergencySquadVacancies(player, target, state.players), player.age, playingReserve(target, player),
       )) {
         reject(rejected, intent, "NPC signing would consume the squad completion wage reserve");
         continue;
@@ -730,7 +743,7 @@ function applyPlayerMovements(
         affordability.remainingWeeklyHeadroom,
         new Set([...toClub.playerIds, ...(player.age >= 18 ? [player.id] : [])]).size,
         transferWage + addOnWeeklyCommitment,
-        getGoalkeeperRecruitmentNeed(player, toClub, state.players), getEmergencySquadVacancies(player, toClub, state.players), player.age,
+        getGoalkeeperRecruitmentNeed(player, toClub, state.players), getEmergencySquadVacancies(player, toClub, state.players), player.age, playingReserve(toClub, player),
       )) {
         reject(rejected, intent, "NPC transfer would consume the squad completion wage reserve");
         continue;
@@ -822,8 +835,8 @@ function applyPlayerMovements(
       }
       if (intent.preserveSquadWageReserve && !canFundSquadCompletion(
         affordability.remainingWeeklyHeadroom,
-        new Set([...loanClub.playerIds, ...(player.age >= 18 ? [player.id] : [])]).size, weeklyContribution,
-        getGoalkeeperRecruitmentNeed(player, loanClub, state.players), getEmergencySquadVacancies(player, loanClub, state.players), player.age,
+        new Set([...loanClub.playerIds, player.id]).size, weeklyContribution,
+        getGoalkeeperRecruitmentNeed(player, loanClub, state.players), getEmergencySquadVacancies(player, loanClub, state.players, true), player.age, playingReserve(loanClub, player, true),
       )) {
         reject(rejected, intent, "NPC loan would consume the squad completion wage reserve");
         continue;
@@ -910,7 +923,7 @@ function applyPlayerMovements(
         declineNPCBuyOption = Boolean(intent.preserveSquadWageReserve && (
           !deal.buyOptionFee || !affordability.affordable || !canFundSquadCompletion(
             affordability.remainingWeeklyHeadroom, new Set(loanClub.playerIds).size, buyingWage,
-            getGoalkeeperRecruitmentNeed(player, loanClub, state.players), getEmergencySquadVacancies(player, loanClub, state.players), player.age,
+            getGoalkeeperRecruitmentNeed(player, loanClub, state.players), getEmergencySquadVacancies(player, loanClub, state.players), player.age, playingReserve(loanClub, player),
           )
         ));
         if ((!deal.buyOptionFee || !affordability.affordable) && !declineNPCBuyOption) {
