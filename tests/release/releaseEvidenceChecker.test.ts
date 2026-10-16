@@ -35,6 +35,50 @@ const tempDirs: string[] = [];
 // correct integrity result into a nondeterministic five-second test failure.
 const RELEASE_CHECK_TIMEOUT_MS = 20_000;
 
+// Literal fixture oracles, frozen before the release-calendar consumer guard.
+const calendarReceipt = (maxCanonicalTicks = 1380) => ({
+  kind: "fresh-builtin-england-v1",
+  leagueClubCounts: [20, 24, 24, 24],
+  weeksPerSeason: 46,
+  maxCanonicalTicks,
+});
+const malformedCalendarResults: Array<[string, Record<string, unknown>]> = [
+  ["missing receipt", { calendarAdmission: undefined }],
+  ["null receipt", { calendarAdmission: null }],
+  ["false receipt", { calendarAdmission: false }],
+  ["zero receipt", { calendarAdmission: 0 }],
+  ["empty receipt", { calendarAdmission: "" }],
+  ["array receipt", { calendarAdmission: [] }],
+  ["missing kind", { calendarAdmission: { ...calendarReceipt(), kind: undefined } }],
+  ["wrong kind", { calendarAdmission: { ...calendarReceipt(), kind: "modded-england" } }],
+  ["missing club counts", { calendarAdmission: { ...calendarReceipt(), leagueClubCounts: undefined } }],
+  ["short club counts", { calendarAdmission: { ...calendarReceipt(), leagueClubCounts: [20, 24, 24] } }],
+  ["reordered club counts", { calendarAdmission: { ...calendarReceipt(), leagueClubCounts: [24, 20, 24, 24] } }],
+  ["string club count", { calendarAdmission: { ...calendarReceipt(), leagueClubCounts: ["20", 24, 24, 24] } }],
+  ["fractional club count", { calendarAdmission: { ...calendarReceipt(), leagueClubCounts: [20.5, 24, 24, 24] } }],
+  ["missing season length", { calendarAdmission: { ...calendarReceipt(), weeksPerSeason: undefined } }],
+  ["wrong season length", { calendarAdmission: { ...calendarReceipt(), weeksPerSeason: 45 } }],
+  ["string season length", { calendarAdmission: { ...calendarReceipt(), weeksPerSeason: "46" } }],
+  ["missing maximum", { calendarAdmission: { ...calendarReceipt(), maxCanonicalTicks: undefined } }],
+  ["wrong maximum", { calendarAdmission: { ...calendarReceipt(), maxCanonicalTicks: 1379 } }],
+  ["unsafe maximum", { calendarAdmission: { ...calendarReceipt(), maxCanonicalTicks: Number.MAX_SAFE_INTEGER + 1 } }],
+  ["string maximum", { calendarAdmission: { ...calendarReceipt(), maxCanonicalTicks: "1380" } }],
+  ["early ticks", { canonicalTicks: 1379 }],
+  ["extra tick", { canonicalTicks: 1381 }],
+  ["matched early counters", { canonicalTicks: 1379, calendarWeeksSpanned: 1379 }],
+  ["matched extra counters", { canonicalTicks: 1381, calendarWeeksSpanned: 1381 }],
+  ["string ticks", { canonicalTicks: "1380" }],
+  ["fractional ticks", { canonicalTicks: 1380.5 }],
+  ["short calendar span", { calendarWeeksSpanned: 1379 }],
+  ["long calendar span", { calendarWeeksSpanned: 1381 }],
+  ["string calendar span", { calendarWeeksSpanned: "1380" }],
+  ["missing final week", { reachedWeek: undefined }],
+  ["wrong final week", { reachedWeek: 2 }],
+  ["string final week", { reachedWeek: "1" }],
+  ["extra season", { reachedSeason: 32 }],
+  ["string final season", { reachedSeason: "31" }],
+];
+
 interface ReleaseSoakPlan {
   executionIdentityHash: string;
   executionIdentity: {
@@ -157,6 +201,7 @@ function check(cwd: string, overrides: Record<string, string> = {}) {
     cwd,
     env,
     encoding: "utf8",
+    timeout: RELEASE_CHECK_TIMEOUT_MS,
   });
   expect(result.status).toBe(0);
   return JSON.parse(readFileSync(outputPath, "utf8"));
@@ -210,8 +255,10 @@ function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
     runs: [{
       seed: "release-soak-01",
       reachedSeason: 2,
-      canonicalTicks: 38,
-      calendarWeeksSpanned: 38,
+      reachedWeek: 1,
+      calendarAdmission: calendarReceipt(46),
+      canonicalTicks: 46,
+      calendarWeeksSpanned: 46,
       initialBytes: 1,
       finalBytes: 1,
       peakBytes: 1,
@@ -259,6 +306,447 @@ function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
     },
   };
 }
+
+function ordinaryCalendarFixture() {
+  const { cwd, commitSha } = fixture();
+  const statusPath = join(cwd, "docs", "release", "release-evidence-status.json");
+  const status = JSON.parse(readFileSync(statusPath, "utf8"));
+  status.gates.longSave = {
+    status: "Unverified",
+    evidence: [],
+    generatedEvidence: {
+      kind: "long-career-release-soak",
+      path: "artifacts/release/generated/long-career.json",
+      minimumSeedCount: 20,
+      minimumSeasonCount: 30,
+      requireProcessIsolation: true,
+      requireDeterministicReplay: true,
+    },
+  };
+  writeJson(statusPath, status);
+  run(cwd, "git", ["add", "docs/release/release-evidence-status.json"]);
+  run(cwd, "git", ["commit", "-m", "add long save policy"]);
+  const updatedSha = run(cwd, "git", ["rev-parse", "HEAD"]);
+  const updatedTreeSha = run(cwd, "git", ["rev-parse", "HEAD^{tree}"]);
+  const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.candidateCommitSha = updatedSha;
+  writeJson(manifestPath, manifest);
+  const runs = Array.from({ length: 20 }, (_, index) => ({
+    seed: `release-soak-${String(index + 1).padStart(2, "0")}`,
+    reachedSeason: 31,
+    reachedWeek: 1,
+    calendarAdmission: calendarReceipt(),
+    canonicalTicks: 1380,
+    calendarWeeksSpanned: 1380,
+    digest: `digest-${index + 1}`,
+  }));
+  const executionIdentity = {
+    protocolVersion: 1,
+    candidateCommitSha: updatedSha,
+    candidateTreeSha: updatedTreeSha,
+    seedCount: 20,
+    seasonCount: 30,
+    concurrency: 3,
+    maxSerializedBytes: 80 * 1024 * 1024,
+    maxOutputBytes: 67108864,
+    profileKind: "full-canonical-weekly-career",
+    processIsolation: "one-seeded-career-per-process",
+    workerNodeArguments: [
+      "--max-old-space-size=1440",
+      "--max-semi-space-size=32",
+      "--expose-gc",
+    ],
+    workerHeapLimitBytes: 1536 * 1024 * 1024,
+    nodeVersion: process.version,
+    nodeOptions: "",
+    platform: process.platform,
+    architecture: process.arch,
+    availableParallelism: 4,
+    totalMemoryBytes: 16 * 1024 * 1024 * 1024,
+    cpuModel: "release-test-cpu",
+  };
+  mkdirSync(join(cwd, "artifacts", "release", "generated"), { recursive: true });
+  writeJson(join(cwd, "artifacts", "release", "generated", "long-career.json"), {
+    schemaVersion: 3,
+    evidenceKind: "long-career-release-soak",
+    candidateCommitSha: updatedSha,
+    candidateTreeSha: updatedTreeSha,
+    candidateBound: true,
+    sourceTreeClean: true,
+    status: "Passed",
+    checkpoint: {
+      protocolVersion: 1,
+      executionIdentity,
+      executionIdentityHash: createHash("sha256")
+        .update(JSON.stringify(executionIdentity))
+        .digest("hex"),
+      resumeEnabled: true,
+      reusedSeedCount: 0,
+      executedSeedCount: 20,
+      determinismReplayExecuted: true,
+    },
+    profile: {
+      kind: "full-canonical-weekly-career",
+      skippedOrdinaryWeeks: false,
+      seedCount: 20,
+      seasonCount: 30,
+      processIsolation: "one-seeded-career-per-process",
+      v8HeapLimitBytes: 1536 * 1024 * 1024,
+    },
+    runs,
+    persistenceReplay: structuredClone(runs[0]),
+  });
+  const evidencePath = join(cwd, "artifacts", "release", "generated", "long-career.json");
+  const cleanEvidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+  return { cwd, evidencePath, cleanEvidence };
+}
+
+function timingCalendarFixture() {
+  const { cwd, commitSha } = fixture();
+  const treeSha = run(cwd, "git", ["rev-parse", "HEAD^{tree}"]);
+  const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.workflowRunId = "4242";
+  writeJson(manifestPath, manifest);
+
+  const certificationDirectory = join(cwd, "artifacts", "release", "generated", "certifications");
+  mkdirSync(certificationDirectory, { recursive: true });
+  const coreEvidencePath = join(cwd, "artifacts", "release", "generated", "candidate-core-suites.json");
+  writeJson(coreEvidencePath, {
+    schemaVersion: 1,
+    evidenceKind: "candidate-core-suites",
+    candidateCommitSha: commitSha,
+    workflowRunId: "4242",
+    candidateBound: true,
+    sourceTreeCleanAtStart: true,
+    sourceAndConfigUnchangedAtCompletion: true,
+    status: "Passed",
+    commands: [{ command: "npm run test:unit", status: "Passed" }],
+  });
+  const sourceRunPath = join(certificationDirectory, "source-workflow-run.json");
+  writeJson(sourceRunPath, {
+    id: 30902995422,
+    head_sha: commitSha,
+    event: "workflow_dispatch",
+    status: "completed",
+    conclusion: "cancelled",
+  });
+  const successfulSeedIndices = Array.from({ length: 19 }, (_, index) => index + 2)
+    .filter((seedIndex) => seedIndex !== 17);
+  const sourceJobsPath = join(certificationDirectory, "source-workflow-jobs.json");
+  writeJson(sourceJobsPath, {
+    jobs: [
+      ...["Release quality gate", "Build Windows", "Build macOS", "Build Linux"]
+        .map((name) => ({ name, conclusion: "success" })),
+      ...Array.from({ length: 20 }, (_, index) => index + 1).map((seedIndex) => ({
+        name: `Exact candidate seed ${seedIndex} x 30 seasons`,
+        conclusion: seedIndex === 1 ? "cancelled" : seedIndex === 17 ? "failure" : "success",
+      })),
+    ],
+  });
+  const sourceShardDirectory = join(certificationDirectory, "source-long-career-shards");
+  mkdirSync(sourceShardDirectory, { recursive: true });
+  const sourceShardPaths = successfulSeedIndices.map((seedIndex) => {
+    const executionIdentity = {
+      protocolVersion: 1,
+      candidateCommitSha: commitSha,
+      candidateTreeSha: treeSha,
+      seedCount: 1,
+      seedStart: seedIndex,
+      seasonCount: 30,
+      maxOutputBytes: 67108864,
+      profileKind: "full-canonical-weekly-career",
+      processIsolation: "one-seeded-career-per-process",
+      workerNodeArguments: [
+        "--max-old-space-size=1440",
+        "--max-semi-space-size=32",
+        "--expose-gc",
+      ],
+      workerHeapLimitBytes: 1610612736,
+    };
+    const shardPath = join(
+      sourceShardDirectory,
+      `long-career-release-summary-seed-${seedIndex}.json`,
+    );
+    writeJson(shardPath, {
+      schemaVersion: 3,
+      evidenceKind: "long-career-release-soak",
+      candidateCommitSha: commitSha,
+      candidateTreeSha: treeSha,
+      candidateBound: true,
+      sourceTreeClean: true,
+      status: "Passed",
+      checkpoint: {
+        protocolVersion: 1,
+        executionIdentity,
+        executionIdentityHash: createHash("sha256")
+          .update(JSON.stringify(executionIdentity))
+          .digest("hex"),
+        reusedSeedCount: 0,
+        executedSeedCount: 1,
+        determinismReplayExecuted: false,
+      },
+      profile: {
+        kind: "full-canonical-weekly-career",
+        skippedOrdinaryWeeks: false,
+        seedCount: 1,
+        seasonCount: 30,
+        processIsolation: "one-seeded-career-per-process",
+        v8HeapLimitBytes: 1610612736,
+      },
+      runs: [{
+        seed: `release-soak-${String(seedIndex).padStart(2, "0")}`,
+        reachedSeason: 31,
+        reachedWeek: 1,
+        calendarAdmission: calendarReceipt(),
+        canonicalTicks: 1380,
+        calendarWeeksSpanned: 1380,
+        digest: "a".repeat(64),
+      }],
+    });
+    return shardPath;
+  });
+  const failedSeedPath = join(sourceShardDirectory, "seed-17-run-failure.json");
+  writeJson(failedSeedPath, {
+    schemaVersion: 2,
+    evidenceKind: "long-career-worker-failure",
+    candidateCommitSha: commitSha,
+    candidateTreeSha: treeSha,
+    seedIndex: 17,
+    seed: "release-soak-17",
+    seasonCount: 30,
+    message:
+      "batch CPU latency at S30 W46; wall=44278.6ms; expected 45174.415 to be less than 45000",
+  });
+
+  const generatedEvidence = {
+    kind: "long-career-release-soak",
+    path: "artifacts/release/generated/missing-long-career.json",
+    minimumSeedCount: 20,
+    minimumSeasonCount: 30,
+    requireProcessIsolation: true,
+    requireDeterministicReplay: true,
+  };
+  const releaseException = {
+    kind: "long-career-timing-exception",
+    path: "artifacts/release/generated/certifications/long-career-timing-exception.json",
+    sourceWorkflowRunId: "30902995422",
+    sourceCandidateCommitSha: commitSha,
+    sourceCandidateTreeSha: treeSha,
+    candidateCoreEvidencePath: "artifacts/release/generated/candidate-core-suites.json",
+    maximumValidityDays: 30,
+    allowedReasonCodes: ["release-owner-accepted-bounded-hosted-runner-variance"],
+    requiredSeedCount: 20,
+    minimumSuccessfulSeedCount: 18,
+    maximumAffectedSeedCount: 2,
+    maximumCpuOverrunRatio: 0.005,
+    minimumReachedSeason: 30,
+    sourceEvidence: {
+      workflowRunPath: "artifacts/release/generated/certifications/source-workflow-run.json",
+      workflowJobsPath: "artifacts/release/generated/certifications/source-workflow-jobs.json",
+      successfulShardDirectory:
+        "artifacts/release/generated/certifications/source-long-career-shards",
+      failedSeedPath:
+        "artifacts/release/generated/certifications/source-long-career-shards/seed-17-run-failure.json",
+    },
+    expectedAffectedSeeds: [
+      {
+        seedIndex: 1,
+        classification: "operator-cancelled-after-risk-acceptance",
+        status: "Cancelled",
+      },
+      {
+        seedIndex: 17,
+        classification: "hosted-runner-cpu-timing-variance",
+        status: "Failed",
+      },
+    ],
+    requiredControls: [
+      "qualityAndPlatformBuildsPassed",
+      "noCorrectnessCrashMemoryOrSaveFailure",
+      "timingVarianceBelowHalfPercent",
+      "wallGuardRemainedWithinLimit",
+      "candidateAndSourceRunMatch",
+      "ownerDirectedCancellationRecorded",
+      "rollbackAndMonitoringPlanPresent",
+    ],
+  };
+  const controlDirectory = mkdtempSync(join(tmpdir(), "talentscout-release-control-"));
+  tempDirs.push(controlDirectory);
+  const controlStatusPath = join(controlDirectory, "release-evidence-status.json");
+  const controlStatus = {
+    schemaVersion: 2,
+    candidate: {
+      tag: null,
+      requireVersionTag: false,
+      packageManifest: "artifacts/release/candidate-package-manifest.json",
+      requiredPackageKinds: ["test-package"],
+    },
+    gates: {
+      automated: { status: "Passed", evidence: ["evidence.txt"] },
+      longSaveGrowthAndCompaction: {
+        status: "Unverified",
+        evidence: [],
+        generatedEvidence,
+        releaseException,
+      },
+    },
+  };
+  writeJson(controlStatusPath, controlStatus);
+
+  const now = Date.now();
+  const exceptionPath = join(certificationDirectory, "long-career-timing-exception.json");
+  const validException = {
+    schemaVersion: 1,
+    evidenceKind: "release-gate-exception",
+    exceptionKind: "long-career-timing-exception",
+    gateId: "longSaveGrowthAndCompaction",
+    candidateCommitSha: commitSha,
+    candidateTreeSha: treeSha,
+    candidateTag: null,
+    candidateWorkflowRunId: "4242",
+    sourceWorkflowRunId: "30902995422",
+    packageManifestSha256: createHash("sha256").update(readFileSync(manifestPath)).digest("hex"),
+    candidateCoreEvidenceSha256: createHash("sha256")
+      .update(readFileSync(coreEvidencePath))
+      .digest("hex"),
+    generatedPolicySha256: createHash("sha256")
+      .update(JSON.stringify(generatedEvidence))
+      .digest("hex"),
+    status: "Accepted",
+    approvedBy: "Release Owner",
+    approvalReference: "decision-2026-08-04",
+    approvedAt: new Date(now - 60_000).toISOString(),
+    expiresAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    reasonCode: "release-owner-accepted-bounded-hosted-runner-variance",
+    metrics: {
+      totalSeedCount: 20,
+      successfulSeedCount: 18,
+      affectedSeedCount: 2,
+      maximumCpuOverrunRatio: (45174.415 - 45000) / 45000,
+    },
+    affectedSeeds: [
+      {
+        seedIndex: 1,
+        seed: "release-soak-01",
+        classification: "operator-cancelled-after-risk-acceptance",
+        status: "Cancelled",
+      },
+      {
+        seedIndex: 17,
+        seed: "release-soak-17",
+        classification: "hosted-runner-cpu-timing-variance",
+        status: "Failed",
+        reachedSeason: 30,
+        reachedWeek: 46,
+        cpuElapsedMs: 45174.415,
+        cpuLimitMs: 45000,
+        wallElapsedMs: 44278.6,
+        wallLimitMs: 60000,
+      },
+    ],
+    controls: Object.fromEntries(
+      releaseException.requiredControls.map((controlId) => [controlId, { status: "Passed" }]),
+    ),
+    evidence: [sourceRunPath, sourceJobsPath, ...sourceShardPaths, failedSeedPath].map((path) => ({
+      path: path.slice(cwd.length + 1).replaceAll("\\", "/"),
+      sha256: createHash("sha256").update(readFileSync(path)).digest("hex"),
+    })),
+  };
+  writeJson(exceptionPath, validException);
+
+  const overrides = {
+    RELEASE_EVIDENCE_STATUS: controlStatusPath,
+    RELEASE_WORKFLOW_RUN_ID: "4242",
+  };
+  const ordinaryCalendarRuns = Array.from({ length: 20 }, (_, index) => ({
+    seed: `release-soak-${String(index + 1).padStart(2, "0")}`,
+    reachedSeason: 31,
+    reachedWeek: 1,
+    calendarAdmission: calendarReceipt(),
+    canonicalTicks: 1380,
+    calendarWeeksSpanned: 1380,
+    digest: `calendar-waiver-digest-${index + 1}`,
+  }));
+  const ordinaryCalendarIdentity = {
+    protocolVersion: 1,
+    candidateCommitSha: commitSha,
+    candidateTreeSha: treeSha,
+    seedCount: 20,
+    seasonCount: 30,
+    concurrency: 3,
+    maxSerializedBytes: 80 * 1024 * 1024,
+    maxOutputBytes: 67108864,
+    profileKind: "full-canonical-weekly-career",
+    processIsolation: "one-seeded-career-per-process",
+    workerNodeArguments: [
+      "--max-old-space-size=1440",
+      "--max-semi-space-size=32",
+      "--expose-gc",
+    ],
+    workerHeapLimitBytes: 1536 * 1024 * 1024,
+    nodeVersion: process.version,
+    nodeOptions: "",
+    platform: process.platform,
+    architecture: process.arch,
+    availableParallelism: 4,
+    totalMemoryBytes: 16 * 1024 * 1024 * 1024,
+    cpuModel: "release-test-cpu",
+  };
+  const ordinaryCalendarEvidence = {
+    schemaVersion: 3,
+    evidenceKind: "long-career-release-soak",
+    candidateCommitSha: commitSha,
+    candidateTreeSha: treeSha,
+    candidateBound: true,
+    sourceTreeClean: true,
+    status: "Passed",
+    checkpoint: {
+      protocolVersion: 1,
+      executionIdentity: ordinaryCalendarIdentity,
+      executionIdentityHash: createHash("sha256")
+        .update(JSON.stringify(ordinaryCalendarIdentity)).digest("hex"),
+      resumeEnabled: true,
+      reusedSeedCount: 0,
+      executedSeedCount: 20,
+      determinismReplayExecuted: true,
+    },
+    profile: {
+      kind: "full-canonical-weekly-career",
+      skippedOrdinaryWeeks: false,
+      seedCount: 20,
+      seasonCount: 30,
+      processIsolation: "one-seeded-career-per-process",
+      v8HeapLimitBytes: 1536 * 1024 * 1024,
+    },
+    runs: ordinaryCalendarRuns,
+    persistenceReplay: structuredClone(ordinaryCalendarRuns[0]),
+  };
+  const ordinaryCalendarPath = join(cwd, generatedEvidence.path);
+  const unchangedTimingInputs = [
+    manifestPath, coreEvidencePath, controlStatusPath, exceptionPath,
+    sourceRunPath, sourceJobsPath, ...sourceShardPaths, failedSeedPath,
+  ].map((path) => ({ path, bytes: readFileSync(path) }));
+  return {
+    cwd, overrides, validException, exceptionPath, sourceShardPaths,
+    failedSeedPath, coreEvidencePath, controlStatus, controlStatusPath,
+    ordinaryCalendarEvidence, ordinaryCalendarPath, unchangedTimingInputs,
+  };
+}
+
+const ordinaryCalendarCases = (["main run", "fresh replay"] as const).flatMap((target) =>
+  malformedCalendarResults.map(([name, mutation]) => [target, name, mutation] as const),
+);
+
+const malformedOrdinaryCalendars = [
+  { id: "CW01", target: "run", changes: { calendarAdmission: null } },
+  { id: "CW02", target: "run", changes: { reachedWeek: 2 } },
+  { id: "CW03", target: "run", changes: { canonicalTicks: 1379, calendarWeeksSpanned: 1379 } },
+  { id: "CW04", target: "replay", changes: { calendarAdmission: null } },
+  { id: "CW05", target: "replay", changes: { reachedWeek: 2 } },
+  { id: "CW06", target: "replay", changes: { canonicalTicks: 1379, calendarWeeksSpanned: 1379 } },
+];
 
 afterEach(() => {
   while (tempDirs.length > 0) rmSync(tempDirs.pop()!, { recursive: true, force: true });
@@ -563,101 +1051,13 @@ describe("release evidence checker", () => {
   }, RELEASE_CHECK_TIMEOUT_MS);
 
   it("promotes long-save policy only for clean exact-candidate 20x30 evidence", () => {
-    const { cwd, commitSha } = fixture();
-    const statusPath = join(cwd, "docs", "release", "release-evidence-status.json");
-    const status = JSON.parse(readFileSync(statusPath, "utf8"));
-    status.gates.longSave = {
-      status: "Unverified",
-      evidence: [],
-      generatedEvidence: {
-        kind: "long-career-release-soak",
-        path: "artifacts/release/generated/long-career.json",
-        minimumSeedCount: 20,
-        minimumSeasonCount: 30,
-        requireProcessIsolation: true,
-        requireDeterministicReplay: true,
-      },
-    };
-    writeJson(statusPath, status);
-    run(cwd, "git", ["add", "docs/release/release-evidence-status.json"]);
-    run(cwd, "git", ["commit", "-m", "add long save policy"]);
-    const updatedSha = run(cwd, "git", ["rev-parse", "HEAD"]);
-    const updatedTreeSha = run(cwd, "git", ["rev-parse", "HEAD^{tree}"]);
-    const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-    manifest.candidateCommitSha = updatedSha;
-    writeJson(manifestPath, manifest);
-    const runs = Array.from({ length: 20 }, (_, index) => ({
-      seed: `release-soak-${String(index + 1).padStart(2, "0")}`,
-      reachedSeason: 31,
-      canonicalTicks: 1140,
-      calendarWeeksSpanned: 1140,
-      digest: `digest-${index + 1}`,
-    }));
-    const executionIdentity = {
-      protocolVersion: 1,
-      candidateCommitSha: updatedSha,
-      candidateTreeSha: updatedTreeSha,
-      seedCount: 20,
-      seasonCount: 30,
-      concurrency: 3,
-      maxSerializedBytes: 80 * 1024 * 1024,
-      maxOutputBytes: 67108864,
-      profileKind: "full-canonical-weekly-career",
-      processIsolation: "one-seeded-career-per-process",
-      workerNodeArguments: [
-        "--max-old-space-size=1440",
-        "--max-semi-space-size=32",
-        "--expose-gc",
-      ],
-      workerHeapLimitBytes: 1536 * 1024 * 1024,
-      nodeVersion: process.version,
-      nodeOptions: "",
-      platform: process.platform,
-      architecture: process.arch,
-      availableParallelism: 4,
-      totalMemoryBytes: 16 * 1024 * 1024 * 1024,
-      cpuModel: "release-test-cpu",
-    };
-    mkdirSync(join(cwd, "artifacts", "release", "generated"), { recursive: true });
-    writeJson(join(cwd, "artifacts", "release", "generated", "long-career.json"), {
-      schemaVersion: 3,
-      evidenceKind: "long-career-release-soak",
-      candidateCommitSha: updatedSha,
-      candidateTreeSha: updatedTreeSha,
-      candidateBound: true,
-      sourceTreeClean: true,
-      status: "Passed",
-      checkpoint: {
-        protocolVersion: 1,
-        executionIdentity,
-        executionIdentityHash: createHash("sha256")
-          .update(JSON.stringify(executionIdentity))
-          .digest("hex"),
-        resumeEnabled: true,
-        reusedSeedCount: 0,
-        executedSeedCount: 20,
-        determinismReplayExecuted: true,
-      },
-      profile: {
-        kind: "full-canonical-weekly-career",
-        skippedOrdinaryWeeks: false,
-        seedCount: 20,
-        seasonCount: 30,
-        processIsolation: "one-seeded-career-per-process",
-        v8HeapLimitBytes: 1536 * 1024 * 1024,
-      },
-      runs,
-      persistenceReplay: { seed: runs[0].seed, digest: runs[0].digest },
-    });
+    const { cwd, evidencePath, cleanEvidence } = ordinaryCalendarFixture();
 
     const passed = check(cwd);
     expect(passed.status).toBe("Passed");
     expect(passed.gateResults.find((gate: { gateId: string }) => gate.gateId === "longSave"))
       .toMatchObject({ configuredStatus: "Unverified", status: "Passed" });
 
-    const evidencePath = join(cwd, "artifacts", "release", "generated", "long-career.json");
-    const cleanEvidence = JSON.parse(readFileSync(evidencePath, "utf8"));
     // Tests first: a rehashed malformed grant is still invalid evidence.
     for (const grant of [undefined, 0, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
       const invalidGrant = structuredClone(cleanEvidence);
@@ -672,6 +1072,7 @@ describe("release evidence checker", () => {
         expect.stringContaining("maxOutputBytes"),
       ]));
     }
+    writeJson(evidencePath, cleanEvidence);
     writeJson(evidencePath, cleanEvidence);
     const removeCertifiedHeapEvidence = [
       (evidence: typeof cleanEvidence) => {
@@ -712,261 +1113,11 @@ describe("release evidence checker", () => {
   }, RELEASE_CHECK_TIMEOUT_MS);
 
   it("accepts only the exact bounded long-career timing risk decision", () => {
-    const { cwd, commitSha } = fixture();
-    const treeSha = run(cwd, "git", ["rev-parse", "HEAD^{tree}"]);
-    const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-    manifest.workflowRunId = "4242";
-    writeJson(manifestPath, manifest);
-
-    const certificationDirectory = join(cwd, "artifacts", "release", "generated", "certifications");
-    mkdirSync(certificationDirectory, { recursive: true });
-    const coreEvidencePath = join(cwd, "artifacts", "release", "generated", "candidate-core-suites.json");
-    writeJson(coreEvidencePath, {
-      schemaVersion: 1,
-      evidenceKind: "candidate-core-suites",
-      candidateCommitSha: commitSha,
-      workflowRunId: "4242",
-      candidateBound: true,
-      sourceTreeCleanAtStart: true,
-      sourceAndConfigUnchangedAtCompletion: true,
-      status: "Passed",
-      commands: [{ command: "npm run test:unit", status: "Passed" }],
-    });
-    const sourceRunPath = join(certificationDirectory, "source-workflow-run.json");
-    writeJson(sourceRunPath, {
-      id: 30902995422,
-      head_sha: commitSha,
-      event: "workflow_dispatch",
-      status: "completed",
-      conclusion: "cancelled",
-    });
-    const successfulSeedIndices = Array.from({ length: 19 }, (_, index) => index + 2)
-      .filter((seedIndex) => seedIndex !== 17);
-    const sourceJobsPath = join(certificationDirectory, "source-workflow-jobs.json");
-    writeJson(sourceJobsPath, {
-      jobs: [
-        ...["Release quality gate", "Build Windows", "Build macOS", "Build Linux"]
-          .map((name) => ({ name, conclusion: "success" })),
-        ...Array.from({ length: 20 }, (_, index) => index + 1).map((seedIndex) => ({
-          name: `Exact candidate seed ${seedIndex} x 30 seasons`,
-          conclusion: seedIndex === 1 ? "cancelled" : seedIndex === 17 ? "failure" : "success",
-        })),
-      ],
-    });
-    const sourceShardDirectory = join(certificationDirectory, "source-long-career-shards");
-    mkdirSync(sourceShardDirectory, { recursive: true });
-    const sourceShardPaths = successfulSeedIndices.map((seedIndex) => {
-      const executionIdentity = {
-        protocolVersion: 1,
-        candidateCommitSha: commitSha,
-        candidateTreeSha: treeSha,
-        seedCount: 1,
-        seedStart: seedIndex,
-        seasonCount: 30,
-        maxOutputBytes: 67108864,
-        profileKind: "full-canonical-weekly-career",
-        processIsolation: "one-seeded-career-per-process",
-        workerNodeArguments: [
-          "--max-old-space-size=1440",
-          "--max-semi-space-size=32",
-          "--expose-gc",
-        ],
-        workerHeapLimitBytes: 1610612736,
-      };
-      const shardPath = join(
-        sourceShardDirectory,
-        `long-career-release-summary-seed-${seedIndex}.json`,
-      );
-      writeJson(shardPath, {
-        schemaVersion: 3,
-        evidenceKind: "long-career-release-soak",
-        candidateCommitSha: commitSha,
-        candidateTreeSha: treeSha,
-        candidateBound: true,
-        sourceTreeClean: true,
-        status: "Passed",
-        checkpoint: {
-          protocolVersion: 1,
-          executionIdentity,
-          executionIdentityHash: createHash("sha256")
-            .update(JSON.stringify(executionIdentity))
-            .digest("hex"),
-          reusedSeedCount: 0,
-          executedSeedCount: 1,
-          determinismReplayExecuted: false,
-        },
-        profile: {
-          kind: "full-canonical-weekly-career",
-          skippedOrdinaryWeeks: false,
-          seedCount: 1,
-          seasonCount: 30,
-          processIsolation: "one-seeded-career-per-process",
-          v8HeapLimitBytes: 1610612736,
-        },
-        runs: [{
-          seed: `release-soak-${String(seedIndex).padStart(2, "0")}`,
-          reachedSeason: 31,
-          canonicalTicks: 900,
-          calendarWeeksSpanned: 900,
-          digest: "a".repeat(64),
-        }],
-      });
-      return shardPath;
-    });
-    const failedSeedPath = join(sourceShardDirectory, "seed-17-run-failure.json");
-    writeJson(failedSeedPath, {
-      schemaVersion: 2,
-      evidenceKind: "long-career-worker-failure",
-      candidateCommitSha: commitSha,
-      candidateTreeSha: treeSha,
-      seedIndex: 17,
-      seed: "release-soak-17",
-      seasonCount: 30,
-      message:
-        "batch CPU latency at S30 W46; wall=44278.6ms; expected 45174.415 to be less than 45000",
-    });
-
-    const generatedEvidence = {
-      kind: "long-career-release-soak",
-      path: "artifacts/release/generated/missing-long-career.json",
-      minimumSeedCount: 20,
-      minimumSeasonCount: 30,
-      requireProcessIsolation: true,
-      requireDeterministicReplay: true,
-    };
-    const releaseException = {
-      kind: "long-career-timing-exception",
-      path: "artifacts/release/generated/certifications/long-career-timing-exception.json",
-      sourceWorkflowRunId: "30902995422",
-      sourceCandidateCommitSha: commitSha,
-      sourceCandidateTreeSha: treeSha,
-      candidateCoreEvidencePath: "artifacts/release/generated/candidate-core-suites.json",
-      maximumValidityDays: 30,
-      allowedReasonCodes: ["release-owner-accepted-bounded-hosted-runner-variance"],
-      requiredSeedCount: 20,
-      minimumSuccessfulSeedCount: 18,
-      maximumAffectedSeedCount: 2,
-      maximumCpuOverrunRatio: 0.005,
-      minimumReachedSeason: 30,
-      sourceEvidence: {
-        workflowRunPath: "artifacts/release/generated/certifications/source-workflow-run.json",
-        workflowJobsPath: "artifacts/release/generated/certifications/source-workflow-jobs.json",
-        successfulShardDirectory:
-          "artifacts/release/generated/certifications/source-long-career-shards",
-        failedSeedPath:
-          "artifacts/release/generated/certifications/source-long-career-shards/seed-17-run-failure.json",
-      },
-      expectedAffectedSeeds: [
-        {
-          seedIndex: 1,
-          classification: "operator-cancelled-after-risk-acceptance",
-          status: "Cancelled",
-        },
-        {
-          seedIndex: 17,
-          classification: "hosted-runner-cpu-timing-variance",
-          status: "Failed",
-        },
-      ],
-      requiredControls: [
-        "qualityAndPlatformBuildsPassed",
-        "noCorrectnessCrashMemoryOrSaveFailure",
-        "timingVarianceBelowHalfPercent",
-        "wallGuardRemainedWithinLimit",
-        "candidateAndSourceRunMatch",
-        "ownerDirectedCancellationRecorded",
-        "rollbackAndMonitoringPlanPresent",
-      ],
-    };
-    const controlDirectory = mkdtempSync(join(tmpdir(), "talentscout-release-control-"));
-    tempDirs.push(controlDirectory);
-    const controlStatusPath = join(controlDirectory, "release-evidence-status.json");
-    const controlStatus = {
-      schemaVersion: 2,
-      candidate: {
-        tag: null,
-        requireVersionTag: false,
-        packageManifest: "artifacts/release/candidate-package-manifest.json",
-        requiredPackageKinds: ["test-package"],
-      },
-      gates: {
-        automated: { status: "Passed", evidence: ["evidence.txt"] },
-        longSaveGrowthAndCompaction: {
-          status: "Unverified",
-          evidence: [],
-          generatedEvidence,
-          releaseException,
-        },
-      },
-    };
-    writeJson(controlStatusPath, controlStatus);
-
-    const now = Date.now();
-    const exceptionPath = join(certificationDirectory, "long-career-timing-exception.json");
-    const validException = {
-      schemaVersion: 1,
-      evidenceKind: "release-gate-exception",
-      exceptionKind: "long-career-timing-exception",
-      gateId: "longSaveGrowthAndCompaction",
-      candidateCommitSha: commitSha,
-      candidateTreeSha: treeSha,
-      candidateTag: null,
-      candidateWorkflowRunId: "4242",
-      sourceWorkflowRunId: "30902995422",
-      packageManifestSha256: createHash("sha256").update(readFileSync(manifestPath)).digest("hex"),
-      candidateCoreEvidenceSha256: createHash("sha256")
-        .update(readFileSync(coreEvidencePath))
-        .digest("hex"),
-      generatedPolicySha256: createHash("sha256")
-        .update(JSON.stringify(generatedEvidence))
-        .digest("hex"),
-      status: "Accepted",
-      approvedBy: "Release Owner",
-      approvalReference: "decision-2026-08-04",
-      approvedAt: new Date(now - 60_000).toISOString(),
-      expiresAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      reasonCode: "release-owner-accepted-bounded-hosted-runner-variance",
-      metrics: {
-        totalSeedCount: 20,
-        successfulSeedCount: 18,
-        affectedSeedCount: 2,
-        maximumCpuOverrunRatio: (45174.415 - 45000) / 45000,
-      },
-      affectedSeeds: [
-        {
-          seedIndex: 1,
-          seed: "release-soak-01",
-          classification: "operator-cancelled-after-risk-acceptance",
-          status: "Cancelled",
-        },
-        {
-          seedIndex: 17,
-          seed: "release-soak-17",
-          classification: "hosted-runner-cpu-timing-variance",
-          status: "Failed",
-          reachedSeason: 30,
-          reachedWeek: 46,
-          cpuElapsedMs: 45174.415,
-          cpuLimitMs: 45000,
-          wallElapsedMs: 44278.6,
-          wallLimitMs: 60000,
-        },
-      ],
-      controls: Object.fromEntries(
-        releaseException.requiredControls.map((controlId) => [controlId, { status: "Passed" }]),
-      ),
-      evidence: [sourceRunPath, sourceJobsPath, ...sourceShardPaths, failedSeedPath].map((path) => ({
-        path: path.slice(cwd.length + 1).replaceAll("\\", "/"),
-        sha256: createHash("sha256").update(readFileSync(path)).digest("hex"),
-      })),
-    };
-    writeJson(exceptionPath, validException);
-
-    const overrides = {
-      RELEASE_EVIDENCE_STATUS: controlStatusPath,
-      RELEASE_WORKFLOW_RUN_ID: "4242",
-    };
+    const {
+      cwd, overrides, validException, exceptionPath, sourceShardPaths,
+      failedSeedPath, coreEvidencePath, controlStatus, controlStatusPath,
+      ordinaryCalendarEvidence, ordinaryCalendarPath, unchangedTimingInputs,
+    } = timingCalendarFixture();
     const accepted = check(cwd, overrides);
     expect(accepted.status).toBe("PassedWithAcceptedRisk");
     expect(accepted.acceptedRisks).toEqual([expect.objectContaining({
@@ -981,6 +1132,22 @@ describe("release evidence checker", () => {
       resolution: "AcceptedRisk",
       exceptionApplied: true,
     });
+
+    // Tests first: a valid timing exception cannot waive a present bad calendar.
+    // Keep the preceding missing-artifact AcceptedRisk control unchanged.
+    try {
+      writeJson(ordinaryCalendarPath, ordinaryCalendarEvidence);
+      const ordinaryCalendarPassed = check(cwd, overrides);
+      expect(ordinaryCalendarPassed.status).toBe("Passed");
+      expect(ordinaryCalendarPassed.gateResults.find(
+        (gate: { gateId: string }) => gate.gateId === "longSaveGrowthAndCompaction",
+      )).toMatchObject({ status: "Passed", exceptionApplied: false });
+    } finally {
+      unlinkSync(ordinaryCalendarPath);
+      for (const input of unchangedTimingInputs) {
+        expect(readFileSync(input.path)).toEqual(input.bytes);
+      }
+    }
 
     // Rehash both the actual shard identity and its exception file binding.
     const grantShardPath = sourceShardPaths[0];
@@ -1162,6 +1329,110 @@ describe("release evidence checker", () => {
       expect.stringContaining("release exceptions are supported only for the long-career timing gate"),
     ]));
   }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it.each(ordinaryCalendarCases)(
+    "promotes long-save policy only for clean exact-candidate 20x30 evidence: %s: %s",
+    (target, name, mutation) => {
+      const { cwd, evidencePath, cleanEvidence } = ordinaryCalendarFixture();
+      const invalidCalendar = structuredClone(cleanEvidence);
+      Object.assign(target === "main run"
+        ? invalidCalendar.runs[0]
+        : invalidCalendar.persistenceReplay, mutation);
+      writeJson(evidencePath, invalidCalendar);
+      const submitted = readFileSync(evidencePath);
+      const rejectedCalendar = check(cwd);
+      expect(rejectedCalendar.status, `${target}: ${name}`).toBe("Failed");
+      expect(rejectedCalendar.failures, `${target}: ${name}`).toEqual(expect.arrayContaining([
+        expect.stringMatching(/calendar admission/i),
+      ]));
+      expect(readFileSync(evidencePath)).toEqual(submitted);
+    },
+    RELEASE_CHECK_TIMEOUT_MS,
+  );
+
+  it.each(malformedCalendarResults)(
+    "accepts only the exact bounded long-career timing risk decision: successful source calendar: %s",
+    (name, mutation) => {
+      const { cwd, overrides, validException, exceptionPath, sourceShardPaths } = timingCalendarFixture();
+      const grantShardPath = sourceShardPaths[0];
+      const originalGrantShard = readFileSync(grantShardPath, "utf8");
+      const cleanGrantShard = JSON.parse(originalGrantShard);
+      try {
+        const invalidCalendarShard = structuredClone(cleanGrantShard);
+        Object.assign(invalidCalendarShard.runs[0], mutation);
+        writeJson(grantShardPath, invalidCalendarShard);
+        const calendarShardBytes = readFileSync(grantShardPath);
+        const calendarException = structuredClone(validException);
+        const calendarEntry = calendarException.evidence.find(
+          (entry) => entry.path === grantShardPath.slice(cwd.length + 1).replaceAll("\\", "/"),
+        );
+        expect(calendarEntry).toBeDefined();
+        calendarEntry!.sha256 = createHash("sha256").update(calendarShardBytes).digest("hex");
+        writeJson(exceptionPath, calendarException);
+        const exceptionBytes = readFileSync(exceptionPath);
+        const rejectedCalendar = check(cwd, overrides);
+        expect(rejectedCalendar.status, name).toBe("Failed");
+        expect(rejectedCalendar.failures, name).toEqual(expect.arrayContaining([
+          expect.stringMatching(/calendar admission/i),
+        ]));
+        expect(readFileSync(grantShardPath)).toEqual(calendarShardBytes);
+        expect(readFileSync(exceptionPath)).toEqual(exceptionBytes);
+      } finally {
+        writeFileSync(grantShardPath, originalGrantShard, "utf8");
+        writeJson(exceptionPath, validException);
+      }
+    },
+    RELEASE_CHECK_TIMEOUT_MS,
+  );
+
+  it.each(malformedOrdinaryCalendars)(
+    "accepts only the exact bounded long-career timing risk decision: strict waiver $id ($target)",
+    (fault) => {
+      const {
+        cwd, overrides, ordinaryCalendarEvidence, ordinaryCalendarPath, unchangedTimingInputs,
+      } = timingCalendarFixture();
+      try {
+        const malformed = structuredClone(ordinaryCalendarEvidence);
+        Object.assign(fault.target === "run" ? malformed.runs[0] : malformed.persistenceReplay,
+          fault.changes);
+        writeJson(ordinaryCalendarPath, malformed);
+        const submittedBytes = readFileSync(ordinaryCalendarPath);
+        const failureOutput = join(
+          mkdtempSync(join(cwd, "artifacts", "release", "generated", `calendar-${fault.id}-`)),
+          "release-evidence-check.json",
+        );
+        const refused = spawnSync(process.execPath, [checker], {
+          cwd,
+          env: releaseNeutralEnvironment({ ...overrides, RELEASE_EVIDENCE_OUTPUT: failureOutput }),
+          encoding: "utf8",
+          timeout: RELEASE_CHECK_TIMEOUT_MS,
+        });
+        expect(readFileSync(ordinaryCalendarPath)).toEqual(submittedBytes);
+        expect(refused.error).toBeUndefined();
+        expect(refused.signal).toBeNull();
+        expect(refused.status).toBe(1);
+        const refusedReport = JSON.parse(readFileSync(failureOutput, "utf8"));
+        expect(refusedReport.status).toBe("Failed");
+        expect(refusedReport.failures).toEqual(expect.arrayContaining([
+          expect.stringMatching(/calendar admission/i),
+        ]));
+        const ordinaryFailure = refusedReport.gateResults.find(
+          (gate: { gateId: string }) => gate.gateId === "longSaveGrowthAndCompaction",
+        ).generatedEvidence;
+        expect(ordinaryFailure.status).not.toBe("Passed");
+        expect(ordinaryFailure.failures.length).toBeGreaterThan(0);
+        expect(ordinaryFailure.failures.every(
+          (failure: string) => /calendar admission/i.test(failure),
+        )).toBe(true);
+      } finally {
+        unlinkSync(ordinaryCalendarPath);
+        for (const input of unchangedTimingInputs) {
+          expect(readFileSync(input.path)).toEqual(input.bytes);
+        }
+      }
+    },
+    RELEASE_CHECK_TIMEOUT_MS,
+  );
 
   it("accepts core suites only from the exact clean-start, source-unchanged candidate", () => {
     const { cwd } = fixture();

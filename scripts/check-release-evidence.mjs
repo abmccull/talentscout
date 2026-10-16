@@ -1,4 +1,5 @@
 import { validateAcceptedFontHandoff } from "./accepted-package-font-handoff.mjs";
+import { validateReleaseCalendarReceipt } from "./release-calendar-receipt.mjs";
 import { auditAssetProvenance, listShippingFontFiles, readOrdinaryFile, safeRelativePath, writeOwnedReport } from "./audit-asset-provenance.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -677,6 +678,15 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   ) {
     result.failures.push("one or more soak careers did not process a complete canonical weekly timeline");
   }
+  const calendarAdmissionFailures = [];
+  for (const run of runs) {
+    calendarAdmissionFailures.push(...validateReleaseCalendarReceipt(run, seasonCount)
+      .map((failure) => `soak run ${run?.seed ?? "unknown"} ${failure}`));
+  }
+  calendarAdmissionFailures.push(...validateReleaseCalendarReceipt(evidence.persistenceReplay, seasonCount)
+    .map((failure) => `soak persistence replay ${failure}`));
+  result.calendarAdmissionFailures = calendarAdmissionFailures;
+  result.failures.push(...calendarAdmissionFailures);
   if (policy.requireDeterministicReplay === true) {
     const firstRun = runs[0];
     if (
@@ -1145,6 +1155,12 @@ async function validateReleaseException(gateId, gate) {
       ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
       : null;
     const run = Array.isArray(shard?.runs) && shard.runs.length === 1 ? shard.runs[0] : null;
+    result.failures.push(...validateReleaseCalendarReceipt(run, shard?.profile?.seasonCount)
+      .map((failure) => `source seed ${seedIndex} ${failure}`));
+    if (shard?.persistenceReplay !== undefined) {
+      result.failures.push(...validateReleaseCalendarReceipt(shard.persistenceReplay, shard?.profile?.seasonCount)
+        .map((failure) => `source seed ${seedIndex} supplied replay ${failure}`));
+    }
     if (shard && (
       shard.schemaVersion !== 3
       || shard.evidenceKind !== "long-career-release-soak"
@@ -1333,7 +1349,8 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
   const releaseException = generatedEvidence?.status === "Passed"
     ? null
     : await validateReleaseException(gateId, gate);
-  const exceptionApplied = releaseException?.status === "Accepted";
+  const exceptionApplied = releaseException?.status === "Accepted"
+    && (generatedEvidence?.calendarAdmissionFailures?.length ?? 0) === 0;
   let effectiveStatus = gate.status;
   if (gate.status === "Unverified" && generatedEvidence?.status === "Passed") {
     effectiveStatus = "Passed";

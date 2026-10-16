@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { availableParallelism, cpus, totalmem } from "node:os";
 import { dirname, resolve } from "node:path";
 import { createWorkerOutputRelay } from "./relay-child-output.mjs";
+import { validateReleaseCalendarReceipt } from "./release-calendar-receipt.mjs";
 
 const CHECKPOINT_PROTOCOL_VERSION = 1;
 const maxOutputText = process.env.SOAK_MAX_OUTPUT_BYTES ?? String(64 * 1024 * 1024);
@@ -164,6 +165,11 @@ function validateWorkerResult(result, seedIndex, requireCheckpoint) {
     return failures;
   }
   const run = result.runs[0];
+  failures.push(...validateReleaseCalendarReceipt(run, seasonCount));
+  if (result.persistenceReplay !== undefined) {
+    failures.push(...validateReleaseCalendarReceipt(result.persistenceReplay, seasonCount)
+      .map((failure) => `worker supplied replay ${failure}`));
+  }
   if (run.seed !== seed) failures.push(`worker seed must be ${seed}`);
   if (run.reachedSeason !== seasonCount + 1) {
     failures.push(`worker did not cross the season ${seasonCount} boundary`);
@@ -588,6 +594,10 @@ try {
     : await runWorker(requestedSeedIndices[0], "determinism-replay");
   relay.assertHealthy();
   const persistenceReplay = replayResult?.runs[0] ?? runs[0];
+  const replayCalendarFailures = validateReleaseCalendarReceipt(persistenceReplay, seasonCount);
+  if (replayCalendarFailures.length > 0) {
+    throw new Error(`worker persistence replay ${replayCalendarFailures.join("; ")}`);
+  }
   if (!skipDeterminismReplay && persistenceReplay.digest !== runs[0].digest) {
     throw new Error(
       `Determinism failure for ${runs[0].seed}: ${runs[0].digest} != ${persistenceReplay.digest}`,

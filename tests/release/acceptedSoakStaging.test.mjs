@@ -19,6 +19,46 @@ const sha = value => createHash('sha256').update(value).digest('hex');
 const git = (cwd, ...args) => execFileSync('git', args, {cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 const json = (path,value) => writeFile(path,JSON.stringify(value,null,2)+'\n');
 
+// Literal fixture oracles, frozen before the release-calendar consumer guard.
+const calendarReceipt = () => ({kind:'fresh-builtin-england-v1',
+  leagueClubCounts:[20,24,24,24],weeksPerSeason:46,maxCanonicalTicks:1380});
+const malformedCalendarResults = [
+  ['missing receipt',{calendarAdmission:undefined}],
+  ['null receipt',{calendarAdmission:null}],
+  ['false receipt',{calendarAdmission:false}],
+  ['zero receipt',{calendarAdmission:0}],
+  ['empty receipt',{calendarAdmission:''}],
+  ['array receipt',{calendarAdmission:[]}],
+  ['missing kind',{calendarAdmission:{...calendarReceipt(),kind:undefined}}],
+  ['wrong kind',{calendarAdmission:{...calendarReceipt(),kind:'modded-england'}}],
+  ['missing club counts',{calendarAdmission:{...calendarReceipt(),leagueClubCounts:undefined}}],
+  ['short club counts',{calendarAdmission:{...calendarReceipt(),leagueClubCounts:[20,24,24]}}],
+  ['reordered club counts',{calendarAdmission:{...calendarReceipt(),leagueClubCounts:[24,20,24,24]}}],
+  ['string club count',{calendarAdmission:{...calendarReceipt(),leagueClubCounts:['20',24,24,24]}}],
+  ['fractional club count',{calendarAdmission:{...calendarReceipt(),leagueClubCounts:[20.5,24,24,24]}}],
+  ['missing season length',{calendarAdmission:{...calendarReceipt(),weeksPerSeason:undefined}}],
+  ['wrong season length',{calendarAdmission:{...calendarReceipt(),weeksPerSeason:45}}],
+  ['string season length',{calendarAdmission:{...calendarReceipt(),weeksPerSeason:'46'}}],
+  ['missing maximum',{calendarAdmission:{...calendarReceipt(),maxCanonicalTicks:undefined}}],
+  ['wrong maximum',{calendarAdmission:{...calendarReceipt(),maxCanonicalTicks:1379}}],
+  ['unsafe maximum',{calendarAdmission:{...calendarReceipt(),maxCanonicalTicks:Number.MAX_SAFE_INTEGER+1}}],
+  ['string maximum',{calendarAdmission:{...calendarReceipt(),maxCanonicalTicks:'1380'}}],
+  ['early ticks',{canonicalTicks:1379}],
+  ['extra tick',{canonicalTicks:1381}],
+  ['matched early counters',{canonicalTicks:1379,calendarWeeksSpanned:1379}],
+  ['matched extra counters',{canonicalTicks:1381,calendarWeeksSpanned:1381}],
+  ['string ticks',{canonicalTicks:'1380'}],
+  ['fractional ticks',{canonicalTicks:1380.5}],
+  ['short calendar span',{calendarWeeksSpanned:1379}],
+  ['long calendar span',{calendarWeeksSpanned:1381}],
+  ['string calendar span',{calendarWeeksSpanned:'1380'}],
+  ['missing final week',{reachedWeek:undefined}],
+  ['wrong final week',{reachedWeek:2}],
+  ['string final week',{reachedWeek:'1'}],
+  ['extra season',{reachedSeason:32}],
+  ['string final season',{reachedSeason:'31'}],
+];
+
 async function fixture() {
   const base = await mkdtemp(join(tmpdir(),'talentscout-release-stage-'));
   const candidate = join(base,'candidate'), records=join(base,'records');
@@ -29,6 +69,8 @@ async function fixture() {
   // Reuse real aggregator; it is committed in the fixture to keep checkout clean.
   await writeFile(join(candidate,'scripts/aggregate-release-soak-shards.mjs'),
     await readFile(process.env.TALENTSCOUT_SOAK_AGGREGATOR ?? join(source,'scripts/aggregate-release-soak-shards.mjs')));
+  await writeFile(join(candidate,'scripts/release-calendar-receipt.mjs'),
+    await readFile(process.env.TALENTSCOUT_SOAK_CALENDAR_RECEIPT ?? join(source,'scripts/release-calendar-receipt.mjs')));
   git(candidate,'init','--quiet');
   git(candidate,'config','user.name','Fixture Tester');
   git(candidate,'config','user.email','fixture@example.invalid');
@@ -51,7 +93,8 @@ async function fixture() {
       seedCount:1,seedStart:index,seasonCount:30,concurrency:1,maxSerializedBytes:80*1024*1024,maxOutputBytes:67108864,
       profileKind:'full-canonical-weekly-career',processIsolation:'one-seeded-career-per-process',
       workerNodeArguments:nodeArgs,workerHeapLimitBytes:heap};
-    const runResult={seed,reachedSeason:31,canonicalTicks:1560,calendarWeeksSpanned:1560,
+    const runResult={seed,reachedSeason:31,reachedWeek:1,calendarAdmission:calendarReceipt(),
+      canonicalTicks:1380,calendarWeeksSpanned:1380,
       digest:sha(seed),peakBytes:500000,finalToInitialRatio:1.3,
       memory:{peakRuntimeHeapUsedBytes:400000000,peakHeapUsedBytes:500000000,peakRssBytes:600000000},
       seasonGrowth:[{growthBytes:1000}],compaction:{totalRemovedBytes:100,collectionDeltas:{reports:100}},
@@ -62,7 +105,7 @@ async function fixture() {
         v8HeapLimitBytes:heap,maxSerializedBytes:80*1024*1024,collectionByteBudgets:{reports:8*1024*1024}},
       checkpoint:{protocolVersion:1,resumeEnabled:true,reusedSeedCount:0,executedSeedCount:1,executionIdentity:identity,executionIdentityHash:sha(JSON.stringify(identity)),
         determinismReplayExecuted:index===1},runs:[runResult],
-      ...(index===1?{persistenceReplay:{seed,digest:runResult.digest}}:{})};
+      ...(index===1?{persistenceReplay:structuredClone(runResult)}:{})};
     await json(join(shards,`long-career-release-summary-seed-${index}.json`),document);
   }
   const invoke=()=>spawnSync(process.execPath,[helper,`--candidate-dir=${candidate}`,`--run=${run}`,
@@ -88,6 +131,12 @@ test('stages fresh successful 20x30 aggregate from original candidate-bound shar
     assert.equal(result.checkpoint.executionIdentity.maxOutputBytes,67108864);
     assert.equal(result.checkpoint.executionIdentityHash,sha(JSON.stringify(result.checkpoint.executionIdentity)));
     assert.equal(result.checkpoint.determinismReplayExecuted,true);assert.equal(result.runs.length,20);
+    for(const run of result.runs) {
+      assert.equal(run.reachedSeason,31);assert.equal(run.reachedWeek,1);
+      assert.equal(run.canonicalTicks,1380);assert.equal(run.calendarWeeksSpanned,1380);
+      assert.deepEqual(run.calendarAdmission,calendarReceipt());
+    }
+    assert.deepEqual(result.persistenceReplay,result.runs[0]);
     for(const [path,hash] of original) assert.equal(sha(await readFile(path)),hash,path);
     assert.equal(git(f.candidate,'status','--porcelain'),'');
   }finally{await f.clean();}
@@ -204,5 +253,55 @@ for(const [name,value]of [['missing',undefined],['zero',0],['fractional',0.5],
       assert.equal(await readFile(f.output,'utf8'),sentinel);
       for(const [path,hash]of before)assert.equal(sha(await readFile(path)),hash,path);
     }finally{await f.clean();}
+  });
+}
+
+// Keep the other nineteen calendars valid: each case corrupts exactly one
+// successful source run, or only the actually executed seed-01 replay result.
+for(const target of ['source run','fresh replay']) {
+  for(const [name,mutation]of malformedCalendarResults) {
+    test(`rejects calendar admission ${target}: ${name} without replacing evidence or raw receipts`,async()=>{
+      const f=await fixture();try{
+        await f.mutateShard(target==='source run'?9:1,d=>{
+          Object.assign(target==='source run'?d.runs[0]:d.persistenceReplay,mutation);
+        });
+        const paths=[f.run,f.jobs,...(await readdir(f.shards)).map(file=>join(f.shards,file))];
+        const before=new Map();for(const path of paths)before.set(path,sha(await readFile(path)));
+        await mkdir(resolve(f.output,'..'),{recursive:true});
+        const sentinel='existing canonical evidence remains unchanged\n';await writeFile(f.output,sentinel);
+        const r=f.invoke();assert.notEqual(r.status,0);assert.equal(r.signal,null);
+        assert.match(r.stderr+r.stdout,/calendar admission/i);
+        assert.equal(await readFile(f.output,'utf8'),sentinel);
+        for(const [path,hash]of before)assert.equal(sha(await readFile(path)),hash,path);
+      }finally{await f.clean();}
+    });
+  }
+}
+
+// Real-aggregator shape controls, frozen before the exact-one-run correction.
+for (const extraKind of ['duplicate', 'malformed']) {
+  test(`rejects calendar admission extra ${extraKind} source run without replacing evidence or raw receipts`, async () => {
+    const f = await fixture();
+    try {
+      await f.mutateShard(9, document => {
+        document.runs.push(extraKind === 'duplicate'
+          ? structuredClone(document.runs[0])
+          : { seed: 'ignored-malformed-run', calendarAdmission: null });
+      });
+      const paths = [f.run, f.jobs, ...(await readdir(f.shards)).map(file => join(f.shards, file))];
+      const before = new Map();
+      for (const file of paths) before.set(file, sha(await readFile(file)));
+      await mkdir(resolve(f.output, '..'), { recursive: true });
+      const sentinel = 'existing canonical evidence remains unchanged\n';
+      await writeFile(f.output, sentinel);
+      const result = f.invoke();
+      assert.notEqual(result.status, 0);
+      assert.equal(result.signal, null);
+      assert.match(result.stderr + result.stdout, /calendar admission/i);
+      assert.equal(await readFile(f.output, 'utf8'), sentinel);
+      for (const [file, hash] of before) assert.equal(sha(await readFile(file)), hash, file);
+    } finally {
+      await f.clean();
+    }
   });
 }

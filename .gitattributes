@@ -15,3 +15,6 @@ tests/release/fixtures/worker-output-quota-cases.json text eol=lf
 
 # Keep the digest-bound production output grant catalog stable on Windows.
 tests/release/fixtures/production-output-grant-cases.json text eol=lf
+
+# Preserve frozen actual-worker calendar fixture bytes on Windows checkouts.
+tests/release/fixtures/calendar-worker-guard/* text eol=lf

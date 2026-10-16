@@ -60,6 +60,23 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Actual worker calendar publication guard regression
+        id: calendar-worker-guard
+        env:
+          TALENTSCOUT_CALENDAR_GUARD_MODE: candidate
+          TALENTSCOUT_CALENDAR_GUARD_EVIDENCE: ${{ runner.temp }}/calendar-worker-guard-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          TALENTSCOUT_CALENDAR_GUARD_FIXTURE_ROOT: ${{ runner.temp }}
+        run: npm run test:calendar-worker-guard
+
+      - name: Upload calendar worker guard evidence
+        if: ${{ always() && (steps.calendar-worker-guard.outcome == 'success' || steps.calendar-worker-guard.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: calendar-worker-guard-evidence
+          path: ${{ runner.temp }}/calendar-worker-guard-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Installed reviewed Braces regression
         id: braces-depth-guard
         run: npm run test:braces-depth-guard

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { validateReleaseCalendarReceipt } from "./release-calendar-receipt.mjs";
 
 const seedCount = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
 const seasonCount = Number.parseInt(process.env.SOAK_SEASONS ?? "30", 10);
@@ -57,6 +58,9 @@ const shardBySeed = new Map();
 let maxOutputBytes;
 for (const shard of shards) {
   const document = shard.document;
+  if (!Array.isArray(document.runs) || document.runs.length !== 1) {
+    throw new Error(`Release soak shard calendar admission requires exactly one run: ${shard.file}`);
+  }
   const run = Array.isArray(document.runs) ? document.runs[0] : undefined;
   const identity = document.checkpoint?.executionIdentity;
   if (!Number.isSafeInteger(identity?.maxOutputBytes) || identity?.maxOutputBytes <= 0) {
@@ -92,6 +96,14 @@ for (const shard of shards) {
     || JSON.stringify(identity?.workerNodeArguments) !== JSON.stringify(certifiedWorkerNodeArguments)
   ) {
     throw new Error(`Invalid release soak shard: ${shard.file}`);
+  }
+  const calendarFailures = validateReleaseCalendarReceipt(run, seasonCount);
+  if (document.persistenceReplay !== undefined) {
+    calendarFailures.push(...validateReleaseCalendarReceipt(document.persistenceReplay, seasonCount)
+      .map((failure) => `supplied replay ${failure}`));
+  }
+  if (calendarFailures.length > 0) {
+    throw new Error(`Invalid release soak shard ${shard.file}: ${calendarFailures.join("; ")}`);
   }
   if (shardBySeed.has(run.seed)) {
     throw new Error(`Duplicate release soak shard for ${run.seed}`);

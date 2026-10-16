@@ -6,6 +6,7 @@ import { performance } from "node:perf_hooks";
 import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
+import { admitReleaseCareerCalendar, type ReleaseCalendarAdmission } from "./releaseCareerCalendar";
 import { captureCareerDevelopmentCohort } from "../support/careerDevelopmentTelemetry";
 import { collectWorldRosterGaps } from "./worldRosterHealth";
 import { getSeasonLength } from "@/engine/core/gameDate";
@@ -230,6 +231,8 @@ interface MemorySample {
 interface RunEvidence {
   seed: string;
   reachedSeason: number;
+  reachedWeek: number;
+  calendarAdmission: ReleaseCalendarAdmission;
   canonicalTicks: number;
   calendarWeeksSpanned: number;
   initialBytes: number;
@@ -849,6 +852,7 @@ async function simulateCareer(
 
   const initial = useGameStore.getState().gameState;
   if (!initial) throw new Error(`Failed to initialize release soak seed ${seed}`);
+  const calendar = admitReleaseCareerCalendar(initial, seasonCount);
   if (workerProgress) {
     await appendWorkerProgress("started", seed, initial.currentSeason, initial.currentWeek, 0, 0);
   }
@@ -888,176 +892,173 @@ async function simulateCareer(
     latestWeeklyTelemetry = sample;
   });
 
-  while ((useGameStore.getState().gameState?.currentSeason ?? 0) <= seasonCount) {
-    const before = useGameStore.getState().gameState;
-    if (!before) throw new Error(`Seed ${seed} lost game state`);
-    const started = performance.now();
-    const cpuStarted = process.cpuUsage();
-    const driverTiming = await driveAutonomousYouthCareerWeek(careerTelemetry);
-    const elapsed = performance.now() - started;
-    const cpuUsage = process.cpuUsage(cpuStarted);
-    const cpuElapsed = (cpuUsage.user + cpuUsage.system) / 1_000;
-    // The real UI yields after every command. Without this yield, mocked
-    // checkpoint/autosave promises retain every prior serialized state and the
-    // soak measures its own synchronous harness rather than game heap.
-    await flushAsyncPersistenceQueue();
-    const after = useGameStore.getState().gameState;
-    const advanced = Boolean(
-      after && (
-        after.currentSeason !== before.currentSeason
-        || after.currentWeek !== before.currentWeek
-      ),
-    );
-    if (!after || !advanced) {
-      throw new Error(
-        `Seed ${seed} stalled at S${before.currentSeason} W${before.currentWeek}`,
-      );
-    }
-    // Sample the product path after its persistence yield and before the
-    // release harness performs several whole-save serialization passes. The
-    // worker's V8 ceiling remains the hard guard for spikes between samples.
-    const runtimeMemory = collectMemorySample(after.currentSeason);
-    if (DIAGNOSTIC_CHECKPOINT_PATH) {
-      // Keep small completed-week evidence even if a worker dies between
-      // seasonal snapshots. Await writes so instrumentation cannot accumulate
-      // pending work or retain whole game states during a long run.
-      await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
-      await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.progress.jsonl`, JSON.stringify({
-        recordedAt: new Date().toISOString(), pid: process.pid, seed,
-        season: after.currentSeason, week: after.currentWeek,
-        completedCanonicalTicks: canonicalTicks + 1,
-        elapsedMs: elapsed, cpuElapsedMs: cpuElapsed, memory: runtimeMemory,
-        players: Object.keys(after.players).length,
-      }) + "\n", "utf8");
-    }
-    if (workerProgress) {
-      await appendWorkerProgress("week", seed, after.currentSeason, after.currentWeek,
-        canonicalTicks + 1, calendarWeeksSpanned + 1);
-    }
-    peakRuntimeHeapUsedBytes = Math.max(
-      peakRuntimeHeapUsedBytes,
-      runtimeMemory.heapUsedBytes,
-    );
-    peakRssBytes = Math.max(peakRssBytes, runtimeMemory.rssBytes);
-    canonicalTicks++;
-    calendarWeeksSpanned += 1;
-    weeklyLatency.push(elapsed);
-    const matchingWeeklyTelemetry = latestWeeklyTelemetry
-      && latestWeeklyTelemetry.sourceSeason === before.currentSeason
-      && latestWeeklyTelemetry.sourceWeek === before.currentWeek
-      ? latestWeeklyTelemetry
-      : undefined;
-    const phaseElapsed = matchingWeeklyTelemetry?.phases.reduce(
-      (sum, phase) => sum + phase.elapsedMs,
-      0,
-    );
-    const phaseBreakdown = matchingWeeklyTelemetry
-      ? matchingWeeklyTelemetry.phases
-        .map((phase) => `${phase.phase}=${phase.elapsedMs.toFixed(1)}ms`)
-        .join(", ")
-      : "unavailable";
-    const diagnosticBreakdown = formatWeeklyDiagnostics(matchingWeeklyTelemetry?.diagnostics);
-    const driverBreakdown = [
-      `stabilization=${driverTiming.stabilizationMs.toFixed(1)}ms`,
-      `scheduling=${driverTiming.schedulingMs.toFixed(1)}ms`,
-      `simulation=${driverTiming.simulationMs.toFixed(1)}ms`,
-      `total=${driverTiming.totalMs.toFixed(1)}ms`,
-    ].join(", ");
-    expect(
-      elapsed,
-      `seed ${seed} batch wall latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; driver: ${driverBreakdown}; phases: ${phaseBreakdown}; diagnostics: ${diagnosticBreakdown}`,
-    ).toBeLessThan(MAX_SINGLE_BATCH_WALL_MS);
-    expect(
-      cpuElapsed,
-      `seed ${seed} batch CPU latency indicates excessive work at S${before.currentSeason} W${before.currentWeek}; wall=${elapsed.toFixed(1)}ms; driver: ${driverBreakdown}; phases=${phaseElapsed?.toFixed(1) ?? "unavailable"}ms (${phaseBreakdown}); diagnostics: ${diagnosticBreakdown}`,
-    ).toBeLessThan(MAX_SINGLE_BATCH_CPU_MS);
-
-    if (after.currentSeason !== lastCheckedSeason) {
-      stabilizeAutonomousCareerState(careerTelemetry);
-      const stabilized = useGameStore.getState().gameState;
-      if (!stabilized) throw new Error(`Seed ${seed} lost stabilized state at season boundary`);
-      const footprint = assertReleaseInvariants(stabilized, initialBytes);
-      const boundaryHealth = collectAutonomousWorldHealth(stabilized, careerTelemetry);
-      worldHealth.push(boundaryHealth);
+  try {
+    for (let attempt = 0; attempt < calendar.admission.maxCanonicalTicks; attempt += 1) {
+      const before = useGameStore.getState().gameState;
+      if (!before) throw new Error(`Seed ${seed} lost game state`);
+      calendar.assertBeforeDrive(before, canonicalTicks);
+      const started = performance.now();
+      const cpuStarted = process.cpuUsage();
+      const driverTiming = await driveAutonomousYouthCareerWeek(careerTelemetry);
+      const elapsed = performance.now() - started;
+      const cpuUsage = process.cpuUsage(cpuStarted);
+      const cpuElapsed = (cpuUsage.user + cpuUsage.system) / 1_000;
+      // The real UI yields after every command. Without this yield, mocked
+      // checkpoint/autosave promises retain every prior serialized state and the
+      // soak measures its own synchronous harness rather than game heap.
+      await flushAsyncPersistenceQueue();
+      const after = useGameStore.getState().gameState;
+      if (!after) throw new Error(`ERR_RELEASE_CALENDAR: Seed ${seed} lost game state after drive`);
+      calendar.assertAfterDrive(after, canonicalTicks + 1);
+      // Sample the product path after its persistence yield and before the
+      // release harness performs several whole-save serialization passes. The
+      // worker's V8 ceiling remains the hard guard for spikes between samples.
+      const runtimeMemory = collectMemorySample(after.currentSeason);
       if (DIAGNOSTIC_CHECKPOINT_PATH) {
-        // Persist before final assertions: a later healthy season must not erase
-        // the club, registrations and finances behind an earlier roster gap.
-        await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.world-health.jsonl`, JSON.stringify({
-          runId: developmentRunId, seed, completedCanonicalTicks: canonicalTicks,
-          season: stabilized.currentSeason, week: stabilized.currentWeek,
-          health: boundaryHealth, rosterGaps: collectWorldRosterGaps(stabilized),
+        // Keep small completed-week evidence even if a worker dies between
+        // seasonal snapshots. Await writes so instrumentation cannot accumulate
+        // pending work or retain whole game states during a long run.
+        await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
+        await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.progress.jsonl`, JSON.stringify({
+          recordedAt: new Date().toISOString(), pid: process.pid, seed,
+          season: after.currentSeason, week: after.currentWeek,
+          completedCanonicalTicks: canonicalTicks + 1,
+          elapsedMs: elapsed, cpuElapsedMs: cpuElapsed, memory: runtimeMemory,
+          players: Object.keys(after.players).length,
         }) + "\n", "utf8");
       }
-      expect(
-        serializedRoundTripDigest(stabilized),
-        `seed ${seed} changed during the season ${stabilized.currentSeason} save round trip`,
-      ).toBe(deterministicDigest(stabilized));
-      expect(
-        Object.keys(stabilized.players).length,
-        `seed ${seed} exhausted the active player pool`,
-      ).toBeGreaterThan(0);
-      expect(
-        Object.keys(stabilized.unsignedYouth ?? {}).length,
-        `seed ${seed} exhausted the unsigned youth pool`,
-      ).toBeGreaterThan(0);
-      if (DIAGNOSTIC_CHECKPOINT_PATH) {
-        const capture = captureCareerDevelopmentCohort(stabilized, developmentCohort);
-        developmentCohort = capture.tracked;
-        await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.development.jsonl`,
-          JSON.stringify({ runId: developmentRunId, seed, completedCanonicalTicks: canonicalTicks, ...capture.snapshot }) + "\n", "utf8");
-        await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
-        await writeFile(
-          DIAGNOSTIC_CHECKPOINT_PATH,
-          JSON.stringify({
-            schemaVersion: 1,
-            evidenceKind: "long-career-diagnostic-season-checkpoint",
-            seed,
-            seasonCount,
-            completedCanonicalTicks: canonicalTicks,
-            careerTelemetry,
-            gameState: stabilized,
-          }),
-          "utf8",
-        );
+      if (workerProgress) {
+        await appendWorkerProgress("week", seed, after.currentSeason, after.currentWeek,
+          canonicalTicks + 1, calendarWeeksSpanned + 1);
       }
-      const bytes = footprint.totalBytes;
-      const boundaryCompactions = pendingCompactionSamples.splice(
-        0,
-        pendingCompactionSamples.length,
+      peakRuntimeHeapUsedBytes = Math.max(
+        peakRuntimeHeapUsedBytes,
+        runtimeMemory.heapUsedBytes,
       );
-      seasonGrowth.push({
-        season: after.currentSeason,
-        serializedBytes: bytes,
-        growthBytes: bytes - lastBoundaryBytes,
-        compactionRemovedBytes: boundaryCompactions.reduce(
-          (sum, sample) => sum + sample.removedBytes,
-          0,
-        ),
-        compactionEvents: boundaryCompactions.length,
-        collectionBytes: footprint.collections,
-        collectionCompactionDeltas: sumCompactionDeltas(boundaryCompactions),
-      });
-      lastBoundaryBytes = bytes;
-      peakBytes = Math.max(peakBytes, bytes);
-      lastCheckedSeason = stabilized.currentSeason;
-      const beforeCollection = collectMemorySample(stabilized.currentSeason);
-      peakRssBytes = Math.max(peakRssBytes, beforeCollection.rssBytes);
-      requestGarbageCollection();
-      const afterCollection = collectMemorySample(stabilized.currentSeason);
-      peakHeapUsedBytes = Math.max(peakHeapUsedBytes, afterCollection.heapUsedBytes);
-      peakRssBytes = Math.max(peakRssBytes, afterCollection.rssBytes);
-      memorySamples.push(afterCollection);
+      peakRssBytes = Math.max(peakRssBytes, runtimeMemory.rssBytes);
+      canonicalTicks++;
+      calendarWeeksSpanned += 1;
+      weeklyLatency.push(elapsed);
+      const matchingWeeklyTelemetry = latestWeeklyTelemetry
+        && latestWeeklyTelemetry.sourceSeason === before.currentSeason
+        && latestWeeklyTelemetry.sourceWeek === before.currentWeek
+        ? latestWeeklyTelemetry
+        : undefined;
+      const phaseElapsed = matchingWeeklyTelemetry?.phases.reduce(
+        (sum, phase) => sum + phase.elapsedMs,
+        0,
+      );
+      const phaseBreakdown = matchingWeeklyTelemetry
+        ? matchingWeeklyTelemetry.phases
+          .map((phase) => `${phase.phase}=${phase.elapsedMs.toFixed(1)}ms`)
+          .join(", ")
+        : "unavailable";
+      const diagnosticBreakdown = formatWeeklyDiagnostics(matchingWeeklyTelemetry?.diagnostics);
+      const driverBreakdown = [
+        `stabilization=${driverTiming.stabilizationMs.toFixed(1)}ms`,
+        `scheduling=${driverTiming.schedulingMs.toFixed(1)}ms`,
+        `simulation=${driverTiming.simulationMs.toFixed(1)}ms`,
+        `total=${driverTiming.totalMs.toFixed(1)}ms`,
+      ].join(", ");
+      expect(
+        elapsed,
+        `seed ${seed} batch wall latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; driver: ${driverBreakdown}; phases: ${phaseBreakdown}; diagnostics: ${diagnosticBreakdown}`,
+      ).toBeLessThan(MAX_SINGLE_BATCH_WALL_MS);
+      expect(
+        cpuElapsed,
+        `seed ${seed} batch CPU latency indicates excessive work at S${before.currentSeason} W${before.currentWeek}; wall=${elapsed.toFixed(1)}ms; driver: ${driverBreakdown}; phases=${phaseElapsed?.toFixed(1) ?? "unavailable"}ms (${phaseBreakdown}); diagnostics: ${diagnosticBreakdown}`,
+      ).toBeLessThan(MAX_SINGLE_BATCH_CPU_MS);
 
+      if (after.currentSeason !== lastCheckedSeason) {
+        stabilizeAutonomousCareerState(careerTelemetry);
+        const stabilized = useGameStore.getState().gameState;
+        if (!stabilized) throw new Error(`Seed ${seed} lost stabilized state at season boundary`);
+        const footprint = assertReleaseInvariants(stabilized, initialBytes);
+        const boundaryHealth = collectAutonomousWorldHealth(stabilized, careerTelemetry);
+        worldHealth.push(boundaryHealth);
+        if (DIAGNOSTIC_CHECKPOINT_PATH) {
+          // Persist before final assertions: a later healthy season must not erase
+          // the club, registrations and finances behind an earlier roster gap.
+          await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.world-health.jsonl`, JSON.stringify({
+            runId: developmentRunId, seed, completedCanonicalTicks: canonicalTicks,
+            season: stabilized.currentSeason, week: stabilized.currentWeek,
+            health: boundaryHealth, rosterGaps: collectWorldRosterGaps(stabilized),
+          }) + "\n", "utf8");
+        }
+        expect(
+          serializedRoundTripDigest(stabilized),
+          `seed ${seed} changed during the season ${stabilized.currentSeason} save round trip`,
+        ).toBe(deterministicDigest(stabilized));
+        expect(
+          Object.keys(stabilized.players).length,
+          `seed ${seed} exhausted the active player pool`,
+        ).toBeGreaterThan(0);
+        expect(
+          Object.keys(stabilized.unsignedYouth ?? {}).length,
+          `seed ${seed} exhausted the unsigned youth pool`,
+        ).toBeGreaterThan(0);
+        if (DIAGNOSTIC_CHECKPOINT_PATH) {
+          const capture = captureCareerDevelopmentCohort(stabilized, developmentCohort);
+          developmentCohort = capture.tracked;
+          await appendFile(`${DIAGNOSTIC_CHECKPOINT_PATH}.development.jsonl`,
+            JSON.stringify({ runId: developmentRunId, seed, completedCanonicalTicks: canonicalTicks, ...capture.snapshot }) + "\n", "utf8");
+          await mkdir(dirname(DIAGNOSTIC_CHECKPOINT_PATH), { recursive: true });
+          await writeFile(
+            DIAGNOSTIC_CHECKPOINT_PATH,
+            JSON.stringify({
+              schemaVersion: 1,
+              evidenceKind: "long-career-diagnostic-season-checkpoint",
+              seed,
+              seasonCount,
+              completedCanonicalTicks: canonicalTicks,
+              careerTelemetry,
+              gameState: stabilized,
+            }),
+            "utf8",
+          );
+        }
+        const bytes = footprint.totalBytes;
+        const boundaryCompactions = pendingCompactionSamples.splice(
+          0,
+          pendingCompactionSamples.length,
+        );
+        seasonGrowth.push({
+          season: after.currentSeason,
+          serializedBytes: bytes,
+          growthBytes: bytes - lastBoundaryBytes,
+          compactionRemovedBytes: boundaryCompactions.reduce(
+            (sum, sample) => sum + sample.removedBytes,
+            0,
+          ),
+          compactionEvents: boundaryCompactions.length,
+          collectionBytes: footprint.collections,
+          collectionCompactionDeltas: sumCompactionDeltas(boundaryCompactions),
+        });
+        lastBoundaryBytes = bytes;
+        peakBytes = Math.max(peakBytes, bytes);
+        lastCheckedSeason = stabilized.currentSeason;
+        const beforeCollection = collectMemorySample(stabilized.currentSeason);
+        peakRssBytes = Math.max(peakRssBytes, beforeCollection.rssBytes);
+        requestGarbageCollection();
+        const afterCollection = collectMemorySample(stabilized.currentSeason);
+        peakHeapUsedBytes = Math.max(peakHeapUsedBytes, afterCollection.heapUsedBytes);
+        peakRssBytes = Math.max(peakRssBytes, afterCollection.rssBytes);
+        memorySamples.push(afterCollection);
+
+      }
     }
+  } finally {
+    stopObservingCompaction();
+    stopObservingWeeklyTelemetry();
   }
-  stopObservingCompaction();
-  stopObservingWeeklyTelemetry();
 
   const finalState = useGameStore.getState().gameState;
   if (!finalState) throw new Error(`Seed ${seed} lost its final state`);
+  calendar.assertComplete(finalState, canonicalTicks);
   stabilizeAutonomousCareerState(careerTelemetry);
   const stabilizedFinalState = useGameStore.getState().gameState;
   if (!stabilizedFinalState) throw new Error(`Seed ${seed} lost its stabilized final state`);
+  calendar.assertComplete(stabilizedFinalState, canonicalTicks);
   const finalBytes = assertReleaseInvariants(stabilizedFinalState, initialBytes).totalBytes;
   peakBytes = Math.max(peakBytes, finalBytes);
   const history = stabilizedFinalState.worldHistory;
@@ -1095,6 +1096,7 @@ async function simulateCareer(
     `seed ${seed} retained excessive heap across the career`,
   ).toBeLessThanOrEqual(MAX_POST_GC_HEAP_GROWTH_BYTES);
 
+  calendar.assertComplete(stabilizedFinalState, canonicalTicks);
   if (workerProgress) {
     await appendWorkerProgress("career-complete", seed, stabilizedFinalState.currentSeason,
       stabilizedFinalState.currentWeek, canonicalTicks, calendarWeeksSpanned, finalDigest);
@@ -1103,6 +1105,8 @@ async function simulateCareer(
   return {
     seed,
     reachedSeason: finalState.currentSeason,
+    reachedWeek: finalState.currentWeek,
+    calendarAdmission: calendar.admission,
     canonicalTicks,
     calendarWeeksSpanned,
     initialBytes,

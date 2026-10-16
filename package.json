@@ -34,6 +34,7 @@
     "test:release-soak": "node scripts/run-long-career-release-soak.mjs",
     "test:worker-output-relay": "node --test --test-concurrency=1 tests/release/workerOutputRelay.e2e.test.mjs",
     "test:production-output-grant": "node --test --test-concurrency=1 tests/release/productionOutputGrant.e2e.test.mjs",
+    "test:calendar-worker-guard": "node scripts/run-calendar-worker-guard-e2e.mjs",
     "test:braces-depth-guard": "node --test --test-concurrency=1 tests/release/bracesDepthGuard.e2e.test.mjs",
     "test:http-cache-policy": "node --test --test-concurrency=1 tests/release/httpCachePolicy.e2e.test.mjs",
     "test:release-soak:chooser-matrix": "node scripts/run-release-chooser-profile-matrix.mjs",

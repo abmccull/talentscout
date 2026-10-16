@@ -96,6 +96,41 @@ seed one deterministically. The tracked gate remains
 `Unverified`; the checker computes an effective `Passed` status from this
 generated evidence, avoiding any post-commit policy edit.
 
+The release worker admits the fresh built-in England world before publishing
+progress. It verifies the original 20-league, 282-club topology and England's
+20/24/24/24 league sizes, then fixes the release calendar at 46 weeks per season.
+Every actual driver return must match the expected date, tick count, current
+fixtures and membership. A 30-season career must make exactly 1,380 canonical
+ticks and finish at season 31, week 1. The run records `reachedWeek` and the
+immutable `calendarAdmission` receipt alongside its existing evidence. These
+checks belong to the release worker; ordinary gameplay keeps its existing
+calendar authority for other season lengths.
+
+The runner, shard aggregator and release checker require the exact completion
+receipt on every successful run and actual replay. Each input shard must contain
+exactly one primary run. Successful source shards used by a timing exception
+receive the same calendar validation. A timing exception cannot waive calendar
+failures in a present ordinary artifact; the report remains failed.
+
+Run the bounded actual-worker fault regression with fresh external paths:
+
+```powershell
+$calendarRoot = Join-Path 'C:\' ('ts-cg-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $calendarRoot | Out-Null
+$env:TALENTSCOUT_CALENDAR_GUARD_FIXTURE_ROOT = (Resolve-Path -LiteralPath $calendarRoot).Path
+$env:TALENTSCOUT_CALENDAR_GUARD_EVIDENCE = Join-Path $calendarRoot 'evidence'
+$env:TALENTSCOUT_CALENDAR_GUARD_MODE = 'candidate'
+npm.cmd run test:calendar-worker-guard
+```
+
+The five cases exercise the real game start and weekly driver with test-only
+fault injection. They verify a healthy control and reject invalid dates,
+fixtures and membership before invalid progress can be published. Raw output,
+progress, test reports and error witnesses remain outside the checkout. CI
+uploads available evidence after success or failure. This regression verifies
+the publication guard; the full fresh 20-career campaign and seed-one replay
+remain required.
+
 Run the optional, non-gating chooser-profile matrix separately:
 
 ```powershell
