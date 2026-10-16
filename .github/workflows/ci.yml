@@ -43,6 +43,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Installed reviewed Braces regression
+        id: braces-depth-guard
+        run: npm run test:braces-depth-guard
+
+      - name: Upload Braces regression evidence
+        if: ${{ always() && (steps.braces-depth-guard.outcome == 'success' || steps.braces-depth-guard.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: braces-depth-guard-evidence
+          path: artifacts/release/generated/braces-depth-guard-e2e-*/
+          if-no-files-found: error
+          retention-days: 30
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=moderate
 

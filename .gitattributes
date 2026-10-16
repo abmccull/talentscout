@@ -1,3 +1,7 @@
 *.vdf text eol=lf
 
 public/licenses/*.txt text eol=lf
+
+# Preserve reviewed vendor payload bytes across Windows checkouts.
+vendor/braces-depth-guard/** -text
+vendor/*.tgz -text
