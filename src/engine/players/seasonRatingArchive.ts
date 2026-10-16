@@ -28,8 +28,9 @@ export function archivePlayerSeasonRatings(
   let archived = players;
   for (const [playerId, appearances] of collectCanonicalAppearances(fixtures, matchRatings, season)) {
     const player = players[playerId];
+    if (!player) continue;
     const totals = summarizeCanonicalAppearances(appearances);
-    if (!player || !totals) continue;
+    if (!totals) continue;
     const prior = (player.seasonRatings ?? []).find((entry) => expandSeasonRating(entry).season === season);
     const record = {
       ...(prior ? expandSeasonRating(prior) : {}),

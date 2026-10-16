@@ -352,21 +352,29 @@ function buildSeasonRecord(
     historicallyRelevantPlayerIds,
   );
 
+  const leagueCounts = new Map<string, { clubCount: number; playedFixtures: number }>();
+  for (const league of Object.values(snapshot.leagues)) {
+    leagueCounts.set(league.id, { clubCount: 0, playedFixtures: 0 });
+  }
+  for (const club of Object.values(snapshot.clubs)) {
+    const counts = leagueCounts.get(club.leagueId);
+    if (counts) counts.clubCount += 1;
+  }
+  for (const fixture of Object.values(snapshot.fixtures)) {
+    const counts = leagueCounts.get(fixture.leagueId);
+    if (counts && fixture.played && isFixtureInSeason(fixture, completedSeason)) {
+      counts.playedFixtures += 1;
+    }
+  }
+
   const leagues: LeagueSeasonHistory[] = Object.values(snapshot.leagues)
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((league) => ({
       leagueId: league.id,
       country: league.country,
       tier: league.tier,
-      clubCount: Object.values(snapshot.clubs).filter(
-        (club) => club.leagueId === league.id,
-      ).length,
-      playedFixtures: Object.values(snapshot.fixtures).filter(
-        (fixture) =>
-          fixture.leagueId === league.id &&
-          fixture.played &&
-          isFixtureInSeason(fixture, completedSeason),
-      ).length,
+      clubCount: leagueCounts.get(league.id)?.clubCount ?? 0,
+      playedFixtures: leagueCounts.get(league.id)?.playedFixtures ?? 0,
     }));
 
   return {
