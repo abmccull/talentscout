@@ -59,6 +59,34 @@ $env:SOAK_CONCURRENCY = "3"
 npm run test:release-soak
 ```
 
+The runner uses a shared 64 MiB relay-output allowance per invocation. Set
+`SOAK_MAX_OUTPUT_BYTES` to a canonical positive safe integer to choose another
+allowance. Invalid text fails before Git/setup; the exact numeric value is
+recorded in the execution identity and changes its hash. Exceeding the allowance
+fails the run without admitting a partial output buffer. Evidence without a
+valid allowance is rejected. Matrix aggregation requires the same allowance for
+each originating invocation and propagates that value unchanged.
+
+The allowance covers relay markers and worker stdout/stderr. It does not reserve
+disk space or bound direct checkpoint/save writes or Node's uncaught-error
+output. Full career and capacity evidence remain required.
+
+Run the real-process output regression without starting game workers:
+
+```powershell
+$grantRoot = Join-Path 'C:\' ('ts-og-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $grantRoot | Out-Null
+$env:TALENTSCOUT_OUTPUT_GRANT_FIXTURE_ROOT = (Resolve-Path -LiteralPath $grantRoot).Path
+$env:TALENTSCOUT_OUTPUT_GRANT_EVIDENCE = Join-Path $grantRoot 'evidence'
+$env:TALENTSCOUT_OUTPUT_GRANT_MODE = 'candidate'
+npm.cmd run test:production-output-grant
+```
+
+The test retains raw evidence and disposable Git fixtures outside the checkout.
+Its evidence path must be absent with an existing parent; its fixture root must
+exist and be short on Windows. CI supplies both paths under `runner.temp` and
+uploads the actual success/failure artifacts.
+
 Each seed runs every canonical calendar week in its own process. The bounded
 worker pool only overlaps independent careers and writes results back in seed
 order. The generated summary is accepted only when it names the exact commit,

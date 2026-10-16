@@ -33,6 +33,7 @@
     "test:replayability:nightly": "node scripts/run-replayability-telemetry.mjs --profile=nightly --seeds=1000 --seasons=10 --weeks=38 --out=artifacts/replayability/nightly-summary.json",
     "test:release-soak": "node scripts/run-long-career-release-soak.mjs",
     "test:worker-output-relay": "node --test --test-concurrency=1 tests/release/workerOutputRelay.e2e.test.mjs",
+    "test:production-output-grant": "node --test --test-concurrency=1 tests/release/productionOutputGrant.e2e.test.mjs",
     "test:braces-depth-guard": "node --test --test-concurrency=1 tests/release/bracesDepthGuard.e2e.test.mjs",
     "test:http-cache-policy": "node --test --test-concurrency=1 tests/release/httpCachePolicy.e2e.test.mjs",
     "test:release-soak:chooser-matrix": "node scripts/run-release-chooser-profile-matrix.mjs",

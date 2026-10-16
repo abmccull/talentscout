@@ -43,6 +43,23 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Production runner finite output grant regression
+        id: production-output-grant
+        env:
+          TALENTSCOUT_OUTPUT_GRANT_MODE: candidate
+          TALENTSCOUT_OUTPUT_GRANT_EVIDENCE: ${{ runner.temp }}/production-output-grant-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          TALENTSCOUT_OUTPUT_GRANT_FIXTURE_ROOT: ${{ runner.temp }}
+        run: npm run test:production-output-grant
+
+      - name: Upload production output grant evidence
+        if: ${{ always() && (steps.production-output-grant.outcome == 'success' || steps.production-output-grant.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-output-grant-evidence
+          path: ${{ runner.temp }}/production-output-grant-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Installed reviewed Braces regression
         id: braces-depth-guard
         run: npm run test:braces-depth-guard

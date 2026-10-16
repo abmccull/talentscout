@@ -41,6 +41,7 @@ interface ReleaseSoakPlan {
     candidateCommitSha: string;
     candidateTreeSha: string;
     maxSerializedBytes: number;
+    maxOutputBytes: number;
     workerHeapLimitBytes: number;
     workerNodeArguments: string[];
   };
@@ -173,6 +174,7 @@ function planReleaseSoak(
       SOAK_SEASONS: "1",
       SOAK_CONCURRENCY: "1",
       SOAK_PLAN_ONLY: "true",
+      SOAK_MAX_OUTPUT_BYTES: "67108864",
       SOAK_WORKER_DIRECTORY: workerDirectory,
       ...overrides,
     }),
@@ -346,6 +348,7 @@ describe("release evidence checker", () => {
       reusableSeedIndices: [],
       pendingSeedIndices: [1],
       executionIdentity: {
+        maxOutputBytes: 67108864,
         workerHeapLimitBytes: 1536 * 1024 * 1024,
         workerNodeArguments: [
           "--max-old-space-size=1440",
@@ -599,6 +602,7 @@ describe("release evidence checker", () => {
       seasonCount: 30,
       concurrency: 3,
       maxSerializedBytes: 80 * 1024 * 1024,
+      maxOutputBytes: 67108864,
       profileKind: "full-canonical-weekly-career",
       processIsolation: "one-seeded-career-per-process",
       workerNodeArguments: [
@@ -654,6 +658,21 @@ describe("release evidence checker", () => {
 
     const evidencePath = join(cwd, "artifacts", "release", "generated", "long-career.json");
     const cleanEvidence = JSON.parse(readFileSync(evidencePath, "utf8"));
+    // Tests first: a rehashed malformed grant is still invalid evidence.
+    for (const grant of [undefined, 0, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const invalidGrant = structuredClone(cleanEvidence);
+      if (grant === undefined) delete invalidGrant.checkpoint.executionIdentity.maxOutputBytes;
+      else invalidGrant.checkpoint.executionIdentity.maxOutputBytes = grant;
+      invalidGrant.checkpoint.executionIdentityHash = createHash("sha256")
+        .update(JSON.stringify(invalidGrant.checkpoint.executionIdentity)).digest("hex");
+      writeJson(evidencePath, invalidGrant);
+      const rejectedGrant = check(cwd);
+      expect(rejectedGrant.status).toBe("Failed");
+      expect(rejectedGrant.failures).toEqual(expect.arrayContaining([
+        expect.stringContaining("maxOutputBytes"),
+      ]));
+    }
+    writeJson(evidencePath, cleanEvidence);
     const removeCertifiedHeapEvidence = [
       (evidence: typeof cleanEvidence) => {
         delete evidence.profile.v8HeapLimitBytes;
@@ -745,6 +764,7 @@ describe("release evidence checker", () => {
         seedCount: 1,
         seedStart: seedIndex,
         seasonCount: 30,
+        maxOutputBytes: 67108864,
         profileKind: "full-canonical-weekly-career",
         processIsolation: "one-seeded-career-per-process",
         workerNodeArguments: [
@@ -962,6 +982,92 @@ describe("release evidence checker", () => {
       exceptionApplied: true,
     });
 
+    // Rehash both the actual shard identity and its exception file binding.
+    const grantShardPath = sourceShardPaths[0];
+    const originalGrantShard = readFileSync(grantShardPath, "utf8");
+    const cleanGrantShard = JSON.parse(originalGrantShard);
+    for (const grant of [undefined, 0, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const invalidGrantShard = structuredClone(cleanGrantShard);
+      if (grant === undefined) delete invalidGrantShard.checkpoint.executionIdentity.maxOutputBytes;
+      else invalidGrantShard.checkpoint.executionIdentity.maxOutputBytes = grant;
+      invalidGrantShard.checkpoint.executionIdentityHash = createHash("sha256")
+        .update(JSON.stringify(invalidGrantShard.checkpoint.executionIdentity)).digest("hex");
+      writeJson(grantShardPath, invalidGrantShard);
+      const grantException = structuredClone(validException);
+      const grantEntry = grantException.evidence.find(
+        (entry) => entry.path === grantShardPath.slice(cwd.length + 1).replaceAll("\\", "/"),
+      );
+      expect(grantEntry).toBeDefined();
+      grantEntry!.sha256 = createHash("sha256").update(readFileSync(grantShardPath)).digest("hex");
+      writeJson(exceptionPath, grantException);
+      const rejectedGrant = check(cwd, overrides);
+      expect(rejectedGrant.status).toBe("Failed");
+      expect(rejectedGrant.failures).toEqual(expect.arrayContaining([
+        expect.stringContaining("maxOutputBytes"),
+      ]));
+    }
+    writeFileSync(grantShardPath, originalGrantShard, "utf8");
+    writeJson(exceptionPath, validException);
+    // Tests first: valid hash-bound falsy JSON must not skip grant validation.
+    const falsyEvidenceDirectory = process.env.TALENTSCOUT_OUTPUT_GRANT_FALSY_EVIDENCE;
+    if (falsyEvidenceDirectory !== undefined) {
+      expect(falsyEvidenceDirectory.length).toBeGreaterThan(0);
+    }
+    try {
+      for (const [name, value, rawHex] of [
+        ["null", null, "6e756c6c0a"],
+        ["false", false, "66616c73650a"],
+        ["zero", 0, "300a"],
+        ["empty-string", "", "22220a"],
+      ] as const) {
+        writeJson(grantShardPath, value);
+        const falsyShardBytes = readFileSync(grantShardPath);
+        expect(falsyShardBytes.toString("hex")).toBe(rawHex);
+        const falsyShardSha256 = createHash("sha256").update(falsyShardBytes).digest("hex");
+        const falsyException = structuredClone(validException);
+        const falsyEntry = falsyException.evidence.find(
+          (entry) => entry.path === grantShardPath.slice(cwd.length + 1).replaceAll("\\", "/"),
+        );
+        expect(falsyEntry).toBeDefined();
+        falsyEntry!.sha256 = falsyShardSha256;
+        writeJson(exceptionPath, falsyException);
+        const falsyExceptionBytes = readFileSync(exceptionPath);
+        const falsyReport = check(cwd, overrides);
+        if (falsyEvidenceDirectory !== undefined) {
+          writeFileSync(join(falsyEvidenceDirectory, `falsy-${name}.json`), `${JSON.stringify({
+            schemaVersion: 1,
+            evidenceKind: "release-output-grant-falsy-shard-observation",
+            caseName: name,
+            shard: {
+              path: grantShardPath,
+              bytes: falsyShardBytes.length,
+              sha256: falsyShardSha256,
+              rawHex: falsyShardBytes.toString("hex"),
+            },
+            exception: {
+              path: exceptionPath,
+              bytes: falsyExceptionBytes.length,
+              sha256: createHash("sha256").update(falsyExceptionBytes).digest("hex"),
+              rawHex: falsyExceptionBytes.toString("hex"),
+              shardEntryPath: falsyEntry!.path,
+              shardEntrySha256: falsyEntry!.sha256,
+            },
+            checkerReport: falsyReport,
+            nativeAcceptance: false,
+            capacityAccepted: false,
+            fullCareerAccepted: false,
+            releaseAccepted: false,
+          }, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+        }
+        expect(falsyReport.status).toBe("Failed");
+        expect(falsyReport.failures).toEqual(expect.arrayContaining([
+          expect.stringContaining("maxOutputBytes"),
+        ]));
+      }
+    } finally {
+      writeFileSync(grantShardPath, originalGrantShard, "utf8");
+      writeJson(exceptionPath, validException);
+    }
     const wrongRun = structuredClone(validException);
     wrongRun.sourceWorkflowRunId = "30902995423";
     writeJson(exceptionPath, wrongRun);

@@ -6,6 +6,12 @@ import { dirname, resolve } from "node:path";
 import { createWorkerOutputRelay } from "./relay-child-output.mjs";
 
 const CHECKPOINT_PROTOCOL_VERSION = 1;
+const maxOutputText = process.env.SOAK_MAX_OUTPUT_BYTES ?? String(64 * 1024 * 1024);
+const maxOutputBytes = Number(maxOutputText);
+if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0
+  || String(maxOutputBytes) !== maxOutputText) {
+  throw new Error("SOAK_MAX_OUTPUT_BYTES must be a canonical positive safe integer");
+}
 const seedCount = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
 const seedStart = Number.parseInt(process.env.SOAK_SEED_START ?? "1", 10);
 const seasonCount = Number.parseInt(process.env.SOAK_SEASONS ?? "30", 10);
@@ -90,6 +96,7 @@ const executionIdentity = {
   seasonCount,
   concurrency,
   maxSerializedBytes,
+  maxOutputBytes,
   profileKind: "full-canonical-weekly-career",
   processIsolation: "one-seeded-career-per-process",
   workerNodeArguments,
@@ -317,6 +324,7 @@ const plan = {
 };
 
 const relay = createWorkerOutputRelay({
+  maxOutputBytes,
   stdout: process.stdout,
   stderr: process.stderr,
   tailCodeUnits: 32_768,

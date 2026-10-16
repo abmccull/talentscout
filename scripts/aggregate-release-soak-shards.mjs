@@ -54,10 +54,18 @@ const expectedSeeds = Array.from(
   (_, index) => `release-soak-${String(index + 1).padStart(2, "0")}`,
 );
 const shardBySeed = new Map();
+let maxOutputBytes;
 for (const shard of shards) {
   const document = shard.document;
   const run = Array.isArray(document.runs) ? document.runs[0] : undefined;
   const identity = document.checkpoint?.executionIdentity;
+  if (!Number.isSafeInteger(identity?.maxOutputBytes) || identity?.maxOutputBytes <= 0) {
+    throw new Error(`Invalid release soak shard maxOutputBytes: ${shard.file}`);
+  }
+  if (maxOutputBytes !== undefined && identity.maxOutputBytes !== maxOutputBytes) {
+    throw new Error("Release soak shards must agree on maxOutputBytes");
+  }
+  maxOutputBytes = identity.maxOutputBytes;
   const calculatedIdentityHash = identity
     ? createHash("sha256").update(JSON.stringify(identity)).digest("hex")
     : "";
@@ -147,6 +155,7 @@ const executionIdentity = {
   seasonCount,
   concurrency: seedCount,
   maxSerializedBytes: firstShard.profile.maxSerializedBytes,
+  maxOutputBytes,
   profileKind: "full-canonical-weekly-career",
   processIsolation: "one-seeded-career-per-process",
   workerNodeArguments: certifiedWorkerNodeArguments,

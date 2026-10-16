@@ -593,6 +593,10 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   const seasonCount = evidence.profile?.seasonCount;
   const checkpoint = evidence.checkpoint;
   const executionIdentity = checkpoint?.executionIdentity;
+  if (!Number.isSafeInteger(executionIdentity?.maxOutputBytes)
+    || executionIdentity?.maxOutputBytes <= 0) {
+    result.failures.push("soak executionIdentity.maxOutputBytes must be a positive safe integer");
+  }
   const calculatedIdentityHash = executionIdentity && typeof executionIdentity === "object"
     ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
     : null;
@@ -1133,6 +1137,10 @@ async function validateReleaseException(gateId, gate) {
     const shard = await readBoundSourceJson(shardPath, `source seed ${seedIndex} evidence`);
     const checkpoint = shard?.checkpoint;
     const executionIdentity = shard?.checkpoint?.executionIdentity;
+    if (!Number.isSafeInteger(executionIdentity?.maxOutputBytes)
+      || executionIdentity?.maxOutputBytes <= 0) {
+      result.failures.push(`source seed ${seedIndex} executionIdentity.maxOutputBytes must be a positive safe integer`);
+    }
     const calculatedIdentityHash = executionIdentity && typeof executionIdentity === "object"
       ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
       : null;

@@ -12,3 +12,6 @@ vendor/*.tgz -text
 
 # Keep the digest-bound worker output quota catalog stable on Windows.
 tests/release/fixtures/worker-output-quota-cases.json text eol=lf
+
+# Keep the digest-bound production output grant catalog stable on Windows.
+tests/release/fixtures/production-output-grant-cases.json text eol=lf

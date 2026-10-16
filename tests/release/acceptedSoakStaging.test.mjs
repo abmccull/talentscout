@@ -48,7 +48,7 @@ async function fixture() {
   for(let index=1;index<=20;index++) {
     const seed=`release-soak-${String(index).padStart(2,'0')}`;
     const identity={protocolVersion:1,candidateCommitSha:commit,candidateTreeSha:tree,
-      seedCount:1,seedStart:index,seasonCount:30,concurrency:1,maxSerializedBytes:80*1024*1024,
+      seedCount:1,seedStart:index,seasonCount:30,concurrency:1,maxSerializedBytes:80*1024*1024,maxOutputBytes:67108864,
       profileKind:'full-canonical-weekly-career',processIsolation:'one-seeded-career-per-process',
       workerNodeArguments:nodeArgs,workerHeapLimitBytes:heap};
     const runResult={seed,reachedSeason:31,canonicalTicks:1560,calendarWeeksSpanned:1560,
@@ -85,6 +85,8 @@ test('stages fresh successful 20x30 aggregate from original candidate-bound shar
     assert.equal(result.candidateCommitSha,f.commit);assert.equal(result.candidateTreeSha,f.tree);
     assert.equal(result.profile.seedCount,20);assert.equal(result.profile.seasonCount,30);
     assert.equal(result.profile.v8HeapLimitBytes,heap);assert.equal(result.status,'Passed');
+    assert.equal(result.checkpoint.executionIdentity.maxOutputBytes,67108864);
+    assert.equal(result.checkpoint.executionIdentityHash,sha(JSON.stringify(result.checkpoint.executionIdentity)));
     assert.equal(result.checkpoint.determinismReplayExecuted,true);assert.equal(result.runs.length,20);
     for(const [path,hash] of original) assert.equal(sha(await readFile(path)),hash,path);
     assert.equal(git(f.candidate,'status','--porcelain'),'');
@@ -166,3 +168,41 @@ test('rejects impossible individual accounting when paired legacy counter is abs
     assert.equal(await readFile(f.output,'utf8'),sentinel);
   }finally{await f.clean();}
 });
+
+// Tests-first output grant additions: real unchanged stager and aggregator.
+test('propagates a common nondefault per-runner grant without rewriting raw shards',async()=>{
+  const f=await fixture();try{
+    for(let index=1;index<=20;index++) await f.mutateShard(index,d=>{
+      d.checkpoint.executionIdentity.maxOutputBytes=67108865;
+      d.checkpoint.executionIdentityHash=sha(JSON.stringify(d.checkpoint.executionIdentity));
+    });
+    const paths=[f.run,f.jobs,...(await readdir(f.shards)).map(name=>join(f.shards,name))];
+    const before=new Map();for(const path of paths)before.set(path,sha(await readFile(path)));
+    const r=f.invoke();assert.equal(r.status,0,r.stderr);
+    const result=JSON.parse(await readFile(f.output,'utf8'));
+    assert.equal(result.checkpoint.executionIdentity.maxOutputBytes,67108865);
+    assert.equal(result.checkpoint.executionIdentityHash,sha(JSON.stringify(result.checkpoint.executionIdentity)));
+    assert.equal(result.checkpoint.executionIdentity.executionMode,'github-matrix-shards');
+    for(const [path,hash]of before)assert.equal(sha(await readFile(path)),hash,path);
+  }finally{await f.clean();}
+});
+for(const [name,value]of [['missing',undefined],['zero',0],['fractional',0.5],
+  ['unsafe',Number.MAX_SAFE_INTEGER+1],['mixed',67108865]]){
+  test(`rejects ${name} source output grant after rehash without replacing evidence or raw receipts`,async()=>{
+    const f=await fixture();try{
+      await f.mutateShard(9,d=>{
+        if(value===undefined)delete d.checkpoint.executionIdentity.maxOutputBytes;
+        else d.checkpoint.executionIdentity.maxOutputBytes=value;
+        d.checkpoint.executionIdentityHash=sha(JSON.stringify(d.checkpoint.executionIdentity));
+      });
+      const paths=[f.run,f.jobs,...(await readdir(f.shards)).map(file=>join(f.shards,file))];
+      const before=new Map();for(const path of paths)before.set(path,sha(await readFile(path)));
+      await mkdir(resolve(f.output,'..'),{recursive:true});
+      const sentinel='existing canonical evidence remains unchanged\n';await writeFile(f.output,sentinel);
+      const r=f.invoke();assert.notEqual(r.status,0);assert.equal(r.signal,null);
+      assert.match(r.stderr+r.stdout,/maxOutputBytes/);
+      assert.equal(await readFile(f.output,'utf8'),sentinel);
+      for(const [path,hash]of before)assert.equal(sha(await readFile(path)),hash,path);
+    }finally{await f.clean();}
+  });
+}
