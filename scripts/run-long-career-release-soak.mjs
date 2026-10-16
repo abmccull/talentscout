@@ -3,6 +3,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { availableParallelism, cpus, totalmem } from "node:os";
 import { dirname, resolve } from "node:path";
+import { createWorkerOutputRelay } from "./relay-child-output.mjs";
 
 const CHECKPOINT_PROTOCOL_VERSION = 1;
 const seedCount = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
@@ -267,17 +268,23 @@ async function readReusableWorker(seedIndex) {
     : { reusable: false, reason: failures.join("; ") };
 }
 
-async function writeJsonAtomic(path, value) {
+async function writeJsonAtomic(path, value, assertHealthy) {
+  assertHealthy?.();
   await mkdir(dirname(path), { recursive: true });
+  assertHealthy?.();
   const temporaryPath = `${path}.partial-${process.pid}-${randomUUID()}`;
   await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  assertHealthy?.();
   try {
     await rename(temporaryPath, path);
   } catch (error) {
     if (!error || !["EEXIST", "EPERM"].includes(error.code)) throw error;
+    assertHealthy?.();
     await rm(path, { force: true });
+    assertHealthy?.();
     await rename(temporaryPath, path);
   }
+  assertHealthy?.();
 }
 
 const inspections = await Promise.all(
@@ -309,13 +316,21 @@ const plan = {
   determinismReplayRequired: !skipDeterminismReplay,
 };
 
-if (planOnly) {
-  console.info(`SOAK_RELEASE_PLAN ${JSON.stringify(plan)}`);
-  process.exit(0);
-}
+const relay = createWorkerOutputRelay({
+  stdout: process.stdout,
+  stderr: process.stderr,
+  tailCodeUnits: 32_768,
+});
 
+async function runRelease() {
+if (planOnly) {
+  await relay.line("stdout", `SOAK_RELEASE_PLAN ${JSON.stringify(plan)}`);
+  await relay.finish();
+  return;
+}
 await mkdir(workerDirectory, { recursive: true });
-console.info(`SOAK_RELEASE_PLAN ${JSON.stringify(plan)}`);
+relay.assertHealthy();
+await relay.line("stdout", `SOAK_RELEASE_PLAN ${JSON.stringify(plan)}`);
 
 const runs = new Array(seedCount);
 let profile;
@@ -335,6 +350,8 @@ for (const seedIndex of reusableSeedIndices) {
 
 let checkpointWrite = Promise.resolve();
 function writeProgress(status, failure = null) {
+  const guard = status === "Failed" ? undefined : relay.assertHealthy;
+  guard?.();
   const snapshot = {
     schemaVersion: 1,
     evidenceKind: "long-career-release-soak-checkpoint",
@@ -360,7 +377,7 @@ function writeProgress(status, failure = null) {
       .map(([seedIndex]) => seedIndex),
     failure,
   };
-  checkpointWrite = checkpointWrite.then(() => writeJsonAtomic(checkpointPath, snapshot));
+  checkpointWrite = checkpointWrite.then(() => writeJsonAtomic(checkpointPath, snapshot, guard));
   return checkpointWrite;
 }
 
@@ -374,24 +391,23 @@ function assertCandidateUnchanged() {
 }
 
 async function runWorker(seedIndex, suffix = "run") {
+  relay.assertHealthy();
   assertCandidateUnchanged();
   const workerOutput = workerOutputPath(seedIndex, suffix);
   const workerRunId = randomUUID();
   const temporaryWorkerOutput = `${workerOutput}.partial-${process.pid}-${workerRunId}.json`;
   const workerProgressOutput = `${workerOutput}.progress-${workerRunId}.jsonl`;
   const startedAt = Date.now();
-  console.info(
-    `SOAK_WORKER_START seed=${seedIndex}/${seedCount} suffix=${suffix} active=${[
-      ...seedStates.values(),
-    ].filter((state) => state === "Active").length}`,
-  );
+  let workerOutcome;
   try {
-    let workerStdout = "";
-    let workerStderr = "";
-    const retainDiagnosticTail = (current, chunk) =>
-      `${current}${chunk}`.slice(-32_768);
-    await new Promise((resolveWorker, rejectWorker) => {
-      const child = spawn(
+    await relay.line(
+      "stdout",
+      `SOAK_WORKER_START seed=${seedIndex}/${seedCount} suffix=${suffix} active=${[
+        ...seedStates.values(),
+      ].filter((state) => state === "Active").length}`,
+    );
+    relay.assertHealthy();
+    const child = spawn(
         process.execPath,
         [
           ...workerNodeArguments,
@@ -419,13 +435,12 @@ async function runWorker(seedIndex, suffix = "run") {
           stdio: ["ignore", "pipe", "pipe"],
         },
       );
-      child.once("spawn", () => {
+    const ticket = relay.watch(child, { onSpawn() {
         const vitestPid = child.pid;
         if (!Number.isSafeInteger(vitestPid) || (vitestPid ?? 0) <= 0) {
-          rejectWorker(new Error("Actual spawned Vitest PID is unavailable"));
-          return;
+          throw new Error("Actual spawned Vitest PID is unavailable");
         }
-        console.info(`SOAK_WORKER_PROCESS_IDENTITY ${JSON.stringify({
+        return relay.line("stdout", `SOAK_WORKER_PROCESS_IDENTITY ${JSON.stringify({
           schemaVersion: 1,
           evidenceKind: "long-career-release-worker-process-identity-v1",
           workerRunId,
@@ -439,29 +454,22 @@ async function runWorker(seedIndex, suffix = "run") {
           progressPath: workerProgressOutput,
           spawnedAtUtc: new Date().toISOString(),
         })}`);
-      });
-      child.stdout?.on("data", (chunk) => {
-        const text = chunk.toString();
-        workerStdout = retainDiagnosticTail(workerStdout, text);
-        process.stdout.write(text);
-      });
-      child.stderr?.on("data", (chunk) => {
-        const text = chunk.toString();
-        workerStderr = retainDiagnosticTail(workerStderr, text);
-        process.stderr.write(text);
-      });
-      child.once("error", rejectWorker);
-      child.once("exit", (code, signal) => {
-        if (code === 0) resolveWorker();
-        else {
-          const diagnostic = (workerStderr || workerStdout).trim();
-          rejectWorker(new Error(
-            `Soak worker ${seedIndex} failed (${signal ?? code})${diagnostic ? `\n${diagnostic}` : ""}`,
-          ));
-        }
-      });
-    });
+    } });
+    try {
+      workerOutcome = await ticket.done;
+    } catch (error) {
+      workerOutcome = error.outcome;
+      throw error;
+    }
+    relay.assertHealthy();
+    if (workerOutcome.code !== 0) {
+      const diagnostic = (workerOutcome.stderrTail || workerOutcome.stdoutTail).trim();
+      throw new Error(
+        `Soak worker ${seedIndex} failed (${workerOutcome.signal ?? workerOutcome.code})${diagnostic ? `\n${diagnostic}` : ""}`,
+      );
+    }
     const result = JSON.parse(await readFile(temporaryWorkerOutput, "utf8"));
+    relay.assertHealthy();
     const failures = validateWorkerResult(result, seedIndex, false);
     if (failures.length > 0) {
       throw new Error(`Soak worker ${seedIndex} emitted invalid evidence: ${failures.join("; ")}`);
@@ -480,42 +488,53 @@ async function runWorker(seedIndex, suffix = "run") {
         elapsedMs: Date.now() - startedAt,
       },
     };
-    await writeJsonAtomic(workerOutput, completedResult);
+    await writeJsonAtomic(workerOutput, completedResult, relay.assertHealthy);
     await rm(workerOutput.replace(/\.json$/, "-failure.json"), { force: true });
-    console.info(
+    relay.assertHealthy();
+    await relay.line(
+      "stdout",
       `SOAK_WORKER_COMPLETE seed=${seedIndex}/${seedCount} suffix=${suffix} elapsedMinutes=${(
         (Date.now() - startedAt) / 60_000
       ).toFixed(2)}`,
     );
+    relay.assertHealthy();
+    await rm(temporaryWorkerOutput, { force: true });
+    relay.assertHealthy();
     return completedResult;
   } catch (error) {
-    await writeJsonAtomic(
-      workerOutput.replace(/\.json$/, "-failure.json"),
-      {
-        schemaVersion: 2,
-        evidenceKind: "long-career-worker-failure",
-        generatedAt: new Date().toISOString(),
-        candidateCommitSha: currentHeadSha,
-        candidateTreeSha: currentTreeSha,
-        executionIdentityHash,
-        seedIndex,
-        seed: expectedSeed(seedIndex),
-        seasonCount,
-        message: error instanceof Error ? error.message : String(error),
-      },
-    );
-    throw error;
-  } finally {
-    await rm(temporaryWorkerOutput, { force: true });
+    const failure = relay.failure ?? error;
+    try {
+      await writeJsonAtomic(
+        workerOutput.replace(/\.json$/, "-failure.json"),
+        {
+          schemaVersion: 2,
+          evidenceKind: "long-career-worker-failure",
+          generatedAt: new Date().toISOString(),
+          candidateCommitSha: currentHeadSha,
+          candidateTreeSha: currentTreeSha,
+          executionIdentityHash,
+          seedIndex,
+          seed: expectedSeed(seedIndex),
+          seasonCount,
+          message: failure instanceof Error ? failure.message : String(failure),
+          ...(workerOutcome ? { outputOutcome: workerOutcome } : {}),
+        },
+      );
+    } catch {
+      // A diagnostic write must not replace the worker/output failure.
+    }
+    throw relay.failure ?? failure;
   }
 }
 
-await writeProgress("InProgress");
 try {
+  await writeProgress("InProgress");
+  relay.assertHealthy();
   let nextPendingIndex = 0;
   const workerSettlements = await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, pendingSeedIndices.length) }, async () => {
       while (true) {
+        relay.assertHealthy();
         const pendingIndex = nextPendingIndex;
         nextPendingIndex += 1;
         const seedIndex = pendingSeedIndices[pendingIndex];
@@ -524,6 +543,7 @@ try {
         await writeProgress("InProgress");
         try {
           const result = await runWorker(seedIndex);
+          relay.assertHealthy();
           profile ??= result.profile;
           const position = seedPosition.get(seedIndex);
           if (position === undefined) throw new Error(`Unknown completed seed ${seedIndex}`);
@@ -532,15 +552,21 @@ try {
           await writeProgress("InProgress");
         } catch (error) {
           seedStates.set(seedIndex, "Failed");
-          await writeProgress(
-            "Failed",
-            error instanceof Error ? error.message : String(error),
-          );
-          throw error;
+          const failure = relay.failure ?? error;
+          try {
+            await writeProgress(
+              "Failed",
+              failure instanceof Error ? failure.message : String(failure),
+            );
+          } catch {
+            // Preserve the first failure if checkpoint publication also fails.
+          }
+          throw relay.failure ?? failure;
         }
       }
     }),
   );
+  relay.assertHealthy();
   const failedWorker = workerSettlements.find((settlement) => settlement.status === "rejected");
   if (failedWorker?.status === "rejected") throw failedWorker.reason;
 
@@ -552,6 +578,7 @@ try {
   const replayResult = skipDeterminismReplay
     ? null
     : await runWorker(requestedSeedIndices[0], "determinism-replay");
+  relay.assertHealthy();
   const persistenceReplay = replayResult?.runs[0] ?? runs[0];
   if (!skipDeterminismReplay && persistenceReplay.digest !== runs[0].digest) {
     throw new Error(
@@ -636,10 +663,35 @@ try {
     persistenceReplay,
   };
 
-  await writeJsonAtomic(outputPath, summary);
+  await relay.line("stdout", `LONG_CAREER_RELEASE_GATE ${JSON.stringify(summary.aggregate)}`);
+  await relay.finish();
+  relay.assertHealthy();
+  await writeJsonAtomic(outputPath, summary, relay.assertHealthy);
   await writeProgress("Passed");
-  console.info(`LONG_CAREER_RELEASE_GATE ${JSON.stringify(summary.aggregate)}`);
+  relay.assertHealthy();
 } catch (error) {
-  await writeProgress("Failed", error instanceof Error ? error.message : String(error));
-  throw error;
+  const failure = relay.failure ?? error;
+  try {
+    await relay.finish();
+  } catch {
+    // All active children still settle before the first relay failure is rethrown.
+  }
+  try {
+    await writeProgress("Failed", failure instanceof Error ? failure.message : String(failure));
+  } catch {
+    // Preserve the first failure if checkpoint publication also fails.
+  }
+  throw relay.failure ?? failure;
+}
+}
+
+try {
+  await runRelease();
+} catch (error) {
+  try {
+    await relay.finish();
+  } catch {
+    // Includes plan-only/startup failures without replacing their primary cause.
+  }
+  throw relay.failure ?? error;
 }
