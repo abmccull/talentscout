@@ -456,6 +456,22 @@ export class GamePage {
 
     await this.waitForScreen("weekSimulation", 10_000);
 
+    await this.settleCanonicalWeek(sourceSeason, {
+      launchLiveSession,
+      maxLiveSessions,
+      acknowledgeSeasonReview,
+    });
+  }
+
+  /** Settle a week already entered through its real Planner confirmations. */
+  async settleCanonicalWeek(sourceSeason: number, options: {
+    launchLiveSession?: boolean;
+    maxLiveSessions?: number;
+    acknowledgeSeasonReview?: boolean;
+  } = {}): Promise<void> {
+    const { launchLiveSession = false, maxLiveSessions = Number.POSITIVE_INFINITY,
+      acknowledgeSeasonReview = true } = options;
+
     let settlementDeadline = Date.now() + 30_000;
     let completedLiveSessionCount = 0;
     while (Date.now() < settlementDeadline) {

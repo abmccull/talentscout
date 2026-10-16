@@ -49,6 +49,18 @@ function getInitials(name: string): string {
 }
 
 const TARGET_SELECTOR_SEPARATOR = "\u001f";
+const DIALOG_ELEMENT_SELECTOR = 'dialog, [role="dialog"], [role="alertdialog"]';
+const GAME_DIALOG_SELECTOR = 'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+
+function hasVisibleGameDialog(): boolean {
+  return [...document.querySelectorAll<HTMLElement>(GAME_DIALOG_SELECTOR)].some((dialog) => {
+    if (dialog.closest('#mentor-help-panel, [hidden], [inert], [aria-hidden="true"]')) return false;
+    const rect = dialog.getBoundingClientRect();
+    const style = window.getComputedStyle(dialog);
+    return rect.width > 0 && rect.height > 0
+      && style.display !== "none" && style.visibility === "visible";
+  });
+}
 
 function findVisibleTutorialTarget(selectorKey: string): HTMLElement | null {
   if (!selectorKey) return null;
@@ -113,7 +125,9 @@ export function MentorOverlay() {
   const [needsCompact, setNeedsCompact] = useState(false);
   const [manuallyCollapsed, setManuallyCollapsed] = useState(false);
   const [forceExpanded, setForceExpanded] = useState(false);
+  const [gameDialogOpen, setGameDialogOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const cardSizeRef = useRef({ width: 360, height: 220 });
   const continueRef = useRef<HTMLButtonElement>(null);
   const compactButtonRef = useRef<HTMLButtonElement>(null);
   const hideButtonRef = useRef<HTMLButtonElement>(null);
@@ -163,6 +177,7 @@ export function MentorOverlay() {
   const isOffGuidedScreen = activeMode.kind === "guided"
     && currentGameScreen !== activeMode.milestone.screen;
   const isCompact = canCollapse && (manuallyCollapsed || (needsCompact && !forceExpanded));
+  const mentorHidden = isCompact || gameDialogOpen;
 
   useEffect(() => {
     setManuallyCollapsed(false);
@@ -208,6 +223,12 @@ export function MentorOverlay() {
   // ---------------------------------------------------------------------------
 
   const measure = useCallback(() => {
+    const dialogOpen = hasVisibleGameDialog();
+    setGameDialogOpen(dialogOpen);
+    if (dialogOpen) {
+      setTargetRect(null);
+      return;
+    }
     const el = findVisibleTutorialTarget(targetSelectorKey);
     const domRect = el?.getBoundingClientRect();
     const rect: TargetRect | null = domRect ? {
@@ -217,8 +238,14 @@ export function MentorOverlay() {
       height: domRect.height,
     } : null;
     setTargetRect(rect);
-    const cardWidth = cardRef.current?.offsetWidth ?? 360;
-    const cardHeight = cardRef.current?.offsetHeight ?? 220;
+    const measuredWidth = cardRef.current?.offsetWidth ?? 0;
+    const measuredHeight = cardRef.current?.offsetHeight ?? 0;
+    if (measuredWidth > 0 && measuredHeight > 0) {
+      cardSizeRef.current = { width: measuredWidth, height: measuredHeight };
+    }
+    // A suspended card is still display:none for this measurement. Reuse its
+    // real size so resuming help cannot first place a zero-sized card on input.
+    const { width: cardWidth, height: cardHeight } = cardSizeRef.current;
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const safePosition = rect && placeMentorWithoutCoveringTarget(
       rect, preferredSide, { width: cardWidth, height: cardHeight }, viewport,
@@ -256,11 +283,23 @@ export function MentorOverlay() {
     window.addEventListener("scroll", measure, true);
 
     let frame = 0;
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((records) => {
+      const affectsDialog = records.some((record) => record.type === "childList"
+        || (record.target instanceof Element
+          && !record.target.closest("#mentor-help-panel")
+          && (record.attributeName === "role"
+            || record.target.matches(DIALOG_ELEMENT_SELECTOR)
+            || record.target.querySelector(DIALOG_ELEMENT_SELECTOR))));
+      if (!affectsDialog) return;
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(measure);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["open", "role", "aria-modal", "aria-hidden", "hidden", "inert", "style", "class"],
+    });
 
     return () => {
       window.removeEventListener("resize", measure);
@@ -275,6 +314,7 @@ export function MentorOverlay() {
 
     let settleId: number | null = null;
     const id = window.setTimeout(() => {
+      if (hasVisibleGameDialog()) return;
       const target = findVisibleTutorialTarget(targetSelectorKey);
       if (!target) return;
 
@@ -311,6 +351,7 @@ export function MentorOverlay() {
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (hasVisibleGameDialog()) return;
       const target = e.target instanceof Element ? e.target : null;
       const targetDialog = target?.closest('dialog, [role="dialog"], [role="alertdialog"]');
       if (targetDialog && targetDialog !== cardRef.current) return;
@@ -480,9 +521,9 @@ export function MentorOverlay() {
   return (
     <>
       {/* Spotlight — pointerEvents none so the game remains fully interactive */}
-      {!isCompact && <div aria-hidden="true" style={spotlightStyle} />}
+      {!mentorHidden && <div aria-hidden="true" style={spotlightStyle} />}
 
-      {isCompact && (
+      {isCompact && !gameDialogOpen && (
         <div
           role="complementary"
           aria-label={`Mentor: ${title}`}
@@ -508,19 +549,22 @@ export function MentorOverlay() {
         id="mentor-help-panel"
         ref={cardRef}
         role="dialog"
-        aria-modal={trapFocus}
+        aria-modal={trapFocus && !gameDialogOpen}
         aria-label={isCompact ? undefined : `Mentor: ${title}`}
-        aria-hidden={isCompact || undefined}
-        inert={isCompact || undefined}
+        aria-hidden={mentorHidden || undefined}
+        inert={mentorHidden || undefined}
         style={{
+          // Keep the task mounted while the game dialog owns input. display:none
+          // also makes the existing focus trap yield without restoring stale focus.
+          display: gameDialogOpen ? "none" : undefined,
           position: "fixed",
           top: popupPos.top,
           left: popupPos.left,
           width: "min(360px, calc(100vw - 16px))",
           maxHeight: "calc(100dvh - 16px)",
           overflowY: "auto",
-          visibility: isCompact ? "hidden" : "visible",
-          pointerEvents: isCompact ? "none" : "auto",
+          visibility: mentorHidden ? "hidden" : "visible",
+          pointerEvents: mentorHidden ? "none" : "auto",
           zIndex: 9999,
           transition: "top 150ms ease, left 150ms ease",
         }}
