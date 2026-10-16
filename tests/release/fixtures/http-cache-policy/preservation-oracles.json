@@ -1,0 +1,85 @@
+{
+  "schema": "http-cache-policy-precode-preservation-oracles-v1",
+  "scope": "Two literal manual public-API preservation cases; not a replacement/extension of the frozen integration matrix",
+  "candidateExecuted": false,
+  "base": "published http-cache-semantics@4.3.0",
+  "cases": [
+    {
+      "id": "FRESH-SHARED-SMAXAGE-EVALUATE",
+      "method": "evaluateRequest",
+      "options": {
+        "shared": true
+      },
+      "originalRequest": {
+        "url": "http://127.0.0.1/example",
+        "method": "GET",
+        "headers": {
+          "host": "127.0.0.1"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "public, max-age=3600, s-maxage=600",
+          "age": "120",
+          "etag": "\"A\""
+        }
+      },
+      "incomingRequest": {
+        "url": "http://127.0.0.1/example",
+        "method": "GET",
+        "headers": {
+          "host": "127.0.0.1",
+          "cache-control": "max-stale=300"
+        }
+      },
+      "expected": {
+        "responsePresent": true,
+        "responseStatus": 200,
+        "revalidationPresent": false
+      },
+      "boundedTimingAssumption": "Observe within5seconds of construction; freshness margin480seconds. No fake clock."
+    },
+    {
+      "id": "FRESH-SHARED-SMAXAGE-SIE",
+      "method": "revalidatedPolicy",
+      "options": {
+        "shared": true
+      },
+      "originalRequest": {
+        "url": "http://127.0.0.1/example",
+        "method": "GET",
+        "headers": {
+          "host": "127.0.0.1"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "public, max-age=3600, s-maxage=600, stale-if-error=300",
+          "age": "120",
+          "etag": "\"A\""
+        }
+      },
+      "incomingRequest": {
+        "url": "http://127.0.0.1/example",
+        "method": "GET",
+        "headers": {
+          "host": "127.0.0.1"
+        }
+      },
+      "revalidationResponse": {
+        "status": 503,
+        "headers": {
+          "cache-control": "no-store"
+        }
+      },
+      "expected": {
+        "samePolicyIdentity": true,
+        "modified": false,
+        "matches": true
+      },
+      "boundedTimingAssumption": "Observe within5seconds of construction; still fresh. Preserve existing direct API result, no origin/Map integration claim."
+    }
+  ]
+}

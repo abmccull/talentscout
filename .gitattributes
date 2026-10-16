@@ -2,6 +2,10 @@
 
 public/licenses/*.txt text eol=lf
 
+# Keep digest-bound HTTP regression fixtures stable on every checkout.
+tests/release/fixtures/http-cache-policy/*.json text eol=lf
+
 # Preserve reviewed vendor payload bytes across Windows checkouts.
 vendor/braces-depth-guard/** -text
+vendor/http-cache-policy/** -text
 vendor/*.tgz -text

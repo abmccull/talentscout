@@ -55,6 +55,19 @@ jobs:
           path: artifacts/release/generated/braces-depth-guard-e2e-*/
           if-no-files-found: error
           retention-days: 30
+      - name: Installed HTTP cache policy real-consumer regression
+        id: http-cache-policy
+        run: npm run test:http-cache-policy
+
+      - name: Upload HTTP cache policy regression evidence
+        if: ${{ always() && (steps.http-cache-policy.outcome == 'success' || steps.http-cache-policy.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: http-cache-policy-evidence
+          path: artifacts/release/generated/http-cache-policy-e2e-*/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=moderate
 

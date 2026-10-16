@@ -1,0 +1,66 @@
+{
+  "schema": "talentscout-http-cache-policy-upstream-v1",
+  "derivative": {
+    "name": "@talentscout/http-cache-policy",
+    "version": "4.3.0-ts.1",
+    "private": true,
+    "published": false
+  },
+  "upstream": {
+    "name": "http-cache-semantics",
+    "version": "4.3.0",
+    "repository": "https://github.com/kornelski/http-cache-semantics",
+    "gitCommit": "b1d4bd682fbab0252985de45219f4e7497c0067c",
+    "license": "BSD-2-Clause",
+    "copyright": "Copyright 2016-2018 Kornel Lesiński",
+    "originalArchive": {
+      "bytes": 14074,
+      "sha256": "d75e1e6a11587954da5e2f0e2b5c4b397a16d28cc2f7bdf64e9027fc2fe593ee",
+      "integrity": "sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA=="
+    },
+    "originalRuntime": {
+      "bytes": 35882,
+      "sha256": "ede1cc404a492fa348eb9d97a3007a0d72aa717bd22cd86a56bd0824c19729ca"
+    },
+    "completeFourMembersMatchExactPublishedCommit": true
+  },
+  "localArchive": {
+    "file": "talentscout-http-cache-policy-4.3.0-ts.1.tgz",
+    "bytes": 14176,
+    "sha256": "c006ee20e7141ddf901d4afc71c2cf7642f1f5ba8f0ab625ee7b61f7cd6476ec",
+    "integrity": "sha512-70Pg7dJ/UIvgwBzu2lxMjx5VWcipatlGIcM6b6OaetOpJH+yLweJXpvmr4O0/UqAYhr01OZ5ah+4YRjWEj+Kjw=="
+  },
+  "candidateRuntime": {
+    "bytes": 36685,
+    "sha256": "9073361ea5a25272688b3433790ec0bcdfb6d6fa4eb8f4d285aea5b9e8d93c98"
+  },
+  "changes": [
+    "Response no-cache uses the existing synchronous revalidation path.",
+    "Shared stale proxy-revalidate or own s-maxage cannot bypass revalidation through stale permissions.",
+    "Stale-if-error fallback requires the existing request/variant match and respects the declared mandatory-validation policy."
+  ],
+  "preserved": [
+    "Upstream CommonJS API, serialization, freshness and SIE/SWR arithmetic, response/304 merge tail, original license and README.",
+    "Fresh shared s-maxage, private-cache distinctions, cookie and ordinary max-stale compatibility controls.",
+    "All published 4.3 status and Vary fixes."
+  ],
+  "preImplementationCatalogs": {
+    "http8": "290d085d2c18ebb9eed7c647c544b2e7379fcd88a05298524945171683b4cc29",
+    "sie6": "14d013f7c1c68890b988241cbfaecb055d8920b84bfa5229bff17c22e82cb100",
+    "vary2": "3081193675c6f7d845021fdf6d6aeec1ea8afa3edd358d62e22cc68a2e86a033",
+    "directApiPreservation": "8d419d07418bdb7f596751fc61d0957a656099889ecee2e2b4f194adf3c67862"
+  },
+  "localPairedProof": {
+    "cases": 16,
+    "baselineAndCandidateOutcomes": 32,
+    "allPassed": true,
+    "verificationBytes": 77745,
+    "verificationSha256": "c1f9a0da8c48dffa8276a4965c17fbf0c1de85b2d0cc0aac419a89ea497a1ddc",
+    "scope": "Actual Got11.8.6 through Cacheable-request7.0.4 with Keyv4.5.4 and json-buffer3.0.1. Nine baseline defects reproduced; seven compatibility controls retained. Complete isolated graphs differ only in this policy package."
+  },
+  "limits": [
+    "Conservative precedence over optional stale-if-error is the declared local production policy, not a new upstream compliance or vulnerability verdict.",
+    "This package identity is not a scanner waiver. Qualified/invalid directives, additional direct API, HEAD, network-error and invalid304 variants are not newly certified.",
+    "Local paired proof does not establish Source installation, remote CI, platform package or production release readiness."
+  ]
+}

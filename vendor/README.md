@@ -1,4 +1,4 @@
-# Reviewed Braces depth guard
+# Reviewed local dependencies
 
 The root `braces` file dependency and `$braces` override select the private
 `@talentscout/braces-depth-guard@3.0.3-ts.2` archive in this directory. Use the
@@ -26,3 +26,25 @@ or remediate unrelated dependency findings.
 Do not replace this with an upstream master snapshot, change its identity to
 hide scanner findings, or regenerate the tarball without reviewing its source,
 retaining the original license/provenance, and rerunning compatibility checks.
+
+## HTTP cache policy
+
+The root `http-cache-semantics` file dependency and matching override select the
+private `@talentscout/http-cache-policy@4.3.0-ts.1` archive. The readable
+`http-cache-policy/` directory retains its four package files and separate
+`UPSTREAM.json` provenance. The archive is the installation input; its SHA-256 is
+`c006ee20e7141ddf901d4afc71c2cf7642f1f5ba8f0ab625ee7b61f7cd6476ec`.
+
+This derivative retains the complete published 4.3.0 package, BSD-2-Clause
+license and attribution. Three guards enforce required revalidation and request
+variant matching before stale fallback. Fresh/private/cache compatibility and
+upstream freshness arithmetic and 304 merging remain. Conservative precedence
+over optional stale-if-error is the declared local policy; additional protocol
+variants are outside the bounded acceptance.
+
+Before integration, all 16 frozen cases passed for both baseline and candidate
+through real Got/Cacheable-request/Keyv consumers: 32 outcomes, with complete
+isolated graph and actual process/socket/descriptor closure evidence. The
+installed-consumer gate `npm run test:http-cache-policy` covers all 16 cases plus
+two separately identified fresh direct API controls and retains JSON artifacts.
+These local checks do not establish remote CI, platform or release readiness.
