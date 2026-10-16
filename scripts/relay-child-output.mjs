@@ -4,10 +4,17 @@ import { StringDecoder } from "node:string_decoder";
 // One session shares destination gates across all concurrent workers. It owns
 // neither the children nor the caller's destinations. A sink failure invalidates
 // the run; later bytes are counted/hashed and explicitly dropped, never retried.
-export function createWorkerOutputRelay({ stdout, stderr, tailCodeUnits = 32_768 }) {
+export function createWorkerOutputRelay({ stdout, stderr, tailCodeUnits = 32_768, maxOutputBytes }) {
   if (!Number.isSafeInteger(tailCodeUnits) || tailCodeUnits <= 0) {
     throw new TypeError("A positive diagnostic tail bound is required");
   }
+  if (
+    maxOutputBytes !== undefined
+    && (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0)
+  ) {
+    throw new TypeError("maxOutputBytes must be a positive safe integer when supplied");
+  }
+  let chargedBytes = 0;
   const gates = new Map();
   const tickets = new Set();
   let failure = null;
@@ -20,6 +27,20 @@ export function createWorkerOutputRelay({ stdout, stderr, tailCodeUnits = 32_768
   function fail(error) {
     failure ??= error instanceof Error ? error : new Error(String(error));
     for (const gate of gates.values()) gate.stop();
+  }
+
+  function admit(bytes) {
+    if (failure) return false;
+    // Omission preserves unmetered behavior and the null/0 budget snapshot.
+    if (maxOutputBytes === undefined) return true;
+    if (bytes.length > maxOutputBytes - chargedBytes) {
+      const error = new Error("Worker output exceeds cumulative byte allowance");
+      error.code = "ERR_WORKER_OUTPUT_QUOTA";
+      fail(error);
+      return false;
+    }
+    chargedBytes += bytes.length;
+    return true;
   }
 
   function destination(stream) {
@@ -139,7 +160,8 @@ export function createWorkerOutputRelay({ stdout, stderr, tailCodeUnits = 32_768
     assertHealthy();
     if (finishing) throw new Error("Worker output relay is already finishing");
     if (!Object.hasOwn(channels, channel)) throw new TypeError("Unknown output channel");
-    await channels[channel].write(Buffer.from(`${text}\n`, "utf8"));
+    const bytes = Buffer.from(`${text}\n`, "utf8");
+    if (admit(bytes)) await channels[channel].write(bytes);
     assertHealthy();
   }
 
@@ -223,7 +245,7 @@ export function createWorkerOutputRelay({ stdout, stderr, tailCodeUnits = 32_768
           state.observedBytes += bytes.length;
           state.hash.update(bytes);
           append(state, state.decoder.write(bytes));
-          const disposition = failure ? "dropped" : await channels[channel].write(bytes);
+          const disposition = admit(bytes) ? await channels[channel].write(bytes) : "dropped";
           state[`${disposition}Bytes`] += bytes.length;
         }
         normalEnd = true;
@@ -279,5 +301,9 @@ export function createWorkerOutputRelay({ stdout, stderr, tailCodeUnits = 32_768
     })();
     return completion;
   }
-  return { line, watch, finish, assertHealthy, get failure() { return failure; } };
+  return {
+    line, watch, finish, assertHealthy,
+    get failure() { return failure; },
+    get outputBudget() { return { limitBytes: maxOutputBytes ?? null, chargedBytes }; },
+  };
 }

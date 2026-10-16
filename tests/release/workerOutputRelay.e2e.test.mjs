@@ -10,11 +10,18 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, basename, join, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const source = resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const requestedSource = process.env.TALENTSCOUT_WORKER_OUTPUT_SOURCE;
+if (requestedSource !== undefined) assert(requestedSource && resolve(requestedSource) === requestedSource,
+  'Explicit test Source must be an absolute canonical path');
+const source = requestedSource ?? resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const quotaMode = process.env.TALENTSCOUT_WORKER_OUTPUT_QUOTA_MODE ?? 'candidate';
+assert(['baseline', 'candidate'].includes(quotaMode), 'Explicit baseline/candidate quota mode required');
+const quotaDataPath = fileURLToPath(new URL('./fixtures/worker-output-quota-cases.json', import.meta.url));
+let quotaCases;
 const fixturePath = fileURLToPath(new URL('./fixtures/worker-output-child.mjs', import.meta.url));
-const relayURL = new URL('../../scripts/relay-child-output.mjs', import.meta.url);
+const relayURL = pathToFileURL(join(source, 'scripts/relay-child-output.mjs'));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 let owner, createWorkerOutputRelay, importFailure;
 const caseResults = [];
@@ -31,6 +38,14 @@ const deferred = () => {
 };
 
 before(async () => {
+  quotaCases = JSON.parse(await readFile(quotaDataPath, 'utf8'));
+  assert.equal(quotaCases.schemaVersion, 1);
+  assert.deepEqual(quotaCases.modes, ['baseline', 'candidate']);
+  assert.equal(quotaCases.diagnosticControls.caseTimeoutMs, 30000);
+  assert.equal(quotaCases.diagnosticControls.maxNewConcurrentChildren, 3);
+  assert.equal(quotaCases.diagnosticControls.maxNewRecipeBytesPerChannel, 64);
+  assert.equal(text(quotaCases.marker.text + '\n').toString('hex'), quotaCases.marker.utf8WithLfHex);
+  assert.equal(text(quotaCases.marker.text + '\n').length, quotaCases.marker.bytes);
   const configured = process.env.TALENTSCOUT_WORKER_OUTPUT_EVIDENCE;
   if (configured !== undefined) {
     assert(configured && resolve(configured) === configured, 'Explicit evidence owner must be absolute/canonical');
@@ -47,7 +62,7 @@ before(async () => {
   await mkdir(owner); // Exclusive: preserve every prior owner.
   console.info('TALENTSCOUT_WORKER_OUTPUT_EVIDENCE ' + owner);
   const inputs = [];
-  for (const path of [fileURLToPath(import.meta.url), fixturePath, fileURLToPath(relayURL)]) {
+  for (const path of [fileURLToPath(import.meta.url), fixturePath, quotaDataPath, fileURLToPath(relayURL)]) {
     try { const bytes = await readFile(path); inputs.push({ path, bytes: bytes.length, sha256: sha(bytes) }); }
     catch (error) { if (error.code !== 'ENOENT') throw error; inputs.push({ path, missing: true }); }
   }
@@ -76,7 +91,7 @@ after(async () => {
   await inventory(owner);
   await writeFile(join(owner, 'manifest.json'), JSON.stringify({
     schemaVersion: 1, evidenceKind: 'real-worker-output-relay-e2e',
-    owner, cases: caseResults, files: files.sort((a, b) => a.path.localeCompare(b.path)),
+    owner, quotaMode, cases: caseResults, files: files.sort((a, b) => a.path.localeCompare(b.path)),
     nativeAcceptance: false, capacityAccepted: false, fullCareerAcceptance: false,
   }, null, 2) + '\n', { flag: 'wx' });
 });
@@ -147,11 +162,13 @@ async function actualFile(context, name, { cork = false, failFirstWrite = false 
     const originalCallback = typeof encoding === 'function' ? encoding : callback;
     counters.calls += 1;
     if (file.firstBuffer === null) file.firstBuffer = Buffer.from(bytes);
+    if (file.onAttempt) file.onAttempt(bytes);
     if (file.failFirstWrite) { file.failFirstWrite = false; stream.end(); }
     const done = error => {
       counters.callbackCalls += 1;
       if (error) { file.firstError ??= error; errorSeen.resolve(error); }
       else counters.handledBytes += bytes.length;
+      if (file.onCompletion) file.onCompletion(bytes, error);
       if (originalCallback) originalCallback(error);
     };
     const returned = typeof encoding === 'string'
@@ -251,7 +268,7 @@ function e2e(name, exercise) {
         error: failure ? { name: failure.name, code: failure.code ?? null } : null,
         children: context.children.map(item => ({ pid: item.child.pid ?? null, mode: item.mode,
           actualClosed: item.closed, code: item.exitCode ?? null, signal: item.signal ?? null })),
-        outcomes: context.outcomes,
+        outcomes: context.outcomes, quotaFacts: context.quotaFacts ?? null,
         files: await Promise.all(context.files.map(async file => {
           const bytes = await readFile(file.path);
           return { name: basename(file.path), bytes: bytes.length, sha256: sha(bytes), ...file.counters };
@@ -267,6 +284,8 @@ function e2e(name, exercise) {
   });
 }
 
+
+if (quotaMode === 'candidate') {
 e2e('01-split raw split UTF8 reaches real files and streaming diagnostic tails', async context => {
   const out = await actualFile(context, 'stdout.bin'), err = await actualFile(context, 'stderr.bin');
   const relay = createWorkerOutputRelay({ stdout: out.stream, stderr: err.stream, tailCodeUnits: 32768 });
@@ -550,3 +569,356 @@ e2e('08-cleanup aliases and caller-owned destination survive sequential children
   for (let byte = 0; byte < 64; byte += 1) assert.equal([...prefix].filter(value => value === byte).length, 2);
   assert.deepEqual(bytes.subarray(prefix.length), Buffer.concat([text('CALLER-MARKER\n'), sentinel]));
 });
+
+function budgetSnapshot(relay, limit, charged) {
+  const snapshot = relay.outputBudget;
+  assert(snapshot && typeof snapshot === 'object', 'Real relay exposes an outputBudget snapshot');
+  assert.deepEqual(Object.keys(snapshot).sort(), quotaCases.mechanism.snapshotKeys);
+  assert.equal(snapshot.limitBytes, limit);
+  assert(Number.isSafeInteger(snapshot.chargedBytes) && snapshot.chargedBytes >= 0);
+  assert(snapshot.chargedBytes <= snapshot.limitBytes, 'Admission never overspends the session allowance');
+  if (charged !== undefined) assert.equal(snapshot.chargedBytes, charged);
+  return snapshot;
+}
+function quotaAttemptEvidence(context, relay, files) {
+  const attempts = [];
+  for (const file of new Set(files)) {
+    file.onAttempt = bytes => {
+      assert(attempts.length < quotaCases.diagnosticControls.maxAttemptObservationsPerQuotaCase);
+      const value = relay.outputBudget;
+      assert(bytes.length <= quotaCases.diagnosticControls.maxNewRecipeBytesPerChannel);
+      attempts.push({ file: basename(file.path), bytes: bytes.length, hex: bytes.toString('hex'),
+        limitBytes: value?.limitBytes ?? null, chargedBytes: value?.chargedBytes ?? null });
+    };
+  }
+  context.quotaFacts = { attempts };
+  return attempts;
+}
+function assertAttemptCharges(attempts, limit) {
+  let attempted = 0;
+  for (const value of attempts) {
+    attempted += value.bytes;
+    assert.equal(value.limitBytes, limit);
+    assert(Number.isSafeInteger(value.chargedBytes));
+    assert(value.chargedBytes >= attempted, 'Complete byte charge precedes the actual underlying write attempt');
+    assert(value.chargedBytes <= limit);
+  }
+  return attempted;
+}
+function handledPrefix(file, expected) {
+  const ready = deferred(), parts = [];
+  let count = 0;
+  file.onCompletion = (bytes, error) => {
+    if (error) { ready.reject(error); return; }
+    parts.push(Buffer.from(bytes)); count += bytes.length;
+    if (count >= expected.length) ready.resolve(Buffer.concat(parts));
+  };
+  return ready.promise;
+}
+async function expectQuotaFinish(relay, firstFailure) {
+  assert.equal(relay.failure, firstFailure);
+  assert.equal(firstFailure.code, quotaCases.mechanism.quotaErrorCode);
+  assert.throws(() => relay.assertHealthy(), error => error === firstFailure);
+  await assert.rejects(relay.finish(), error => error === firstFailure);
+  assert.equal(relay.failure, firstFailure);
+}
+
+e2e('09-quota-exact aliases count UTF8 marker LF and both raw worker channels once', async context => {
+  const q = quotaCases.Q09, marker = Buffer.from(quotaCases.marker.utf8WithLfHex, 'hex');
+  const file = await actualFile(context, 'combined.bin');
+  const relay = createWorkerOutputRelay({ stdout: file.stream, stderr: file.stream,
+    tailCodeUnits: 32768, maxOutputBytes: q.limitBytes });
+  const attempts = quotaAttemptEvidence(context, relay, [file]);
+  budgetSnapshot(relay, q.limitBytes, 0);
+  await relay.line('stdout', quotaCases.marker.text);
+  budgetSnapshot(relay, q.limitBytes, marker.length);
+  const child = childFixture(context, 'quota-exact'), record = watch(context, relay, child);
+  await child.message('ready'); send(child.child, 'start');
+  const result = await record.settled;
+  assert.equal(result.ok, true, result.error?.message); assert.equal(child.closed, true);
+  assert.equal(result.outcome.code, 0); assert.equal(result.outcome.signal, null);
+  const out = Buffer.from(q.workerStdoutHex, 'hex'), err = Buffer.from(q.workerStderrHex, 'hex');
+  assertStats(result.outcome.outputStats.stdout, out);
+  assertStats(result.outcome.outputStats.stderr, err);
+  const detached = budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+  try { detached.chargedBytes = -1; } catch {}
+  budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+  assert.equal(assertAttemptCharges(attempts, q.limitBytes), q.limitBytes);
+  await relay.finish(); await finishFile(file);
+  const actual = await readFile(file.path);
+  assert.equal(actual.length, q.limitBytes); assert.deepEqual(actual.subarray(0, marker.length), marker);
+  const rest = actual.subarray(marker.length);
+  assert.deepEqual(Buffer.from([...rest].filter(byte => out.includes(byte))), out);
+  assert.deepEqual(Buffer.from([...rest].filter(byte => err.includes(byte))), err);
+  context.quotaFacts.finalBudget = budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+});
+
+e2e('10-quota-plus-one real over-limit byte is dropped and existing child remains watched', async context => {
+  const q = quotaCases.Q10, marker = Buffer.from(quotaCases.marker.utf8WithLfHex, 'hex');
+  const out = await actualFile(context, 'stdout.bin'), err = await actualFile(context, 'stderr.bin');
+  const relay = createWorkerOutputRelay({ stdout: out.stream, stderr: err.stream,
+    tailCodeUnits: 32768, maxOutputBytes: q.limitBytes });
+  const attempts = quotaAttemptEvidence(context, relay, [out, err]);
+  await relay.line('stdout', quotaCases.marker.text);
+  const approved = Buffer.from(q.approvedStdoutHex, 'hex');
+  const approvedHandled = handledPrefix(out, approved);
+  const child = childFixture(context, 'quota-plus-one'), record = watch(context, relay, child);
+  const existing = childFixture(context, q.lateExistingRecipe, q.lateExistingIndex);
+  await Promise.all([child.message('ready'), existing.message('ready')]);
+  send(child.child, 'start');
+  assert.deepEqual(await approvedHandled, approved);
+  budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+  send(child.child, 'extra');
+  const result = await record.settled;
+  assert.equal(result.ok, false); assert.equal(child.closed, true);
+  assert.equal(result.outcome.code, 0); assert.equal(result.outcome.signal, null);
+  const firstFailure = relay.failure;
+  assert.equal(firstFailure.code, quotaCases.mechanism.quotaErrorCode);
+  const overflow = Buffer.from(q.overflowStdoutHex, 'hex');
+  assertStats(result.outcome.outputStats.stdout, Buffer.concat([approved, overflow]),
+    { handled: approved.length, dropped: overflow.length });
+  assertStats(result.outcome.outputStats.stderr, Buffer.alloc(0));
+  const count = context.children.length;
+  assert.throws(() => { relay.assertHealthy(); childFixture(context, 'empty'); }, error => error === firstFailure);
+  assert.equal(context.children.length, count, 'Guarded admission creates no new child');
+  const late = watch(context, relay, existing);
+  send(existing.child, 'start');
+  const lateResult = await late.settled;
+  assert.equal(lateResult.ok, false); assert.equal(existing.closed, true);
+  assert.equal(lateResult.outcome.code, 0); assert.equal(lateResult.outcome.signal, null);
+  const bytes = Buffer.from(Array.from({ length: 64 }, (_, n) => q.lateExistingIndex * 64 + n));
+  assertStats(lateResult.outcome.outputStats.stdout, bytes, { handled: 0, dropped: bytes.length });
+  assertStats(lateResult.outcome.outputStats.stderr, Buffer.from(bytes).reverse(), { handled: 0, dropped: bytes.length });
+  await assert.rejects(relay.line('stderr', 'after-failure'), error => error === firstFailure);
+  await expectQuotaFinish(relay, firstFailure);
+  budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+  assert.equal(assertAttemptCharges(attempts, q.limitBytes), marker.length + approved.length);
+  assert.equal(err.counters.calls, 0);
+  await finishFile(out); await finishFile(err);
+  assert.deepEqual(await readFile(out.path), Buffer.from(q.expectedFileStdoutHex, 'hex'));
+  assert.equal((await readFile(err.path)).length, 0);
+  context.quotaFacts.finalBudget = budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+});
+
+e2e('11-quota-markers exact UTF8 plus LF and whole oversized marker admission', async context => {
+  const q = quotaCases.Q11, marker = Buffer.from(quotaCases.marker.utf8WithLfHex, 'hex');
+  const out = await actualFile(context, 'stdout.bin'), err = await actualFile(context, 'stderr.bin');
+  const relay = createWorkerOutputRelay({ stdout: out.stream, stderr: err.stream,
+    tailCodeUnits: 32768, maxOutputBytes: q.limitBytes });
+  const attempts = quotaAttemptEvidence(context, relay, [out, err]);
+  await relay.line('stdout', quotaCases.marker.text);
+  budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+  await assert.rejects(relay.line('stderr', q.nextMarkerText), error => error.code === quotaCases.mechanism.quotaErrorCode);
+  const firstFailure = relay.failure;
+  await assert.rejects(relay.line('stdout', 'later'), error => error === firstFailure);
+  await expectQuotaFinish(relay, firstFailure);
+  assert.equal(assertAttemptCharges(attempts, q.limitBytes), q.limitBytes);
+  assert.equal(err.counters.calls, 0);
+  await finishFile(out); await finishFile(err);
+  assert.deepEqual(await readFile(out.path), marker); assert.equal((await readFile(err.path)).length, 0);
+  const overOut = await actualFile(context, 'oversized-stdout.bin');
+  const overErr = await actualFile(context, 'oversized-stderr.bin');
+  const over = createWorkerOutputRelay({ stdout: overOut.stream, stderr: overErr.stream,
+    tailCodeUnits: 32768, maxOutputBytes: q.oversizedSessionLimitBytes });
+  await assert.rejects(over.line('stdout', quotaCases.marker.text), error => error.code === quotaCases.mechanism.quotaErrorCode);
+  const overFailure = over.failure;
+  await expectQuotaFinish(over, overFailure);
+  budgetSnapshot(over, q.oversizedSessionLimitBytes, q.expectedOversizedSessionChargedBytes);
+  assert.equal(overOut.counters.calls, 0); assert.equal(overErr.counters.calls, 0);
+  await finishFile(overOut); await finishFile(overErr);
+  assert.equal((await readFile(overOut.path)).length, 0); assert.equal((await readFile(overErr.path)).length, 0);
+  context.quotaFacts.finalBudget = budgetSnapshot(relay, q.limitBytes, q.expectedChargedBytes);
+  context.quotaFacts.oversizedBudget = budgetSnapshot(over, q.oversizedSessionLimitBytes, 0);
+});
+
+e2e('12-quota-c3 shared destinations cannot admit three late bytes into two remaining slots', async context => {
+  const q = quotaCases.Q12, marker = Buffer.from(quotaCases.marker.utf8WithLfHex, 'hex');
+  const out = await actualFile(context, 'stdout.bin'), err = await actualFile(context, 'stderr.bin');
+  const relay = createWorkerOutputRelay({ stdout: out.stream, stderr: err.stream,
+    tailCodeUnits: 32768, maxOutputBytes: q.limitBytes });
+  const attempts = quotaAttemptEvidence(context, relay, [out, err]);
+  await relay.line('stdout', quotaCases.marker.text);
+  const firstHandled = handledPrefix(out, Buffer.alloc(q.firstStdoutByteHex.length));
+  const firstAttempt = deferred();
+  out.onWrite = () => firstAttempt.resolve();
+  out.stream.cork();
+  const workers = Array.from({ length: 3 }, (_, index) => {
+    const child = childFixture(context, 'quota-c3', index);
+    return { child, record: watch(context, relay, child), index };
+  });
+  await Promise.all(workers.map(({ child }) => child.message('ready')));
+  workers.forEach(({ child }) => send(child.child, 'start'));
+  await Promise.all(workers.map(({ child }) => child.message('first-written')));
+  await firstAttempt.promise;
+  assert.equal(out.counters.calls, 2, 'Marker plus one real blocked write; c3 shares the actual gate');
+  assert.equal(out.counters.callbackCalls, 1);
+  assert.equal(out.stream.bytesWritten, marker.length);
+  out.stream.uncork();
+  const firstBytes = await firstHandled;
+  assert.deepEqual([...firstBytes].sort((a, b) => a - b), q.firstStdoutByteHex.map(value => Number.parseInt(value, 16)));
+  budgetSnapshot(relay, q.limitBytes, q.expectedChargeAfterFirstPhase);
+  out.onWrite = null; out.onCompletion = null;
+  err.stream.cork();
+  workers.forEach(({ child }) => send(child.child, 'last-byte'));
+  await Promise.all(workers.map(({ child }) => child.exit.promise));
+  let checks = 0;
+  while (checks < quotaCases.diagnosticControls.quotaFailurePollAttempts && !relay.failure) {
+    checks += 1;
+    await new Promise(resolveCheck => setTimeout(resolveCheck, quotaCases.diagnosticControls.quotaFailurePollIntervalMs));
+  }
+  context.quotaFacts.quotaObservationChecks = checks;
+  const firstFailure = relay.failure;
+  assert(firstFailure, 'Finite quota-failure observation allowance exhausted');
+  assert.equal(firstFailure.code, quotaCases.mechanism.quotaErrorCode);
+  budgetSnapshot(relay, q.limitBytes, q.expectedFinalChargedBytes);
+  assert.equal(err.counters.calls, 1, 'Only the first already-issued actual stderr write precedes quota failure');
+  assert.equal(err.counters.callbackCalls, 0); assert.equal(err.stream.bytesWritten, 0);
+  assert(workers.some(({ record }) => !record.finished), 'Real blocked write still prevents completion');
+  err.stream.uncork();
+  const results = await Promise.all(workers.map(({ record }) => record.settled));
+  await expectQuotaFinish(relay, firstFailure);
+  await finishFile(out); await finishFile(err);
+  const stdout = await readFile(out.path), stderr = await readFile(err.path);
+  assert.deepEqual(stdout.subarray(0, marker.length), marker);
+  assert.deepEqual([...stdout.subarray(marker.length)].sort((a, b) => a - b),
+    q.firstStdoutByteHex.map(value => Number.parseInt(value, 16)));
+  assert.equal(stderr.length, q.expectedHandledLateBytesWhileHeldUntilFailure);
+  assert(q.lastStderrByteHex.some(value => Buffer.from(value, 'hex').equals(stderr)));
+  for (let index = 0; index < workers.length; index += 1) {
+    const result = results[index];
+    assert.equal(result.ok, false); assert.equal(workers[index].child.closed, true);
+    assert.equal(result.outcome.code, 0); assert.equal(result.outcome.signal, null);
+    const a = Buffer.from(q.firstStdoutByteHex[index], 'hex'), b = Buffer.from(q.lastStderrByteHex[index], 'hex');
+    assertStats(result.outcome.outputStats.stdout, a);
+    const handled = stderr.includes(b[0]) ? 1 : 0;
+    assertStats(result.outcome.outputStats.stderr, b, { handled, dropped: b.length - handled });
+  }
+  assert.equal(assertAttemptCharges(attempts, q.limitBytes), q.expectedFinalChargedBytes - 1,
+    'One admitted queued byte remains charged after it is dropped without an attempt');
+  context.quotaFacts.finalBudget = budgetSnapshot(relay, q.limitBytes, q.expectedFinalChargedBytes);
+});
+
+e2e('13-quota-uncertain actual failed write remains charged and session never retries', async context => {
+  const q = quotaCases.Q13, marker = Buffer.from(quotaCases.marker.utf8WithLfHex, 'hex');
+  const out = await actualFile(context, 'stdout.bin'), err = await actualFile(context, 'stderr.bin');
+  const relay = createWorkerOutputRelay({ stdout: out.stream, stderr: err.stream,
+    tailCodeUnits: 32768, maxOutputBytes: q.limitBytes });
+  const attempts = quotaAttemptEvidence(context, relay, [out, err]);
+  await relay.line('stdout', quotaCases.marker.text);
+  out.failFirstWrite = true;
+  const child = childFixture(context, 'sink-error'), record = watch(context, relay, child);
+  const existing = childFixture(context, q.lateExistingRecipe, q.lateExistingIndex);
+  await Promise.all([child.message('ready'), existing.message('ready')]);
+  send(child.child, 'start');
+  const actualError = await out.errorSeen.promise;
+  assert.equal(actualError.code, q.expectedActualErrorCode);
+  const firstFailure = relay.failure;
+  assert(firstFailure); assert.notEqual(firstFailure.code, quotaCases.mechanism.quotaErrorCode);
+  const attempted = attempts[attempts.length - 1];
+  assert.equal(attempts.length, 2, 'Handled marker plus exactly one actual uncertain write attempt');
+  const first = text(q.firstText), droppedOut = text(q.laterStdoutText), droppedErr = text(q.laterStderrText);
+  assert(attempted.bytes > 0 && attempted.bytes <= first.length);
+  assert.deepEqual(Buffer.from(attempted.hex, 'hex'), first.subarray(0, attempted.bytes));
+  const charged = marker.length + attempted.bytes;
+  budgetSnapshot(relay, q.limitBytes, charged);
+  const late = watch(context, relay, existing);
+  send(child.child, 'after-failure'); send(existing.child, 'start');
+  const result = await record.settled, lateResult = await late.settled;
+  assert.equal(result.ok, false); assert.equal(lateResult.ok, false);
+  assert.equal(child.closed, true); assert.equal(existing.closed, true);
+  assert.equal(result.outcome.code, 0); assert.equal(result.outcome.signal, null);
+  assert.equal(lateResult.outcome.code, 0); assert.equal(lateResult.outcome.signal, null);
+  assertStats(result.outcome.outputStats.stdout, Buffer.concat([first, droppedOut]),
+    { handled: 0, uncertain: attempted.bytes, dropped: first.length - attempted.bytes + droppedOut.length });
+  assertStats(result.outcome.outputStats.stderr, droppedErr, { handled: 0, dropped: droppedErr.length });
+  const bytes = Buffer.from(Array.from({ length: 64 }, (_, n) => q.lateExistingIndex * 64 + n));
+  assertStats(lateResult.outcome.outputStats.stdout, bytes, { handled: 0, dropped: bytes.length });
+  assertStats(lateResult.outcome.outputStats.stderr, Buffer.from(bytes).reverse(), { handled: 0, dropped: bytes.length });
+  await assert.rejects(relay.line('stderr', 'no-retry'), error => error === firstFailure);
+  await assert.rejects(relay.finish(), error => error === firstFailure);
+  assert.equal(relay.failure, firstFailure);
+  assert.equal(assertAttemptCharges(attempts, q.limitBytes), charged);
+  assert.equal(out.counters.calls, 2); assert.equal(err.counters.calls, 0);
+  assert.equal(out.counters.handledBytes, marker.length);
+  await finishFile(out); await finishFile(err);
+  assert.deepEqual(await readFile(out.path), marker); assert.equal((await readFile(err.path)).length, 0);
+  context.quotaFacts.actualStreamErrorCode = actualError.code;
+  context.quotaFacts.finalBudget = budgetSnapshot(relay, q.limitBytes, charged);
+});
+
+
+e2e('14-quota-invalid actual open files receive no writes from invalid allowance construction', async context => {
+  const q = quotaCases.Q14;
+  const out = await actualFile(context, 'stdout.bin'), err = await actualFile(context, 'stderr.bin');
+  const invalid = [
+    ['zero', 0], ['negative', -1], ['fractional', 0.5],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1], ['nan', Number.NaN],
+    ['infinity', Number.POSITIVE_INFINITY], ['null', null], ['string', '8'],
+  ];
+  assert.deepEqual(invalid.map(([name]) => name), q.invalidValueNames);
+  const events = ['error', 'close', 'drain', 'finish'];
+  const baseline = [out, err].map(file => events.map(event => file.stream.listenerCount(event)));
+  let refused = 0;
+  for (const [name, value] of invalid) {
+    assert.throws(() => createWorkerOutputRelay({ stdout: out.stream, stderr: err.stream,
+      tailCodeUnits: 32768, maxOutputBytes: value }),
+      error => error instanceof Error, 'Synchronous invalid allowance refusal: ' + name);
+    refused += 1;
+    assert.equal(out.counters.calls + err.counters.calls, q.expectedDelegatedSinkWrites);
+    assert.equal(context.children.length, q.expectedChildren);
+    for (let index = 0; index < 2; index += 1) {
+      const file = [out, err][index];
+      assert.equal(file.stream.destroyed, false); assert.equal(file.stream.writableEnded, false);
+      assert.deepEqual(events.map(event => file.stream.listenerCount(event)), baseline[index],
+        'Validation leaves the caller actual Writable untouched: ' + name);
+    }
+  }
+  assert.equal(refused, q.expectedRefusals);
+  await finishFile(out); await finishFile(err);
+  assert.equal((await readFile(out.path)).length, 0); assert.equal((await readFile(err.path)).length, 0);
+  context.quotaFacts = { invalidValueNames: q.invalidValueNames, actualSynchronousRefusals: refused,
+    delegatedSinkWrites: out.counters.calls + err.counters.calls, actualChildren: context.children.length };
+});
+
+} else {
+
+e2e('B0-baseline current Source retains nine bytes against the proposed eight-byte allowance', async context => {
+  const q = quotaCases.B0, marker = Buffer.from(quotaCases.marker.utf8WithLfHex, 'hex');
+  const out = await actualFile(context, 'stdout.bin'), err = await actualFile(context, 'stderr.bin');
+  // This actual Source relay currently ignores the new option. Do not fake it.
+  const relay = createWorkerOutputRelay({ stdout: out.stream, stderr: err.stream,
+    tailCodeUnits: 32768, maxOutputBytes: q.limitBytes });
+  await relay.line('stdout', quotaCases.marker.text);
+  const approved = Buffer.from(q.approvedStdoutHex, 'hex');
+  const handled = deferred(), pieces = []; let count = 0;
+  out.onCompletion = (bytes, error) => {
+    if (error) { handled.reject(error); return; }
+    pieces.push(Buffer.from(bytes)); count += bytes.length;
+    if (count >= approved.length) handled.resolve(Buffer.concat(pieces));
+  };
+  const child = childFixture(context, 'quota-plus-one'), record = watch(context, relay, child);
+  await child.message('ready'); send(child.child, 'start');
+  assert.deepEqual(await handled.promise, approved);
+  send(child.child, 'extra');
+  const result = await record.settled;
+  assert.equal(result.ok, true, 'Import/sink/process failure is not a baseline overflow observation');
+  assert.equal(result.outcome.code, 0); assert.equal(result.outcome.signal, null);
+  assert.equal(child.closed, true); assert.equal(relay.failure, null);
+  const emitted = Buffer.concat([approved, Buffer.from(q.overflowStdoutHex, 'hex')]);
+  assert.equal(emitted.length, q.expectedObservedWorkerStdoutBytes);
+  assertStats(result.outcome.outputStats.stdout, emitted);
+  assertStats(result.outcome.outputStats.stderr, Buffer.alloc(0));
+  await relay.finish(); await finishFile(out); await finishFile(err);
+  const stdout = await readFile(out.path), stderr = await readFile(err.path);
+  assert.deepEqual(stdout, Buffer.from(q.expectedFileStdoutHex, 'hex'));
+  assert.deepEqual(stderr, Buffer.from(q.expectedFileStderrHex, 'hex'));
+  const actual = stdout.length + stderr.length;
+  assert(actual > q.limitBytes, 'Actual retained file bytes must exceed the proposed allowance');
+  assert.equal(actual - q.limitBytes, q.expectedActualExcessBytes);
+  assert.equal(out.counters.handledBytes, marker.length + emitted.length);
+  context.quotaFacts = { baselineDefectObserved: true, proposedLimitBytes: q.limitBytes,
+    actualFileBytes: actual, actualExcessBytes: actual - q.limitBytes,
+    handledWorkerStdoutBytes: result.outcome.outputStats.stdout.handledBytes };
+});
+
+}

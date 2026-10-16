@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "modes": ["baseline", "candidate"],
+  "diagnosticControls": {
+    "caseTimeoutMs": 30000,
+    "maxNewConcurrentChildren": 3,
+    "maxNewRecipeBytesPerChannel": 64,
+    "maxAttemptObservationsPerQuotaCase": 16,
+    "quotaFailurePollAttempts": 500,
+    "quotaFailurePollIntervalMs": 10
+  },
+  "mechanism": {
+    "allowanceOption": "maxOutputBytes",
+    "snapshot": "outputBudget",
+    "snapshotKeys": ["chargedBytes", "limitBytes"],
+    "quotaErrorCode": "ERR_WORKER_OUTPUT_QUOTA",
+    "firstFailureSticky": true,
+    "wholeBufferAdmission": true,
+    "uncertainAndQueuedChargeRefunded": false,
+    "productionGrant": null
+  },
+  "marker": { "text": "€", "utf8WithLfHex": "e282ac0a", "bytes": 4 },
+  "B0": {
+    "name": "B0-baseline current Source retains nine bytes against the proposed eight-byte allowance",
+    "limitBytes": 8,
+    "approvedStdoutHex": "61626364",
+    "overflowStdoutHex": "ff",
+    "expectedFileStdoutHex": "e282ac0a61626364ff",
+    "expectedFileStderrHex": "",
+    "expectedObservedWorkerStdoutBytes": 5,
+    "expectedActualExcessBytes": 1
+  },
+  "Q09": {
+    "name": "09-quota-exact aliases count UTF8 marker LF and both raw worker channels once",
+    "limitBytes": 8,
+    "workerStdoutHex": "00ff",
+    "workerStderrHex": "7fc0",
+    "expectedChargedBytes": 8
+  },
+  "Q10": {
+    "name": "10-quota-plus-one real over-limit byte is dropped and existing child remains watched",
+    "limitBytes": 8,
+    "approvedStdoutHex": "61626364",
+    "overflowStdoutHex": "ff",
+    "expectedFileStdoutHex": "e282ac0a61626364",
+    "lateExistingRecipe": "concurrent",
+    "lateExistingIndex": 1,
+    "expectedChargedBytes": 8
+  },
+  "Q11": {
+    "name": "11-quota-markers exact UTF8 plus LF and whole oversized marker admission",
+    "limitBytes": 4,
+    "nextMarkerText": "",
+    "nextMarkerBytes": 1,
+    "oversizedSessionLimitBytes": 3,
+    "expectedChargedBytes": 4,
+    "expectedOversizedSessionChargedBytes": 0
+  },
+  "Q12": {
+    "name": "12-quota-c3 shared destinations cannot admit three late bytes into two remaining slots",
+    "limitBytes": 9,
+    "firstStdoutByteHex": ["01", "02", "03"],
+    "lastStderrByteHex": ["a0", "a1", "a2"],
+    "expectedChargeAfterFirstPhase": 7,
+    "expectedFinalChargedBytes": 9,
+    "maxHandledLateBytes": 2,
+    "expectedHandledLateBytesWhileHeldUntilFailure": 1
+  },
+  "Q13": {
+    "name": "13-quota-uncertain actual failed write remains charged and session never retries",
+    "limitBytes": 26,
+    "firstText": "first-uncertain-buffer",
+    "laterStdoutText": "later-explicitly-dropped-stdout",
+    "laterStderrText": "later-explicitly-dropped-stderr",
+    "expectedActualErrorCode": "ERR_STREAM_WRITE_AFTER_END",
+    "lateExistingRecipe": "concurrent",
+    "lateExistingIndex": 1
+  },
+  "Q14": {
+    "name": "14-quota-invalid actual open files receive no writes from invalid allowance construction",
+    "invalidValueNames": ["zero", "negative", "fractional", "unsafe", "nan", "infinity", "null", "string"],
+    "expectedRefusals": 8,
+    "expectedDelegatedSinkWrites": 0,
+    "expectedChildren": 0
+  },
+  "scope": {
+    "sourceImplementationAuthored": false,
+    "executed": false,
+    "productionGrantBound": false,
+    "nativeLifetimeAccepted": false,
+    "physicalCapacityAccepted": false,
+    "fullCareerAccepted": false
+  }
+}

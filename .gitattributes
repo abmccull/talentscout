@@ -9,3 +9,6 @@ tests/release/fixtures/http-cache-policy/*.json text eol=lf
 vendor/braces-depth-guard/** -text
 vendor/http-cache-policy/** -text
 vendor/*.tgz -text
+
+# Keep the digest-bound worker output quota catalog stable on Windows.
+tests/release/fixtures/worker-output-quota-cases.json text eol=lf

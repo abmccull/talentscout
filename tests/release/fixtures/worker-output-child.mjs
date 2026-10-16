@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const mode = process.argv[2];
 const index = Number(process.argv[3] ?? '0');
 const modes = new Set(['split', 'bytes-tail', 'pressure-exit',
-  'concurrent', 'trail-parent', 'trail-grandchild', 'nonzero', 'empty', 'sink-error']);
+  'concurrent', 'trail-parent', 'trail-grandchild', 'nonzero', 'empty', 'sink-error',
+  'quota-exact', 'quota-plus-one', 'quota-c3']);
 if (!modes.has(mode) || !Number.isInteger(index) || index < 0 || index > 2) {
   throw new Error('Invalid finite fixture recipe');
 }
@@ -123,6 +124,19 @@ async function main() {
     send({ type: 'descendant', pid: descendant.pid });
     await take('parent-exit');
     descendant.unref();
+  } else if (mode === 'quota-exact') {
+    writeAll(1, Buffer.from([0x00, 0xff]));
+    writeAll(2, Buffer.from([0x7f, 0xc0]));
+  } else if (mode === 'quota-plus-one') {
+    writeAll(1, Buffer.from([0x61, 0x62, 0x63, 0x64]));
+    await take('extra');
+    writeAll(1, Buffer.from([0xff]));
+  } else if (mode === 'quota-c3') {
+    writeAll(1, Buffer.from([index + 1]));
+    send({ type: 'first-written', index });
+    await take('last-byte');
+    writeAll(2, Buffer.from([0xa0 + index]));
+
   } else if (mode === 'nonzero') {
     writeAll(1, Buffer.from('nonzero-stdout\n'));
     writeAll(2, Buffer.from('nonzero-stderr:\u20ac\n'));
