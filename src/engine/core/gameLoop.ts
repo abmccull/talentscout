@@ -436,23 +436,6 @@ export function selectStartingXI(
   return selected;
 }
 
-function clubAverageAbility(
-  club: Club,
-  players: Record<string, Player>,
-  disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
-  loanSelectionPriorities?: ReadonlyMap<string, LoanSelectionPriority>,
-  manager?: ManagerProfile,
-): number {
-  const startingXI = selectStartingXI(
-    club,
-    players,
-    disciplinaryRecords,
-    loanSelectionPriorities,
-    manager,
-  );
-  return calculateLineupStrength(startingXI);
-}
-
 /**
  * Pick a weather condition for a fixture, weighted toward typical conditions.
  */
@@ -546,24 +529,27 @@ function simulateFixture(
 
   const weather = pickWeather(rng);
 
-  const homeAbility = homeClub
-    ? clubAverageAbility(
+  // Reuse the eligible starters for strength, scorers and ratings in this fixture.
+  const homePlayers = homeClub
+    ? selectStartingXI(
         homeClub,
         players,
         disciplinaryRecords,
         loanSelectionPriorities,
         managerProfiles[homeClub.id],
       )
-    : 0;
-  const awayAbility = awayClub
-    ? clubAverageAbility(
+    : [];
+  const homeAbility = homeClub ? calculateLineupStrength(homePlayers) : 0;
+  const awayPlayers = awayClub
+    ? selectStartingXI(
         awayClub,
         players,
         disciplinaryRecords,
         loanSelectionPriorities,
         managerProfiles[awayClub.id],
       )
-    : 0;
+    : [];
+  const awayAbility = awayClub ? calculateLineupStrength(awayPlayers) : 0;
 
   // Calculate tactical matchup between the two clubs' styles
   let tacticalMatchup: TacticalMatchup | undefined;
@@ -588,25 +574,6 @@ function simulateFixture(
     ? generateAttendance(homeClub, rng)
     : rng.nextInt(5000, 30000);
 
-  // Pick scorers for rating generation — exclude injured players
-  const homePlayers = homeClub
-    ? selectStartingXI(
-        homeClub,
-        players,
-        disciplinaryRecords,
-        loanSelectionPriorities,
-        managerProfiles[homeClub.id],
-      )
-    : [];
-  const awayPlayers = awayClub
-    ? selectStartingXI(
-        awayClub,
-        players,
-        disciplinaryRecords,
-        loanSelectionPriorities,
-        managerProfiles[awayClub.id],
-      )
-    : [];
   const scorers = pickScorers(rng, homePlayers, homeGoals, awayPlayers, awayGoals);
 
   // Generate simulated match ratings for all players in both squads

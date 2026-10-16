@@ -1014,9 +1014,10 @@ export function compactLongCareerHistory(state: GameState): GameState {
       .filter(([youthId]) => !unsignedYouth[youthId])
       .map(([, youth]) => youth.player.id),
   );
+  const expandedMovementHistory = expandPlayerMovementHistory(state.playerMovementHistory ?? []);
   let worldHistory = projectWorldHistoryMovementSummaries(
     state.worldHistory,
-    expandPlayerMovementHistory(state.playerMovementHistory ?? []),
+    expandedMovementHistory,
   );
   // Record projection coverage before tiering the public archive. This lets a
   // closed, non-causal background move age out of both the raw ledger and the
@@ -1086,7 +1087,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
       }),
     };
   }
-  const playerMovementHistory = expandPlayerMovementHistory(state.playerMovementHistory ?? []).filter(
+  const playerMovementHistory = expandedMovementHistory.filter(
     (movement) => {
       // Renewals do not enter the permanent archive. Their active-contract
       // meaning remains useful only for the current and immediately previous
@@ -1115,7 +1116,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
   );
 
   const retainedRetiredPlayerIds = new Set(causalPlayerIds);
-  for (const movement of expandPlayerMovementHistory(state.playerMovementHistory ?? [])) {
+  for (const movement of expandedMovementHistory) {
     if (
       (movement.type === "retirement" || movement.type === "footballExit")
       && movement.season >= renewalDetailCutoff
