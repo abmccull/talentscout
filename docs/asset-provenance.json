@@ -545,5 +545,22 @@
   "assetRoots": [
     "public",
     "build"
+  ],
+  "sourceFontReconciliations": [
+    {
+      "id": "caveat-local-variable",
+      "sourcePath": "src/app/fonts/Caveat-Variable.ttf",
+      "sha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988",
+      "bytes": 403648,
+      "license": "SIL Open Font License 1.1",
+      "licensePath": "public/licenses/Caveat-OFL.txt",
+      "licenseSha256": "1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b",
+      "evidencePath": "docs/release/caveat-source-provenance.json",
+      "evidenceSha256": "cc8c3133b5c76d2c5eed9f05e2b408d0f3b7732486ef0caabc839f8c8f38d6ef",
+      "verificationCommand": "node scripts/verify-caveat-font.mjs",
+      "status": "pinned-source-and-license-reconciled",
+      "scope": "Original upstream source and exact license; emitted export requires checker and accepted package font extraction remains separate",
+      "changesOtherAssetApprovals": false
+    }
   ]
 }

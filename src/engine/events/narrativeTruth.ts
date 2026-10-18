@@ -182,6 +182,9 @@ function performanceCallbackSignals(state: GameState, calendar: GameCalendarInde
     };
     if (!callbackIsRecent(state, occurredAt, calendar)) return [];
     const reportLabel = pulse.reportsSubmitted === 1 ? "report" : "reports";
+    const accuracy = Number.isFinite(pulse.accuracySampleSize) && (pulse.accuracySampleSize ?? 0) > 0
+      ? `${pulse.accuracyRate}% recorded accuracy`
+      : "accuracy awaiting verified assessments";
     const development = pulse.professionalDevelopment
       ? " Formal study also counted toward the period's professional development."
       : "";
@@ -189,7 +192,7 @@ function performanceCallbackSignals(state: GameState, calendar: GameCalendarInde
       domain: "career" as const,
       fingerprint: `performance-pulse:${state.scout.id}:${pulse.season}:${pulse.period}`,
       title: `Your latest professional review: Grade ${pulse.grade}`,
-      summary: `Your form is ${pulse.trend}. The review covers ${pulse.reportsSubmitted} ${reportLabel}, ${pulse.reportQualityAvg}% average report quality, and ${pulse.accuracyRate}% recorded accuracy.${development}`,
+      summary: `Your form is ${pulse.trend}. The review covers ${pulse.reportsSubmitted} ${reportLabel}, ${pulse.reportQualityAvg}% average report quality, and ${accuracy}.${development}`,
       occurredAt,
       evidence: {
         source: "performance-pulse" as const,

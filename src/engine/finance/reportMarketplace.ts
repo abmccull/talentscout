@@ -5,6 +5,7 @@
  * All functions are pure: (state, rng) => newState.
  */
 
+import { isSubmissionAccuracy } from "@/engine/scout/accuracyHistory";
 import type { RNG } from "../rng/index";
 import type {
   FinancialRecord,
@@ -110,15 +111,15 @@ const ADJACENT_POSITIONS: Record<Position, Position[]> = {
 // ---------------------------------------------------------------------------
 
 /**
- * Compute a scout's accuracy score from their recent prediction history.
+ * Compute accuracy only from verified submission-time comparisons.
  * Same formula as performancePulse.ts: 100 - |predictedCA - actualCA| * 2,
- * averaged over the last 20 entries. Returns 50 (neutral) when no data.
+ * averaged over the last 20 verified entries. Unknown legacy dates are neutral.
  */
 function computeAccuracyScore(
-  accuracyHistory: { predictedCA: number; actualCA: number }[] | undefined,
+  accuracyHistory: Scout["accuracyHistory"],
 ): number {
-  if (!accuracyHistory || accuracyHistory.length === 0) return 50;
-  const recent = accuracyHistory.slice(-20);
+  const recent = (accuracyHistory ?? []).filter(isSubmissionAccuracy).slice(-20);
+  if (recent.length === 0) return 50;
   return (
     recent.reduce((sum, a) => {
       const diff = Math.abs(a.predictedCA - a.actualCA);

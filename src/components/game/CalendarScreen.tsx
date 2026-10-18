@@ -1408,13 +1408,19 @@ export function CalendarScreen() {
                     onChange={(event) => setPlacementSupportCondition(event.target.value as PlacementSupportCondition)}
                     className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white"
                   >
-                    <option value="none">No extra condition</option>
-                    <option value="educationPlan">Protect the education plan</option>
-                    <option value="playingPathway">Require a credible playing pathway</option>
-                    <option value="familySupport">Require family and settlement support</option>
+                    <option value="none">No extra commitment</option>
+                    <option value="educationPlan">Education check-in</option>
+                    <option value="playingPathway">Playing-pathway review</option>
+                    <option value="familySupport">Family and settlement check-in</option>
                   </select>
                 </label>
               </div>
+
+              {placementSupportCondition !== "none" && (
+                <p className="mt-3 text-xs leading-relaxed text-zinc-300">
+                  If accepted, complete a {placementSupportCondition === "playingPathway" ? "Follow-up Session" : "Parent/Coach Meeting"} for this player within 6 weeks. The review uses one planner slot and normal activity fatigue. Follow-through earns +1 reputation and +3 relationship with club contacts; missing the review costs 2 reputation and 8 relationship. Unsupported promises can weaken the pitch. A review checks the support plan; it does not guarantee the player&apos;s outcomes.
+                </p>
+              )}
 
               <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 {placementClubShortlist.map((option) => (

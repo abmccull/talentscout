@@ -207,6 +207,14 @@ export function groupReportRevisionsByCase(
     .sort((left, right) => left.caseKey.localeCompare(right.caseKey));
 }
 
+/** A historical assessment needs all of its contemporaneous truth, not a later player's attributes. */
+export function hasCompleteReportSubmissionSnapshot(report: ScoutReport): boolean {
+  return report.attributeAssessments.length > 0 && report.attributeAssessments.every(assessment => {
+    const value = report.validationSnapshot?.[assessment.attribute];
+    return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 20;
+  });
+}
+
 /**
  * A report can support a retrospective outcome review when it contains an
  * evidence-backed assessment. This deliberately includes monitor/no-deal
@@ -229,6 +237,7 @@ export function selectMatureReportCasesForValidation(
   return groupReportRevisionsByCase(reports).filter((reportCase) => {
     const report = reportCase.latestReport;
     return report.postTransferRating === undefined
+      && report.validationStatus !== "unverifiable"
       && (scoutId === undefined || report.scoutId === scoutId)
       && isReportOutcomeValidatable(report)
       && completedSeason - report.submittedSeason >= REPORT_VALIDATION_HORIZON_SEASONS;

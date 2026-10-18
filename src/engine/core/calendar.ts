@@ -32,6 +32,7 @@ import type {
   ScoutReport,
   GameState,
 } from "@/engine/core/types";
+import { selectActionableProspects } from "@/engine/youth/actionableProspects";
 import { RNG } from "@/engine/rng";
 import {
   rollActivityQuality,
@@ -778,22 +779,6 @@ function topObservedPlayers(
     .map(([playerId, observations]) => ({ playerId, observations }));
 }
 
-function topObservedUnsignedYouth(
-  observedCounts: Map<string, number>,
-  unsignedYouth?: Record<string, UnsignedYouth>,
-  maxCount = 5,
-): Array<{ youth: UnsignedYouth; observations: number }> {
-  const results = Object.values(unsignedYouth ?? {})
-    .filter((y) => !y.placed && !y.retired)
-    .map((y) => ({
-      youth: y,
-      observations: observedCounts.get(y.player.id) ?? 0,
-    }))
-    .filter((entry) => entry.observations > 0)
-    .sort((a, b) => b.observations - a.observations);
-  return results.slice(0, maxCount);
-}
-
 /**
  * Build the list of activities the scout can currently schedule.
  *
@@ -834,6 +819,9 @@ export function getAvailableActivities(
   opportunityContext?: {
     currentSeason: number;
     consequenceState?: GameState["consequenceState"];
+    scoutingCases?: GameState["scoutingCases"];
+    alumniRecords?: GameState["alumniRecords"];
+    retiredPlayers?: GameState["retiredPlayers"];
   },
 ): Activity[] {
   const activities: Activity[] = [];
@@ -1057,7 +1045,7 @@ export function getAvailableActivities(
   }
 
   // followUpSession / parentCoachMeeting / writePlacementReport:
-  // requires at least 1 observation of an unsigned (unplaced) youth player
+  // observed unsigned prospects and signed alumni/live cases share follow-up access
   // Deduplicated — one card per activity type, target picker selects player
   const activeProfessionalCaseOpportunities = opportunityContext
     ? getActiveProfessionalCaseOpportunities({
@@ -1068,12 +1056,22 @@ export function getAvailableActivities(
     : [];
   // Targeted follow-ups must remain available for every observed prospect,
   // including a dossier opened beyond the first five suggested names.
-  const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, Number.POSITIVE_INFINITY);
+  const actionableProspects = selectActionableProspects({
+    players: players ?? {}, unsignedYouth: unsignedYouth ?? {},
+    scoutingCases: opportunityContext?.scoutingCases,
+    alumniRecords: opportunityContext?.alumniRecords,
+    retiredPlayers: opportunityContext?.retiredPlayers,
+  });
+  const opportunityPlayerIds = new Set(activeProfessionalCaseOpportunities.map(opportunity => opportunity.playerId));
+  const targetedYouth = actionableProspects
+    .map(target => ({ ...target, observations: observedCounts.get(target.player.id) ?? 0 }))
+    .filter(target => target.observations > 0 || target.source !== "unsigned" || opportunityPlayerIds.has(target.player.id))
+    .sort((left, right) => right.observations - left.observations);
 
   if (targetedYouth.length > 0 || activeProfessionalCaseOpportunities.length > 0) {
     const youthPoolByPlayerId = new Map<string, TargetOption>();
     for (const entry of targetedYouth) {
-      const p = entry.youth.player;
+      const p = entry.player;
       const bestAbility = bestAbilityByPlayerId.get(p.id);
       youthPoolByPlayerId.set(p.id, {
         id: p.id,
@@ -1130,7 +1128,8 @@ export function getAvailableActivities(
         .filter((report) => report.scoutId === scout.id)
         .map((report) => report.playerId),
     );
-    const pitchPool = youthPool.filter((target) => authoredPlayerIds.has(target.id));
+    const unsignedIds = new Set(actionableProspects.filter(target => target.source === "unsigned").map(target => target.player.id));
+    const pitchPool = youthPool.filter((target) => authoredPlayerIds.has(target.id) && unsignedIds.has(target.id));
     if (pitchPool.length > 0) {
       activities.push({
         type: "writePlacementReport",

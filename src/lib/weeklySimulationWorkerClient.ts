@@ -1,3 +1,5 @@
+import { getWeeklySimulationGeneration, invalidateWeeklySimulationGeneration } from "./weeklySimulationLifecycle";
+export { getWeeklySimulationGeneration } from "./weeklySimulationLifecycle";
 import {
   WEEKLY_TRANSACTION_PROTOCOL_VERSION,
   createWeeklyTransactionJob,
@@ -59,11 +61,6 @@ let worker: Worker | null = null;
 let workerReadiness: { owner: Worker; createdAt: number; readyAt: number | null } | null = null;
 let workerBaseState: WeeklyWorkerInput["gameState"] | null = null;
 let transactionSequence = 0;
-let lifecycleGeneration = 0;
-
-export function getWeeklySimulationGeneration(): number {
-  return lifecycleGeneration;
-}
 
 class WeeklySimulationCancelledError extends Error {
   constructor() {
@@ -206,9 +203,9 @@ function dispatchWeeklyTransaction(
 export async function runWeeklyWorkerTransaction(
   input: WeeklyWorkerInput,
 ): Promise<WeeklyWorkerExecution> {
-  const generation = lifecycleGeneration;
+  const generation = getWeeklySimulationGeneration();
   const assertActiveGeneration = () => {
-    if (generation !== lifecycleGeneration) throw new WeeklySimulationCancelledError();
+    if (generation !== getWeeklySimulationGeneration()) throw new WeeklySimulationCancelledError();
   };
   const startedAt = monotonicNow();
   const baseJob = createWeeklyTransactionJob(input.gameState);
@@ -277,6 +274,6 @@ export async function runWeeklyWorkerTransaction(
 
 /** Cancel in-flight work when a save is replaced or the game is disposed. */
 export function terminateWeeklySimulationWorker(): void {
-  lifecycleGeneration += 1;
+  invalidateWeeklySimulationGeneration();
   disposeWorker(new WeeklySimulationCancelledError());
 }

@@ -1,3 +1,4 @@
+import { persistCareerEnd } from "@/lib/careerDisposition";
 import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 /**
  * Weekly cycle, calendar scheduling, match, day simulation, and season
@@ -1378,7 +1379,19 @@ export function createWeeklyActions(
       predictionAccuracyBonus: weekEquipBonuses?.predictionAccuracy ?? 0,
     });
     if (seasonRollover.terminal === "ironman-fired") {
-      set({ gameState: null, isLoaded: false, currentScreen: "mainMenu" });
+      const endedState: GameState = {
+        ...seasonRollover.state,
+        careerEnd: { reason: "ironman-fired", season: gameState.currentSeason, week: gameState.currentWeek },
+        activeObservationSession: null,
+        pendingWeekRecovery: null,
+      };
+      // Headless workers return a portable terminal snapshot. Only the owned
+      // main-thread commit may write the independent permanent run record.
+      if (runtime.persistenceEnabled) {
+        persistCareerEnd(endedState);
+        queueGameplayAutosave(endedState, set);
+      }
+      set({ gameState: runtime.persistenceEnabled ? null : endedState, isLoaded: false, currentScreen: "mainMenu" });
       return;
     }
     newState = seasonRollover.state;

@@ -168,6 +168,19 @@ function readHarness(initialState: GameState) {
   };
 }
 
+describe("follow-up provenance", () => {
+  it.each([3, 7, 19])("labels a sparse saved case as an investigation at week %i", (week) => {
+    const saved = JSON.parse(JSON.stringify(state(week))) as GameState;
+    const beats = projectWeeklyProspectFollowUps(saved);
+    expect(beats.length).toBeGreaterThan(0);
+    for (const beat of beats) {
+      expect(beat.message.body).toContain("INVESTIGATION PROMPT");
+      expect(beat.message.body).toContain("not a confirmed update");
+      expect(beat.message.body).not.toMatch(/has supplied|staff report that|family describes|has begun monitoring|has not yet received/);
+    }
+  });
+});
+
 describe("prospect follow-up cadence", () => {
   it("surfaces two distinct beats inside eight weeks of an accepted placement", () => {
     expect(projectWeeklyProspectFollowUps(state(2))).toEqual([]);

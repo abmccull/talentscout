@@ -246,7 +246,7 @@ export interface GameStoreState {
   suppressCareerMoment: (momentId: string, reason?: string) => void;
   dismissSeasonAwards: () => void;
 
-  startNewGame: (config: NewGameConfig) => Promise<void>;
+  startNewGame: (config: NewGameConfig) => Promise<GameState | void>;
   loadGame: (state: unknown) => void;
   saveGame: () => GameState | null;
   flushGameplaySave: () => Promise<void>;
@@ -267,7 +267,7 @@ export interface GameStoreState {
   setDelegationPolicy: (policyId: DelegationPolicyId) => void;
   requestWeekAdvance: () => void;
   advanceWeek: () => void;
-  advanceWeekAsync: () => Promise<void>;
+  advanceWeekAsync: () => Promise<"committed" | "cancelled" | "failed" | "skipped">;
   isAdvancingWeek: boolean;
   lastWeeklyExecutionRoute: "worker" | "main-thread-fallback" | null;
   lastWeeklyWorkerTelemetry: WeeklyWorkerTelemetry | null;

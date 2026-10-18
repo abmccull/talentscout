@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Caveat } from "next/font/google";
+import localFont from "next/font/local";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import "./globals.css";
@@ -15,8 +15,10 @@ export const metadata: Metadata = {
   },
 };
 
-const caveat = Caveat({
-  subsets: ["latin"],
+const caveat = localFont({
+  src: "./fonts/Caveat-Variable.ttf",
+  weight: "400 700",
+  style: "normal",
   variable: "--font-caveat",
   display: "swap",
 });

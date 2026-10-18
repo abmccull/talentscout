@@ -47,7 +47,7 @@ function DomainBadge({ domain }: { domain: string }) {
   const colorClass = DOMAIN_COLORS[domain] ?? DOMAIN_COLORS.hidden;
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${colorClass}`}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-eyebrow font-semibold uppercase tracking-wide ${colorClass}`}
     >
       {domain}
     </span>
@@ -183,7 +183,7 @@ function MomentTimeline({ session }: { session: ObservationSession }) {
   const { flaggedMoments } = session;
   if (flaggedMoments.length === 0) {
     return (
-      <p className="text-sm text-zinc-500 italic py-2">No moments were flagged during this session.</p>
+      <p className="text-sm text-quiet italic py-2">No moments were flagged during this session.</p>
     );
   }
 
@@ -200,7 +200,7 @@ function MomentTimeline({ session }: { session: ObservationSession }) {
             {/* Minute marker */}
             <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-full border border-[#27272a] bg-[#1a1a1a]">
-                <span className="text-[9px] font-bold text-zinc-400">{fm.minute}&apos;</span>
+                <span className="text-eyebrow font-bold text-zinc-400">{fm.minute}&apos;</span>
               </div>
               <div className="w-px flex-1 bg-[#27272a]" aria-hidden="true" />
             </div>
@@ -209,15 +209,15 @@ function MomentTimeline({ session }: { session: ObservationSession }) {
             <div className="mb-2 min-w-0 space-y-1.5 pb-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
-                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${reactionColor}`}
+                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-eyebrow font-semibold uppercase tracking-wide ${reactionColor}`}
                 >
                   {reactionLabel}
                 </span>
-                <span className="text-[10px] text-zinc-500">Phase {fm.phaseIndex + 1}</span>
+                <span className="text-eyebrow text-quiet">Phase {fm.phaseIndex + 1}</span>
               </div>
               <p className="text-sm text-zinc-300 leading-snug">{getPerceivedFlaggedMomentDescription(session, fm)}</p>
               {fm.note && (
-                <p className="text-xs text-zinc-500 italic">Note: {fm.note}</p>
+                <p className="text-xs text-quiet italic">Note: {fm.note}</p>
               )}
             </div>
           </li>
@@ -303,7 +303,7 @@ export function ReflectionScreen({
 
       {/* ── Session Summary ── */}
       <section aria-labelledby="summary-heading">
-        <h2 id="summary-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+        <h2 id="summary-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-quiet">
           Session Summary
         </h2>
         <Card className="border-[#27272a] bg-[#141414] shadow-md">
@@ -330,21 +330,21 @@ export function ReflectionScreen({
                         : "No reliable signal today"}
                   </p>
                   {signalAssessment.comparisonReady && (
-                    <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-1 text-[10px] text-cyan-100">
+                    <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-1 text-eyebrow text-cyan-100">
                       New comparison available
                     </span>
                   )}
                 </div>
                 <p className="mt-1 text-xs leading-5 text-zinc-300">{signalAssessment.summary}</p>
                 {signalAssessment.reasons.length > 0 && (
-                  <p className="mt-1 text-[11px] leading-4 text-zinc-500">
+                  <p className="mt-1 text-[11px] leading-4 text-quiet">
                     {signalAssessment.reasons[0]}
                   </p>
                 )}
               </div>
             )}
             <div className="flex items-center gap-2 pt-1">
-              <span className="text-xs text-zinc-500">Reflection bonus:</span>
+              <span className="text-xs text-quiet">Reflection bonus:</span>
               <span className="text-sm font-bold text-amber-400">
                 +{insightPointsFromReflection} IP
               </span>
@@ -358,7 +358,7 @@ export function ReflectionScreen({
       {/* ── Gut Feeling ── */}
       {gutFeelingCandidate !== null && (
         <section aria-labelledby="gut-feeling-heading">
-          <h2 id="gut-feeling-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+          <h2 id="gut-feeling-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-quiet">
             Gut Feeling
           </h2>
           <div
@@ -398,7 +398,7 @@ export function ReflectionScreen({
             {/* Reliability bar */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-amber-300/70">Reliability</span>
+                <span className="text-amber-200">Reliability</span>
                 <span className="font-semibold text-amber-300">
                   {Math.round(gutFeelingCandidate.reliability * 100)}%
                 </span>
@@ -407,9 +407,9 @@ export function ReflectionScreen({
                 value={gutFeelingCandidate.reliability * 100}
                 className="h-1.5 bg-amber-950/60"
                 indicatorClassName="bg-amber-400"
-                aria-label={`Gut feeling reliability: ${Math.round(gutFeelingCandidate.reliability * 100)}%`}
+                aria-label="Gut feeling reliability"
               />
-              <p className="text-[10px] text-amber-400/60">{gutFeelingCandidate.triggerReason}</p>
+              <p className="text-eyebrow text-amber-200">{gutFeelingCandidate.triggerReason}</p>
             </div>
 
             {/* PA Estimate — only when perk is active */}
@@ -419,7 +419,7 @@ export function ReflectionScreen({
               >
                 <div className="flex items-center gap-2">
                   <Brain size={14} className="shrink-0 text-amber-500/70" aria-hidden="true" />
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-500/70">
+                  <span className="text-eyebrow font-semibold uppercase tracking-widest text-amber-200">
                     Projection signal
                   </span>
                 </div>
@@ -437,11 +437,11 @@ export function ReflectionScreen({
                     aria-hidden="true"
                   />
                 </div>
-                <div className="flex justify-between text-[10px] text-zinc-500">
+                <div className="flex justify-between text-eyebrow text-quiet">
                   <span>1</span>
                   <span>200</span>
                 </div>
-                <p className="text-[10px] text-amber-500/50 italic">
+                <p className="text-eyebrow text-amber-200 italic">
                   Built from the cues you noticed. It is deliberately broad and can be wrong.
                 </p>
               </div>
@@ -453,7 +453,7 @@ export function ReflectionScreen({
       {/* ── Reflection Prompts ── */}
       {reflectionPrompts.length > 0 && (
         <section aria-labelledby="prompts-heading">
-          <h2 id="prompts-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+          <h2 id="prompts-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-quiet">
             Reflection Prompts
           </h2>
           <div className="space-y-3">
@@ -472,7 +472,7 @@ export function ReflectionScreen({
       {/* ── Flagged Moments Review ── */}
       {session.mode === "investigation" && (
         <section aria-labelledby="conversation-record-heading">
-          <h2 id="conversation-record-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+          <h2 id="conversation-record-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-quiet">
             Conversation record
           </h2>
           <p className="mb-3 text-sm text-zinc-400">Keep these accounts in context. They can guide your next observation, but do not establish a trait on their own.</p>
@@ -490,10 +490,10 @@ export function ReflectionScreen({
       {(session.mode !== "investigation" || session.flaggedMoments.length > 0) && (
       <section aria-labelledby="flagged-moments-heading">
         <div className="mb-3 flex items-center gap-2">
-          <Flag size={13} className="text-zinc-500" aria-hidden="true" />
+          <Flag size={13} className="text-quiet" aria-hidden="true" />
           <h2
             id="flagged-moments-heading"
-            className="text-xs font-semibold uppercase tracking-widest text-zinc-500"
+            className="text-xs font-semibold uppercase tracking-widest text-quiet"
           >
             {MODE_FLAGGED_LABEL[session.mode]}
           </h2>
@@ -514,10 +514,10 @@ export function ReflectionScreen({
       {/* ── Notes ── */}
       <section aria-labelledby="notes-heading">
         <div className="mb-3 flex items-center gap-2">
-          <Brain size={13} className="text-zinc-500" aria-hidden="true" />
+          <Brain size={13} className="text-quiet" aria-hidden="true" />
           <h2
             id="notes-heading"
-            className="text-xs font-semibold uppercase tracking-widest text-zinc-500"
+            className="text-xs font-semibold uppercase tracking-widest text-quiet"
           >
             Private notebook
           </h2>
@@ -549,11 +549,11 @@ export function ReflectionScreen({
             onKeyDown={handleNoteKeyDown}
             placeholder="Optional private note — this is not scored or parsed (Ctrl+Enter to save)"
             rows={3}
-            className="w-full resize-none rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-600"
+            className="w-full resize-none rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 text-sm text-zinc-200 placeholder:text-[var(--muted-foreground)] outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-600"
             aria-describedby="reflection-note-hint"
           />
           <div className="flex items-center justify-between gap-2">
-            <p id="reflection-note-hint" className="text-[10px] text-zinc-600">
+            <p id="reflection-note-hint" className="text-eyebrow text-quiet">
               Private notes are archival only · Ctrl+Enter to save
             </p>
             <Button
@@ -575,7 +575,8 @@ export function ReflectionScreen({
         <Button
           ref={completeButtonRef}
           size="lg"
-          className="w-full bg-emerald-600 text-white shadow-md hover:bg-emerald-500 focus-visible:ring-emerald-500"
+          variant="success"
+          className="min-h-11 w-full shadow-md"
           onClick={onComplete}
           disabled={requiresEvidenceInterpretation}
           data-tutorial-id="observation-complete-reflection"
@@ -583,7 +584,7 @@ export function ReflectionScreen({
           {requiresEvidenceInterpretation ? "Classify one saved passage" : "Complete Reflection"}
           <ChevronRight size={16} className="ml-2" aria-hidden="true" />
         </Button>
-        <p className="mt-2 text-center text-[11px] text-zinc-500">
+        <p className="mt-2 text-center text-[11px] text-quiet">
           Your classified evidence carries into the next assessment. Private notes remain in your notebook and never affect scoring.
         </p>
       </div>

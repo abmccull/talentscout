@@ -186,6 +186,8 @@ function ReportDetailModal({
               <span className={`text-sm font-semibold ${qualityColor(report.postTransferRating)}`}>
                 Validated accuracy: {report.postTransferRating}/100
               </span>
+            ) : report.validationStatus === "unverifiable" ? (
+              <span className="text-xs text-zinc-500">Historical accuracy unavailable: original assessment evidence was not preserved</span>
             ) : (
               <span className="text-xs text-zinc-500">Accuracy pending career evidence</span>
             )}

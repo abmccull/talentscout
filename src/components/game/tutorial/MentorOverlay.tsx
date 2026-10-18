@@ -163,7 +163,11 @@ export function MentorOverlay() {
     }
     // 2. Guided session milestone
     if (guidedSessionActive && currentGuidedTask) {
-      const milestone = getGuidedMilestone(currentGuidedTask as GuidedMilestoneId);
+      const task = guidedSessionKind === "discoveryHook" && observationState === "reflection"
+        && (currentGuidedTask === "focusedPlayer" || currentGuidedTask === "flaggedBreakthrough")
+        ? "completedMatch"
+        : currentGuidedTask;
+      const milestone = getGuidedMilestone(task as GuidedMilestoneId);
       if (milestone) {
         return { kind: "guided", milestone };
       }
@@ -414,6 +418,9 @@ export function MentorOverlay() {
     if (activeMode.kind === "tutorial") return activeMode.step.description;
     if (activeMode.kind === "guided") {
       const isFreelance = mentorName === "Tommy Reyes";
+      if (activeMode.milestone.id === "completedMatch" && observationState === "reflection") {
+        return "The watch is over. Keep your first impression honest: classify what you saved, then complete reflection. You can try another focus or flag on your next look.";
+      }
       if (isWaitingForStandout) {
         return isFreelance
           ? "You have chosen who to watch. Select Next phase and stay with the play—the key moment is still ahead."
@@ -462,7 +469,13 @@ export function MentorOverlay() {
 
   function handleReturnToGuidedStep() {
     if (activeMode.kind !== "guided") return;
-    setScreen(activeMode.milestone.screen as GameScreen);
+    const latestGame = useGameStore.getState();
+    if (latestGame.gameState && !latestGame.activeSession) {
+      useTutorialStore.getState().reconcileOpeningObservationProgress(latestGame.gameState);
+    }
+    const task = useTutorialStore.getState().currentGuidedTask;
+    const destination = task ? getGuidedMilestone(task)?.screen : null;
+    if (destination) setScreen(destination as GameScreen);
   }
 
   const showSkipControls = activeMode.kind === "tutorial";

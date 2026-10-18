@@ -1,3 +1,4 @@
+import { assertSaveOperationOwned, type SaveOperationOwnership } from "./saveOperationOwnership";
 /**
  * SupabaseCloudSaveProvider — a CloudSaveProvider backed by Supabase PostgreSQL.
  *
@@ -114,6 +115,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
     state: GameState,
     name?: string,
     savedAt = Date.now(),
+    ownership?: SaveOperationOwnership,
   ): Promise<void> {
     if (!supabase) throw new Error("Cloud features are not configured");
     const userId = await this.requireAuthenticatedUserId();
@@ -132,6 +134,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
       assertSupportedSaveSchema(existing.state);
     }
 
+    assertSaveOperationOwned(ownership);
     const { error } = await supabase.from("save_slots").upsert(
       {
         user_id: userId,
@@ -155,7 +158,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * Download a previously saved game state from the given slot.
    * Returns null when the slot is empty or does not exist for this user.
    */
-  async downloadSave(slot: number): Promise<GameState | null> {
+  async downloadSave(slot: number, options?: { publishPlayerExperience?: boolean; onPlayerExperience?: (value: NonNullable<ReturnType<typeof extractSavePlayerExperience>>) => void }): Promise<GameState | null> {
     if (!supabase) return null;
     const userId = await this.requireAuthenticatedUserId();
     const { data, error } = await supabase
@@ -170,7 +173,8 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
 
     const playerExperience = extractSavePlayerExperience(data.state);
     if (playerExperience) {
-      mergePersistedPlayerExperience(playerExperience);
+      options?.onPlayerExperience?.(playerExperience);
+      if (options?.publishPlayerExperience !== false) mergePersistedPlayerExperience(playerExperience);
     }
     return migrateSaveState(extractSaveStatePayload(data.state));
   }

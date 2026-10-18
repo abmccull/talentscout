@@ -1,3 +1,5 @@
+import { assertSaveOperationOwned, type SaveOperationOwnership } from "./saveOperationOwnership";
+import { assertCareerCanResume } from "./careerDisposition";
 import { assertStoredHistoryArchives } from "./storedHistoryValidation";
 import { assertStoredFinancialArchives } from "./storedFinancialValidation";
 /**
@@ -699,13 +701,14 @@ export async function loadGame(slot: number): Promise<GameState | null> {
  */
 export async function loadGameWithRecovery(
   slot: number,
+  options?: { publishPlayerExperience?: boolean },
 ): Promise<LocalSaveLoadResult | null> {
   const rawRecord: unknown = await db.saves.get(slot);
   if (!rawRecord) return null;
 
   try {
     const record = migrateSaveRecord(rawRecord);
-    mergePersistedPlayerExperience(record.playerExperience);
+    if (options?.publishPlayerExperience !== false) mergePersistedPlayerExperience(record.playerExperience);
     return { state: record.state, record };
   } catch (headError) {
     if (isFutureSaveMigrationError(headError)) throw headError;
@@ -720,7 +723,7 @@ export async function loadGameWithRecovery(
     for (const archive of archives) {
       try {
         const record = migrateSaveRecord(archive.record);
-        mergePersistedPlayerExperience(record.playerExperience);
+        if (options?.publishPlayerExperience !== false) mergePersistedPlayerExperience(record.playerExperience);
         return {
           state: record.state,
           record,
@@ -806,7 +809,7 @@ export async function listSaves(): Promise<SaveListEntry[]> {
       entries.push(meta);
     } catch {
       try {
-        const recovered = await loadGameWithRecovery(raw.slot);
+        const recovered = await loadGameWithRecovery(raw.slot, { publishPlayerExperience: false });
         if (!recovered) continue;
         const { state: _state, ...meta } = recovered.record;
         entries.push({ ...meta, recovery: recovered.recovery });
@@ -890,15 +893,20 @@ export interface ConflictResolutionCommitResult {
  */
 export async function commitConflictResolution(
   input: ConflictResolutionCommit,
+  ownership?: SaveOperationOwnership,
 ): Promise<ConflictResolutionCommitResult> {
+  assertSaveOperationOwned(ownership);
   const archiveId = `conflict:${input.conflictId}`;
   const selected = migrateSaveRecord({ ...input.selected, slot: input.slot });
   const losing = migrateSaveRecord({ ...input.losing, slot: input.slot });
 
   return db.transaction("rw", db.saves, db.saveArchives, async () => {
     const priorArchive = await db.saveArchives.get(archiveId);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(selected.state);
     if (priorArchive) {
       const currentRaw: unknown = await db.saves.get(input.slot);
+      assertSaveOperationOwned(ownership);
       if (!currentRaw) {
         throw new Error("Resolved conflict archive exists but the selected save is missing.");
       }
@@ -910,6 +918,7 @@ export async function commitConflictResolution(
     }
 
     const currentRaw: unknown = await db.saves.get(input.slot);
+    assertSaveOperationOwned(ownership);
     if (!currentRaw) throw new Error("The local save disappeared before conflict resolution.");
     const current = migrateSaveRecord(currentRaw);
     if (current.savedAt !== input.expectedLocalTimestamp) {
@@ -933,9 +942,13 @@ export async function commitConflictResolution(
       ...selected,
       storageRevision: await nextStorageRevision(input.slot, current),
     };
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(selected.state);
     await db.saveArchives.put(archive);
     await db.saves.put(promoted);
     await pruneArchives(input.slot);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(selected.state);
 
     return {
       applied: true,
@@ -946,12 +959,17 @@ export async function commitConflictResolution(
 }
 
 /** Restore a recovery generation while preserving the displaced current row. */
-export async function restoreSaveArchive(id: string): Promise<SaveRecord> {
+export async function restoreSaveArchive(id: string, ownership?: SaveOperationOwnership): Promise<SaveRecord> {
+  assertSaveOperationOwned(ownership);
   return db.transaction("rw", db.saves, db.saveArchives, async () => {
     const archive = await db.saveArchives.get(id);
+    assertSaveOperationOwned(ownership);
     if (!archive) throw new Error("That recovery copy is no longer available.");
     const recovered = migrateSaveRecord(archive.record);
+    assertCareerCanResume(recovered.state);
     const currentRaw: unknown = await db.saves.get(archive.slot);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(recovered.state);
     let current: SaveRecord | undefined;
     if (currentRaw) {
       try {
@@ -977,8 +995,12 @@ export async function restoreSaveArchive(id: string): Promise<SaveRecord> {
       playerExperience: recovered.playerExperience,
       storageRevision: await nextStorageRevision(archive.slot, current),
     };
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(recovered.state);
     await db.saves.put(restored);
     await pruneArchives(archive.slot);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(recovered.state);
     return restored;
   });
 }
@@ -1077,7 +1099,9 @@ async function normalizeLegacyUpload(
 export async function enqueueSaveSync(
   record: SaveRecord,
   target: SaveSyncTarget,
+  ownership?: SaveOperationOwnership,
 ): Promise<SaveSyncQueueRecord> {
+  assertSaveOperationOwned(ownership);
   const slot = record.slot;
   if (!Number.isInteger(slot) || slot < 0 || slot > MAX_MANUAL_SLOTS) {
     throw new Error("A cloud upload must reference a valid local save slot.");
@@ -1090,10 +1114,12 @@ export async function enqueueSaveSync(
     db.saveSyncQueue,
     async () => {
       const head = await authoritativeHeadWithRevision(slot);
+      assertSaveOperationOwned(ownership);
       persistenceFaultInjector?.("after-sync-head-normalization-before-intent");
       const now = Date.now();
       const id = syncTaskId(target, slot);
       const existing = await db.saveSyncQueue.get(id);
+      assertSaveOperationOwned(ownership);
       const task: SaveUploadSyncQueueRecord = {
         id,
         slot,
@@ -1110,6 +1136,7 @@ export async function enqueueSaveSync(
         sourceSavedAt: head.savedAt,
       };
       await db.saveSyncQueue.put(task);
+      assertSaveOperationOwned(ownership);
       return task;
     },
   );

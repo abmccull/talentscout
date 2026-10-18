@@ -9,6 +9,9 @@
   --primary-foreground: #0a1628;
   --success: #2f8f63;
   --success-foreground: #e8fff4;
+  /* Filled actions need a darker surface than success text/icons. */
+  --success-action: #166b47;
+  --success-action-hover: #125b3b;
   --secondary: #19232d;
   --secondary-foreground: #f2f5f7;
   --muted: #171c22;

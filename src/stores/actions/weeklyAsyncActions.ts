@@ -1,3 +1,4 @@
+import { persistCareerEnd } from "@/lib/careerDisposition";
 import { preparePortraitWeekCommit } from "@/engine/players/portraits/gameIntegration";
 import type { GameState } from "@/engine/core/types";
 import { getWeeklySimulationGeneration, runWeeklyWorkerTransaction } from "@/lib/weeklySimulationWorkerClient";
@@ -47,7 +48,7 @@ export function createWeeklyAsyncActions(get: GetState, set: SetState): WeeklyAs
       const sourceState = source.gameState;
       const sourceSimulation = source.weekSimulation;
       const sourceSession = source.activeSession ?? null;
-      if (!sourceState || !sourceSimulation || source.isAdvancingWeek) return;
+      if (!sourceState || !sourceSimulation || source.isAdvancingWeek) return "skipped";
       const owner = { token: Symbol("weekly-advance"), generation: getWeeklySimulationGeneration() };
       activeAdvance = owner;
       const ownsAdvance = () => activeAdvance === owner && owner.generation === getWeeklySimulationGeneration();
@@ -69,30 +70,33 @@ export function createWeeklyAsyncActions(get: GetState, set: SetState): WeeklyAs
       set({ isAdvancingWeek: true, weeklyTransactionError: null });
       try {
         const execution = await runWeeklyWorkerTransaction(input);
-        if (!ownsAdvance()) return;
+        if (!ownsAdvance()) return "cancelled";
         const current = get();
         if (!isCompatibleSource(sourceState, current.gameState)
           || current.weekSimulation !== sourceSimulation
           || (current.activeSession ?? null) !== sourceSession) {
           set({ isAdvancingWeek: false,
             weeklyTransactionError: "Your career changed while this week was being resolved. Your changes are safe; complete the week again." });
-          return;
+          return "cancelled";
         }
         const commit = execution.materializedCommit ?? materializeWeeklyWorkerCommit(sourceState, execution.commit);
         const committedState = commit.patch.gameState && current.gameState
           ? prepareCommittedState(commit.patch.gameState, current.gameState) : commit.patch.gameState;
+        if (committedState?.careerEnd) persistCareerEnd(committedState);
         set({
           ...commit.patch,
-          ...(Object.prototype.hasOwnProperty.call(commit.patch, "gameState") ? { gameState: committedState } : {}),
+          ...(Object.prototype.hasOwnProperty.call(commit.patch, "gameState") ? { gameState: committedState?.careerEnd ? null : committedState } : {}),
           isAdvancingWeek: false, lastWeeklyExecutionRoute: execution.route,
           lastWeeklyWorkerTelemetry: execution.telemetry, weeklyTransactionError: null,
         });
         applyWeeklyTutorialCommands(commit.tutorialCommands);
-        if (committedState && !isBatchAdvanceInProgress()) queueWeeklyAutosave(committedState, set);
+        if (committedState && (committedState.careerEnd || !isBatchAdvanceInProgress())) queueWeeklyAutosave(committedState, set);
+        return "committed";
       } catch (error) {
-        if (!ownsAdvance()) return;
+        if (!ownsAdvance()) return "cancelled";
         set({ isAdvancingWeek: false, weeklyTransactionError: error instanceof Error ? error.message : String(error) });
         console.error("Weekly simulation failed:", error);
+        return "failed";
       } finally {
         if (activeAdvance === owner) {
           activeAdvance = null;

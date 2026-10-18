@@ -898,9 +898,9 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
               <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">
                 {veteranPrologue.venueLabel} · {MODE_LABELS[mode]}
               </p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
                 {veteranPrologue.title}
-              </h2>
+              </h1>
               <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
                 {veteranPrologue.premise}
               </p>
@@ -952,7 +952,7 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">10:42 · Local school ground</p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">The match started early.</h2>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">The match started early.</h1>
               <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-300">
                 No academy scout is here yet. {lead.name}, a {lead.position}, was mentioned quietly—but the source only saw one previous match. Watch the match, spend your focus, and flag what changes the question.
               </p>
@@ -998,9 +998,9 @@ const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
         <ModeIcon size={24} className="text-emerald-400" aria-hidden="true" />
       </div>
-      <h2 className="text-lg font-semibold text-zinc-100 mb-1">
+      <h1 className="text-lg font-semibold text-zinc-100 mb-1">
         {MODE_LABELS[mode]}
-      </h2>
+      </h1>
       <p className="text-sm text-zinc-400 mb-2">
         {session.phases.length} phase{session.phases.length !== 1 ? "s" : ""}
         {session.focusTokens.total > 0 &&
@@ -1152,7 +1152,7 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
       data-tutorial-id="observation-session-controls"
     >
       <div className="mx-auto max-w-2xl">
-        <h2 className="text-lg font-semibold text-zinc-100 mb-1">Session Reflection</h2>
+        <h1 className="text-lg font-semibold text-zinc-100 mb-1">Session Reflection</h1>
         <p className="text-sm text-zinc-400 mb-6">
           Review what you observed before completing the session.
         </p>
@@ -1246,7 +1246,7 @@ const CompleteView = memo(function CompleteView({ session, onContinue }: Complet
   return (
     <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
       <CheckCircle2 size={40} className="text-emerald-400 mb-4" aria-hidden="true" />
-      <h2 className="text-lg font-semibold text-zinc-100 mb-1">Session Complete</h2>
+      <h1 className="text-lg font-semibold text-zinc-100 mb-1">Session Complete</h1>
       <p className="text-sm text-zinc-400 mb-6">
         {result.phasesCompleted} of {result.totalPhases} phases completed —{" "}
         <span className="capitalize text-zinc-300">{result.qualityTier}</span> quality
@@ -1562,9 +1562,11 @@ export function ObservationScreen() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <ModeIcon size={14} className="signal-focus shrink-0" aria-hidden="true" />
-                <span className="truncate text-sm font-semibold text-zinc-200">
-                  {MODE_LABELS[mode]}
-                </span>
+                {state === "active" ? (
+                  <h1 className="truncate text-sm font-semibold text-zinc-200">{MODE_LABELS[mode]}</h1>
+                ) : (
+                  <span className="truncate text-sm font-semibold text-zinc-200">{MODE_LABELS[mode]}</span>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                 {state === "active" && currentPhase && (

@@ -11,8 +11,12 @@ import type {
   Club,
   Player,
   PitchResult,
+  GameDate,
+  GameState,
 } from "../core/types";
 import {
+  addGameWeeks,
+  gameWeeksBetween,
   gameWeeksBetweenWithSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "../core/gameDate";
@@ -92,6 +96,120 @@ export function processClientRelationshipWeek(
 // ---------------------------------------------------------------------------
 // Pitching
 // ---------------------------------------------------------------------------
+
+export type ClientPitchType = "coldCall" | "referral" | "showcase";
+export interface ClientPitchAttempt {
+  clubId: string;
+  pitchType: ClientPitchType;
+  occurredAt: GameDate;
+  retryAt: GameDate;
+  cost: number;
+  success: boolean;
+  message: string;
+  evidenceLabel?: string;
+  /** Stable contact or report reference; the label is a readable presentation only. */
+  evidenceId?: string;
+}
+export const CLIENT_PITCH_COSTS: Record<ClientPitchType, number> = {
+  coldCall: 50, referral: 50, showcase: 100,
+};
+export const CLIENT_PITCH_FATIGUE = 3;
+export const CLIENT_PITCH_COOLDOWN_WEEKS = 4;
+
+/** The UI and mutation share the same eligibility policy. Missing old-save history is empty. */
+export function getClientPitchEligibility(
+  state: GameState,
+  clubId: string,
+  pitchType: ClientPitchType,
+): { eligible: boolean; reason: string; cost: number; evidenceLabel?: string; evidenceId?: string } {
+  const cost = CLIENT_PITCH_COSTS[pitchType];
+  const blocked = (reason: string) => ({ eligible: false, reason, cost });
+  const finances = state.finances;
+  const club = state.clubs[clubId];
+  if (!finances || !club || !Number.isFinite(cost)) return blocked("Choose an available club and pitch method.");
+  if (state.scout.careerPath !== "independent") return blocked("Client outreach is available to independent scouts.");
+  if (isClubBlacklisted(finances, clubId)) return blocked("This club has blacklisted your agency.");
+  if (finances.retainerContracts.some(contract => contract.clubId === clubId && contract.status === "active")
+    || finances.pendingRetainerOffers.some(contract => contract.clubId === clubId)) {
+    return blocked("This club already has an active contract or pending offer.");
+  }
+  const now = { week: state.currentWeek, season: state.currentSeason };
+  const attempts = finances.clientPitchHistory ?? [];
+  const lastClubAttempt = [...attempts].reverse().find(attempt => attempt.clubId === clubId);
+  if (lastClubAttempt && gameWeeksBetween(state.fixtures, now, lastClubAttempt.retryAt) > 0) {
+    return blocked(`This club will hear another pitch in season ${lastClubAttempt.retryAt.season}, week ${lastClubAttempt.retryAt.week}.`);
+  }
+  if (attempts.some(attempt => attempt.occurredAt.season === now.season && attempt.occurredAt.week === now.week)) {
+    return blocked("Your outreach slot is used this week. Prepare your next pitch for next week.");
+  }
+  if (!Number.isFinite(finances.balance) || finances.balance < cost) return blocked(`You need £${cost} available for preparation and outreach.`);
+  if (!Number.isFinite(state.scout.fatigue) || state.scout.fatigue > 100 - CLIENT_PITCH_FATIGUE) {
+    return blocked("Rest before pitching; outreach adds 3 fatigue.");
+  }
+  let evidenceLabel: string | undefined;
+  let evidenceId: string | undefined;
+  if (pitchType === "referral") {
+    const contact = Object.values(state.contacts).filter(candidate =>
+      [club.id, club.name, club.shortName].filter(Boolean).includes(candidate.organization)
+      && !candidate.dormant && candidate.relationship >= 50
+      && (!candidate.accessSuspendedUntil || gameWeeksBetween(state.fixtures, now, candidate.accessSuspendedUntil) < 0)
+    ).sort((a, b) => b.relationship - a.relationship || a.id.localeCompare(b.id))[0];
+    if (!contact) return blocked("Referral needs an active contact at this club with relationship 50+ and no suspended access.");
+    evidenceLabel = `Referred by ${contact.name}`;
+    evidenceId = contact.id;
+  }
+  if (pitchType === "showcase") {
+    const report = Object.values(state.reports).filter(candidate =>
+      candidate.scoutId === state.scout.id && candidate.qualityScore >= 65
+      && candidate.submittedWeek >= 1 && candidate.submittedSeason >= 1
+      && gameWeeksBetween(state.fixtures, { week: candidate.submittedWeek, season: candidate.submittedSeason }, now) >= 0
+    ).sort((a, b) => b.qualityScore - a.qualityScore || a.id.localeCompare(b.id))[0];
+    if (!report) return blocked("Showcase needs one of your completed reports with quality 65+.");
+    const player = state.players[report.playerId];
+    evidenceLabel = `${player ? `Report on ${player.firstName} ${player.lastName}` : "Your completed report"} · quality ${Math.round(report.qualityScore)} · season ${report.submittedSeason}, week ${report.submittedWeek}`;
+    evidenceId = report.id;
+  }
+  return { eligible: true, reason: `£${cost} + 3 fatigue · one pitch this week · this club waits 4 weeks after a decline.`, cost, evidenceLabel, evidenceId };
+}
+
+/** Apply one eligible attempt atomically; blocked actions consume neither RNG nor resources. */
+export function attemptClientPitch(
+  state: GameState,
+  clubId: string,
+  pitchType: ClientPitchType,
+  rng: RNG,
+): GameState {
+  const eligibility = getClientPitchEligibility(state, clubId, pitchType);
+  if (!eligibility.eligible || !state.finances) return state;
+  const club = state.clubs[clubId];
+  const actionSequence = (state.finances.actionSequence ?? 0) + 1;
+  const result = pitchToClub(rng, state.scout, state.finances, club, pitchType, actionSequence, state.players);
+  const occurredAt = { week: state.currentWeek, season: state.currentSeason };
+  const retryAt = addGameWeeks(state.fixtures, occurredAt, CLIENT_PITCH_COOLDOWN_WEEKS);
+  const attempt: ClientPitchAttempt = {
+    clubId, pitchType, occurredAt, retryAt, cost: eligibility.cost,
+    success: result.success, message: result.success ? result.message
+      : `${club.name} declined. You can approach again in season ${retryAt.season}, week ${retryAt.week}.`,
+    evidenceLabel: eligibility.evidenceLabel,
+    evidenceId: eligibility.evidenceId,
+  };
+  let finances: FinancialRecord = {
+    ...state.finances, actionSequence,
+    balance: state.finances.balance - eligibility.cost,
+    // One attempt per week keeps this recent audit comfortably beyond every active cooldown.
+    clientPitchHistory: [...(state.finances.clientPitchHistory ?? []), attempt].slice(-52),
+    transactions: [...state.finances.transactions, {
+      week: state.currentWeek, season: state.currentSeason, amount: -eligibility.cost,
+      description: `Client pitch preparation: ${club.name} (${pitchType})`,
+      category: "operatingCost", referenceId: `client-pitch:${actionSequence}`, counterpartyId: clubId,
+    }],
+  };
+  if (result.success && result.offeredContract) {
+    finances = ensureClientRelationship(finances, clubId, state.currentWeek, state.currentSeason);
+    finances = { ...finances, pendingRetainerOffers: [...finances.pendingRetainerOffers, result.offeredContract] };
+  }
+  return { ...state, finances, scout: { ...state.scout, fatigue: state.scout.fatigue + CLIENT_PITCH_FATIGUE } };
+}
 
 /**
  * Attempt to pitch services to a club and generate a retainer offer on success.

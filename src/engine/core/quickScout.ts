@@ -112,6 +112,8 @@ export function autoScheduleWeek(
     },
     state.youthTournaments,
     state.reports,
+    { currentSeason: state.currentSeason, consequenceState: state.consequenceState,
+      scoutingCases: state.scoutingCases, alumniRecords: state.alumniRecords, retiredPlayers: state.retiredPlayers },
   );
 
   // Estimate current fatigue trajectory across the week

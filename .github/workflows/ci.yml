@@ -105,6 +105,12 @@ jobs:
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=moderate
 
+      - name: Desktop import memory admission regression
+        run: npm run test:electron-import-admission
+
+      - name: Formatter precision and real consumer regression
+        run: npm run test:sprintf-precision-guard
+
       - name: Type check
         run: npx tsc --noEmit
 

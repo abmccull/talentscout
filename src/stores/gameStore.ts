@@ -1,3 +1,5 @@
+import { SaveOperationCancelledError } from "@/lib/saveOperationOwnership";
+import { assertCareerCanResume } from "@/lib/careerDisposition";
 import { captureException } from "@/lib/deferredErrorReporting";
 import { revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { create } from "zustand";
@@ -334,6 +336,33 @@ type GameStore = GameStoreState;
 // single-flight so double activation cannot race two careers into one store.
 let newGameStartInFlight = false;
 
+// All asynchronous career replacements share one owner. Source references also
+// protect ordinary unsaved play while a provider read is pending.
+let replacementOwner: symbol | null = null;
+let replacementGeneration = 0;
+function beginCareerReplacement(source: GameStoreState, get: () => GameStoreState) {
+  const token = Symbol("career-replacement");
+  replacementOwner = token;
+  replacementGeneration += 1;
+  let accepted: { state: GameState; generation: number } | null = null;
+  const canCommit = () => replacementOwner === token
+    && get().gameState === source.gameState
+    && get().activeSession === source.activeSession
+    && get().weekSimulation === source.weekSimulation;
+  return {
+    isCurrent: () => replacementOwner === token,
+    canCommit,
+    canMirror: () => accepted
+      ? accepted.generation === replacementGeneration && get().gameState === accepted.state
+      : canCommit(),
+    acceptCurrentCareer: () => {
+      // loadGame clears this request synchronously; never steal a newer owner.
+      const state = get().gameState;
+      if (replacementOwner === null && state) accepted = { state, generation: replacementGeneration };
+    },
+  };
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   // Navigation
   currentScreen: "mainMenu",
@@ -410,6 +439,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Start new game
   startNewGame: async (config) => {
     if (newGameStartInFlight) return;
+    get().dismissSaveConflict();
+    const request = beginCareerReplacement(get(), get);
     resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     set({
@@ -492,6 +523,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rng,
       selectedCountries,
     );
+    if (!request.canCommit()) return;
     let scout = createScout(effectiveConfig, rng);
     // `countries` is the map/travel surface, not a static data catalogue. It
     // must only contain countries actually generated into this world. All
@@ -621,6 +653,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Build a temporary state object so Phase 2 generators can read world data
     const tempState: GameState = {
       seed: effectiveConfig.worldSeed,
+      careerInstanceId: globalThis.crypto.randomUUID(),
       runManifest,
       currentWeek: 1,
       currentSeason: 1,
@@ -933,6 +966,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           recentTemplateIds: readPlayerExperience().recentVeteranPrologueTemplateIds,
         })
       : null;
+    if (!request.canCommit()) return;
     if (veteranPrologue) {
       recordVeteranPrologueTemplate(veteranPrologue.templateId);
     }
@@ -1025,7 +1059,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         set,
       );
     }
+    return get().gameState ?? undefined;
     } finally {
+      if (request.isCurrent()) replacementOwner = null;
       newGameStartInFlight = false;
     }
   },
@@ -1036,6 +1072,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const migratedState = reconcileOpeningReportStage(migrateSaveState(rawState));
     const scenarioSafeState = revealKnownGamePortraits(migratedState);
     assertEarlyAccessSaveCompatibility(scenarioSafeState);
+    assertCareerCanResume(scenarioSafeState);
+    get().dismissSaveConflict();
     // Rejected imports leave the active career's simulation and saves intact.
     terminateWeeklySimulationWorker();
     const resumableSession = scenarioSafeState.activeObservationSession ?? null;
@@ -1147,11 +1185,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadFromSlot: async (slot) => {
-    set({ isLoadingSave: true });
+    const request = beginCareerReplacement(get(), get);
+    set({ isLoadingSave: true, isResolvingSaveConflict: false, saveConflict: null });
     try {
       const provider = await getActiveSaveProvider();
       const slotName = slotNumberToSaveName(slot);
-      const conflict = await provider.checkConflict(slotName);
+      if (!request.canCommit()) return;
+      const conflict = await provider.checkConflict(slotName, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!request.canCommit()) return;
       if (conflict) {
         set({
           saveConflict: {
@@ -1163,12 +1204,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       set({ saveConflict: null });
-      const loaded = await provider.load(slotName);
-      if (!loaded) return;
+      const loaded = await provider.load(slotName, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!loaded || !request.canCommit()) return;
 
       get().loadGame(loadResultGameState(loaded));
+    } catch (error) {
+      if (error instanceof SaveOperationCancelledError || !request.canCommit()) return;
+      throw error;
     } finally {
-      set({ isLoadingSave: false });
+      if (request.isCurrent()) {
+        replacementOwner = null;
+        set({ isLoadingSave: false });
+      }
     }
   },
 
@@ -1222,14 +1269,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   restoreSaveRecoveryCopy: async (archiveId) => {
-    set({ isLoadingSave: true });
+    const request = beginCareerReplacement(get(), get);
+    set({ isLoadingSave: true, isResolvingSaveConflict: false, saveConflict: null });
     try {
       const provider = await getActiveSaveProvider();
-      const restored = await provider.restoreRecoveryCopy(archiveId);
+      if (!request.canCommit()) return;
+      const restored = await provider.restoreRecoveryCopy(archiveId, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!request.canCommit()) return;
       get().loadGame(loadResultGameState(restored));
+      request.acceptCurrentCareer();
       await get().refreshSaveSlots();
+    } catch (error) {
+      if (error instanceof SaveOperationCancelledError || !request.canCommit()) return;
+      throw error;
     } finally {
-      set({ isLoadingSave: false });
+      if (request.isCurrent()) {
+        replacementOwner = null;
+        set({ isLoadingSave: false });
+      }
     }
   },
 
@@ -1246,21 +1303,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   dismissSaveConflict: () => {
-    set({ saveConflict: null });
+    replacementOwner = null;
+    replacementGeneration += 1;
+    set({ saveConflict: null, isLoadingSave: false, isResolvingSaveConflict: false });
   },
 
   resolveSaveConflict: async (slot, preferredSource) => {
-    set({ isResolvingSaveConflict: true });
+    const request = beginCareerReplacement(get(), get);
+    set({ isResolvingSaveConflict: true, isLoadingSave: false });
     try {
       const provider = await getActiveSaveProvider();
       const slotName = slotNumberToSaveName(slot);
-      const resolved = await provider.resolveConflict(slotName, preferredSource);
+      if (!request.canCommit()) return;
+      const resolved = await provider.resolveConflict(slotName, preferredSource, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!request.canCommit()) return;
 
       get().loadGame(loadResultGameState(resolved));
+      request.acceptCurrentCareer();
       set({ saveConflict: null });
       await get().refreshSaveSlots();
+    } catch (error) {
+      if (error instanceof SaveOperationCancelledError || !request.canCommit()) return;
+      throw error;
     } finally {
-      set({ isResolvingSaveConflict: false });
+      if (request.isCurrent()) {
+        replacementOwner = null;
+        set({ isResolvingSaveConflict: false });
+      }
     }
   },
 
@@ -1502,6 +1571,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       {
         currentSeason: gameState.currentSeason,
         consequenceState: gameState.consequenceState,
+        scoutingCases: gameState.scoutingCases,
+        alumniRecords: gameState.alumniRecords,
+        retiredPlayers: gameState.retiredPlayers,
       },
     );
   },
@@ -1579,11 +1651,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const signatureSummary = getLatestCareerSignatureSummary(profile);
 
     // Start the game with perk-only carryover using the existing startNewGame flow.
-    await get().startNewGame(perkResult.config);
+    const createdState = await get().startNewGame(perkResult.config);
 
-    // Now apply post-generation bonuses that can't be expressed in NewGameConfig
+    // Apply perks only to the exact career returned by this generation request.
+    // A load/import can replace it before this outer async continuation runs.
     const { gameState } = get();
-    if (!gameState) return;
+    if (!createdState || gameState !== createdState) return;
 
     let updatedState = { ...gameState };
     let updatedScout = { ...updatedState.scout };

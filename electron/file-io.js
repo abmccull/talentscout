@@ -3,6 +3,7 @@
 const { randomUUID } = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { TextDecoder } = require("node:util");
 const { decodeUtf8SavePayload } = require("./save-transfer");
 
 function assertPositiveByteLimit(maxBytes) {
@@ -54,9 +55,9 @@ async function atomicWriteUtf8File(filePath, text, maxBytes, fileSystem = fs) {
 }
 
 /**
- * Read a regular file through one open handle, enforce its byte budget before
- * and after materialization, and reject malformed UTF-8 rather than silently
- * replacing corrupt bytes before JSON validation sees them.
+ * Read a stable regular file into its admitted allocation through one handle.
+ * A one-byte overflow probe detects growth without materializing it. Decode in
+ * bounded pieces to validate UTF-8 without retaining a second full-size string.
  */
 async function readBoundedUtf8Buffer(filePath, maxBytes, fileSystem = fs) {
   assertPositiveByteLimit(maxBytes);
@@ -68,13 +69,32 @@ async function readBoundedUtf8Buffer(filePath, maxBytes, fileSystem = fs) {
       throw new RangeError(`Selected file must contain 1-${maxBytes} bytes`);
     }
 
-    const payload = await handle.readFile();
-    if (payload.byteLength <= 0 || payload.byteLength > maxBytes) {
-      throw new RangeError(`Selected file must contain 1-${maxBytes} bytes`);
+    const payload = Buffer.allocUnsafe(stats.size);
+    const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+    let offset = 0;
+    while (offset < payload.byteLength) {
+      const { bytesRead } = await handle.read(
+        payload,
+        offset,
+        Math.min(64 * 1024, payload.byteLength - offset),
+        offset,
+      );
+      if (bytesRead === 0) throw new Error("Selected file changed size while being read");
+      try {
+        decoder.decode(payload.subarray(offset, offset + bytesRead), { stream: true });
+      } catch {
+        throw new TypeError("save payload is not valid UTF-8");
+      }
+      offset += bytesRead;
     }
-    // Validate before crossing IPC. Return the original buffer so chunked
-    // transfers do not need another UTF-8 encode in the main process.
-    decodeUtf8SavePayload(payload);
+
+    const { bytesRead: overflowBytes } = await handle.read(Buffer.allocUnsafe(1), 0, 1, offset);
+    if (overflowBytes !== 0) throw new Error("Selected file changed size while being read");
+    try {
+      decoder.decode();
+    } catch {
+      throw new TypeError("save payload is not valid UTF-8");
+    }
     return payload;
   } finally {
     await handle.close();

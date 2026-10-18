@@ -86,6 +86,20 @@ function gameState(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("narrative truth contracts", () => {
+  it.each([undefined, 0, -1, Number.NaN, 2])("does not present an unverified pulse as recorded accuracy (sample %s)", sampleSize => {
+    const state = gameState();
+    state.scout.performancePulses = [{ period: 5, season: 1, reportsSubmitted: 2,
+      reportQualityAvg: 70, accuracyRate: 50, accuracySampleSize: sampleSize,
+      signingSuccess: 0, fatigueAvg: 0, grade: "C", trend: "stable" }];
+    const signal = getNarrativeCallbackSignals(state).find(candidate => candidate.evidence.source === "performance-pulse");
+    expect(signal).toBeDefined();
+    if (sampleSize === 2) expect(signal!.summary).toContain("50% recorded accuracy");
+    else {
+      expect(signal!.summary).toContain("awaiting verified assessments");
+      expect(signal!.summary).not.toContain("50% recorded accuracy");
+    }
+  });
+
   it("requires an authoritative contract for every material factual story type", () => {
     expect(Object.keys(FACTUAL_NARRATIVE_TRUTH_CONTRACTS).sort()).toEqual(
       [...MATERIAL_FACTUAL_NARRATIVE_TYPES].sort(),

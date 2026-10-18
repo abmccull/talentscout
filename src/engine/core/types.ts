@@ -354,7 +354,7 @@ export interface Scout {
 
   // --- Deep Systems Overhaul ---
   /** Rolling accuracy tracking for recent reports. */
-  accuracyHistory?: { week: number; season: number; predictedCA: number; actualCA: number }[];
+  accuracyHistory?: { week: number; season: number; predictedCA: number; actualCA: number; assessmentBasis?: "submission" }[];
   /** Monthly performance pulse grades. */
   performancePulses?: PerformancePulse[];
 }
@@ -611,6 +611,10 @@ export interface ScoutReport {
    * player development is not mistaken for an inaccurate original report.
    */
   validationSnapshot?: Partial<Record<PlayerAttribute, number>>;
+  /** Engine-only current ability at submission; never compare a present-tense report to later development. */
+  validationCurrentAbility?: number;
+  /** Durable legacy outcome: original truth is missing, so historical accuracy cannot be validated. */
+  validationStatus?: "unverifiable";
 }
 
 /**
@@ -1822,6 +1826,10 @@ export interface InvalidScenarioArchiveEntry {
 }
 
 export interface GameState {
+  /** Unique playthrough identity; unlike the run manifest, repeated seeds get a new identity. */
+  careerInstanceId?: string;
+  /** Permanent terminal disposition; older snapshots are blocked by the local run record. */
+  careerEnd?: { reason: "ironman-fired"; season: number; week: number };
   /** Permanent observed-person portrait reservations, including archived players. */
   playerPortraits?: import("../players/portraits/types").PlayerPortraitState;
   /** First-assignment guide choice. Missing in legacy saves; false always keeps navigation open. */
@@ -3162,6 +3170,8 @@ export interface FinancialRecord {
    * so repeated actions in one week remain unique and save/reload deterministic.
    */
   actionSequence?: number;
+  /** Recent outreach attempts retain costs, outcomes, and retry dates across saves. */
+  clientPitchHistory?: import("../finance/clientRelationships").ClientPitchAttempt[];
   /** 5-slot equipment loadout and owned items. */
   equipment?: EquipmentInventory;
 
@@ -3269,6 +3279,8 @@ export interface PerformancePulse {
   reportsSubmitted: number;
   reportQualityAvg: number;
   accuracyRate: number;
+  /** Zero means the neutral rate is a fallback, not a measured assessment. */
+  accuracySampleSize?: number;
   signingSuccess: number;
   fatigueAvg: number;
   /** Formal study kept the period professionally productive despite low case volume. */
@@ -3560,6 +3572,10 @@ export interface PlacementReport {
   targetClubId: string;
   pitchPosture?: PlacementPitchPosture;
   supportCondition?: PlacementSupportCondition;
+  /** Existing pending pitches keep the terms under which they were made. */
+  supportTermsVersion?: 1;
+  /** New placements only: executable scout follow-up, never a retroactive promise. */
+  supportCommitment?: import("../youth/placementSupport").PlacementSupportCommitment;
   scoutId: string;
   conviction: ConvictionLevel;
   clubResponse?: "pending" | "accepted" | "rejected" | "trial" | "followUpRequested";

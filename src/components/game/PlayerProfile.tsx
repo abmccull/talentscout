@@ -1,4 +1,6 @@
 "use client";
+
+import { resolveActionableProspect } from "@/engine/youth/actionableProspects";
 import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { expandPlayerInjuryHistory, expandPlayerPersonalityProfile } from "../../engine/players/playerStateArchive";
 import { expandLoanDeal } from "../../engine/finance/terminalRecordArchive";
@@ -233,6 +235,7 @@ function PlayerProfileContent() {
   const recurringInjuryConcern = hasObservableRecurringInjuryConcern(expandPlayerInjuryHistory(player.injuryHistory, player.id));
   const canonicalPlayerId = resolvedPlayer.playerId;
   const unsignedYouthRecord = resolvedPlayer.unsignedYouth;
+  const actionableProspect = resolveActionableProspect(gameState, resolvedPlayer.playerId);
   const relatedPlayerIds = new Set(
     getResolvedPlayerIds(gameState, selectedPlayerId),
   );
@@ -801,7 +804,7 @@ function PlayerProfileContent() {
               </Button>
             )}
             {/* Youth-specific quick actions */}
-            {unsignedYouthRecord && observations.length > 0 && (
+            {actionableProspect && (observations.length > 0 || actionableProspect.source !== "unsigned") && (
               <>
                 <Button
                   variant="outline"
@@ -941,7 +944,7 @@ function PlayerProfileContent() {
                   startReport(canonicalPlayerId);
                   return;
                 }
-                if (unsignedYouthRecord && observations.length > 0) {
+                if (actionableProspect && (observations.length > 0 || actionableProspect.source !== "unsigned")) {
                   setPendingCalendarActivity({
                     type: "followUpSession",
                     targetId: canonicalPlayerId,

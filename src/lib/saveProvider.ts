@@ -1,3 +1,5 @@
+import { assertSaveOperationOwned, type SaveOperationOwnership } from "./saveOperationOwnership";
+import { assertCareerCanResume } from "./careerDisposition";
 /**
  * SaveProvider — unified multi-backend save abstraction.
  *
@@ -183,13 +185,13 @@ export interface SaveProvider {
    * Queries all available backends in parallel and returns the entry with
    * the newest timestamp.  Returns null when the slot is empty everywhere.
    */
-  load(slotName: string): Promise<LoadResult | null>;
+  load(slotName: string, ownership?: SaveOperationOwnership): Promise<LoadResult | null>;
 
   /**
    * Load a specific backend copy for the slot instead of automatically
    * choosing the newest source.
    */
-  loadFromSource(slotName: string, source: SaveSource): Promise<LoadResult | null>;
+  loadFromSource(slotName: string, source: SaveSource, ownership?: SaveOperationOwnership): Promise<LoadResult | null>;
 
   /**
    * List all available saves across every configured backend.
@@ -212,7 +214,7 @@ export interface SaveProvider {
    * CONFLICT_THRESHOLD_MS.  Returns null when there is no conflict (or when
    * no cloud backend is available / the slot does not exist in the cloud).
    */
-  checkConflict(slotName: string): Promise<SaveConflict | null>;
+  checkConflict(slotName: string, ownership?: SaveOperationOwnership): Promise<SaveConflict | null>;
 
   /**
    * Resolve a divergence without destroying the unselected branch. The loser
@@ -221,13 +223,14 @@ export interface SaveProvider {
   resolveConflict(
     slotName: string,
     preferredSource: SaveSource,
+    ownership?: SaveOperationOwnership,
   ): Promise<ConflictResolutionResult>;
 
   /** Player-visible immutable recovery copies, newest first. */
   listRecoveryCopies(slotName?: string): Promise<SaveArchiveSummary[]>;
 
   /** Restore a journal generation locally while preserving the displaced head. */
-  restoreRecoveryCopy(archiveId: string): Promise<LoadResult>;
+  restoreRecoveryCopy(archiveId: string, ownership?: SaveOperationOwnership): Promise<LoadResult>;
 
   /** Persistent offline queue state; unlike the legacy status it survives reloads. */
   getSyncStatus(): Promise<PersistentCloudSyncStatus>;
@@ -491,13 +494,22 @@ class SaveProviderImpl implements SaveProvider {
   private async uploadQueuedRecord(
     target: SaveSyncTarget,
     record: SaveRecord,
+    ownership?: SaveOperationOwnership,
   ): Promise<void> {
     if (target === "steam") {
       const steam = getSteam();
       if (!this.includeSteam || !steam.isAvailable()) {
         throw new Error("Steam Cloud is unavailable. The local save remains queued.");
       }
+      assertSaveOperationOwned(ownership);
       const existing = await steam.getCloudSave(record.slot);
+      assertSaveOperationOwned(ownership);
+      // The remote preflight can outlive a newer local save. Re-read the
+      // authoritative revision immediately before initiating the upload.
+      const current = await loadGameWithRecovery(record.slot, { publishPlayerExperience: false });
+      assertSaveOperationOwned(ownership);
+      if (!current || current.record.storageRevision !== record.storageRevision
+        || current.record.savedAt !== record.savedAt) return;
       if (existing) {
         let parsed: unknown;
         try {
@@ -521,6 +533,7 @@ class SaveProviderImpl implements SaveProvider {
       record.state,
       record.name,
       record.savedAt,
+      ownership,
     );
   }
 
@@ -541,13 +554,14 @@ class SaveProviderImpl implements SaveProvider {
     await cloud.deleteCloudSave(slot);
   }
 
-  private async processQueuedTask(task: SaveSyncQueueRecord): Promise<boolean> {
+  private async processQueuedTask(task: SaveSyncQueueRecord, ownership?: SaveOperationOwnership): Promise<boolean> {
     return serializeSyncTask(task.id, async () => {
       const outcome = await processSaveSyncTask(task.id, (current) =>
         current.operation === "upload"
-          ? this.uploadQueuedRecord(current.target, current.record)
+          ? this.uploadQueuedRecord(current.target, current.record, ownership)
           : this.deleteQueuedRemote(current.target, current.slot),
       );
+      if (ownership?.canCommit && !ownership.canCommit()) return false;
       if (outcome === "failed") {
         const queue = await listSaveSyncQueue();
         const failed = queue.find((entry) => entry.id === task.id);
@@ -572,7 +586,10 @@ class SaveProviderImpl implements SaveProvider {
     record: SaveRecord,
     waitForCloud: boolean,
     requestedTargets?: readonly SaveSyncTarget[],
+    ownership?: SaveOperationOwnership,
   ): Promise<void> {
+    const mirrorOwnership = ownership
+      ? { canCommit: ownership.canMirror ?? ownership.canCommit } : undefined;
     const configured = new Set(this.configuredSyncTargets());
     const targets = requestedTargets
       ? requestedTargets.filter((target) => configured.has(target))
@@ -581,19 +598,23 @@ class SaveProviderImpl implements SaveProvider {
 
     const tasks: SaveSyncQueueRecord[] = [];
     for (const target of targets) {
-      tasks.push(await enqueueSaveSync(record, target));
+      assertSaveOperationOwned(mirrorOwnership);
+      tasks.push(await enqueueSaveSync(record, target, mirrorOwnership));
+      assertSaveOperationOwned(mirrorOwnership);
     }
     markCloudSyncPending();
 
     const upload = async () => {
+      assertSaveOperationOwned(mirrorOwnership);
       const outcomes = await Promise.all(
-        tasks.map((task) => this.processQueuedTask(task)),
+        tasks.map((task) => this.processQueuedTask(task, mirrorOwnership)),
       );
       if (outcomes.some((succeeded) => !succeeded)) {
         throw new Error(
           "The save is safe locally, but one or more cloud copies remain queued.",
         );
       }
+      assertSaveOperationOwned(mirrorOwnership);
       for (const target of targets) {
         mirroredRevisionByTarget.set(mirrorRevisionKey(target, record), mirrorRevision(record));
       }
@@ -603,6 +624,7 @@ class SaveProviderImpl implements SaveProvider {
       await upload();
     } else {
       void upload().catch((error: unknown) => {
+        if (mirrorOwnership?.canCommit && !mirrorOwnership.canCommit()) return;
         console.warn("SaveProvider: remote mirror remains queued:", error);
       });
     }
@@ -684,7 +706,7 @@ class SaveProviderImpl implements SaveProvider {
   // load
   // -------------------------------------------------------------------------
 
-  async load(slotName: string): Promise<LoadResult | null> {
+  async load(slotName: string, ownership?: SaveOperationOwnership): Promise<LoadResult | null> {
     const slot = slotNameToNumber(slotName);
 
     // Gather candidates from all available backends in parallel.
@@ -703,7 +725,9 @@ class SaveProviderImpl implements SaveProvider {
       }
     }
 
+    assertSaveOperationOwned(ownership);
     if (!best) return null;
+    assertCareerCanResume(best.record.state);
     mergePersistedPlayerExperience(best.record.playerExperience);
     return candidateToLoadResult(best);
   }
@@ -711,10 +735,13 @@ class SaveProviderImpl implements SaveProvider {
   async loadFromSource(
     slotName: string,
     source: SaveSource,
+    ownership?: SaveOperationOwnership,
   ): Promise<LoadResult | null> {
     const slot = slotNameToNumber(slotName);
     const candidate = await this._loadRecordFromSource(slot, source);
+    assertSaveOperationOwned(ownership);
     if (!candidate) return null;
+    assertCareerCanResume(candidate.record.state);
     mergePersistedPlayerExperience(candidate.record.playerExperience);
     return candidateToLoadResult(candidate);
   }
@@ -735,7 +762,7 @@ class SaveProviderImpl implements SaveProvider {
 
   private async _loadLocalRecord(slot: number): Promise<RecordCandidate | null> {
     try {
-      const loaded = await loadGameWithRecovery(slot);
+      const loaded = await loadGameWithRecovery(slot, { publishPlayerExperience: false });
       if (!loaded) return null;
       return {
         source: "local",
@@ -784,10 +811,14 @@ class SaveProviderImpl implements SaveProvider {
       const meta = metas.find((m) => m.slot === slot);
       if (!meta) return null;
 
-      const state = await supabaseProvider.downloadSave(slot);
+      let playerExperience: Parameters<typeof createSaveEnvelope>[2];
+      const state = await supabaseProvider.downloadSave(slot, {
+        publishPlayerExperience: false,
+        onPlayerExperience: (value) => { playerExperience = value; },
+      });
       if (!state) return null;
 
-      const envelope = createSaveEnvelope(state, meta.savedAt);
+      const envelope = createSaveEnvelope(state, meta.savedAt, playerExperience);
       const record = migrateSaveRecord({
         ...envelope,
         slot: meta.slot,
@@ -925,16 +956,18 @@ class SaveProviderImpl implements SaveProvider {
   // checkConflict
   // -------------------------------------------------------------------------
 
-  async checkConflict(slotName: string): Promise<SaveConflict | null> {
+  async checkConflict(slotName: string, ownership?: SaveOperationOwnership): Promise<SaveConflict | null> {
     const slot = slotNameToNumber(slotName);
 
     const local = await this._loadLocalRecord(slot);
+    assertSaveOperationOwned(ownership);
     if (!local) return null;
 
     const cloudCandidates = await Promise.all([
       this._loadSteamRecord(slot),
       this._loadSupabaseRecord(slot),
     ]);
+    assertSaveOperationOwned(ownership);
     for (const cloud of cloudCandidates) {
       if (!cloud) continue;
       if (
@@ -963,9 +996,11 @@ class SaveProviderImpl implements SaveProvider {
   async resolveConflict(
     slotName: string,
     preferredSource: SaveSource,
+    ownership?: SaveOperationOwnership,
   ): Promise<ConflictResolutionResult> {
     const slot = slotNameToNumber(slotName);
-    const conflict = await this.checkConflict(slotName);
+    const conflict = await this.checkConflict(slotName, ownership);
+    assertSaveOperationOwned(ownership);
     if (!conflict) {
       throw new Error("This save no longer has a conflict. Refresh the save list.");
     }
@@ -977,6 +1012,7 @@ class SaveProviderImpl implements SaveProvider {
       this._loadLocalRecord(slot),
       this._loadRecordFromSource(slot, conflict.cloud.source),
     ]);
+    assertSaveOperationOwned(ownership);
     if (!local || !cloud) {
       throw new Error("One side of the save conflict disappeared. Refresh before choosing.");
     }
@@ -987,15 +1023,17 @@ class SaveProviderImpl implements SaveProvider {
       throw new Error("This conflict changed while it was open. Review the updated copies.");
     }
 
+    assertCareerCanResume((preferredSource === "local" ? local : cloud).record.state);
     if (local.recovery) {
       // A conflict decision must never operate against corrupt head bytes.
       // Promote the verified generation first, then re-check the remote branch
       // before atomically archiving whichever valid branch the player rejects.
-      const restored = await restoreSaveArchive(local.recovery.archiveId);
+      const restored = await restoreSaveArchive(local.recovery.archiveId, ownership);
       const refreshedCloud = await this._loadRecordFromSource(
         slot,
         conflict.cloud.source,
       );
+      assertSaveOperationOwned(ownership);
       if (
         !refreshedCloud
         || refreshedCloud.record.savedAt !== conflict.cloud.timestamp
@@ -1018,11 +1056,13 @@ class SaveProviderImpl implements SaveProvider {
       losingSource: losing.source,
       selected: selected.record,
       losing: losing.record,
-    });
+    }, ownership);
 
     // Resolve only the branch the player reviewed. A second divergent remote
     // remains untouched and will receive its own conflict prompt.
-    await this.mirrorRecord(commit.selected, true, [conflict.cloud.source]);
+    assertSaveOperationOwned(ownership);
+    await this.mirrorRecord(commit.selected, true, [conflict.cloud.source], ownership);
+    assertSaveOperationOwned(ownership);
     mergePersistedPlayerExperience(commit.selected.playerExperience);
     return Object.assign(
       candidateToLoadResult({ source: "local", record: commit.selected }),
@@ -1036,12 +1076,14 @@ class SaveProviderImpl implements SaveProvider {
     );
   }
 
-  async restoreRecoveryCopy(archiveId: string): Promise<LoadResult> {
-    const record = await restoreSaveArchive(archiveId);
+  async restoreRecoveryCopy(archiveId: string, ownership?: SaveOperationOwnership): Promise<LoadResult> {
+    const record = await restoreSaveArchive(archiveId, ownership);
+    assertSaveOperationOwned(ownership);
     // Restoring selects canonical history. Queue that exact record for each
     // configured remote so an older cloud branch cannot silently reappear.
     // The local restore remains successful while an offline mirror is retried.
-    await this.mirrorRecord(record, false);
+    await this.mirrorRecord(record, false, undefined, ownership);
+    assertSaveOperationOwned(ownership);
     mergePersistedPlayerExperience(record.playerExperience);
     return candidateToLoadResult({ source: "local", record });
   }

@@ -222,7 +222,7 @@ export const ObservationPitch = memo(function ObservationPitch({
                   playerId={marker.playerId}
                   size={64}
                   className="h-16 w-16"
-                  alt={marker.name}
+                  alt=""
                 />
                 {marker.isFocused && (
                   <span className="absolute inset-0 rounded-full ring-2 ring-[color:var(--signal-focus)]" />
@@ -275,7 +275,7 @@ export const ObservationPitch = memo(function ObservationPitch({
                     }`}
                     aria-label={`Select ${markerLabel(marker)} for focus`}
                   >
-                    <YouthPortraitWithFallback playerId={marker.playerId} size={32} alt={marker.name} />
+                    <YouthPortraitWithFallback playerId={marker.playerId} size={32} alt="" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-medium text-zinc-200">{marker.name}</span>
                       <span className="block truncate text-eyebrow text-zinc-300">

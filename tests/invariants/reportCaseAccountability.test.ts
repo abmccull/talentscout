@@ -401,6 +401,68 @@ describe("report case accountability", () => {
     expect(replay.messages).toEqual([]);
   });
 
+  it("keeps submission-time ability accuracy when a youth develops before review", () => {
+    const accurate = {
+      ...report("growth", "growth-case", "growth-player", 1, 1),
+      validationCurrentAbility: 80,
+      validationSnapshot: { pace: 8 },
+      attributeAssessments: [{ attribute: "pace", estimatedValue: 8, confidenceRange: [7, 9], domain: "physical" }],
+    } as ScoutReport;
+    const saved = JSON.parse(JSON.stringify({
+      currentWeek: 1, currentSeason: 4,
+      scout: { id: "scout-1", reputation: 50, accuracyHistory: [] },
+      reports: { growth: accurate },
+      players: { "growth-player": { id: "growth-player", firstName: "Growth", lastName: "Prospect", currentAbility: 110, attributes: { pace: 11 } } },
+      unsignedYouth: {}, retiredPlayers: {}, alumniRecords: [], transferRecords: [],
+    })) as GameState;
+    const result = validateMatureReportCasesAtSeasonEnd(saved, 3);
+    expect(result.state.scout.accuracyHistory).toEqual([{ week: 1, season: 4, predictedCA: 80, actualCA: 80, assessmentBasis: "submission" }]);
+    expect(result.state.reports.growth.postTransferRating).toBe(100);
+    const replay = validateMatureReportCasesAtSeasonEnd(JSON.parse(JSON.stringify(result.state)), 3);
+    expect(replay.state.scout.accuracyHistory).toHaveLength(1);
+    delete saved.reports.growth.validationCurrentAbility;
+    expect(validateMatureReportCasesAtSeasonEnd(saved, 3).state.scout.accuracyHistory).toEqual([]);
+  });
+
+  it("keeps legacy history but excludes unknown assessment dates from the pulse", () => {
+    const legacy = { week: 4, season: 1, predictedCA: 80, actualCA: 110 };
+    const scout = { id: "scout-1", fatigue: 0, reputation: 50, accuracyHistory: [legacy] } as Scout;
+    const state = { currentWeek: 4, currentSeason: 1, reports: {}, discoveryRecords: [] } as unknown as GameState;
+    const loaded = JSON.parse(JSON.stringify(scout)) as Scout;
+    const unknown = generatePerformancePulse(state, loaded);
+    expect(unknown.accuracyRate).toBe(50);
+    expect(applyPulseConsequences(loaded, unknown, 4, 1).messages[0].body).toContain("Awaiting verified assessments");
+    expect(loaded.accuracyHistory).toEqual([legacy]);
+    loaded.accuracyHistory!.push({ ...legacy, actualCA: 80, assessmentBasis: "submission" });
+    expect(generatePerformancePulse(state, loaded).accuracyRate).toBe(100);
+  });
+
+  it.each([undefined, { pace: 8 }])("leaves legacy reports unverified without complete submission truth", snapshot => {
+    const legacy = { ...report("legacy-unverified", "legacy-case", "legacy-player", 1, 1),
+      attributeAssessments: [
+        { attribute: "pace", estimatedValue: 8, confidenceRange: [7, 9], domain: "physical" },
+        { attribute: "passing", estimatedValue: 8, confidenceRange: [7, 9], domain: "technical" },
+      ], validationSnapshot: snapshot, validationCurrentAbility: 80 } as ScoutReport;
+    const saved = JSON.parse(JSON.stringify({ currentWeek: 1, currentSeason: 4,
+      scout: { id: "scout-1", reputation: 50, accuracyHistory: [] },
+      reports: { [legacy.id]: legacy }, inbox: [],
+      players: { "legacy-player": { id: "legacy-player", firstName: "Legacy", lastName: "Prospect", currentAbility: 110, attributes: { pace: 15, passing: 15 } } },
+      unsignedYouth: {}, retiredPlayers: {}, alumniRecords: [], transferRecords: [],
+    })) as GameState;
+    const result = validateMatureReportCasesAtSeasonEnd(saved, 3);
+    expect(result.state.scout.reputation).toBe(50);
+    expect(result.state.scout.accuracyHistory).toEqual([]);
+    expect(result.state.reports[legacy.id]).toMatchObject({ validationStatus: "unverifiable" });
+    expect(result.state.reports[legacy.id].postTransferRating).toBeUndefined();
+    expect(calculateReportAccountabilityMetrics(Object.values(result.state.reports), "scout-1").validatedCases).toBe(0);
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0].body).toContain("submission-time attribute evidence is incomplete");
+    expect(result.messages[0].body).not.toContain("has been validated");
+    const reloaded = JSON.parse(JSON.stringify({ ...result.state, currentSeason: 5, inbox: [] })) as GameState;
+    expect(validateMatureReportCasesAtSeasonEnd(reloaded, 4).messages).toEqual([]);
+    expect(reloaded.scout.reputation).toBe(50);
+  });
+
   it("weights mature accuracy and calibrated conviction above craft volume", () => {
     const scout = {
       id: "scout-1",

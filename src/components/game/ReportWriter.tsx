@@ -1124,7 +1124,7 @@ export function ReportWriter() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-cyan-300">Boardroom step</p>
-                        <h3 id="presentation-room-title" className="mt-1 text-lg font-bold text-white">Choose how you make the case</h3>
+                        <h2 id="presentation-room-title" className="mt-1 text-lg font-bold text-white">Choose how you make the case</h2>
                         <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-400">
                           Framing changes what the room notices. It cannot improve the underlying evidence, and every approach gives something up.
                         </p>
@@ -1650,7 +1650,7 @@ export function ReportWriter() {
           {/* Observation summary */}
           <Card data-tutorial-id="report-observation-summary">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{t("observationSummary")}</CardTitle>
+              <CardTitle as="h2" className="text-sm">{t("observationSummary")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4">
               <div>
@@ -1678,7 +1678,7 @@ export function ReportWriter() {
           {draft && (draft.perceivedCAStars != null || draft.estimatedValue > 0) && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Ability Overview</CardTitle>
+                <CardTitle as="h2" className="text-sm">Ability Overview</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-6">
@@ -1728,7 +1728,7 @@ export function ReportWriter() {
           {draft && draft.comparisonSuggestions.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Comparison Angles</CardTitle>
+                <CardTitle as="h2" className="text-sm">Comparison Angles</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
@@ -1753,7 +1753,7 @@ export function ReportWriter() {
           {/* Current Form */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Current Form</CardTitle>
+              <CardTitle as="h2" className="text-sm">Current Form</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-3 mb-3">
@@ -1772,7 +1772,7 @@ export function ReportWriter() {
           {merged.size > 0 && (
             <Card data-tutorial-id="report-attributes">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">{t("attributeAssessments")}</CardTitle>
+                <CardTitle as="h2" className="text-sm">{t("attributeAssessments")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1820,7 +1820,7 @@ export function ReportWriter() {
           {!isYouthCase && (
           <Card data-tutorial-id="report-strengths">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
+              <CardTitle as="h2" className="text-sm">
                 {t("strengths")} ({selectedStrengths.length})
               </CardTitle>
             </CardHeader>
@@ -1924,7 +1924,7 @@ export function ReportWriter() {
           {!isYouthCase && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
+              <CardTitle as="h2" className="text-sm">
                 {t("weaknesses")} ({selectedWeaknesses.length})
               </CardTitle>
             </CardHeader>
@@ -2029,7 +2029,7 @@ export function ReportWriter() {
           {!isYouthCase && personalityProfile && !personalityProfile.hiddenUntilRevealed && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Character Assessment</CardTitle>
+                <CardTitle as="h2" className="text-sm">Character Assessment</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -2090,7 +2090,7 @@ export function ReportWriter() {
           {/* Written summary */}
           <Card className="hidden">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{t("scoutSummary")}</CardTitle>
+              <CardTitle as="h2" className="text-sm">{t("scoutSummary")}</CardTitle>
             </CardHeader>
             <CardContent>
               {effectiveSummary.trim() ? (
@@ -2109,7 +2109,7 @@ export function ReportWriter() {
           {observations.length > 0 && (
             <Card className="hidden">
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <TrendingUp size={14} className="text-zinc-400" aria-hidden="true" />
                    Craft Preview
                 </CardTitle>
@@ -2212,7 +2212,7 @@ export function ReportWriter() {
               </summary>
             <Card className="mt-4 border-emerald-500/20">
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <DollarSign size={14} className="text-emerald-400" aria-hidden="true" />
                   Price Estimate
                   <Badge
@@ -2274,7 +2274,7 @@ export function ReportWriter() {
           {systemFit && (
             <Card className="border-blue-500/20">
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <Target size={14} className="text-blue-400" aria-hidden="true" />
                   System Fit
                   <span

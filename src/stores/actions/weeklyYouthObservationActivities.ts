@@ -41,9 +41,9 @@ import {
 import { recordDiscovery } from "@/engine/career";
 import { buildScoutQualityDataForState } from "./weeklySimulationSupport";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
-import { produceWeeklyVenueObservation } from "./weeklyObservationProducer";
+import { produceWeeklyVenueObservation, produceWeeklyPlayerObservation } from "./weeklyObservationProducer";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
-import { resolveUnsignedYouth } from "@/lib/playerResolution";
+import { resolveActionableProspect } from "@/engine/youth/actionableProspects";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -130,7 +130,6 @@ export function processWeeklyYouthObservationActivities(
     completedInteractiveIds,
     completedLiveActivityTypes,
   } = input;
-  const weekEquipBonuses = input.equipmentBonuses;
   const qualityMap = input.qualityByType;
   const actObsRng = input.rng;
   let actDiscoveries = [...input.discoveries];
@@ -169,11 +168,6 @@ export function processWeeklyYouthObservationActivities(
       tournament,
   });
 
-  const resolveTargetYouth = (
-    targetId: string,
-    youthMap: Record<string, UnsignedYouth>,
-  ): UnsignedYouth | null => resolveUnsignedYouth({ unsignedYouth: youthMap }, targetId);
-
   // ── Youth-exclusive activity observation handlers ──────────────────────
   // These use the proper youth venue system (getYouthVenuePool + processVenueObservation)
   // which draws from unsignedYouth rather than signed professionals.
@@ -202,107 +196,6 @@ export function processWeeklyYouthObservationActivities(
     };
 
     let updatedUnsignedYouthObs = { ...stateWithScheduleApplied.unsignedYouth };
-
-    // --- Follow-Up Session: deepens observation on a specific youth ---
-    if (weekResult.followUpSessionsExecuted > 0) {
-      const qr = qualityMap.get("followUpSession");
-      const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
-      const followUpActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
-        .filter((entry) => !completedInteractiveIds.has(
-          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
-        ))
-        .map((entry) => entry.activity)
-        .filter((a) => a.type === "followUpSession" && !!a.targetId);
-      for (const followUpAct of followUpActivities) {
-        const booking = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
-          .find(entry => entry.activity === followUpAct)!;
-        if (!followUpAct.targetId) continue;
-        const targetYouth = resolveTargetYouth(followUpAct.targetId, updatedUnsignedYouthObs);
-        if (!targetYouth) continue;
-        const pool = getYouthVenuePool(
-          actObsRng,
-          "followUpSession",
-          updatedUnsignedYouthObs,
-          currentScout,
-          undefined,
-          targetYouth.id,
-          undefined,
-          stateWithScheduleApplied.currentWeek,
-          undefined,
-          buildScoutQualityDataForState(
-            stateWithScheduleApplied,
-            effectiveScoutCountry,
-          ),
-        );
-        if (pool.length === 0) continue;
-        const youth = pool[0];
-        const existingObsForYouth = playerEvidence(youth.player.id);
-        const result = produceWeeklyVenueObservation({
-          state: stateWithScheduleApplied, rng: actObsRng, scout: currentScout, youth,
-          context: "followUpSession", existingObservations: existingObsForYouth,
-          activityInstanceId: getInteractiveActivityCompletionKey(booking.activity, booking.dayIndex),
-        });
-
-        recordObservation(result.observation);
-        updatedUnsignedYouthObs[youth.id] = result.updatedYouth;
-        weekObservationsGenerated++;
-
-        const topAttrs = result.observation.attributeReadings
-          .sort((a, b) => b.perceivedValue - a.perceivedValue)
-          .slice(0, 3)
-          .map((r) => `${r.attribute} ${r.perceivedValue}`)
-          .join(", ");
-        const narrativePrefix = qr ? `${qr.narrative}\n\n` : "";
-        actObsMessages.push({
-          id: `obs-followup-${youth.player.id}-w${stateWithScheduleApplied.currentWeek}`,
-          week: stateWithScheduleApplied.currentWeek,
-          season: stateWithScheduleApplied.currentSeason,
-          type: "feedback" as const,
-          title: `Follow-Up Session${tierLabel ? ` (${tierLabel})` : ""}: ${youth.player.firstName} ${youth.player.lastName}`,
-          body: `${narrativePrefix}You conducted a focused follow-up session on ${youth.player.firstName} ${youth.player.lastName} (age ${youth.player.age}, ${youth.player.position}). This deeper assessment refines your earlier observations. ${result.observation.attributeReadings.length} attributes assessed with higher confidence. Notable: ${topAttrs}.`,
-          read: false,
-          actionRequired: false,
-          relatedId: youth.player.id,
-          relatedEntityType: "player" as const,
-        });
-      }
-    }
-
-    // --- Parent/Coach Meeting: reveals hidden intel, no attribute observations ---
-    if (weekResult.parentCoachMeetingsExecuted > 0) {
-      const qr = qualityMap.get("parentCoachMeeting");
-      const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
-      const meetingActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
-        .filter((entry) => !completedInteractiveIds.has(
-          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
-        ))
-        .map((entry) => entry.activity)
-        .filter((a) => a.type === "parentCoachMeeting" && !!a.targetId);
-      for (const meetingAct of meetingActivities) {
-        if (!meetingAct.targetId) continue;
-        const youth = resolveTargetYouth(meetingAct.targetId, updatedUnsignedYouthObs);
-        if (!youth || youth.placed || youth.retired) continue;
-
-        const meetingResult = processParentCoachMeeting(actObsRng, currentScout, youth);
-        const intelLines = [
-          ...meetingResult.hiddenIntel.map((h) => `Intel: ${h}`),
-          ...meetingResult.characterNotes.map((c) => `Character: ${c}`),
-        ];
-        const narrativePrefix = qr ? `${qr.narrative}\n\n` : "";
-        actObsMessages.push({
-          id: `obs-parentcoach-${youth.player.id}-w${stateWithScheduleApplied.currentWeek}`,
-          week: stateWithScheduleApplied.currentWeek,
-          season: stateWithScheduleApplied.currentSeason,
-          type: "feedback" as const,
-          title: `Parent/Coach Meeting${tierLabel ? ` (${tierLabel})` : ""}: ${youth.player.firstName} ${youth.player.lastName}`,
-          body: `${narrativePrefix}You met with ${youth.player.firstName} ${youth.player.lastName}'s family and coaching staff.\n\n${intelLines.join("\n")}`,
-          read: false,
-          actionRequired: false,
-          relatedId: youth.player.id,
-          relatedEntityType: "player" as const,
-        });
-      }
-    }
 
     // ── Focus observations for youth venues (main path) ──────────────
     // The fallback path has this inline; the main path must run it too.
@@ -699,132 +592,6 @@ export function processWeeklyYouthObservationActivities(
     tournamentIdForType("agencyShowcase"),
   );
 
-  // --- Follow-Up Session: deepens observation on a specific youth ---
-    if (weekResult.followUpSessionsExecuted > 0) {
-      const qr = qualityMap.get("followUpSession");
-      const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
-      // Find the followUpSession activity to get its targetId
-      const followUpActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
-        .filter((entry) => !completedInteractiveIds.has(
-          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
-        ))
-        .map((entry) => entry.activity)
-        .filter((a) => a.type === "followUpSession" && !!a.targetId);
-      for (const followUpAct of followUpActivities) {
-        const booking = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
-          .find(entry => entry.activity === followUpAct)!;
-        if (!followUpAct?.targetId) continue;
-        const targetYouth = resolveTargetYouth(followUpAct.targetId, updatedUnsignedYouthObs);
-        if (!targetYouth) continue;
-        const pool = getYouthVenuePool(
-          actObsRng,
-          "followUpSession",
-          updatedUnsignedYouthObs,
-          currentScout,
-          undefined,
-          targetYouth.id,
-          undefined,
-          stateWithScheduleApplied.currentWeek,
-          undefined,
-        buildScoutQualityDataForState(
-          stateWithScheduleApplied,
-          effectiveScoutCountry,
-        ),
-      );
-      if (pool.length === 0) continue;
-      const youth = pool[0];
-      const existingObsForYouth = playerEvidence(youth.player.id);
-      const result = produceWeeklyVenueObservation({
-          state: stateWithScheduleApplied, rng: actObsRng, scout: currentScout, youth,
-          context: "followUpSession", existingObservations: existingObsForYouth,
-          activityInstanceId: getInteractiveActivityCompletionKey(booking.activity, booking.dayIndex),
-        });
-
-      recordObservation(result.observation);
-      updatedUnsignedYouthObs[youth.id] = result.updatedYouth;
-      weekObservationsGenerated++;
-
-      // Roll gut feeling for standalone follow-up observation
-      const followUpGutFeeling = rollGutFeeling(
-        actObsRng,
-        currentScout,
-        youth,
-        "followUpSession",
-        gutPerkMods,
-        gutEquipBonuses?.gutFeelingBonus ?? 0,
-      );
-      if (followUpGutFeeling) {
-        followUpGutFeeling.week = stateWithScheduleApplied.currentWeek;
-        followUpGutFeeling.season = stateWithScheduleApplied.currentSeason;
-        if (youthPerkModifiers.hasPAEstimate) {
-          followUpGutFeeling.narrative = formatGutFeelingWithPA(
-            followUpGutFeeling,
-            youth,
-            gutPerkMods,
-            gutEquipBonuses?.paEstimateAccuracy ?? 0,
-          );
-        }
-        newGutFeelings.push(followUpGutFeeling);
-      }
-
-      const topAttrs = result.observation.attributeReadings
-        .sort((a, b) => b.perceivedValue - a.perceivedValue)
-        .slice(0, 3)
-        .map((r) => `${r.attribute} ${r.perceivedValue}`)
-        .join(", ");
-      const narrativePrefix = qr ? `${qr.narrative}\n\n` : "";
-      actObsMessages.push({
-        id: `obs-followup-${youth.player.id}-w${stateWithScheduleApplied.currentWeek}`,
-        week: stateWithScheduleApplied.currentWeek,
-        season: stateWithScheduleApplied.currentSeason,
-        type: "feedback" as const,
-        title: `Follow-Up Session${tierLabel ? ` (${tierLabel})` : ""}: ${youth.player.firstName} ${youth.player.lastName}`,
-        body: `${narrativePrefix}You conducted a focused follow-up session on ${youth.player.firstName} ${youth.player.lastName} (age ${youth.player.age}, ${youth.player.position}). This deeper assessment refines your earlier observations. ${result.observation.attributeReadings.length} attributes assessed with higher confidence. Notable: ${topAttrs}.`,
-        read: false,
-        actionRequired: false,
-        relatedId: youth.player.id,
-        relatedEntityType: "player" as const,
-      });
-    }
-  }
-
-  // --- Parent/Coach Meeting: reveals hidden intel, no attribute observations ---
-    if (weekResult.parentCoachMeetingsExecuted > 0) {
-      const qr = qualityMap.get("parentCoachMeeting");
-      const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
-      const meetingActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
-        .filter((entry) => !completedInteractiveIds.has(
-          getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
-        ))
-        .map((entry) => entry.activity)
-        .filter((a) => a.type === "parentCoachMeeting" && !!a.targetId);
-      for (const meetingAct of meetingActivities) {
-        if (!meetingAct?.targetId) continue;
-      const youth = resolveTargetYouth(meetingAct.targetId, updatedUnsignedYouthObs);
-      if (!youth || youth.placed || youth.retired) continue;
-
-      const meetingResult = processParentCoachMeeting(actObsRng, currentScout, youth);
-
-      const intelLines = [
-        ...meetingResult.hiddenIntel.map((h) => `Intel: ${h}`),
-        ...meetingResult.characterNotes.map((c) => `Character: ${c}`),
-      ];
-      const narrativePrefix = qr ? `${qr.narrative}\n\n` : "";
-      actObsMessages.push({
-        id: `obs-parentcoach-${youth.player.id}-w${stateWithScheduleApplied.currentWeek}`,
-        week: stateWithScheduleApplied.currentWeek,
-        season: stateWithScheduleApplied.currentSeason,
-        type: "feedback" as const,
-        title: `Parent/Coach Meeting${tierLabel ? ` (${tierLabel})` : ""}: ${youth.player.firstName} ${youth.player.lastName}`,
-        body: `${narrativePrefix}You met with ${youth.player.firstName} ${youth.player.lastName}'s family and coaching staff.\n\n${intelLines.join("\n")}`,
-        read: false,
-        actionRequired: false,
-        relatedId: youth.player.id,
-        relatedEntityType: "player" as const,
-      });
-    }
-  }
-
   // Apply updated unsigned youth back to state
   stateWithScheduleApplied = {
     ...stateWithScheduleApplied,
@@ -849,7 +616,94 @@ export function processWeeklyYouthObservationActivities(
   }
   } // end else (fallback for old saves)
 
+  // Targeted work follows the person after placement. Signed Player is the truth;
+  // an observation must never recreate a duplicate unsigned-youth record.
+  const successfullyCompletedTargets = new Set<string>();
+  const targetedMessages: InboxMessage[] = [];
+  for (const booking of getScheduledActivityInstances(stateWithScheduleApplied.schedule)) {
+    const activity = booking.activity;
+    if (!activity.targetId || (activity.type !== "followUpSession" && activity.type !== "parentCoachMeeting")) continue;
+    const activityInstanceId = getInteractiveActivityCompletionKey(activity, booking.dayIndex);
+    const evidenceKey = `s${stateWithScheduleApplied.currentSeason}-w${stateWithScheduleApplied.currentWeek}-${activityInstanceId}`;
+    const alreadyFiled = Object.values(updatedObservations).some(observation =>
+      observation.activityInstanceId === activityInstanceId
+      && observation.week === stateWithScheduleApplied.currentWeek
+      && observation.season === stateWithScheduleApplied.currentSeason);
+    if (completedInteractiveIds.has(activityInstanceId) || alreadyFiled) {
+      successfullyCompletedTargets.add(activityInstanceId);
+      continue;
+    }
+    const executed = activity.type === "followUpSession"
+      ? weekResult.followUpSessionsExecuted : weekResult.parentCoachMeetingsExecuted;
+    if (executed <= 0) continue;
+    const target = resolveActionableProspect(stateWithScheduleApplied, activity.targetId);
+    if (!target) {
+      targetedMessages.push({ id: `unavailable-${evidenceKey}`, week: stateWithScheduleApplied.currentWeek,
+        season: stateWithScheduleApplied.currentSeason, type: "feedback", title: "Follow-up target unavailable",
+        body: "This scheduled follow-up could not take place because the player is no longer available. Review the dossier before booking another session. No evidence or case completion was credited.",
+        read: false, actionRequired: false, relatedId: activity.targetId, relatedEntityType: "player" });
+      continue;
+    }
+    const { player, unsignedYouth } = target;
+    let observation: Observation;
+    if (activity.type === "parentCoachMeeting") {
+      const meeting = processParentCoachMeeting(actObsRng, currentScout,
+        unsignedYouth ?? { player, buzzLevel: 0 });
+      observation = { id: `meeting-${evidenceKey}`, playerId: player.id, scoutId: currentScout.id,
+        activityInstanceId, week: stateWithScheduleApplied.currentWeek, season: stateWithScheduleApplied.currentSeason,
+        context: "parentCoachMeeting", attributeReadings: [], flaggedMoments: [],
+        notes: [...meeting.hiddenIntel, ...meeting.characterNotes].map(note => `Reported testimony (unverified): ${note}`) };
+    } else if (unsignedYouth) {
+      const result = produceWeeklyVenueObservation({ state: stateWithScheduleApplied, rng: actObsRng,
+        scout: currentScout, youth: unsignedYouth, context: "followUpSession",
+        existingObservations: playerEvidence(player.id), activityInstanceId });
+      observation = result.observation;
+      stateWithScheduleApplied = { ...stateWithScheduleApplied, unsignedYouth: {
+        ...stateWithScheduleApplied.unsignedYouth, [unsignedYouth.id]: result.updatedYouth,
+      } };
+    } else {
+      observation = produceWeeklyPlayerObservation({ state: stateWithScheduleApplied, rng: actObsRng,
+        scout: currentScout, player, context: "followUpSession", existingObservations: playerEvidence(player.id), activityInstanceId });
+    }
+    recordObservation(observation);
+    // Preserve the unsigned follow-up instinct roll from the legacy resolver.
+    if (activity.type === "followUpSession" && unsignedYouth && !simYouthResults) {
+      const perks = resolveScoutPerkModifiers(currentScout);
+      const modifiers = { gutFeelingMultiplier: perks.gutFeelingMultiplier,
+        gutFeelingMaxAge: perks.gutFeelingMaxAge, paEstimate: perks.hasPAEstimate };
+      const equipment = stateWithScheduleApplied.finances?.equipment
+        ? getActiveEquipmentBonuses(stateWithScheduleApplied.finances.equipment.loadout) : undefined;
+      const feeling = rollGutFeeling(actObsRng, currentScout, unsignedYouth, "followUpSession", modifiers, equipment?.gutFeelingBonus ?? 0);
+      if (feeling) {
+        feeling.week = stateWithScheduleApplied.currentWeek;
+        feeling.season = stateWithScheduleApplied.currentSeason;
+        if (perks.hasPAEstimate) feeling.narrative = formatGutFeelingWithPA(feeling, unsignedYouth, modifiers, equipment?.paEstimateAccuracy ?? 0);
+        stateWithScheduleApplied = { ...stateWithScheduleApplied,
+          gutFeelings: [...stateWithScheduleApplied.gutFeelings, feeling] };
+      }
+    }
+    weekObservationsGenerated++;
+    successfullyCompletedTargets.add(activityInstanceId);
+    const name = `${player.firstName} ${player.lastName}`;
+    targetedMessages.push({ id: `completed-${evidenceKey}`, week: stateWithScheduleApplied.currentWeek,
+      season: stateWithScheduleApplied.currentSeason, type: "feedback", title: `${activity.type === "parentCoachMeeting" ? "Parent/Coach Meeting" : "Follow-Up Session"}: ${name}`,
+      body: activity.type === "parentCoachMeeting"
+        ? `You met with ${name}'s family and coaching staff. Their accounts are testimony to cross-check, not confirmed facts.\n\n${observation.notes.join("\n")}`
+        : `You completed a focused follow-up on ${name}. ${observation.attributeReadings.length} attributes were assessed; the evidence is filed in the same dossier as the original recommendation.`,
+      read: false, actionRequired: false, relatedId: player.id, relatedEntityType: "player" });
+  }
+  actObsMessages.push(...targetedMessages);
+  const existingMessageIds = new Set(stateWithScheduleApplied.inbox.map(message => message.id));
+  if (targetedMessages.length > 0) {
+    stateWithScheduleApplied = { ...stateWithScheduleApplied,
+      ...(hasNewObservations() ? { observations: updatedObservations } : {}),
+      inbox: [...stateWithScheduleApplied.inbox, ...targetedMessages.filter(message => !existingMessageIds.has(message.id))] };
+  }
+
   const completedTargetedActivities = getScheduledActivityInstances(stateWithScheduleApplied.schedule)
+    .filter(entry => entry.activity.type === "writePlacementReport" || successfullyCompletedTargets.has(
+      getInteractiveActivityCompletionKey(entry.activity, entry.dayIndex),
+    ))
     .map((entry) => entry.activity)
     .filter((activity) =>
       Boolean(activity.targetId) && (

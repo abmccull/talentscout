@@ -89,6 +89,7 @@ export function ReportWorkspaceBridge({
   const hasFiledArtifact = featuredArtifact !== null;
   const hasLaneItems = viewModel.lanes.some((lane) => lane.items.length > 0);
   const showCompactLifecycle = !hasFiledArtifact && !hasLaneItems;
+  const hasComparisonSelection = viewModel.comparisonCount > 0;
 
   return (
     <section
@@ -96,11 +97,11 @@ export function ReportWorkspaceBridge({
       data-testid="reports-command-deck"
       aria-labelledby="reports-command-deck-title"
     >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className={`grid gap-4 ${hasComparisonSelection ? "xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]" : ""}`}>
         <article className="overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.14),transparent_38%),linear-gradient(180deg,rgba(16,21,27,0.98),rgba(11,16,21,0.98))] p-5 shadow-2xl shadow-black/20">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+              <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-emerald-300">
                 Current report artifact
               </p>
               <h2 id="reports-command-deck-title" className="mt-2 text-2xl font-bold text-white">
@@ -127,27 +128,27 @@ export function ReportWorkspaceBridge({
                 <p className="text-sm leading-6 text-zinc-200">{featuredArtifact.summary}</p>
                 <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Audience</dt>
+                    <dt className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">Audience</dt>
                     <dd className="mt-1 text-sm font-semibold text-white">{featuredArtifact.audience}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Target club</dt>
+                    <dt className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">Target club</dt>
                     <dd className="mt-1 text-sm font-semibold text-white">{featuredArtifact.targetClub}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Need</dt>
+                    <dt className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">Need</dt>
                     <dd className="mt-1 text-sm font-semibold text-white">{featuredArtifact.need}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Primary risk</dt>
+                    <dt className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">Primary risk</dt>
                     <dd className="mt-1 text-sm font-semibold text-white">{featuredArtifact.risk}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Confidence</dt>
+                    <dt className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">Confidence</dt>
                     <dd className="mt-1 text-sm font-semibold text-white">{featuredArtifact.confidence}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Recommended action</dt>
+                    <dt className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">Recommended action</dt>
                     <dd className="mt-1 text-sm font-semibold text-white">{featuredArtifact.recommendedAction}</dd>
                   </div>
                 </dl>
@@ -165,7 +166,7 @@ export function ReportWorkspaceBridge({
               </div>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Next follow-up</p>
+                  <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">Next follow-up</p>
                   <p className="mt-1 text-sm leading-6 text-zinc-300">{featuredArtifact.followUp}</p>
                 </div>
                 <Button
@@ -201,7 +202,7 @@ export function ReportWorkspaceBridge({
               <div className="relative mt-3 overflow-hidden rounded-xl border border-white/10 bg-[repeating-linear-gradient(180deg,rgba(255,255,255,0.025)_0,rgba(255,255,255,0.025)_1px,transparent_1px,transparent_2.4rem)] p-4">
                 <div className="pointer-events-none absolute inset-y-0 left-5 w-px bg-emerald-400/15" aria-hidden="true" />
                 <div className="relative pl-5">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                  <p className="text-eyebrow font-semibold uppercase tracking-[0.18em] text-emerald-300">
                     Opening question
                   </p>
                   <p className="mt-2 text-base font-semibold leading-6 text-white">
@@ -212,7 +213,7 @@ export function ReportWorkspaceBridge({
                       ? "Check your observations, unresolved questions and uncertainty. You can write a report or choose another look from the player's dossier."
                       : "Create the evidence first. Audience, role, risk, and conviction remain deliberately blank until you have something real to defend."}
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                  <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-eyebrow font-semibold uppercase tracking-[0.14em] text-quiet">
                     <span>Audience unset</span>
                     <span>Role unset</span>
                     <span>Conviction untested</span>
@@ -244,12 +245,12 @@ export function ReportWorkspaceBridge({
                   : viewModel.comparisonSummary}
               </p>
               {!showCompactLifecycle && (
-                <p className="mt-3 text-xs text-zinc-500">{viewModel.archiveSummary}</p>
+                <p className="mt-3 text-xs text-quiet">{viewModel.archiveSummary}</p>
               )}
             </div>
           </div>
           {showCompactLifecycle ? (
-            <ol className="mt-4 space-y-3" aria-label="Report lifecycle">
+            <ol className="mt-4 grid gap-3 sm:grid-cols-3" aria-label="Report lifecycle">
               {LIFECYCLE_STEPS.map((step, index) => (
                 <li
                   key={step.id}
@@ -265,7 +266,7 @@ export function ReportWorkspaceBridge({
                 </li>
               ))}
             </ol>
-          ) : (
+          ) : hasComparisonSelection ? (
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -284,7 +285,7 @@ export function ReportWorkspaceBridge({
                 Clear tray
               </Button>
             </div>
-          )}
+          ) : null}
         </section>
       </div>
 
@@ -309,7 +310,7 @@ export function ReportWorkspaceBridge({
                 aria-labelledby={`reports-lane-${lane.id}`}
               >
                 <div className="flex items-start gap-3">
-                  <span className={laneHasItems ? "mt-0.5 text-emerald-300" : "mt-0.5 text-zinc-500"}>
+                  <span className={laneHasItems ? "mt-0.5 text-emerald-300" : "mt-0.5 text-quiet"}>
                     <LaneIcon size={17} aria-hidden="true" />
                   </span>
                   <div>
@@ -323,7 +324,7 @@ export function ReportWorkspaceBridge({
                   {!laneHasItems ? (
                     <div className="rounded-xl border border-dashed border-white/[0.09] bg-black/15 p-4">
                       <p className="font-semibold text-zinc-300">{lane.emptyTitle}</p>
-                      <p className="mt-1 text-sm leading-6 text-zinc-500">{lane.emptyBody}</p>
+                      <p className="mt-1 text-sm leading-6 text-quiet">{lane.emptyBody}</p>
                     </div>
                   ) : (
                     lane.items.map((item) => (
@@ -331,12 +332,12 @@ export function ReportWorkspaceBridge({
                         key={item.id}
                         className={`workspace-interactive rounded-xl border p-4 ${TONE_CLASSES[item.tone]}`}
                       >
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                        <p className="text-eyebrow font-semibold uppercase tracking-[0.16em] text-quiet">
                           {item.eyebrow}
                         </p>
                         <p className="mt-2 text-sm font-semibold text-white">{item.title}</p>
                         <p className="mt-2 text-sm leading-6 text-zinc-300">{item.body}</p>
-                        <p className="mt-3 text-xs text-zinc-500">{item.meta}</p>
+                        <p className="mt-3 text-xs text-quiet">{item.meta}</p>
                         {item.action && (
                           <div className="mt-4">
                             <ActionButton action={item.action} onAction={onAction} />

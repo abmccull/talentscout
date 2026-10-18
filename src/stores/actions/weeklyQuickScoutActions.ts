@@ -1,3 +1,4 @@
+import { getWeeklySimulationGeneration } from "@/lib/weeklySimulationLifecycle";
 import { getWeeklyWorkCounts } from "@/lib/weeklyWorkCounts";
 /**
  * Fast-forward, delegation, and leadership actions that sit beside the
@@ -71,6 +72,7 @@ export function createWeeklyQuickScoutActions(
     batchAdvance: async (weeks: number, priorities?: QuickScoutPriorities) => {
       const initialState = get().gameState;
       if (!initialState) return;
+      const generation = getWeeklySimulationGeneration();
 
       // This is deliberately an input policy over the authoritative
       // day-by-day/week transaction. It must never own a second world
@@ -99,6 +101,7 @@ export function createWeeklyQuickScoutActions(
           get().startWeekSimulation();
           if (!get().weekSimulation) break;
           await get().fastForwardWeek();
+          if (generation !== getWeeklySimulationGeneration()) return;
 
           const after = get().gameState;
           if (!after) break;
@@ -154,7 +157,7 @@ export function createWeeklyQuickScoutActions(
       }
 
       const finalState = get().gameState;
-      if (!finalState) return;
+      if (!finalState || generation !== getWeeklySimulationGeneration()) return;
       const result: BatchAdvanceResult = {
         weekSummaries,
         weeksAdvanced: weekSummaries.length,

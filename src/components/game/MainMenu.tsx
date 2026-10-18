@@ -77,7 +77,13 @@ export function MainMenu() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [deleteConfirmSlot, setDeleteConfirmSlot] = useState<number | null>(null);
   const [deletingSlot, setDeletingSlot] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<{ message: string } | null>(null);
+  const loadErrorRef = useRef<HTMLDivElement>(null);
   const splashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (loadError && !isLoadingSave) loadErrorRef.current?.focus();
+  }, [loadError, isLoadingSave]);
 
   useEffect(() => {
     void refreshSaveSlots();
@@ -119,16 +125,31 @@ export function MainMenu() {
     .filter((save) => !save.unavailable)
     .sort((left, right) => right.savedAt - left.savedAt)[0];
 
-  const handleContinue = async () => {
-    if (continueSave) {
-      await loadFromSlot(continueSave.slot);
+  const handleLoad = async (slot: number) => {
+    setLoadError(null);
+    setDeleteConfirmSlot(null);
+    try {
+      await loadFromSlot(slot);
+      const result = useGameStore.getState();
+      // A pending conflict has its own resolution UI. A missing save can
+      // return without throwing, so confirm that loading actually left menu.
+      if (result.saveConflict) return;
+      if (result.currentScreen === "mainMenu") {
+        setLoadError({ message: "This save could not be opened. Try again or choose another save." });
+        return;
+      }
+      setShowLoadPicker(false);
+    } catch (error) {
+      setLoadError({
+        message: error instanceof Error && error.message.trim()
+          ? error.message
+          : "This career could not be loaded. Try again or choose another save.",
+      });
     }
   };
 
-  const handleLoad = async (slot: number) => {
-    setDeleteConfirmSlot(null);
-    await loadFromSlot(slot);
-    setShowLoadPicker(false);
+  const handleContinue = async () => {
+    if (continueSave) await handleLoad(continueSave.slot);
   };
 
   const handleDelete = async (slot: number) => {
@@ -236,6 +257,18 @@ export function MainMenu() {
         )}
       </div>
 
+      {loadError && (
+        <div
+          ref={loadErrorRef}
+          role="alert"
+          tabIndex={-1}
+          className="relative z-10 mb-4 w-full max-w-md rounded-lg border border-red-400/35 bg-[#241517] p-4 text-sm text-red-100"
+        >
+          <p className="font-semibold">Career not loaded</p>
+          <p className="mt-1 leading-relaxed">{loadError.message}</p>
+        </div>
+      )}
+
       {!showLoadPicker ? (
         <div
           className="relative z-10 flex w-64 flex-col gap-3"
@@ -245,6 +278,7 @@ export function MainMenu() {
             size="lg"
             className="w-full text-base"
             onClick={() => {
+              setLoadError(null);
               if (selectedScenarioId) {
                 setSelectedScenario(null);
               }
@@ -271,7 +305,10 @@ export function MainMenu() {
             size="lg"
             className="w-full text-base"
             disabled={!hasSaveEntries}
-            onClick={() => setShowLoadPicker(true)}
+            onClick={() => {
+              setLoadError(null);
+              setShowLoadPicker(true);
+            }}
           >
             Load Career
           </Button>
@@ -478,6 +515,7 @@ export function MainMenu() {
             variant="outline"
             className="w-full"
             onClick={() => {
+              setLoadError(null);
               setDeleteConfirmSlot(null);
               setShowLoadPicker(false);
             }}

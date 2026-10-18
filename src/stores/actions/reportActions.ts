@@ -500,6 +500,8 @@ export function createReportActions(get: GetState, set: SetState) {
         qualityScore: quality,
         reputationDelta,
         craftBreakdown: qualityDetailed.breakdown,
+        validationStatus: undefined,
+        validationCurrentAbility: player.currentAbility,
         validationSnapshot: Object.fromEntries(
           report.attributeAssessments.map((assessment) => [
             assessment.attribute,

@@ -1,3 +1,4 @@
+import { getWeeklySimulationGeneration } from "@/lib/weeklySimulationLifecycle";
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
@@ -769,14 +770,11 @@ export function createWeekSimulationActions(
         },
       });
       // Trigger the actual week advancement
-      const sourceSeason = get().gameState?.currentSeason;
-      const sourceWeek = get().gameState?.currentWeek;
-      await get().advanceWeekAsync();
-      const committedState = get().gameState;
-      const advanced = committedState == null
-        || committedState.currentSeason !== sourceSeason
-        || committedState.currentWeek !== sourceWeek;
-      if (!advanced) return;
+      const generation = getWeeklySimulationGeneration();
+      const sourceSimulation = get().weekSimulation;
+      const result = await get().advanceWeekAsync();
+      if (result !== "committed" || generation !== getWeeklySimulationGeneration()
+        || (get().weekSimulation !== null && get().weekSimulation !== sourceSimulation)) return;
       const { currentScreen } = get();
       if (currentScreen === "weekSimulation") {
         set({ weekSimulation: null, currentScreen: "calendar" });
@@ -818,14 +816,11 @@ export function createWeekSimulationActions(
     });
 
     // Skip to end and run the full advanceWeek
-    const sourceSeason = get().gameState?.currentSeason;
-    const sourceWeek = get().gameState?.currentWeek;
-    await get().advanceWeekAsync();
-    const committedState = get().gameState;
-    const advanced = committedState == null
-      || committedState.currentSeason !== sourceSeason
-      || committedState.currentWeek !== sourceWeek;
-    if (!advanced) return;
+    const generation = getWeeklySimulationGeneration();
+    const sourceSimulation = get().weekSimulation;
+    const result = await get().advanceWeekAsync();
+    if (result !== "committed" || generation !== getWeeklySimulationGeneration()
+      || (get().weekSimulation !== null && get().weekSimulation !== sourceSimulation)) return;
     const { currentScreen } = get();
     if (currentScreen === "weekSimulation") {
       set({ weekSimulation: null, currentScreen: "calendar" });

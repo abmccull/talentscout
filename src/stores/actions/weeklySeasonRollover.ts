@@ -61,6 +61,7 @@ import {
 import { generateAnalystCandidate, resolvePredictions } from "@/engine/data";
 import {
   calculateReportAccountabilityMetrics,
+  hasCompleteReportSubmissionSnapshot,
   isReportOutcomeValidatable,
   REPORT_VALIDATION_HORIZON_SEASONS,
   selectMatureReportCasesForValidation,
@@ -168,6 +169,15 @@ export function validateMatureReportCasesAtSeasonEnd(
     const player = resolvePlayerEntity(state, accountableReport.playerId)?.player;
     if (!player) continue;
 
+    if (!hasCompleteReportSubmissionSnapshot(accountableReport)) {
+      updatedReports[accountableReport.id] = { ...accountableReport, validationStatus: "unverifiable" };
+      messages.push({ id: `retro-unverifiable-${accountableReport.id}`, week: state.currentWeek,
+        season: state.currentSeason, title: `Historical assessment unavailable: ${player.firstName} ${player.lastName}`,
+        body: "This legacy report cannot receive a historical accuracy score because its submission-time attribute evidence is incomplete. Current ability and later development cannot reconstruct that evidence. The original report is preserved; no reputation reward or penalty was applied. A new report with fresh evidence can be assessed separately.",
+        type: "feedback", read: false, actionRequired: false, relatedId: player.id, relatedEntityType: "player" });
+      continue;
+    }
+
     const seasonsSinceReport = completedSeason - accountableReport.submittedSeason;
     const accountableAccuracy = trackPostTransfer(
       accountableReport,
@@ -191,12 +201,15 @@ export function validateMatureReportCasesAtSeasonEnd(
     const predictedCA = accountableReport.perceivedCAStars !== undefined
       ? starsToAbility(accountableReport.perceivedCAStars)
       : Math.round((assessmentAverage / 20) * 200);
-    if (!reportCase.wasPreviouslyValidated) {
+    // Old saves lack submission-time ability. Their attribute-based validation
+    // still applies, but current ability cannot reconstruct a historical fact.
+    if (!reportCase.wasPreviouslyValidated && Number.isFinite(accountableReport.validationCurrentAbility)) {
       accuracyHistory.push({
         week: state.currentWeek,
         season: state.currentSeason,
         predictedCA,
-        actualCA: player.currentAbility,
+        actualCA: accountableReport.validationCurrentAbility!,
+        assessmentBasis: "submission",
       });
     }
 
@@ -206,6 +219,10 @@ export function validateMatureReportCasesAtSeasonEnd(
         || completedSeason - report.submittedSeason < REPORT_VALIDATION_HORIZON_SEASONS
         || !isReportOutcomeValidatable(report)
       ) {
+        continue;
+      }
+      if (!hasCompleteReportSubmissionSnapshot(report)) {
+        updatedReports[report.id] = { ...report, validationStatus: "unverifiable" };
         continue;
       }
       updatedReports[report.id] = {
@@ -228,8 +245,8 @@ export function validateMatureReportCasesAtSeasonEnd(
         || transferredReportIds.has(report.id)
       );
     const outcomeContext = hadRecordedRecruitmentAction
-      ? "The recorded recruitment outcome and subsequent career evidence informed the review."
-      : "No signing or transfer was required; the original judgment was reviewed against the player's subsequent career evidence.";
+      ? "The original assessment was checked against its submission evidence; recruitment and later development remain separate outcomes."
+      : "No signing or transfer was required; the original assessment was checked against the evidence preserved with the report.";
     messages.push({
       id: `retro-${accountableReport.id}-s${completedSeason}`,
       week: state.currentWeek,

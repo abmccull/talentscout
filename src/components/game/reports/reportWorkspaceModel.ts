@@ -66,6 +66,7 @@ export interface ReportWorkspaceViewModel {
   comparisonSummary: string;
   comparisonCtaLabel: string;
   comparisonReady: boolean;
+  comparisonCount: number;
   archiveSummary: string;
 }
 
@@ -431,6 +432,7 @@ export function buildReportWorkspaceViewModel(
         : `${selectedCount} reports are ready for side-by-side comparison.`,
     comparisonCtaLabel: selectedCount < 2 ? `Compare (${selectedCount})` : `Compare (${selectedCount})`,
     comparisonReady: selectedCount >= 2,
+    comparisonCount: selectedCount,
     archiveSummary: `${input.reports.length} filed report${input.reports.length === 1 ? "" : "s"} | ${input.journalEntryCount} reflection entr${input.journalEntryCount === 1 ? "y" : "ies"} | ${input.activeListingsCount} active listing${input.activeListingsCount === 1 ? "" : "s"} | ${input.pendingBidsCount} pending bid${input.pendingBidsCount === 1 ? "" : "s"}`,
     lanes: [
       {

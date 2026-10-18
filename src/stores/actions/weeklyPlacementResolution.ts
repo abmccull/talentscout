@@ -50,6 +50,7 @@ import {
 } from "@/engine/reports/scoutingCases";
 import { updateReputation } from "@/engine/career";
 import { scaleReputationChange } from "@/engine/core/difficulty";
+import { createPlacementSupportCommitment, describePlacementSupport } from "@/engine/youth/placementSupport";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 
@@ -221,6 +222,7 @@ export function processWeeklyPlacementResolution(
           : undefined,
         pitchPosture: placementActivity.placementPitchPosture ?? "evidenceLed",
         supportCondition: placementActivity.placementSupportCondition ?? "none",
+        supportTermsVersion: 1 as const,
       };
       const linked = ensureScoutingCaseForReport(preparedScoutingCases, sourceReport);
       const recorded = recordDirectPlacementDelivery({
@@ -446,6 +448,12 @@ export function processWeeklyPlacementResolution(
             clubResponse: "accepted" as const,
             placementType: outcome.placementType ?? undefined,
             decisionId: resolved.decision?.id,
+            supportCommitment: createPlacementSupportCommitment(
+              report.supportTermsVersion === 1 ? report.supportCondition ?? "none" : "none", signedPlayerId,
+              { week: stateWithScheduleApplied.currentWeek, season: stateWithScheduleApplied.currentSeason },
+              seasonLength,
+              observationsByPlayerId.get(signedPlayerId) ?? [],
+            ),
           };
           updatedPlacementReports[report.id] = acceptedPlacement;
 
@@ -569,7 +577,7 @@ export function processWeeklyPlacementResolution(
             season: stateWithScheduleApplied.currentSeason,
             type: "event" as const,
             title: `Placement Accepted: ${youth.player.firstName} ${youth.player.lastName}`,
-            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. Your standing increased by ${scaledReputationGain.toFixed(1)} reputation. ${commercialOutcome} You can track their career progress in your alumni records.`,
+            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. Your standing increased by ${scaledReputationGain.toFixed(1)} reputation. ${commercialOutcome} You can track their career progress in your alumni records.${acceptedPlacement.supportCommitment ? `\n\n${describePlacementSupport(acceptedPlacement.supportCommitment)}` : ""}`,
             read: false,
             actionRequired: false,
             relatedId: signedPlayerId,

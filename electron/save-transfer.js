@@ -102,6 +102,22 @@ class SaveTransferBudget {
     this.reservedBytes += bytes;
   }
 
+  adopt(key, nextKey, bytes) {
+    assertSafePositiveInteger(bytes, "transfer bytes");
+    const allowance = this.reservations.get(key);
+    if (allowance === undefined || bytes > allowance) {
+      throw new Error("save transfer exceeds its reserved read allowance");
+    }
+    if (typeof nextKey !== "string" || nextKey.length === 0 || this.reservations.has(nextKey)) {
+      throw new Error("save transfer reservation key is invalid or duplicated");
+    }
+    // The reader and resulting download are one operation. Move ownership
+    // synchronously without freeing bytes or requiring a second transfer slot.
+    this.reservations.delete(key);
+    this.reservations.set(nextKey, bytes);
+    this.reservedBytes += bytes - allowance;
+  }
+
   release(key) {
     const bytes = this.reservations.get(key);
     if (bytes === undefined) return false;
@@ -149,7 +165,7 @@ class TransferRegistryBase {
     }
   }
 
-  beginTransfer(transfer) {
+  beginTransfer(transfer, readReservationKey = null) {
     this.purgeExpired();
 
     // A renderer may restart a transfer after a transient IPC failure. Keep at
@@ -175,7 +191,8 @@ class TransferRegistryBase {
 
     const timestamp = this.now();
     const budgetKey = `${transfer.direction}:${id}`;
-    this.budget.reserve(budgetKey, transfer.totalBytes);
+    if (readReservationKey === null) this.budget.reserve(budgetKey, transfer.totalBytes);
+    else this.budget.adopt(readReservationKey, budgetKey, transfer.totalBytes);
     this.transfers.set(id, {
       ...transfer,
       id,
@@ -282,7 +299,42 @@ class SaveUploadTransferRegistry extends TransferRegistryBase {
 }
 
 class SaveDownloadTransferRegistry extends TransferRegistryBase {
-  begin({ ownerId, slot, payload }) {
+  constructor(options = {}) {
+    super(options);
+    this.pendingReads = new Map();
+  }
+
+  async beginRead({ ownerId, slot, readPayload }) {
+    assertOwnerId(ownerId);
+    if (typeof readPayload !== "function") throw new TypeError("readPayload must be a function");
+    this.purgeExpired();
+    const key = `pending-read:${randomUUID()}`;
+    this.budget.reserve(key, this.maxPayloadBytes);
+    const pending = { ownerId, canceled: false };
+    this.pendingReads.set(key, pending);
+    try {
+      // The allowance covers the native dialog as well as all awaited I/O.
+      // Pending reads must not expire: their buffers may still be live after
+      // renderer destruction or a slow filesystem operation.
+      const payload = await readPayload(() => !pending.canceled);
+      if (pending.canceled || payload === null) return null;
+      return this.begin({ ownerId, slot, payload }, key);
+    } finally {
+      this.pendingReads.delete(key);
+      // Adoption moved the key into a download. Failures/cancellation release
+      // it here only after readPayload (including descriptor close) settles.
+      this.budget.release(key);
+    }
+  }
+
+  discardOwner(ownerId) {
+    for (const pending of this.pendingReads.values()) {
+      if (pending.ownerId === ownerId) pending.canceled = true;
+    }
+    super.discardOwner(ownerId);
+  }
+
+  begin({ ownerId, slot, payload }, readReservationKey = null) {
     assertOwnerId(ownerId);
     // The privileged caller hands ownership of a fresh Steam read buffer to
     // this registry. Retaining the view avoids a second 50-96 MiB copy.
@@ -301,7 +353,7 @@ class SaveDownloadTransferRegistry extends TransferRegistryBase {
       chunkCount,
       nextIndex: 0,
       payload: normalized,
-    });
+    }, readReservationKey);
     return { transferId, totalBytes: normalized.byteLength, chunkCount };
   }
 

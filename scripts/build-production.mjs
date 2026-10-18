@@ -51,10 +51,12 @@ function runNode(script, args = []) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+runNode(resolve(repositoryRoot, "scripts/verify-caveat-font.mjs"), ["--source-only"]);
 runNode(resolve(repositoryRoot, "scripts/prepare-portrait-runtime.cjs"), ["--check"]);
 runNode(resolve(repositoryRoot, "scripts/verify-bundled-portraits.cjs"));
 runNode(resolve(repositoryRoot, "scripts/clean-build-output.mjs"));
 runNode(resolve(repositoryRoot, "node_modules/next/dist/bin/next"), ["build"]);
+runNode(resolve(repositoryRoot, "scripts/verify-caveat-font.mjs"));
 runNode(resolve(repositoryRoot, "scripts/assert-shipping-provenance.mjs"), [
   `--expected=${configuredBuildVersion}`,
 ]);

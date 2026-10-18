@@ -316,48 +316,48 @@ function YouthCard({
             <p className="truncate font-semibold text-white">
               {youth.player.firstName} {youth.player.lastName}
             </p>
-            <Badge className={`shrink-0 text-[10px] ${PIPELINE_COLORS[stage]}`}>
+            <Badge className={`shrink-0 text-eyebrow ${PIPELINE_COLORS[stage]}`}>
               {PIPELINE_LABELS[stage]}
             </Badge>
             {observationBadge && (
-              <Badge className={`shrink-0 text-[10px] ${observationBadge.className}`}>
+              <Badge className={`shrink-0 text-eyebrow ${observationBadge.className}`}>
                 {observationBadge.label}
               </Badge>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-zinc-500">
+          <p className="mt-0.5 text-xs text-quiet">
             {youth.player.nationality} · Age {youth.player.age} ·{" "}
             {youth.player.position}
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-xs text-zinc-500">Scouts</p>
+          <p className="text-xs text-quiet">Scouts</p>
           <p className="text-sm font-bold text-white">{scoutCount}</p>
         </div>
       </div>
 
       {caseItem ? (
         <div className="mb-3 space-y-2 text-xs leading-5 text-zinc-300">
-          <p><span className="text-zinc-500">Last look:</span> {caseItem.lastLookLabel}</p>
-          <p><span className="text-zinc-500">Open question:</span> {caseItem.openQuestion}</p>
-          <p><span className="text-zinc-500">Next test:</span> {caseItem.nextTest}</p>
-          <p><span className="text-zinc-500">Rivals:</span> {caseItem.rivalHeatLabel}</p>
+          <p><span className="text-quiet">Last look:</span> {caseItem.lastLookLabel}</p>
+          <p><span className="text-quiet">Open question:</span> {caseItem.openQuestion}</p>
+          <p><span className="text-quiet">Next test:</span> {caseItem.nextTest}</p>
+          <p><span className="text-quiet">Rivals:</span> {caseItem.rivalHeatLabel}</p>
         </div>
       ) : (
       <div className="mb-3 grid grid-cols-2 gap-3">
         <div>
-          <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">{getReadLabel("ca")}</span>
-            <span className="text-zinc-600">
+          <div className="mb-1 flex items-center justify-between text-eyebrow">
+            <span className="text-quiet">{getReadLabel("ca")}</span>
+            <span className="text-quiet">
               {perceived ? `${getPerceivedSortValue(perceived, "ca").toFixed(1)}★` : "Unknown"}
             </span>
           </div>
           <MiniStarRange perceived={perceived} mode="ca" />
         </div>
         <div>
-          <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">{getReadLabel("pa")}</span>
-            <span className="text-zinc-600">
+          <div className="mb-1 flex items-center justify-between text-eyebrow">
+            <span className="text-quiet">{getReadLabel("pa")}</span>
+            <span className="text-quiet">
               {perceived ? `${getPerceivedSortValue(perceived, "pa").toFixed(1)}★` : "Unknown"}
             </span>
           </div>
@@ -368,8 +368,8 @@ function YouthCard({
 
       {/* Buzz level */}
       <div className="mb-2">
-        <div className="mb-1 flex items-center justify-between text-[10px]">
-          <span className="text-zinc-500">Buzz</span>
+        <div className="mb-1 flex items-center justify-between text-eyebrow">
+          <span className="text-quiet">Buzz</span>
           <span className="text-zinc-400">{youth.buzzLevel}%</span>
         </div>
         <Progress
@@ -381,8 +381,8 @@ function YouthCard({
 
       {/* Visibility */}
       <div>
-        <div className="mb-1 flex items-center justify-between text-[10px]">
-          <span className="text-zinc-500">Visibility</span>
+        <div className="mb-1 flex items-center justify-between text-eyebrow">
+          <span className="text-quiet">Visibility</span>
           <span className="text-zinc-400">{youth.visibility}%</span>
         </div>
         <Progress
@@ -405,17 +405,17 @@ function VenueCard({ venue }: VenueCardProps) {
       <div className="flex items-start justify-between gap-2">
         <p className="font-semibold text-white">{venue.name}</p>
         <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="secondary" className="text-[10px]">
+          <Badge variant="secondary" className="text-eyebrow">
             {venue.slots} slot{venue.slots !== 1 ? "s" : ""}
           </Badge>
-          <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+          <Badge variant="outline" className="text-eyebrow text-amber-400 border-amber-500/30">
             -{venue.fatigue} fatigue
           </Badge>
         </div>
       </div>
       <p className="text-sm text-zinc-400">{venue.description}</p>
-      <p className="text-xs text-zinc-600">
-        <span className="text-zinc-500">Requires: </span>
+      <p className="text-xs text-quiet">
+        <span className="text-quiet">Requires: </span>
         {venue.requirement}
       </p>
     </div>
@@ -501,7 +501,7 @@ function UnsignedYouthTab({
   };
 
   const TableSortIcon = ({ col }: { col: YouthSortKey }) => {
-    if (tableSortKey !== col) return <ChevronDown size={12} className="text-zinc-600" />;
+    if (tableSortKey !== col) return <ChevronDown size={12} className="text-quiet" />;
     return tableSortDir === "asc" ? (
       <ChevronUp size={12} className="text-emerald-400" />
     ) : (
@@ -601,14 +601,14 @@ function UnsignedYouthTab({
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 min-w-48">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-quiet" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name..."
               aria-label="Search youth by name"
-              className="min-h-11 w-full rounded-lg border border-[#27272a] bg-[#0a0a0a] py-2 pl-8 pr-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="min-h-11 w-full rounded-lg border border-[#27272a] bg-[#0a0a0a] py-2 pl-8 pr-3 text-sm text-white placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
 
@@ -654,7 +654,7 @@ function UnsignedYouthTab({
               aria-label="Minimum age"
               className="min-h-11 w-full min-w-0 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-20"
             />
-            <span className="text-zinc-600" aria-hidden="true">&ndash;</span>
+            <span className="text-quiet" aria-hidden="true">&ndash;</span>
             <input
               type="number"
               placeholder="Max"
@@ -781,7 +781,7 @@ function UnsignedYouthTab({
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#27272a] bg-[#141414] text-left text-xs text-zinc-500">
+                <tr className="border-b border-[#27272a] bg-[#141414] text-left text-xs text-quiet">
                   {([
                     ["name", "Name"],
                     ["position", "Pos"],
@@ -835,14 +835,14 @@ function UnsignedYouthTab({
                             {y.player.firstName} {y.player.lastName}
                           </span>
                           {observationBadge && (
-                            <Badge className={`text-[10px] ${observationBadge.className}`}>
+                            <Badge className={`text-eyebrow ${observationBadge.className}`}>
                               {observationBadge.label}
                             </Badge>
                           )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline" className="text-[10px]">{y.player.position}</Badge>
+                        <Badge variant="outline" className="text-eyebrow">{y.player.position}</Badge>
                       </td>
                       <td className="px-4 py-3 text-zinc-400">{y.player.age}</td>
                       <td className="px-4 py-3 text-zinc-400">{y.player.nationality}</td>
@@ -873,7 +873,7 @@ function UnsignedYouthTab({
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge className={`text-[10px] ${PIPELINE_COLORS[stage]}`}>
+                        <Badge className={`text-eyebrow ${PIPELINE_COLORS[stage]}`}>
                           {PIPELINE_LABELS[stage]}
                         </Badge>
                       </td>
@@ -926,8 +926,8 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
           <Globe size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-          <p className="text-sm text-zinc-500">No sub-regions available.</p>
-          <p className="mt-1 text-xs text-zinc-600">
+          <p className="text-sm text-quiet">No sub-regions available.</p>
+          <p className="mt-1 text-xs text-quiet">
             Sub-regions are unlocked as you scout different areas.
           </p>
         </CardContent>
@@ -940,11 +940,11 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
       {countries.map((country) => (
         <div key={country}>
           <div className="mb-3 flex items-center gap-2">
-            <Globe size={14} className="text-zinc-500" aria-hidden="true" />
+            <Globe size={14} className="text-quiet" aria-hidden="true" />
             <h3 className="text-sm font-semibold text-zinc-300">
               {getCountryDisplayName(country)}
             </h3>
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge variant="secondary" className="text-eyebrow">
               {grouped[country].length}
             </Badge>
           </div>
@@ -956,7 +956,7 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <MapPin size={12} className="shrink-0 text-zinc-500" aria-hidden="true" />
+                    <MapPin size={12} className="shrink-0 text-quiet" aria-hidden="true" />
                     <p className="truncate text-sm font-medium text-white">
                       {sr.name}
                     </p>
@@ -967,7 +967,7 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
                     {sr.familiarity}%
                   </span>
                 </div>
-                <div className="mb-1 text-[10px] text-zinc-500">
+                <div className="mb-1 text-eyebrow text-quiet">
                   Familiarity
                 </div>
                 <Progress
@@ -1004,7 +1004,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
       <div>
         <h3 className="mb-3 text-sm font-semibold text-zinc-300">Upcoming & Active ({upcoming.length})</h3>
         {upcoming.length === 0 ? (
-          <p className="text-xs text-zinc-500">No discovered tournaments upcoming. Meet contacts or build regional familiarity to discover events.</p>
+          <p className="text-xs text-quiet">No discovered tournaments upcoming. Meet contacts or build regional familiarity to discover events.</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {upcoming.map(t => {
@@ -1014,7 +1014,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium text-zinc-100">{t.name}</CardTitle>
-                      {isActive && <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Active</Badge>}
+                      {isActive && <Badge className="bg-emerald-500/20 text-emerald-400 text-eyebrow">Active</Badge>}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-1 text-xs text-zinc-400">
@@ -1058,7 +1058,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
       {undiscovered.length > 0 && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-zinc-300">Undiscovered ({undiscovered.length})</h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-quiet">
             {undiscovered.length} tournament{undiscovered.length > 1 ? "s" : ""} remain undiscovered this season. Build regional familiarity and meet contacts to uncover them.
           </p>
         </div>
@@ -1072,7 +1072,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
             {past.map(t => (
               <div key={t.id} className="flex items-center justify-between rounded border border-zinc-700/30 bg-zinc-800/30 px-3 py-2 text-xs">
                 <span className="text-zinc-300">{t.name}</span>
-                <Badge className={t.attended ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-600/20 text-zinc-500"}>
+                <Badge className={t.attended ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-600/20 text-quiet"}>
                   {t.attended ? "Attended" : "Missed"}
                 </Badge>
               </div>
@@ -1255,7 +1255,7 @@ export function YouthScoutingScreen() {
                   <p className="text-xs text-zinc-400">My Pipeline</p>
                   <p className="text-2xl font-bold text-white">{discoveredByScout}</p>
                 </div>
-                <Users size={20} className="text-zinc-600" aria-hidden="true" />
+                <Users size={20} className="text-quiet" aria-hidden="true" />
               </div>
             </CardContent>
           </Card>
@@ -1302,7 +1302,7 @@ export function YouthScoutingScreen() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Legacy Score</p>
+                  <p className="text-xs text-quiet">Legacy Score</p>
                   <p className="text-2xl font-bold text-amber-400">
                     {legacyScore.totalScore}
                   </p>

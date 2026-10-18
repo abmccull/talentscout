@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Club, GameState, MarketplaceBid, NewGameConfig, ScoutReport } from "@/engine/core/types";
+import type { Club, GameState, MarketplaceBid, NewGameConfig, Scout, ScoutReport } from "@/engine/core/types";
 import { createScout } from "@/engine/scout/creation";
 import { RNG } from "@/engine/rng";
 import { initializeFinances } from "@/engine/finance/expenses";
@@ -57,6 +57,25 @@ function bid(
 }
 
 describe("marketplace and placement commercial integrity", () => {
+  it("prices restored ambiguous accuracy neutrally while rewarding verified assessments", () => {
+    const scout = createScout(CONFIG, new RNG("accuracy-market"));
+    const finances = listReport(initializeFinances(scout, "independent", "normal"), "accuracy-report", 1000, false, "buyer", 1, 1);
+    const club = { id: "buyer", name: "Buyer", budget: 1000000, scoutingBudget: 10000, reputation: 60, playerIds: [], scoutingPhilosophy: "academyFirst" } as unknown as Club;
+    const report = { id: "accuracy-report", playerId: "player", qualityScore: 100, conviction: "tablePound" } as ScoutReport;
+    const bidsFor = (accuracyHistory: Scout["accuracyHistory"]) => {
+      const rng = new RNG("accuracy-bids"); rng.chance = () => true;
+      const restored = JSON.parse(JSON.stringify({ ...scout, accuracyHistory })) as Scout;
+      return processMarketplaceBids(rng, finances, { buyer: club }, { "accuracy-report": report }, {}, restored, 2, 1).finances.reportListings[0].bids;
+    };
+    const legacy = { week: 1, season: 1, predictedCA: 80, actualCA: 110 };
+    const neutral = bidsFor([]);
+    expect(neutral).not.toHaveLength(0);
+    expect(bidsFor([legacy])).toEqual(neutral);
+    const verified = { ...legacy, actualCA: 80, assessmentBasis: "submission" as const };
+    expect(bidsFor([verified])[0].amount).toBeGreaterThan(neutral[0].amount);
+    expect(bidsFor([verified, ...Array.from({ length: 25 }, () => legacy)])).toEqual(bidsFor([verified]));
+  });
+
   it("rejects unsupported structured reports at the listing action after save restoration", () => {
     const scout = createScout(CONFIG, new RNG("unsupported-listing"));
     const finances = initializeFinances(scout, "independent", "normal");

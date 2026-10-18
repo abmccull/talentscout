@@ -22,6 +22,7 @@ import { createConsequenceEngineState } from "@/engine/consequences";
 import { processMonthlyCredit } from "@/engine/finance/creditScore";
 import { processDistress } from "@/engine/finance/distress";
 import { applyWeeklyProspectFollowUps } from "@/engine/youth/prospectFollowUps";
+import { applyPlacementSupportCommitments } from "@/engine/youth/placementSupport";
 
 export interface WeeklyPostTickSystemsInput {
   beforeWeek: GameState;
@@ -34,6 +35,7 @@ export function processWeeklyPostTickSystems(
 ): GameState {
   let state = input.state;
 
+  state = applyPlacementSupportCommitments(state);
   state = applyWeeklyProspectFollowUps(state);
 
   const decayWarnings: InboxMessage[] = [];
