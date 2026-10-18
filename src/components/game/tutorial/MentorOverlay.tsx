@@ -128,6 +128,7 @@ export function MentorOverlay() {
   const [popupPos, setPopupPos] = useState<PopupPosition>({ top: 0, left: 0 });
   const [compactPos, setCompactPos] = useState<PopupPosition>({ top: 8, left: 8 });
   const [needsCompact, setNeedsCompact] = useState(false);
+  const [cardMaxHeight, setCardMaxHeight] = useState<number>();
   const [manuallyCollapsed, setManuallyCollapsed] = useState(false);
   const [forceExpanded, setForceExpanded] = useState(false);
   const [gameDialogOpen, setGameDialogOpen] = useState(false);
@@ -254,8 +255,21 @@ export function MentorOverlay() {
     }
     // A suspended card is still display:none for this measurement. Reuse its
     // real size so resuming help cannot first place a zero-sized card on input.
-    const { width: cardWidth, height: cardHeight } = cardSizeRef.current;
     const viewport = { width: window.innerWidth, height: window.innerHeight };
+    // The watch floor remains actionable even when guidance points at a flag
+    // higher on the page. Reserve the actual visible fixed control bar, including
+    // its safe-area padding, for both expanded help and the compact help button.
+    const controls = findVisibleTutorialTarget("observation-session-controls");
+    const controlRect = controls?.getBoundingClientRect();
+    if (canCollapse && !isOffGuidedScreen && controls && controlRect
+      && window.getComputedStyle(controls).position === "fixed"
+      && controlRect.top > 0 && controlRect.top < viewport.height) {
+      viewport.height = controlRect.top;
+    }
+    const maxHeight = Math.max(44, viewport.height - 16);
+    setCardMaxHeight(maxHeight);
+    const cardWidth = cardSizeRef.current.width;
+    const cardHeight = Math.min(cardSizeRef.current.height, maxHeight);
     const safePosition = rect && placeMentorWithoutCoveringTarget(
       rect, preferredSide, { width: cardWidth, height: cardHeight }, viewport,
     );
@@ -579,7 +593,7 @@ export function MentorOverlay() {
           top: popupPos.top,
           left: popupPos.left,
           width: "min(360px, calc(100vw - 16px))",
-          maxHeight: "calc(100dvh - 16px)",
+          maxHeight: cardMaxHeight ?? "calc(100dvh - 16px)",
           overflowY: "auto",
           visibility: mentorHidden ? "hidden" : "visible",
           pointerEvents: mentorHidden ? "none" : "auto",

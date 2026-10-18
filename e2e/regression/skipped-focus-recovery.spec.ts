@@ -50,7 +50,7 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
   await page.getByRole("button", { name: /Projection Specialist/ }).click();
   await page.getByRole("button", { name: "Take the call", exact: true }).click();
   await gamePage.waitForScreen("observation", 60_000);
-  await expect(page.getByRole("heading", { level: 1, name: "The match started early." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "The match started early." })).toBeVisible();
   await page.getByRole("button", { name: "Watch the match", exact: true }).click();
   const lead = await readOpeningLead(page);
   const watch = await advanceGeneratedWatchToReflection(page, { lead, focus: false });
@@ -128,6 +128,33 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
     await page.screenshot({ path: testInfo.outputPath(`discovery-recovered-${viewport.width}.png`), fullPage: true });
   }
   await page.getByRole("button", { name: /Keep the name private/ }).click();
+  await gamePage.waitForScreen("reportWriter");
+  // A peripheral flag preserves uncertainty, not a first-hand observation.
+  // Recover through the actual booked watch before authoring the assessment.
+  await expect(page.getByText("Evidence needed", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Plan focused observation", exact: true }).click();
+  const hideHelp = page.getByRole("button", { name: "Hide mentor help", exact: true });
+  await expect(page.getByRole("heading", { name: "Planner", exact: true })).toBeVisible();
+  if (await hideHelp.isVisible()) await hideHelp.click();
+  await page.getByRole("button", { name: "Choose a day for this work", exact: true }).click();
+  await page.getByRole("button", { name: /^Place Follow-up Session on / }).and(page.locator("button:enabled")).first().click();
+  await expect(page.locator('[data-activity-type="followUpSession"]').getByTestId("planner-activity-target").filter({ hasText: lead.name })).toBeVisible();
+  let watchedFollowUp = false;
+  await gamePage.advanceCanonicalWeek({ launchLiveSession: true, completeLiveSession: async () => {
+    const question = page.getByRole("group", { name: "What are you here to learn?" });
+    await question.locator("summary").click();
+    await question.getByRole("radio", { name: /^What might translate to the next level\?/ }).locator("..").click();
+    await page.locator('[data-tutorial-id="observation-begin-session"]').click();
+    await advanceGeneratedWatchToReflection(page, { lead, focus: true, hideMentorHelp: true });
+    if (await hideHelp.isVisible()) await hideHelp.click();
+    await classifyDisplayedLeadEvidence(page, lead, true);
+    await page.getByRole("button", { name: "Complete Reflection", exact: true }).click();
+    watchedFollowUp = true;
+  } });
+  expect(watchedFollowUp).toBe(true);
+  const showHelp = page.getByRole("button", { name: "Show mentor help", exact: true });
+  if (await showHelp.isVisible()) await showHelp.click();
+  await page.getByRole("button", { name: "Return to guided step", exact: true }).click();
   await gamePage.waitForScreen("reportWriter");
   for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);

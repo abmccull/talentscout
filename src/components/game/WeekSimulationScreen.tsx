@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 
@@ -807,6 +807,23 @@ export function WeekSimulationScreen() {
   const autoPlayWeekSimulation = useSettingsStore((s) => s.autoPlayWeekSimulation);
   const reducedMotionSetting = useSettingsStore((s) => s.reducedMotion);
 
+  const journeyRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLElement>(null);
+  const hasSimulation = weekSimulation !== null;
+
+  useLayoutEffect(() => {
+    const journey = journeyRef.current;
+    const actions = actionsRef.current;
+    if (!journey || !actions) return;
+    const reserveActions = () => {
+      journey.style.setProperty("--week-actions-height", `${actions.getBoundingClientRect().height}px`);
+    };
+    reserveActions();
+    const observer = new ResizeObserver(reserveActions);
+    observer.observe(actions);
+    return () => observer.disconnect();
+  }, [hasSimulation]);
+
   // All hooks must be called before any early return
   const currentDay = weekSimulation?.currentDay ?? 0;
   const dayResults = weekSimulation?.dayResults ?? EMPTY_DAY_RESULTS;
@@ -912,9 +929,10 @@ export function WeekSimulationScreen() {
   return (
     <GameLayout>
       <div
+        ref={journeyRef}
         data-testid="week-journey-screen"
         data-reduced-motion={prefersReducedMotion ? "true" : "false"}
-        className="relative min-h-[calc(100dvh-7.5rem)] min-w-0 overflow-x-clip bg-[var(--background)] px-4 py-5 sm:p-6 lg:h-screen lg:min-h-0 lg:overflow-hidden"
+        className="relative min-h-[calc(100dvh-7.5rem)] min-w-0 overflow-x-clip bg-[var(--background)] px-4 pt-5 pb-[calc(var(--week-actions-height,192px)+1.25rem)] sm:px-6 sm:pt-6 lg:h-screen lg:min-h-0 lg:overflow-hidden lg:pb-6"
       >
         <ScreenBackground src={currentBg} opacity={0.4} />
         <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col lg:h-full">
@@ -1053,7 +1071,7 @@ export function WeekSimulationScreen() {
             </section>
           </div>
 
-          <footer className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 mt-4 flex shrink-0 flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between md:bottom-0 lg:static lg:px-0">
+          <footer ref={actionsRef} className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 flex shrink-0 flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 md:bottom-0 md:left-60 lg:static lg:mt-4 lg:px-0">
             <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
               {isComplete ? (
                 <Button

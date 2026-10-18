@@ -105,7 +105,7 @@ test("a real observed Pass for now survives autosave and reload without recruitm
   await page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: /^Pass for now/ }).locator("..").click();
   await openAssessmentStep(page, "Confidence");
   await page.getByRole("group", { name: "Confidence", exact: true }).getByRole("radio", { name: /^Tentative/ }).locator("..").click();
-  await expect(page.getByText("5 / 5 decisions", { exact: true })).toBeVisible();
+  await expect(page.getByText("6 / 6 decisions", { exact: true })).toBeVisible();
   const file = page.getByRole("button", { name: "File initial assessment", exact: true });
   await expect(file).toBeEnabled();
   await file.click();

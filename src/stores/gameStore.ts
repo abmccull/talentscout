@@ -1589,6 +1589,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         scoutingCases: gameState.scoutingCases,
         alumniRecords: gameState.alumniRecords,
         retiredPlayers: gameState.retiredPlayers,
+        openingCase: gameState.openingCase,
       },
     );
   },

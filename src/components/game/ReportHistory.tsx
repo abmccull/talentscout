@@ -1543,7 +1543,7 @@ export function ReportHistory() {
                               aria-label={`View profile for ${playerName}`}
                             >
                               <span className="flex items-center gap-3">
-                                <PlayerAvatar playerId={report.playerId} size={36} alt={playerName} />
+                                <PlayerAvatar playerId={report.playerId} size={36} alt="" />
                                 <span>{playerName}</span>
                               </span>
                             </button>

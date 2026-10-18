@@ -86,6 +86,7 @@ async function readDurableAcceptance(page: Page, reportId?: string) {
 
 async function retainRealWatch(gamePage: GamePage, lead: WatchedLead, testInfo: TestInfo, label: string) {
   const page = gamePage.page;
+  await page.getByRole("group", { name: "What are you here to learn?" }).locator("summary").click();
   const projection = page.getByRole("group", { name: "What are you here to learn?" })
     .getByRole("radio", { name: /^What might translate to the next level\?/ });
   await projection.locator("..").click();
@@ -192,6 +193,10 @@ async function chooseInitialEvidence(page: Page) {
 async function fileAvailableAssessment(gamePage: GamePage, testInfo: TestInfo, label: string) {
   const page = gamePage.page;
   const file = page.getByRole("button", { name: "File initial assessment", exact: true });
+  // Store navigation precedes the lazy-loaded form. Wait for the actual
+  // workflow before choosing its controls; an absent initial button during
+  // loading is not evidence that the professional form is active.
+  await expect(file.or(page.getByRole("tab", { name: /^Build the case\b/ }))).toBeVisible();
   let choice: { evidenceId: string; supported: boolean; [key: string]: unknown };
   if (await file.isVisible()) {
     choice = await chooseInitialEvidence(page);
@@ -475,6 +480,8 @@ test.describe("Youth Early Access", () => {
     await expect(firstBidMessage).toBeVisible();
     await firstBidMessage.click();
     const balanceBeforeBid = (await gamePage.getGameStateValue("finances.balance")) as number;
+    const bonusUsedBefore = (await gamePage.getGameStateValue("finances.starterBonus.firstReportBonusUsed")) as boolean;
+    expect(bonusUsedBefore).toBe(false);
     await gamePage.page.getByRole("button", { name: /^Accept Bid$/ }).click();
 
     const postSaleState = await gamePage.page.evaluate((listingId) => {
@@ -485,6 +492,11 @@ test.describe("Youth Early Access", () => {
       return {
         balance: state?.finances?.balance ?? 0,
         listingStatus: latestListing?.status ?? null,
+        bonusUsed: state.finances.starterBonus.firstReportBonusUsed,
+        saleTransactions: state.finances.transactions.filter((transaction: any) =>
+          transaction.referenceId?.startsWith(`marketplace:${listingId}:buyer:`)),
+        welcomeTransactions: state.finances.transactions.filter((transaction: any) =>
+          transaction.referenceId?.startsWith("welcome:first-report:")),
         acceptedAmount: (latestListing?.bids ?? []).filter((bid: any) => bid.status === "accepted")
           .reduce((total: number, bid: any) => total + bid.amount, 0),
         acceptedBidCount: latestListing?.bids?.filter(
@@ -494,7 +506,15 @@ test.describe("Youth Early Access", () => {
     }, journey.listingId);
 
     expect(postSaleState.acceptedAmount).toBeGreaterThan(0);
-    expect(postSaleState.balance - balanceBeforeBid).toBe(postSaleState.acceptedAmount);
+    // The earned first sale and the one-time welcome grant are separate ledger
+    // entries. Reconcile both exactly instead of treating the grant as sale cash.
+    const firstSaleBonus = Math.round(postSaleState.acceptedAmount * 0.5);
+    expect(postSaleState.saleTransactions).toHaveLength(1);
+    expect(postSaleState.saleTransactions[0]).toMatchObject({ category: "clientRevenue", amount: postSaleState.acceptedAmount });
+    expect(postSaleState.welcomeTransactions).toHaveLength(1);
+    expect(postSaleState.welcomeTransactions[0]).toMatchObject({ category: "bonus", amount: firstSaleBonus });
+    expect(postSaleState.bonusUsed).toBe(true);
+    expect(postSaleState.balance - balanceBeforeBid).toBe(postSaleState.acceptedAmount + firstSaleBonus);
     expect(postSaleState.listingStatus).toBe("active");
     expect(postSaleState.acceptedBidCount).toBe(1);
 

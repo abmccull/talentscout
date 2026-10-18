@@ -118,6 +118,7 @@ export function ReportWriter() {
   const selectedPlayerId = useGameStore((state) => state.selectedPlayerId);
   const setScreen = useGameStore((state) => state.setScreen);
   const submitReport = useGameStore((state) => state.submitReport);
+  const setPendingCalendarActivity = useGameStore((state) => state.setPendingCalendarActivity);
   const getPlayerObservations = useGameStore(
     (state) => state.getPlayerObservations,
   );
@@ -700,7 +701,11 @@ export function ReportWriter() {
                   <ArrowLeft size={14} className="mr-2" aria-hidden="true" />
                   Back to profile
                 </Button>
-                <Button className="min-h-11" onClick={() => setScreen("calendar")}>
+                <Button className="min-h-11" onClick={() => {
+                  setPendingCalendarActivity({ type: "followUpSession", targetId: player.id,
+                    label: `Follow-up: ${player.firstName} ${player.lastName}` });
+                  setScreen("calendar");
+                }}>
                   Plan focused observation
                 </Button>
               </div>

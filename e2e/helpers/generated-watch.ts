@@ -16,12 +16,16 @@ export async function readOpeningLead(page: Page): Promise<WatchedLead> {
 /** Public controls only; store reads identify the actual lead and verify results. */
 export async function advanceGeneratedWatchToReflection(
   page: Page,
-  options: { lead: WatchedLead; focus: boolean },
+  options: { lead: WatchedLead; focus: boolean; hideMentorHelp?: boolean },
 ) {
   const { lead, focus } = options;
   const controls = page.getByTestId("mobile-observation-controls");
   const trace: unknown[] = [];
   for (let step = 0; step < 30; step++) {
+    if (options.hideMentorHelp) {
+      const hideHelp = page.getByRole("button", { name: "Hide mentor help", exact: true });
+      if (await hideHelp.isVisible()) await hideHelp.click();
+    }
     const before = await page.evaluate((playerId) => {
       const session = (window as any).__GAME_STORE__.getState().activeSession;
       const player = session.players.find((candidate: any) => candidate.playerId === playerId);

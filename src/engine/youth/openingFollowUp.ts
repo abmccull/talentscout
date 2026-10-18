@@ -41,6 +41,7 @@ export function bookOpeningFollowUp(state: GameState): GameState {
     {
       currentSeason: state.currentSeason, consequenceState: state.consequenceState,
       scoutingCases: state.scoutingCases, alumniRecords: state.alumniRecords, retiredPlayers: state.retiredPlayers,
+      openingCase: state.openingCase,
     },
   ).find((candidate) => candidate.type === nextTest.activityType
     && (!candidate.targetId || candidate.targetId === opening.playerId)

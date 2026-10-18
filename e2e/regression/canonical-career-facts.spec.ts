@@ -163,8 +163,10 @@ test.describe("Canonical career facts across rollover and persistence", () => {
     expect(after.players[setup.ids[2]].alumni?.careerUpdates).toEqual(expect.arrayContaining([expect.objectContaining({ type: "loanMove", sourceId: expect.any(String) })]));
     expect(new Set(after.alumniMessages.map((message: any) => message.id)).size).toBe(after.alumniMessages.length);
     await openAlumniWorkspaceThroughCareer(gamePage);
-    await expect(gamePage.page.getByText("First Team Breakthroughs", { exact: true }).locator("..").locator("p").last()).toHaveText("4");
-    await expect(gamePage.page.getByText("total legacy points", { exact: true }).locator("..").locator("p").first()).toHaveText("105");
+    const recordSummary = gamePage.page.locator("summary").filter({ hasText: "View the record in numbers" });
+    await expect(recordSummary).toContainText("105 legacy points");
+    await recordSummary.click();
+    await expect(gamePage.page.getByText("First-team breakthroughs", { exact: true }).locator("..").locator("dd")).toHaveText("4");
     await expect(gamePage.page.getByRole("button", { name: "Expand alumni record for Canonical retired-earlier", exact: true })).toBeVisible();
     await expect(gamePage.page.getByRole("button", { name: "Expand alumni record for Canonical retiring", exact: true })).toBeVisible();
     await expect(gamePage.page.getByRole("button", { name: "Expand alumni record for Unknown Player", exact: true })).toHaveCount(0);

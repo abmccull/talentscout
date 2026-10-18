@@ -1,4 +1,5 @@
 import { test, expect } from "../fixtures";
+import { readOpeningLead, advanceGeneratedWatchToReflection, classifyDisplayedLeadEvidence } from "../helpers/generated-watch";
 
 test.use({ viewport: { width: 711, height: 452 }, contextOptions: { reducedMotion: "reduce" } });
 
@@ -44,23 +45,18 @@ test("keyboard assessment step changes retain focus at large-text reflow width",
   await page.getByRole("button", { name: /Projection Specialist/ }).click();
   await page.getByRole("button", { name: "Take the call", exact: true }).click();
   await gamePage.waitForScreen("observation", 60_000);
+  const question = page.getByRole("group", { name: "What are you here to learn?" });
+  await question.locator("summary").click();
+  await question.getByRole("radio", { name: /^What might translate to the next level\?/ }).locator("..").click();
   await page.getByRole("button", { name: "Watch the match", exact: true }).click();
-  const controls = page.getByTestId("mobile-observation-controls");
-  // Generated openings can put a lead passage in any phase. Use the available
-  // lead flag and approach controls instead of assuming a scripted phase order.
-  for (let phase = 0; phase < 12; phase++) {
-    const flag = page.locator('[data-tutorial-id="observation-flag-moment"]:visible').first();
-    if (await flag.isVisible()) {
-      await flag.click();
-      await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').first().click();
-    }
-    const approach = page.getByRole("button", { name: /^Confirm the first read/ });
-    if (await approach.isVisible() && await approach.isEnabled()) await approach.click();
-    const reflect = controls.getByRole("button", { name: "Reflect on the watch", exact: true });
-    if (await reflect.isVisible()) { await reflect.click(); break; }
-    await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  }
-  await page.getByRole("radio", { name: /^No reliable conclusion/ }).first().check();
+  // Earn a real focused observation from the generated lead, then retain
+  // an explicitly withheld judgment before exercising the assessment controls.
+  const hideHelp = page.getByRole("button", { name: "Hide mentor help", exact: true });
+  if (await hideHelp.isVisible()) await hideHelp.click();
+  const lead = await readOpeningLead(page);
+  await advanceGeneratedWatchToReflection(page, { lead, focus: true, hideMentorHelp: true });
+  if (await hideHelp.isVisible()) await hideHelp.click();
+  await classifyDisplayedLeadEvidence(page, lead, true);
   await page.getByRole("button", { name: "Complete Reflection", exact: true }).click();
   await gamePage.waitForScreen("openingDiscovery");
   await page.getByRole("button", { name: /Keep the name private/ }).click();

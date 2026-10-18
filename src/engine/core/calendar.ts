@@ -823,6 +823,7 @@ export function getAvailableActivities(
     scoutingCases?: GameState["scoutingCases"];
     alumniRecords?: GameState["alumniRecords"];
     retiredPlayers?: GameState["retiredPlayers"];
+    openingCase?: GameState["openingCase"];
   },
 ): Activity[] {
   const activities: Activity[] = [];
@@ -1141,6 +1142,29 @@ export function getAvailableActivities(
           "writePlacementReport",
         ),
       });
+    }
+  }
+
+  // A completed opening watch can be inconclusive because the scout never
+  // focused. The contact still gives access to this one known lead; a second
+  // live watch earns evidence normally. This does not unlock other activities.
+  const opening = opportunityContext?.openingCase;
+  const recoveryLead = opening?.stage === "report"
+    ? actionableProspects.find((target) => target.player.id === opening.playerId)
+    : undefined;
+  if (scout.primarySpecialization === "youth" && recoveryLead
+    && (observedCounts.get(recoveryLead.player.id) ?? 0) === 0) {
+    const p = recoveryLead.player;
+    const target: TargetOption = { id: p.id, name: `${p.firstName} ${p.lastName}`,
+      age: p.age, position: p.position, observations: 0 };
+    const followUp = activities.find((activity) => activity.type === "followUpSession");
+    if (followUp?.targetPool) {
+      if (!followUp.targetPool.some((candidate) => candidate.id === p.id)) {
+        followUp.targetPool = [...followUp.targetPool, target];
+      }
+    } else if (!followUp) {
+      activities.push({ type: "followUpSession", slots: ACTIVITY_SLOT_COSTS.followUpSession,
+        description: "Take a focused second look at the opening lead", targetPool: [target] });
     }
   }
 

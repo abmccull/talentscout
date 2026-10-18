@@ -452,6 +452,9 @@ async function createOfflineCareer(page) {
     }
     const recommendation = page.getByRole("group", { name: "Recommended action", exact: true }).getByRole("radio", { name: /^Keep private\b/i });
     await recommendation.locator("..").click();
+    // Selecting the recommendation advances the accordion to Confidence.
+    // Reopen its real step before verifying the native radio remains checked.
+    await page.getByRole("button", { name: /^Next action\b/ }).click();
     await requireCheckedRadio(recommendation, "Keep private recommendation");
     const confidenceStep = page.getByRole("button", { name: /^Confidence\b/ });
     if (await confidenceStep.isVisible()) await confidenceStep.click();

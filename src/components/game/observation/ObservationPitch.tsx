@@ -83,7 +83,7 @@ export const ObservationPitch = memo(function ObservationPitch({
           <h3 className="dossier-eyebrow text-zinc-300">Players in view</h3>
           <span className="hidden text-xs text-zinc-400 sm:block">Select a player to direct your attention</span>
         </div>
-        <ul className="flex snap-x gap-3 overflow-x-auto pb-2 sm:gap-4" aria-label="Players on the observation pitch">
+        <ul className="flex snap-x scroll-p-2 gap-3 overflow-x-auto p-2 sm:gap-4" aria-label="Players on the observation pitch">
           {markers.map((marker, index) => {
             const isSelected = marker.playerId === selectedPlayerId;
             return (
@@ -91,9 +91,12 @@ export const ObservationPitch = memo(function ObservationPitch({
                 <button
                   type="button" data-observation-pitch-marker
                   onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) event.currentTarget.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }); }}
-                  onClick={() => onSelectPlayer(marker.playerId)} onKeyDown={(event) => handleMarkerKeyDown(event, index)}
+                  onClick={(event) => {
+                    onSelectPlayer(marker.playerId);
+                    event.currentTarget.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+                  }} onKeyDown={(event) => handleMarkerKeyDown(event, index)}
                   aria-label={`Track ${markerLabel(marker)}`} aria-pressed={isSelected} tabIndex={isSelected || (!selectedMarker && index === 0) ? 0 : -1}
-                  className="group scroll-mt-16 scroll-mb-28 flex w-full items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--surface)] sm:block"
+                  className="group scroll-mx-2 scroll-mt-16 scroll-mb-28 flex w-full items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--surface)] sm:block"
                 >
                   <span className={`relative block h-16 w-16 shrink-0 overflow-hidden border-b-[3px] bg-[var(--background)] transition-opacity duration-200 motion-reduce:transition-none sm:mb-2 sm:aspect-[4/3] sm:h-auto sm:w-full ${isSelected ? "border-[var(--primary)]" : "border-transparent"} ${focusActive && !marker.isFocused && !isSelected ? "opacity-65 group-hover:opacity-100 group-focus-visible:opacity-100" : "opacity-100"}`}>
                     <YouthPortraitWithFallback playerId={marker.playerId} size={96} alt="" className="h-full w-full rounded-none object-cover object-top ring-0 ring-offset-0" />

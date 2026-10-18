@@ -18,7 +18,8 @@
   --muted-foreground: #aeb7c2;
   --accent: #d4a843;
   --accent-foreground: #0a1628;
-  --destructive: #ef4444;
+  /* Shared filled danger badges/buttons retain readable white text. */
+  --destructive: #b91c1c;
   --border: #29313a;
   --ring: #d4a843;
   --radius: 0.75rem;

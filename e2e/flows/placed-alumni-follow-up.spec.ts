@@ -45,6 +45,7 @@ test.describe("Placed alumni follow-up continuity", () => {
       });
 
       await gamePage.waitForScreen("playerProfile");
+      await gamePage.page.getByText("Player actions & contacts", { exact: true }).click();
       await gamePage.page.getByRole("button", { name: "Schedule Follow-Up", exact: true }).click();
       await gamePage.waitForScreen("calendar");
       const itinerary = gamePage.page.locator('[data-tutorial-id="calendar-grid"]');
@@ -59,6 +60,7 @@ test.describe("Placed alumni follow-up continuity", () => {
         store.getState().selectPlayer(playerId); store.getState().setScreen("playerProfile");
       }, fixture.playerId);
       await gamePage.waitForScreen("playerProfile");
+      await gamePage.page.getByText("Player actions & contacts", { exact: true }).click();
       await gamePage.page.getByRole("button", { name: "Meet Parents/Coach", exact: true }).click();
       await gamePage.waitForScreen("calendar");
       await expect(itinerary).toContainText(fixture.name);

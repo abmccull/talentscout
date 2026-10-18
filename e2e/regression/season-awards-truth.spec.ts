@@ -159,8 +159,10 @@ test.describe("Recorded season awards", () => {
       expect(JSON.stringify(awards)).not.toMatch(/\bCA\b|\bPA\b|star potential|highest-potential/i);
       // Inspect the actual rollover review while publicly presented.
       await expect(gamePage.page.getByRole("heading", { name: `Season ${setup.season} Complete`, exact: true })).toBeVisible();
-      if (mode !== "unplayed") await expect(gamePage.page.getByText("Awards RecordedScorer — 9 goals", { exact: true })).toBeVisible();
-      else await expect(gamePage.page.getByRole("heading", { name: "League Awards", exact: true })).toHaveCount(0);
+      if (mode !== "unplayed") {
+        await gamePage.page.locator("summary").filter({ hasText: "Around the league" }).click();
+        await expect(gamePage.page.getByText("Awards RecordedScorer — 9 goals", { exact: true })).toBeVisible();
+      } else await expect(gamePage.page.getByRole("heading", { name: "Around the league", exact: true })).toHaveCount(0);
       await gamePage.page.screenshot({ path: test.info().outputPath(`recorded-awards-${mode}.png`), fullPage: true });
       await gamePage.page.evaluate(async () => { await (window as any).__GAME_STORE__.getState().saveToSlot(5, "Recorded season awards proof"); });
       expect(await gamePage.continueCanonicalSeasonReview(setup.season)).toBe(true);
