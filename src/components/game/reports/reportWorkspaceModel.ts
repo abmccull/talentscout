@@ -1,5 +1,6 @@
-import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 "use client";
+
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 
 import { hasReportBuyerEvidence, shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
 import { selectReportFollowUpCases } from "@/lib/reportFollowUpPriority";
