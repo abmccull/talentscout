@@ -132,6 +132,14 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
   }
   await page.getByRole("button", { name: /Keep the name private/ }).click();
   await gamePage.waitForScreen("reportWriter");
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByRole("heading", { level: 2, name: /^Shape the first football read on / })).toBeVisible();
+    const axe = await new AxeBuilder({ page }).withRules(["heading-order"]).analyze();
+    artifacts.push({ screen: "report-before-submit", viewport, violations: axe.violations });
+    expect(axe.violations).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath(`report-heading-order-${viewport.width}.png`), fullPage: true });
+  }
   await gamePage.submitCurrentReportViaUI("note");
   await gamePage.waitForScreen("calendar");
   await testInfo.attach("skipped-focus-accessibility.json", {

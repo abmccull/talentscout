@@ -1,22 +1,16 @@
 // Copy to e2e/regression/canonical-career-facts.spec.ts before further product fixes.
 import type { Page } from "@playwright/test";
 import { test, expect, type GamePage } from "../fixtures";
+import { expandPlayerMovementSummaries, type StoredPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
+import { expandPlayerMovementSummary } from "@/engine/world/worldHistoryTypes";
 
 async function factProjection(page: Page, setup: { season: number; ids: string[]; firstFixture: string; finalFixture: string }) {
-  return page.evaluate(({ season, ids, firstFixture, finalFixture }) => {
+  const facts = await page.evaluate(({ season, ids, firstFixture, finalFixture }) => {
     const store = (window as any).__GAME_STORE__;
     const state = store.getState().gameState;
     const completed = state.worldHistory?.seasons.find((row: any) => row.season === season);
     const expandRating = (entry: any) => Array.isArray(entry)
       ? { season: entry[0], avgRating: entry[1], appearances: entry[2], goals: entry[3], assists: entry[4], cleanSheets: entry[5] } : entry;
-    const expandMovement = (entry: any) => {
-      if (!Array.isArray(entry)) return entry;
-      const [encodedId, playerId, type, week, mask, ...values] = entry;
-      const row: any = { id: Array.isArray(encodedId) ? encodedId[0] + playerId + encodedId[1] : encodedId, playerId, type, week };
-      let offset = 0;
-      ["fromClubId", "toClubId", "contractClubId", "fee"].forEach((key, bit) => { if (mask & (1 << bit)) row[key] = values[offset++]; });
-      return row;
-    };
     const players = Object.fromEntries(ids.map(id => {
       const player = state.players[id] ?? state.retiredPlayers[id];
       const alumni = state.alumniRecords.find((record: any) => record.playerId === id);
@@ -35,12 +29,17 @@ async function factProjection(page: Page, setup: { season: number; ids: string[]
         internationalCapsFromFinds: state.legacyScore.internationalCapsFromFinds, totalScore: state.legacyScore.totalScore },
       retainedFixtures: { first: Boolean(state.fixtures[firstFixture]), final: Boolean(state.fixtures[finalFixture]) },
       retainedRatings: { first: Boolean(state.matchRatings[firstFixture]), final: Boolean(state.matchRatings[finalFixture]) },
-      movements: (completed?.playerMovementSummaries ?? []).map(expandMovement).filter((row: any) => ids.includes(row.playerId)),
+      movements: completed?.playerMovementSummaries ?? [],
       alumniMessages: state.inbox.filter((message: any) => message.season === season && message.id.startsWith("alumni-") && ids.includes(message.relatedId))
         .map((message: any) => ({ id: message.id, relatedId: message.relatedId, body: message.body })),
       executionRoute: store.getState().lastWeeklyExecutionRoute,
     };
   }, setup);
+  return {
+    ...facts,
+    movements: expandPlayerMovementSummaries(facts.movements as StoredPlayerMovementSummaries)
+      .map(expandPlayerMovementSummary).filter((row) => setup.ids.includes(row.playerId)),
+  };
 }
 
 async function openAlumniWorkspaceThroughCareer(gamePage: GamePage): Promise<void> {

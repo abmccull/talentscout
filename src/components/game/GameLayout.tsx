@@ -536,22 +536,24 @@ export function GameLayout({
 
       {watchChrome && (
         <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-white/10 bg-[#0b0e12]/90 px-3 backdrop-blur">
-          <div className="flex min-w-0 items-center gap-3">
-            <p className="text-sm font-semibold text-white">Watch</p>
-            <p className="text-xs font-medium uppercase tracking-[0.1em] text-[color:var(--muted-foreground)]">
+          <div className="flex min-w-0 flex-col justify-center">
+            <div className="flex items-baseline gap-2 max-[359px]:gap-1">
+              <p className="text-sm font-semibold text-white">Watch</p>
+              {(autosaveStatus === "pending" || autosaveStatus === "saved") && (
+                <span
+                  data-testid="watch-save-status"
+                  data-save-status={autosaveStatus}
+                  aria-live="off"
+                  className="shrink-0 text-xs text-[color:var(--muted-foreground)]"
+                >
+                  {autosaveStatus === "pending" ? "Saving…" : "Saved locally"}
+                </span>
+              )}
+            </div>
+            <p className="text-xs font-medium uppercase text-[color:var(--muted-foreground)]">
               Week {currentWeek} · Season {currentSeason}
             </p>
           </div>
-          {(autosaveStatus === "pending" || autosaveStatus === "saved") && (
-            <span
-              data-testid="watch-save-status"
-              data-save-status={autosaveStatus}
-              aria-live="off"
-              className="shrink-0 text-xs text-[color:var(--muted-foreground)]"
-            >
-              {autosaveStatus === "pending" ? "Saving…" : "Saved locally"}
-            </span>
-          )}
         </header>
       )}
 

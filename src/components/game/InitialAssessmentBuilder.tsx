@@ -674,7 +674,7 @@ export function InitialAssessmentBuilder({
     return (
       <Card className="border-cyan-400/20 bg-[#0f1519]/95">
         <CardHeader>
-          <CardTitle className="text-white">Initial assessment</CardTitle>
+          <CardTitle as="h2" className="text-white">Initial assessment</CardTitle>
           <CardDescription className="text-zinc-300">
             Save at least one observation cue before building the first read on {playerName}.
           </CardDescription>
@@ -697,7 +697,7 @@ export function InitialAssessmentBuilder({
               <Sparkles size={16} aria-hidden="true" />
               <span className="text-xs font-bold uppercase tracking-[0.16em]">Initial assessment</span>
             </div>
-            <CardTitle className="mt-2 text-2xl text-white">
+            <CardTitle as="h2" className="mt-2 text-2xl text-white">
               Shape the first football read on {playerName}
             </CardTitle>
             <CardDescription className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">

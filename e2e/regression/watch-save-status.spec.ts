@@ -1,5 +1,38 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../fixtures";
+
+async function inspectUnobscured(locator: Locator, textOnly = false) {
+  return locator.evaluate((element, measureText) => {
+    const rect = element.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const surfaces = measureText ? [...range.getClientRects()] : [rect];
+    const samples = surfaces.filter(surface => surface.width > 0 && surface.height > 0)
+      .flatMap(surface => [0.1, 0.5, 0.9].map(fraction => {
+        const x = surface.left + surface.width * fraction;
+        const y = surface.top + surface.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return { x, y, owned: hit === element || Boolean(hit && element.contains(hit)),
+          hit: hit?.getAttribute("aria-label") ?? hit?.tagName ?? null };
+      }));
+    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom,
+      viewport: { width: innerWidth, height: innerHeight }, samples };
+  }, textOnly);
+}
+
+async function expectUnobscured(locator: Locator, textOnly = false) {
+  await expect(locator).toBeVisible();
+  await expect.poll(async () => {
+    const result = await inspectUnobscured(locator, textOnly);
+    return result.samples.length > 0 && result.samples.every(sample => sample.owned);
+  }, { message: "The actual text/control must be unobscured, not merely CSS-visible" }).toBe(true);
+  const result = await inspectUnobscured(locator, textOnly);
+  expect(result.left).toBeGreaterThanOrEqual(0);
+  expect(result.right).toBeLessThanOrEqual(result.viewport.width);
+  expect(result.top).toBeGreaterThanOrEqual(0);
+  expect(result.bottom).toBeLessThanOrEqual(result.viewport.height);
+  return result;
+}
 
 async function readSavedWatch(page: Page) {
   return page.evaluate(() => new Promise<any>((resolve, reject) => {
@@ -68,6 +101,7 @@ test("watch and reflection show quiet save feedback only after accepted persiste
   await expect(feedback).toHaveAttribute("data-save-status", "saved");
   await expect(feedback).toHaveAttribute("aria-live", "off");
   await expect(feedback).not.toHaveAttribute("role", "status");
+  await expectUnobscured(feedback, true);
   await expect.poll(() => readSavedWatch(page)).toMatchObject({ ...identity, sessionState: "active", phase: 0 });
   const activeCheckpoint = await readSavedWatch(page);
 
@@ -86,9 +120,22 @@ test("watch and reflection show quiet save feedback only after accepted persiste
   const reflectionCheckpoint = await readSavedWatch(page);
 
   const bounds: unknown[] = [];
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }, { width: 320, height: 740 }]) {
     await page.setViewportSize(viewport);
-    await expect(feedback).toBeVisible();
+    const mentorHelp = page.getByRole("button", { name: "Show mentor help", exact: true });
+    await expectUnobscured(feedback, true);
+    await expectUnobscured(mentorHelp);
+    await mentorHelp.click();
+    const hideMentorHelp = page.getByRole("button", { name: "Hide mentor help", exact: true });
+    await expect(hideMentorHelp).toBeVisible();
+    await hideMentorHelp.click();
+    const statusSurface = await expectUnobscured(feedback, true);
+    const mentorSurface = await expectUnobscured(mentorHelp);
+    const surfacesDoNotOverlap = statusSurface.right <= mentorSurface.left
+      || mentorSurface.right <= statusSurface.left
+      || statusSurface.bottom <= mentorSurface.top
+      || mentorSurface.bottom <= statusSurface.top;
+    expect(surfacesDoNotOverlap, `Save feedback and mentor help do not overlap at ${viewport.width}px`).toBe(true);
     const measured = await feedback.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       const header = element.closest("header")!.getBoundingClientRect();
@@ -99,7 +146,7 @@ test("watch and reflection show quiet save feedback only after accepted persiste
     expect(measured.right).toBeLessThanOrEqual(measured.header.right);
     expect(measured.top).toBeGreaterThanOrEqual(measured.header.top);
     expect(measured.bottom).toBeLessThanOrEqual(measured.header.bottom);
-    bounds.push({ viewport, ...measured });
+    bounds.push({ viewport, ...measured, statusSurface, mentorSurface });
     await page.screenshot({ path: testInfo.outputPath(`reflection-save-feedback-${viewport.width}.png`) });
   }
   const transitions = await page.evaluate(() => {

@@ -65,6 +65,11 @@ test.describe("Placed alumni follow-up continuity", () => {
       const plannerLayout: unknown[] = [];
       for (const viewport of [{ width: 1280, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
         await gamePage.page.setViewportSize(viewport);
+        // Keep the real notification behavior; use its existing player control
+        // to make these layout evidence captures unobscured.
+        const dismissAchievement = gamePage.page.getByRole("button", { name: "Dismiss achievement notification", exact: true });
+        if (await dismissAchievement.isVisible()) await dismissAchievement.click();
+        await expect(gamePage.page.getByRole("status", { name: /^Achievements unlocked:/ })).toHaveCount(0);
         for (const type of ["followUpSession", "parentCoachMeeting"]) {
           const day = itinerary.locator(`[data-planner-day-index][data-activity-type="${type}"]`).first();
           await day.scrollIntoViewIfNeeded();
@@ -76,11 +81,15 @@ test.describe("Placed alumni follow-up continuity", () => {
               const range = document.createRange(); range.selectNodeContents(text);
               const rect = range.getBoundingClientRect();
               const style = getComputedStyle(text);
+              const unobscured = [...range.getClientRects()].every(line => {
+                const hit = document.elementFromPoint(line.left + line.width / 2, line.top + line.height / 2);
+                return hit === text || Boolean(hit && text.contains(hit));
+              });
               return { testId, text: text.textContent, left: rect.left, right: rect.right,
                 top: rect.top, bottom: rect.bottom, clientWidth: text.clientWidth,
                 scrollWidth: text.scrollWidth, clientHeight: text.clientHeight,
                 scrollHeight: text.scrollHeight, lineClamp: style.webkitLineClamp,
-                textOverflow: style.textOverflow };
+                textOverflow: style.textOverflow, unobscured };
             });
             return { day: { left: dayRect.left, right: dayRect.right, top: dayRect.top, bottom: dayRect.bottom }, texts };
           });
@@ -93,6 +102,7 @@ test.describe("Placed alumni follow-up continuity", () => {
             expect(text.scrollHeight).toBeLessThanOrEqual(text.clientHeight + 1);
             expect(text.lineClamp).toBe("none");
             expect(text.textOverflow).not.toBe("ellipsis");
+            expect(text.unobscured, `${type} ${text.testId} unobscured at ${viewport.width}`).toBe(true);
           }
           plannerLayout.push({ viewport, type, ...measurement });
         }

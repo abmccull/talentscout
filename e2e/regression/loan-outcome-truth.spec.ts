@@ -1,6 +1,7 @@
 import { test, expect, type GamePage } from "../fixtures";
 import { expandClubFinancialObligation, expandLoanDeal } from "@/engine/finance/terminalRecordArchive";
 import type { StoredClubFinancialObligation, StoredLoanDeal } from "@/engine/core/types";
+import { expandPlayerMovementHistory, type StoredPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 
 type FundingCase = "affordable" | "reserve-blocked" | "payroll-blocked" | "ordinary";
 const LOAN_ID = "review-loan-outcome";
@@ -140,13 +141,15 @@ async function readLoanFacts(gamePage: GamePage, borrowerId: string, parentId: s
       obligations: state.clubs[borrowerId].financialObligations ?? [],
       active: state.activeLoans.filter((deal: any) => deal.id === loanId),
       history: state.loanHistory ?? [],
-      movements: state.playerMovementHistory.filter((movement: any) => movement.loanDealId === loanId),
+      movements: state.playerMovementHistory ?? [],
       recommendation: state.loanRecommendations.find((entry: any) => entry.loanDealId === loanId),
       messages: state.inbox.filter((message: any) => message.relatedId === playerId &&
         /Loan (Buy Option Exercised|Return|Recall|Outcome):/.test(message.title)),
     };
   }, { loanId: LOAN_ID, playerId: PLAYER_ID, borrowerId, parentId });
   return { ...facts,
+    movements: expandPlayerMovementHistory(facts.movements as StoredPlayerMovementHistory)
+      .filter((movement) => movement.loanDealId === LOAN_ID),
     obligations: (facts.obligations as StoredClubFinancialObligation[])
       .map(entry => expandClubFinancialObligation(entry)).filter(entry => entry.playerId === PLAYER_ID),
     history: (facts.history as StoredLoanDeal[])
