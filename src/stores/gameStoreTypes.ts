@@ -226,6 +226,7 @@ export interface GameStoreState {
   isLoadingSave: boolean;
   saveConflict: SaveConflictState | null;
   isResolvingSaveConflict: boolean;
+  autosaveStatus: "idle" | "pending" | "saved" | "error";
   autosaveError: string | null;
 
   selectedScenarioId: string | null;

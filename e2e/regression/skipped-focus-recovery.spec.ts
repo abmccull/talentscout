@@ -1,5 +1,40 @@
 import AxeBuilder from "@axe-core/playwright";
+import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures";
+
+/** Read only the durable autosave; observing the store is not save acceptance. */
+async function readReflectionCheckpoint(page: Page, sessionId: string, completionId: string) {
+  return page.evaluate(({ sessionId, completionId }) => new Promise<any>((resolve, reject) => {
+    const request = indexedDB.open("TalentScoutDB");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const transaction = db.transaction("saves", "readonly");
+      const read = transaction.objectStore("saves").get(0);
+      let checkpoint: unknown = null;
+      read.onsuccess = () => {
+        const record = read.result;
+        const state = record?.state;
+        if (!state) return;
+        const journal = state.reflectionJournal?.[sessionId];
+        checkpoint = {
+          storageRevision: record.storageRevision,
+          lastSaved: state.lastSaved,
+          careerInstanceId: state.careerInstanceId,
+          openingCaseId: state.openingCase?.id,
+          openingCaseStage: state.openingCase?.stage,
+          hasActiveObservationSession: state.activeObservationSession != null,
+          completedSession: state.completedInteractiveSessions?.includes(completionId) ?? false,
+          journalSessionId: journal?.sessionId ?? null,
+          evidenceDecisions: journal?.evidenceDecisions ?? {},
+        };
+      };
+      transaction.oncomplete = () => { db.close(); resolve(checkpoint); };
+      transaction.onerror = () => { db.close(); reject(transaction.error); };
+      transaction.onabort = () => { db.close(); reject(transaction.error); };
+    };
+  }), { sessionId, completionId });
+}
 
 // Failure contract: completing a watch without Focus must never strand the
 // guide in the ended session. All gameplay below uses real controls; the sole
@@ -39,6 +74,17 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`reflection-${viewport.width}.png`), fullPage: true });
   }
+  const reflection = await page.evaluate(() => {
+    const { gameState, activeSession } = (window as any).__GAME_STORE__.getState();
+    if (!activeSession || !gameState?.openingCase) throw new Error("Opening reflection is missing");
+    return {
+      sessionId: activeSession.id,
+      completionId: activeSession.activityInstanceId ?? activeSession.id,
+      careerInstanceId: gameState.careerInstanceId,
+      openingCaseId: gameState.openingCase.id,
+      evidenceDecisions: activeSession.evidenceDecisions ?? {},
+    };
+  });
   await page.getByRole("button", { name: "Complete Reflection", exact: true }).click();
   await gamePage.waitForScreen("openingDiscovery");
   await expect.poll(() => page.evaluate(() => {
@@ -53,7 +99,26 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
   await gamePage.waitForScreen("openingDiscovery");
   await expect(page.getByRole("button", { name: /Keep the name private/ })).toBeVisible();
 
-  // The real Continue Career flow reads IndexedDB and persisted guide state.
+  // Completion paints before the normal coalesced autosave. Wait for the exact
+  // durable completion, without forcing a flush or changing the game's timers.
+  await expect.poll(
+    () => readReflectionCheckpoint(page, reflection.sessionId, reflection.completionId),
+    { timeout: 30_000, message: "Completed reflection must reach the real autosave before reload" },
+  ).toMatchObject({
+    careerInstanceId: reflection.careerInstanceId,
+    openingCaseId: reflection.openingCaseId,
+    openingCaseStage: "decision",
+    hasActiveObservationSession: false,
+    completedSession: true,
+    journalSessionId: reflection.sessionId,
+    evidenceDecisions: reflection.evidenceDecisions,
+  });
+  await testInfo.attach("skipped-focus-durable-reflection.json", {
+    body: JSON.stringify(await readReflectionCheckpoint(page, reflection.sessionId, reflection.completionId), null, 2),
+    contentType: "application/json",
+  });
+
+  // The real Continue Career flow now reads this accepted IndexedDB snapshot.
   await page.reload();
   await page.getByRole("button", { name: "Continue Career", exact: true }).click();
   await gamePage.waitForScreen("openingDiscovery", 60_000);

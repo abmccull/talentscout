@@ -9,6 +9,7 @@ import {
 } from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
 import { isYouthOpeningShell } from "@/lib/youthFirstHour";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { openingFollowUpDayIndex } from "@/engine/youth/openingFollowUp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -321,11 +322,9 @@ export function CalendarScreen() {
   const bookedPlayerNames: Record<string, string> = {};
   for (const activity of activities) {
     if (!activity?.targetId) continue;
-    const youth = Object.values(gameState.unsignedYouth).find(
-      (item) => item.player.id === activity.targetId,
-    );
-    if (youth) {
-      bookedPlayerNames[activity.targetId] = `${youth.player.firstName} ${youth.player.lastName}`;
+    const player = resolvePlayerEntity(gameState, activity.targetId)?.player;
+    if (player) {
+      bookedPlayerNames[activity.targetId] = `${player.firstName} ${player.lastName}`;
     }
   }
   const slotsUsed = activities.filter(Boolean).length;

@@ -28,6 +28,7 @@ const coreFiles = [
   "e2e/regression/weekly-worker-lifecycle.spec.ts",
   "e2e/regression/ironman-terminal-lifecycle.spec.ts",
   "e2e/regression/skipped-focus-recovery.spec.ts",
+  "e2e/regression/watch-save-status.spec.ts",
   "e2e/regression/canonical-career-facts.spec.ts",
   "e2e/regression/loan-outcome-truth.spec.ts",
   "e2e/regression/season-awards-truth.spec.ts",

@@ -1,0 +1,112 @@
+name: Canonical fresh career campaign
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_candidate_sha:
+        description: "Full commit SHA of the selected candidate ref"
+        required: true
+        type: string
+      expected_candidate_tree_sha:
+        description: "Full tree SHA of the selected candidate ref"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-career-${{ inputs.expected_candidate_sha }}
+  cancel-in-progress: false
+
+jobs:
+  canonical:
+    name: Canonical fresh 20x30/c3 with seed-one replay
+    # Explicit prerequisite: a dedicated trusted Linux x64 runner bearing this
+    # custom capability label. No fallback to a hosted 6-hour runner is allowed.
+    runs-on: [self-hosted, linux, x64, talentscout-release-soak]
+    environment: release-certification
+    # 22 hours for the campaign plus setup/evidence time; stays below the normal
+    # GITHUB_TOKEN's 24-hour refresh ceiling. An overrun is a failure, not a pass.
+    timeout-minutes: 1380
+    env:
+      EXPECTED_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
+      EXPECTED_CANDIDATE_TREE_SHA: ${{ inputs.expected_candidate_tree_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Bind exact clean candidate before installing dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_CANDIDATE_TREE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_CANDIDATE_SHA" ]]
+          [[ "$(git rev-parse 'HEAD^{tree}')" == "$EXPECTED_CANDIDATE_TREE_SHA" ]]
+          [[ -z "$(git status --porcelain --untracked-files=all)" ]]
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install the pinned task-local npm toolchain and candidate dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$RUNNER_TEMP/talentscout-npm-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          npm install --prefix "$toolchain" npm@11.21.0 --ignore-scripts --no-audit --no-fund
+          node "$toolchain/node_modules/npm/bin/npm-cli.js" --version
+          node "$toolchain/node_modules/npm/bin/npm-cli.js" ci
+
+      - name: Refuse inherited soak configuration on the dedicated runner
+        run: |
+          node -e 'const inherited=Object.keys(process.env).filter(name=>name.startsWith("SOAK_")); if(inherited.length)throw new Error("Unexpected inherited soak configuration names: "+inherited.join(",")); if(process.env.NODE_OPTIONS)throw new Error("The canonical runner must explicitly clear inherited NODE_OPTIONS before dispatch");'
+
+      - name: Require fresh canonical output locations
+        run: |
+          node -e 'const fs=require("node:fs"); for(const path of ["artifacts/release/generated/long-career-release-summary.json","artifacts/release/generated/long-career-workers","artifacts/release/generated/long-career-artifact-failure.json","artifacts/release/generated/canonical-soak-runner-profile.json"]){try{fs.lstatSync(path);}catch(error){if(error.code==="ENOENT")continue;throw error;}throw new Error("Refusing pre-existing canonical evidence: "+path);}'
+
+      - name: Record the actual runner profile without claiming minimum-hardware acceptance
+        shell: bash
+        run: |
+          mkdir -p artifacts/release/generated
+          node --input-type=module -e 'import os from "node:os"; import fs from "node:fs"; const record={schemaVersion:1,evidenceKind:"canonical-soak-runner-profile",candidateCommitSha:process.env.EXPECTED_CANDIDATE_SHA,candidateTreeSha:process.env.EXPECTED_CANDIDATE_TREE_SHA,nodeVersion:process.version,platform:process.platform,architecture:process.arch,cpuModel:os.cpus()[0]?.model,totalMemoryBytes:os.totalmem(),availableParallelism:os.availableParallelism(),physicalMinimumHardwareAccepted:false}; fs.writeFileSync("artifacts/release/generated/canonical-soak-runner-profile.json",JSON.stringify(record,null,2)+"\n"); console.log(JSON.stringify(record));'
+
+      - name: Run unchanged fresh canonical 20x30/c3 campaign
+        timeout-minutes: 1320
+        env:
+          SOAK_CANDIDATE_SHA: ${{ inputs.expected_candidate_sha }}
+          SOAK_REQUIRE_CLEAN_CANDIDATE: "true"
+          SOAK_SEEDS: "20"
+          SOAK_SEED_START: "1"
+          SOAK_SEASONS: "30"
+          SOAK_CONCURRENCY: "3"
+          SOAK_RESUME: "false"
+          SOAK_SKIP_DETERMINISM_REPLAY: "false"
+          SOAK_MAX_SERIALIZED_BYTES: "83886080"
+          SOAK_MAX_SINGLE_BATCH_CPU_MS: "45000"
+          SOAK_MAX_SINGLE_BATCH_WALL_MS: "60000"
+          SOAK_TEST_TIMEOUT_MS: "18000000"
+          SOAK_MAX_OUTPUT_BYTES: "67108864"
+          SOAK_OUTPUT: artifacts/release/generated/long-career-release-summary.json
+          SOAK_WORKER_DIRECTORY: artifacts/release/generated/long-career-workers
+          SOAK_ARTIFACT_FAILURE_OUTPUT: artifacts/release/generated/long-career-artifact-failure.json
+          SOAK_PLAN_ONLY: "false"
+        run: node scripts/run-long-career-release-soak.mjs
+
+      - name: Preserve actual canonical campaign evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: canonical-release-soak-evidence
+          path: |
+            artifacts/release/generated/canonical-soak-runner-profile.json
+            artifacts/release/generated/long-career-release-summary.json
+            artifacts/release/generated/long-career-artifact-failure.json
+            artifacts/release/generated/long-career-workers/
+          if-no-files-found: error
+          retention-days: 30

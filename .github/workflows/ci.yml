@@ -123,6 +123,11 @@ jobs:
       - name: Accepted-source soak staging contract
         run: npm run test:accepted-soak-staging
 
+      - name: Canonical campaign transport and staging contracts
+        run: |
+          node --test tests/release/canonicalSoakStaging.test.mjs tests/release/canonicalSoakWorkflowPolicy.test.cjs
+          python3 tests/release/canonicalSoakTransport.test.py
+
       - name: Windows installer input contract
         run: npm run test:windows-installer-inputs
 

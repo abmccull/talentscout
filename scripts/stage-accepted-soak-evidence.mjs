@@ -1,20 +1,30 @@
+import { validateCanonicalSource, validateCanonicalCampaign } from "./canonical-soak-ingestion.mjs";
 import { loadArtifactProfile, createArtifactContext } from "./release-artifact-io.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath, rmdir, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const options = new Map();
-const accepted = new Set(["candidate-dir", "run", "jobs", "shards", "out", "source-run-id"]);
+const commonOptions = ["candidate-dir", "run", "jobs", "out", "source-run-id"];
+const canonicalOptions = ["source-artifact-id", "source-artifact-digest", "source-campaign-sha256", "source-artifact-created-at"];
+const accepted = new Set([...commonOptions, ...canonicalOptions, "shards", "campaign"]);
 for (const argument of process.argv.slice(2)) {
   const match = /^--([^=]+)=(.+)$/.exec(argument);
   if (!match || !accepted.has(match[1]) || options.has(match[1])) throw new Error(`Invalid staging option: ${argument}`);
   options.set(match[1], match[2]);
 }
-for (const name of accepted) if (!options.has(name)) throw new Error(`Missing staging option: ${name}`);
+for (const name of commonOptions) if (!options.has(name)) throw new Error(`Missing staging option: ${name}`);
+if (options.has("campaign") === options.has("shards")) throw new Error("Select exactly one canonical campaign or diagnostic shards input");
+const canonicalInput = options.has("campaign");
+for (const name of canonicalOptions) {
+  if (canonicalInput && !options.has(name)) throw new Error(`Missing canonical staging option: ${name}`);
+  if (!canonicalInput && options.has(name)) throw new Error("Provider canonical artifact bindings cannot be applied to diagnostic shards");
+}
 const candidate = resolve(options.get("candidate-dir"));
 const runPath = resolve(options.get("run"));
 const jobsPath = resolve(options.get("jobs"));
-const shards = resolve(options.get("shards"));
+const shards = canonicalInput ? null : resolve(options.get("shards"));
+const campaignPath = canonicalInput ? resolve(options.get("campaign")) : null;
 const output = resolve(options.get("out"));
 const sourceRunId = options.get("source-run-id");
 if (!/^[1-9][0-9]*$/.test(sourceRunId)) throw new Error("Source run id must be numeric");
@@ -22,7 +32,7 @@ if (!/^[1-9][0-9]*$/.test(sourceRunId)) throw new Error("Source run id must be n
 const loadedArtifactProfile = await loadArtifactProfile();
 const artifactContext = createArtifactContext({
   loadedProfile: loadedArtifactProfile, domain: "staging", phase: null,
-  evidenceClassification: "diagnostic-fixture",
+  evidenceClassification: canonicalInput ? "canonical" : "diagnostic-fixture",
 });
 
 function artifactDomainError(message) {
@@ -89,9 +99,55 @@ if (Array.isArray(jobReceipt.jobs)
 if (!Array.isArray(jobReceipt.jobs) || jobReceipt.total_count > jobReceipt.jobs.length) {
   throw new Error("Source job receipt is missing jobs or is truncated");
 }
+if (canonicalInput) {
+  const binding = {
+    expectedRepository, sourceRunId, candidateSha, candidateTree,
+    artifactId: options.get("source-artifact-id"), artifactDigest: options.get("source-artifact-digest"),
+    campaignSha256: options.get("source-campaign-sha256"), artifactCreatedAt: options.get("source-artifact-created-at"),
+  };
+  const sourceIdentity = validateCanonicalSource(run, jobReceipt, binding);
+  for (const path of [runPath, jobsPath, campaignPath]) {
+    if (resolve(path).toLowerCase() === output.toLowerCase()) throw new Error("Accepted output aliases immutable source evidence");
+  }
+  const campaignRead = await artifactContext.readJson(campaignPath, { role: "campaign", expectedSha256: binding.campaignSha256 });
+  const summary = campaignRead.value;
+  validateCanonicalCampaign(summary, {
+    ...binding, runStartedAt: run.run_started_at,
+    profile: loadedArtifactProfile.profile, profileSha256: loadedArtifactProfile.sha256, profilePurpose: loadedArtifactProfile.purpose,
+  });
+  assertArtifactBinding(summary.artifactIo, expectedArtifactBinding(summary.checkpoint.executionIdentityHash), "Canonical source campaign");
+  const originalInputs = [[runPath, runRead], [jobsPath, jobsRead], [campaignPath, campaignRead]];
+  for (const [path, read] of originalInputs) {
+    const expected = read.descriptorAndClose.pathAfter;
+    const current = await lstat(path, { bigint: true });
+    if (expected === null || !current.isFile() || current.isSymbolicLink() || await realpath(path) !== path
+      || ["dev", "ino", "mode", "nlink", "size", "mtimeNs", "ctimeNs", "birthtimeNs"]
+        .some(key => String(current[key]) !== expected[key])) throw artifactDomainError("Original canonical input changed after its admitted read");
+    try {
+      const target = await lstat(output, { bigint: true });
+      if (target.dev === current.dev && target.ino === current.ino) throw artifactDomainError("Accepted output hardlinks immutable source evidence");
+    } catch (error) { if (error?.code !== "ENOENT") throw error; }
+  }
+  if (git("rev-parse", "HEAD").toLowerCase() !== candidateSha || git("rev-parse", "HEAD^{tree}").toLowerCase() !== candidateTree
+    || git("status", "--porcelain", "--untracked-files=all")) throw new Error("Canonical candidate changed during source admission");
+  summary.acceptedSourceWorkflow = {
+    inputMode: "canonical-campaign", runId: sourceRunId, repository: expectedRepository,
+    candidateCommitSha: candidateSha, candidateTreeSha: candidateTree, ...sourceIdentity,
+    runReceiptSha256: runRead.sha256, jobsReceiptSha256: jobsRead.sha256, campaignReceiptSha256: campaignRead.sha256,
+    sourceArtifact: { id: binding.artifactId, name: "canonical-release-soak-evidence", digest: binding.artifactDigest, createdAt: binding.artifactCreatedAt },
+  };
+  const encoded = await artifactContext.encodeJson(summary, { role: "campaign-summary", pretty: true, terminalNewline: true });
+  assertStagingHealthy();
+  await mkdir(dirname(output), { recursive: true });
+  await artifactContext.writeJson(output, encoded, { method: "atomic", role: "campaign-summary", assertHealthy: assertStagingHealthy });
+  console.info(`Staged genuine fresh canonical 20x30/c3 source campaign for ${candidateSha}`);
+} else {
+const diagnosticLabels = jobReceipt.jobs.some(job => job.name === "Aggregate diagnostic 20x30 shards (not canonical c3)");
 const requiredJobs = ["Release quality gate",
-  ...Array.from({ length: 20 }, (_, index) => `Exact candidate seed ${index + 1} x 30 seasons`),
-  "Aggregate exact candidate 20x30 soak"];
+  ...Array.from({ length: 20 }, (_, index) => diagnosticLabels
+    ? `Diagnostic seed ${index + 1} x 30 seasons (c1)`
+    : `Exact candidate seed ${index + 1} x 30 seasons`),
+  diagnosticLabels ? "Aggregate diagnostic 20x30 shards (not canonical c3)" : "Aggregate exact candidate 20x30 soak"];
 for (const name of requiredJobs) {
   const jobs = jobReceipt.jobs.filter(job => job.name === name);
   if (jobs.length !== 1) throw new Error(`Source receipt needs exactly one required job: ${name}`);
@@ -161,7 +217,7 @@ async function assertKnownStagedFile(read) {
     throw artifactDomainError("Staged aggregate read has no actual retained path identity");
   }
   await assertKnownTemporary();
-  summary.acceptedSourceWorkflow = { runId: sourceRunId, repository: expectedRepository,
+  summary.acceptedSourceWorkflow = { inputMode: "diagnostic-shards", runId: sourceRunId, repository: expectedRepository,
     candidateCommitSha: candidateSha, runReceiptSha256: runRead.sha256, jobsReceiptSha256: jobsRead.sha256 };
   const encodedSummary = await artifactContext.encodeJson(summary, {
     role: "campaign-summary", pretty: true, terminalNewline: true,
@@ -183,5 +239,7 @@ async function assertKnownStagedFile(read) {
     }));
     throw error;
   }
-  console.info(`Staged exact accepted-source 20x30 evidence for ${candidateSha}`);
+  console.info(`Staged diagnostic 20x30 shards (not canonical c3) for ${candidateSha}`);
+}
+
 }

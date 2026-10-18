@@ -167,7 +167,7 @@ describe("opening-loop autosave queue", () => {
     rejectOld(new Error("Old career write failed"));
     await expect(replacementFlush).resolves.toBeUndefined();
     expect(oldSet).not.toHaveBeenCalled();
-    expect(nextSet).toHaveBeenLastCalledWith({ autosaveError: null });
+    expect(nextSet).toHaveBeenLastCalledWith({ autosaveError: null, autosaveStatus: "saved" });
   });
 
   it("persists the newest career snapshot after paint", async () => {
@@ -204,6 +204,6 @@ describe("opening-loop autosave queue", () => {
       newer,
       "Autosave",
     );
-    expect(set).toHaveBeenCalledWith({ autosaveError: null });
+    expect(set).toHaveBeenCalledWith({ autosaveError: null, autosaveStatus: "saved" });
   });
 });

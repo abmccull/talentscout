@@ -54,20 +54,22 @@ const autosaveQueue = createAutosaveQueue<AutosaveRequest>({
   schedule: scheduleCoalescedGameplayPersist,
   onRequest: (request) => {
     latestRequest = request;
-    request.set({ autosaveError: null });
+    request.set({ autosaveStatus: "pending", autosaveError: null });
   },
   persist: persistAutosaveSnapshot,
   onSuccess: (request) => {
-    if (request.generation !== generation) return;
-    if (latestRequest === request) latestRequest = null;
-    request.set({ autosaveError: null });
+    // A newer edit can be queued while this write is in flight. Only the
+    // latest request's persistence acknowledgement may clear pending feedback.
+    if (request.generation !== generation || latestRequest !== request) return;
+    latestRequest = null;
+    request.set({ autosaveStatus: "saved", autosaveError: null });
   },
   onError: (error, request) => {
-    if (request.generation !== generation) return;
-    if (latestRequest === request) latestRequest = null;
+    if (request.generation !== generation || latestRequest !== request) return;
+    latestRequest = null;
     const message = error instanceof Error ? error.message : String(error);
     console.warn("Autosave failed:", error);
-    request.set({ autosaveError: message });
+    request.set({ autosaveStatus: "error", autosaveError: message });
   },
 });
 

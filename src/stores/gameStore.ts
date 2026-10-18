@@ -399,6 +399,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isLoadingSave: false,
   saveConflict: null,
   isResolvingSaveConflict: false,
+  autosaveStatus: "idle",
   autosaveError: null,
 
   // Scenario transient state
@@ -444,6 +445,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     set({
+      autosaveStatus: "idle",
+      autosaveError: null,
       isAdvancingWeek: false,
       lastWeeklyExecutionRoute: null,
       lastWeeklyWorkerTelemetry: null,
@@ -1097,6 +1100,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : "dashboard";
     set({
       gameState: scenarioSafeState,
+      autosaveStatus: "idle",
+      autosaveError: null,
       isLoaded: true,
       currentScreen: resolveGameScreenForBuild(restoreScreen, true),
       selectedPlayerId: scenarioSafeState.openingCase?.playerId ?? null,

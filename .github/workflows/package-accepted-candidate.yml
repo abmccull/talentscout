@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       accepted_source_run_id:
-        description: "Accepted source workflow run that already carries the bounded 20x30 evidence"
+        description: "Successful canonical-release-soak run carrying fresh 20x30/c3 and seed-one replay evidence"
         required: true
         type: string
       verification_only:
@@ -206,6 +206,14 @@ jobs:
       - name: Accepted-source soak staging contract
         working-directory: candidate
         run: npm run test:accepted-soak-staging
+
+      - name: Canonical source ingestion and archive contracts
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/release/canonicalSoakStaging.test.mjs tests/release/canonicalSoakWorkflowPolicy.test.cjs
+          python3 tests/release/canonicalSoakTransport.test.py
 
       - name: Windows installer input contract
         working-directory: candidate
@@ -714,38 +722,68 @@ jobs:
           name: quality-evidence
           path: quality-evidence
 
-      - name: Download raw source workflow evidence via GitHub token
+      - name: Retain exact canonical source workflow and artifact receipts
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
         run: |
-          mkdir -p candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > source-artifacts.json
-          node -e 'const fs=require("node:fs"); const data=JSON.parse(fs.readFileSync("source-artifacts.json","utf8")); const matches=(data.artifacts||[]).filter((artifact)=>/^release-soak-shard-\d+$/.test(String(artifact.name||""))); if (matches.length===0) process.exit(1); for (const artifact of matches) console.log(`${artifact.id}\t${artifact.name}`);' > source-artifacts.tsv || {
-            echo "::error::No release-soak shard artifacts were found for the accepted source run"
-            exit 1
-          }
-          while IFS=$'\t' read -r artifact_id artifact_name; do
-            [ -n "$artifact_id" ] || continue
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > source-artifact.zip
-            unzip -jo source-artifact.zip -d candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
-            rm -f source-artifact.zip
-          done < source-artifacts.tsv
-          rm -f source-artifacts.json source-artifacts.tsv
+          set -euo pipefail
+          evidence=candidate-bundle/artifacts/release/generated/certifications
+          mkdir -p "$evidence/source-long-career-shards"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > "$evidence/source-workflow-run.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > "$evidence/source-workflow-jobs.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > "$evidence/source-long-career-shards/source-artifacts.json"
 
-      - name: Stage exact accepted-source canonical soak aggregate
+      - name: Select the one provider-bound canonical campaign archive
+        id: canonical_source
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence=candidate-bundle/artifacts/release/generated/certifications
+          python3 scripts/prepare-canonical-soak-artifact.py --select-only \
+            --run="$evidence/source-workflow-run.json" \
+            --artifacts="$evidence/source-long-career-shards/source-artifacts.json" \
+            --candidate-sha="$RELEASE_CANDIDATE_SHA" --source-run-id="$SOURCE_WORKFLOW_RUN_ID" \
+            --repository="$GITHUB_REPOSITORY" --outputs="$GITHUB_OUTPUT"
+
+      - name: Verify original archive bytes and preserve all canonical phase receipts
+        id: canonical_transport
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANONICAL_ARTIFACT_ID: ${{ steps.canonical_source.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          evidence=candidate-bundle/artifacts/release/generated/certifications
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${CANONICAL_ARTIFACT_ID}/zip" | \
+            python3 scripts/prepare-canonical-soak-artifact.py --archive-stdin \
+              --run="$evidence/source-workflow-run.json" \
+              --artifacts="$evidence/source-long-career-shards/source-artifacts.json" \
+              --candidate-sha="$RELEASE_CANDIDATE_SHA" --source-run-id="$SOURCE_WORKFLOW_RUN_ID" \
+              --repository="$GITHUB_REPOSITORY" --outputs="$GITHUB_OUTPUT" \
+              --destination="$evidence/source-long-career-shards/canonical" \
+              --receipt="$evidence/source-long-career-shards/canonical-artifact.json"
+
+      - name: Stage genuine fresh canonical 20x30/c3 source campaign
         working-directory: candidate
-        run: >-
-          node scripts/stage-accepted-soak-evidence.mjs
-          --candidate-dir=.
-          --run=../candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
-          --jobs=../candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
-          --shards=../candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
-          --out=../candidate-bundle/artifacts/release/generated/long-career-release-summary.json
-          --source-run-id=${{ inputs.accepted_source_run_id }}
+        shell: bash
+        env:
+          SOURCE_ARTIFACT_ID: ${{ steps.canonical_transport.outputs.artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ steps.canonical_transport.outputs.artifact_digest }}
+          SOURCE_ARTIFACT_CREATED_AT: ${{ steps.canonical_transport.outputs.artifact_created_at }}
+          SOURCE_CAMPAIGN_SHA256: ${{ steps.canonical_transport.outputs.source_campaign_sha256 }}
+        run: |
+          set -euo pipefail
+          evidence=../candidate-bundle/artifacts/release/generated/certifications
+          node ../scripts/stage-accepted-soak-evidence.mjs \
+            --candidate-dir=. \
+            --run="$evidence/source-workflow-run.json" \
+            --jobs="$evidence/source-workflow-jobs.json" \
+            --campaign="$evidence/source-long-career-shards/canonical/long-career-release-summary.json" \
+            --out=../candidate-bundle/artifacts/release/generated/long-career-release-summary.json \
+            --source-run-id="$SOURCE_WORKFLOW_RUN_ID" \
+            --source-artifact-id="$SOURCE_ARTIFACT_ID" --source-artifact-digest="$SOURCE_ARTIFACT_DIGEST" \
+            --source-artifact-created-at="$SOURCE_ARTIFACT_CREATED_AT" --source-campaign-sha256="$SOURCE_CAMPAIGN_SHA256"
 
       - name: Download exact release package artifacts
         if: inputs.verification_only != true

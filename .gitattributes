@@ -8,6 +8,7 @@ tests/release/fixtures/http-cache-policy/*.json text eol=lf
 # Preserve reviewed vendor payload bytes across Windows checkouts.
 vendor/braces-depth-guard/** -text
 vendor/http-cache-policy/** -text
+vendor/sprintf-precision-guard/** -text
 vendor/*.tgz -text
 
 # Keep the digest-bound worker output quota catalog stable on Windows.

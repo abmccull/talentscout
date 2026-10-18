@@ -16,7 +16,7 @@ test.describe("Placed alumni follow-up continuity", () => {
         const youth = Object.values(state.unsignedYouth).find((candidate: any) => !candidate.placed && !candidate.retired) as any;
         const club = Object.values(state.clubs).find((candidate: any) => candidate.academyPlayerIds) as any;
         if (!youth || !club) throw new Error("Placed-alumni fixture requires a youth and academy");
-        const player = { ...youth.player, clubId: club.id };
+        const player = { ...youth.player, firstName: "Alessandro", lastName: "Montgomery-Worthington", clubId: club.id };
         const caseId = `case_${state.scout.id}_${player.id}`;
         const unsignedYouth = { ...state.unsignedYouth }; delete unsignedYouth[youth.id];
         const observation = { id: "placed-continuity-original", playerId: player.id, scoutId: state.scout.id,
@@ -62,6 +62,44 @@ test.describe("Placed alumni follow-up continuity", () => {
       await gamePage.page.getByRole("button", { name: "Meet Parents/Coach", exact: true }).click();
       await gamePage.waitForScreen("calendar");
       await expect(itinerary).toContainText(fixture.name);
+      const plannerLayout: unknown[] = [];
+      for (const viewport of [{ width: 1280, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
+        await gamePage.page.setViewportSize(viewport);
+        for (const type of ["followUpSession", "parentCoachMeeting"]) {
+          const day = itinerary.locator(`[data-planner-day-index][data-activity-type="${type}"]`).first();
+          await day.scrollIntoViewIfNeeded();
+          await expect(day.getByTestId("planner-activity-target")).toHaveText(fixture.name);
+          const measurement = await day.evaluate((element) => {
+            const dayRect = element.getBoundingClientRect();
+            const texts = ["planner-activity-label", "planner-activity-target"].map((testId) => {
+              const text = element.querySelector<HTMLElement>(`[data-testid="${testId}"]`)!;
+              const range = document.createRange(); range.selectNodeContents(text);
+              const rect = range.getBoundingClientRect();
+              const style = getComputedStyle(text);
+              return { testId, text: text.textContent, left: rect.left, right: rect.right,
+                top: rect.top, bottom: rect.bottom, clientWidth: text.clientWidth,
+                scrollWidth: text.scrollWidth, clientHeight: text.clientHeight,
+                scrollHeight: text.scrollHeight, lineClamp: style.webkitLineClamp,
+                textOverflow: style.textOverflow };
+            });
+            return { day: { left: dayRect.left, right: dayRect.right, top: dayRect.top, bottom: dayRect.bottom }, texts };
+          });
+          for (const text of measurement.texts) {
+            expect(text.left, `${type} ${text.testId} left at ${viewport.width}`).toBeGreaterThanOrEqual(measurement.day.left);
+            expect(text.right, `${type} ${text.testId} right at ${viewport.width}`).toBeLessThanOrEqual(measurement.day.right);
+            expect(text.top).toBeGreaterThanOrEqual(measurement.day.top);
+            expect(text.bottom).toBeLessThanOrEqual(measurement.day.bottom);
+            expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+            expect(text.scrollHeight).toBeLessThanOrEqual(text.clientHeight + 1);
+            expect(text.lineClamp).toBe("none");
+            expect(text.textOverflow).not.toBe("ellipsis");
+          }
+          plannerLayout.push({ viewport, type, ...measurement });
+        }
+        await gamePage.page.screenshot({ path: testInfo.outputPath(`placed-planner-layout-${viewport.width}.png`), fullPage: true });
+      }
+      await testInfo.attach("placed-planner-layout.json", { body: JSON.stringify(plannerLayout, null, 2), contentType: "application/json" });
+      await gamePage.page.setViewportSize({ width: 1280, height: 900 });
       await gamePage.page.screenshot({ path: testInfo.outputPath("placed-follow-up-planner.png"), fullPage: true });
       await gamePage.advanceCanonicalWeek({ launchLiveSession, maxLiveSessions: 1 });
 

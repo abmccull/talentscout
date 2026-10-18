@@ -25,7 +25,7 @@ The scope is the shipped Youth Scout game. New career modes, cloud enablement, p
 - [x] Reviewed supplied report and bound the actual checkout.
 - [x] Preserved existing changes and created the implementation branch.
 - [x] Integrate lifecycle, scouting continuity, economy, interface and import repairs; independent gameplay, lifecycle and security reviews have no outstanding source findings.
-- [ ] Run required full source checks and build.
+- [x] Run required full source checks and fresh E2E build; final shipping build follows candidate freeze.
 - [ ] Verify rendered core journeys and affected responsive states.
 - [ ] Run available long-career/performance and package validation.
 - [ ] Independent review, fixes, final evidence and remaining release gates.
@@ -33,11 +33,14 @@ The scope is the shipped Youth Scout game. New career modes, cloud enablement, p
 ## Current proof
 
 - Original candidate baseline: 386 files and 2,978 tests passed.
-- Integrated full suite: 397 files and 3,038 tests passed in 186.46 seconds.
-- Integrated source: typecheck and lint passed; architecture has 763 modules, 3,644 internal edges and zero dependency cycles.
+- Final integrated full suite: 399 files and 3,049 tests passed in 143.59 seconds.
+- Integrated source: typecheck and lint passed; architecture has 763 modules, 3,645 internal edges and zero dependency cycles.
 - Critical coverage and save-retention coverage gates passed without threshold changes.
 - Bounded import and installed formatter compatibility regressions passed 20/20; pinned-toolchain dependency audit reports zero vulnerabilities. Only the intended formatter leaf and root metadata changed in the dependency graph.
-- New browser acceptance covers skipped Focus recovery at desktop/tablet/mobile sizes, placed alumni follow-up through the dossier and Planner, and durable Ironman dismissal plus delayed-save replacement ownership. These are included in the core Youth Scout E2E command; browser execution is pending.
+- Initial fresh-build browser checks passed placed alumni follow-up (automatic and interactive), durable Ironman dismissal and delayed-save replacement ownership, skipped Focus recovery across three sizes, and all six accessibility journeys. Final checks add planner label readability and truthful watch/reflection save feedback.
+- Rebuilt final targeted browser checks passed both placed-player journeys with long-name layout assertions at 1280, 768 and 390 pixels; watch/reflection feedback passed against actual IndexedDB persistence. Full journey and shipping-export results are retained outside this candidate in `../improvement-20261018/checks/` to preserve a frozen source identity.
+- The 100-seed, three-season replayability diagnostic passed its behavioral checks. A clean-candidate rerun and the full canonical campaign have distinct authority requirements; neither human fun nor 30-season reliability is inferred from that short diagnostic.
+- Canonical soak ingestion passed 157 Node contract cases plus eight timestamp boundary cases and 24 Python transport scenarios across 11 test methods. Dedicated runner orchestration preserves the original fresh 20-by-30, concurrency-three campaign and seed-one replay. This is pipeline verification, not an executed career campaign.
 - Caveat is now a locally bundled original font with pinned upstream identity and build-time exact-byte/license verification. Other asset approval statuses are unchanged.
 
 ## External release gates
