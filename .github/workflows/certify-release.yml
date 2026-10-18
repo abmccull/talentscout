@@ -215,7 +215,7 @@ jobs:
           RELEASE_EVIDENCE_OUTPUT: artifacts/release/generated/certifications/release-evidence-check-${{ github.run_id }}-${{ github.run_attempt }}.json
           RELEASE_TAG_BINDING_MODE: intended
         working-directory: candidate
-        run: node ../scripts/check-release-evidence.mjs
+        run: node ../scripts/check-release-evidence.mjs --scope full-release
 
       - name: Upload certification decision
         if: always()

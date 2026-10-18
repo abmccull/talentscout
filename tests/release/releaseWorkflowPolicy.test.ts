@@ -105,7 +105,8 @@ describe("release workflow policy", () => {
     expect(certification).toContain("RELEASE_EVIDENCE_STATUS: ../docs/release/release-evidence-status.json");
     expect(certification).toContain("working-directory: candidate");
     expect(certification).toContain("node ../scripts/check-release-preflight.mjs --mode certify --json");
-    expect(certification).toContain("run: node ../scripts/check-release-evidence.mjs");
+    expect(certification).toContain("run: node ../scripts/check-release-evidence.mjs --scope full-release");
+    expect(certification).not.toMatch(/node \.\.\/scripts\/check-release-evidence\.mjs[^\r\n]*--scope(?:\s+|=)diagnostic/);
     expect(certification).toContain("RELEASE_TAG_BINDING_MODE: intended");
     expect(certification).toContain("node scripts/install-release-certification.mjs");
     expect(certification).toContain("--destination=candidate/artifacts/release/generated/certifications");

@@ -71,6 +71,9 @@ async function fixture() {
     await readFile(process.env.TALENTSCOUT_SOAK_AGGREGATOR ?? join(source,'scripts/aggregate-release-soak-shards.mjs')));
   await writeFile(join(candidate,'scripts/release-calendar-receipt.mjs'),
     await readFile(process.env.TALENTSCOUT_SOAK_CALENDAR_RECEIPT ?? join(source,'scripts/release-calendar-receipt.mjs')));
+  for (const name of ['release-artifact-io.mjs', 'release-artifact-io-profile.json']) {
+    await writeFile(join(candidate, 'scripts', name), await readFile(join(source, 'scripts', name)));
+  }
   git(candidate,'init','--quiet');
   git(candidate,'config','user.name','Fixture Tester');
   git(candidate,'config','user.email','fixture@example.invalid');

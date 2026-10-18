@@ -13,9 +13,16 @@ const outputPath = resolve(
 );
 const planOnly = process.env.SOAK_PLAN_ONLY === "true";
 
+function refuseUnsupportedChooserMode() {
+  throw Object.assign(new Error(
+    "Chooser-only output is unsupported by artifact admission",
+  ), { code: "ERR_RELEASE_ARTIFACT_UNSUPPORTED_MODE" });
+}
+
 if (planOnly) {
   console.info("LONG_CAREER_CHOOSER_PROFILE_MATRIX_PLAN skipped=true reason=plan-only");
 } else {
+  refuseUnsupportedChooserMode();
   await new Promise((resolveRun, rejectRun) => {
     const child = spawn(
       process.execPath,

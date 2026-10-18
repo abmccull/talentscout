@@ -1,12 +1,20 @@
 import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getHeapStatistics } from "node:v8";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { admitReleaseCareerCalendar, type ReleaseCalendarAdmission } from "./releaseCareerCalendar";
+import {
+  createArtifactContext,
+  loadArtifactProfile,
+  type ArtifactAdmissionPolicy,
+  type ArtifactContext,
+  type EvidenceClassification,
+  type WorkerProgressContext as ArtifactWorkerPhase,
+} from "../../scripts/release-artifact-io.mjs";
 import { captureCareerDevelopmentCohort } from "../support/careerDevelopmentTelemetry";
 import { collectWorldRosterGaps } from "./worldRosterHealth";
 import { getSeasonLength } from "@/engine/core/gameDate";
@@ -177,9 +185,10 @@ async function appendWorkerProgress(
     recordedAtUtc: new Date().toISOString(), event, completedCanonicalTicks, calendarWeeksSpanned,
     season, week, digest,
   };
-  const raw = `${JSON.stringify(row)}\n`;
-  if (event === "started") await writeFile(workerProgress.progressPath, raw, { encoding: "utf8", flag: "wx" });
-  else await appendFile(workerProgress.progressPath, raw, "utf8");
+  const encoded = await artifactContext.encodeJson(row, {
+    role: "progress", pretty: false, terminalNewline: true,
+  });
+  await artifactContext.appendProgress(workerProgress.progressPath, encoded, { event });
 }
 
 // Heap samples are taken after an explicit collection so the release gate
@@ -201,6 +210,95 @@ const PROFILE_MATRIX_OUTPUT_PATH = resolve(
   process.env.SOAK_PROFILE_MATRIX_OUTPUT
     ?? "artifacts/release/generated/long-career-chooser-profile-matrix.json",
 );
+
+function refuseArtifactConfiguration(explanation: string): never {
+  throw Object.assign(new Error(explanation), { code: "ERR_RELEASE_ARTIFACT_DOMAIN" });
+}
+
+function assertSupportedArtifactMode(): void {
+  if (process.env.SOAK_DIAGNOSTIC_CHECKPOINT_PATH !== undefined || PROFILE_MATRIX_ONLY) {
+    throw Object.assign(new Error(
+      "Shared diagnostic checkpoints and chooser-only output are unsupported by artifact admission",
+    ), { code: "ERR_RELEASE_ARTIFACT_UNSUPPORTED_MODE" });
+  }
+}
+
+const artifactAdmission: {
+  readonly context: ArtifactContext;
+  readonly artifactIo: ArtifactAdmissionPolicy | undefined;
+} = await (async () => {
+  const loadedProfile = await loadArtifactProfile();
+  const profile = loadedProfile.profile;
+  if (!Number.isSafeInteger(RELEASE_SEED_COUNT) || RELEASE_SEED_COUNT <= 0
+    || RELEASE_SEED_COUNT > profile.campaign.maxPrimarySeeds
+    || !Number.isSafeInteger(RELEASE_SEED_START) || RELEASE_SEED_START <= 0
+    || !Number.isSafeInteger(RELEASE_SEED_START + RELEASE_SEED_COUNT - 1)
+    || !Number.isSafeInteger(RELEASE_SEASON_COUNT) || RELEASE_SEASON_COUNT <= 0
+    || RELEASE_SEASON_COUNT > profile.campaign.maxSeasons
+    || !Number.isSafeInteger(PROFILE_MATRIX_SEED_COUNT) || PROFILE_MATRIX_SEED_COUNT < 0
+    || PROFILE_MATRIX_SEED_COUNT > profile.campaign.maxPrimarySeeds
+    || !Number.isSafeInteger(PROFILE_MATRIX_SEASON_COUNT) || PROFILE_MATRIX_SEASON_COUNT <= 0
+    || PROFILE_MATRIX_SEASON_COUNT > profile.campaign.maxSeasons) {
+    refuseArtifactConfiguration("Release artifact cardinalities exceed the selected bounded profile");
+  }
+  const phase: ArtifactWorkerPhase | null = workerProgress
+    ? Object.freeze({
+        workerRunId: workerProgress.workerRunId,
+        phase: workerProgress.phase,
+        seedIndex: workerProgress.seedIndex,
+        driverPid: workerProgress.driverPid,
+        vitestPid: process.ppid,
+        workerPid: process.pid,
+      })
+    : null;
+  let evidenceClassification: EvidenceClassification = "diagnostic-fixture";
+  let artifactIo: ArtifactAdmissionPolicy | undefined;
+  const identityNames = [
+    "SOAK_ARTIFACT_EXECUTION_IDENTITY_HASH",
+    "SOAK_ARTIFACT_CANDIDATE_COMMIT_SHA",
+    "SOAK_ARTIFACT_CANDIDATE_TREE_SHA",
+    "SOAK_ARTIFACT_EVIDENCE_CLASSIFICATION",
+  ] as const;
+  if (identityNames.some((name) => process.env[name] !== undefined)) {
+    const executionIdentityHash = process.env.SOAK_ARTIFACT_EXECUTION_IDENTITY_HASH;
+    const candidateCommitSha = process.env.SOAK_ARTIFACT_CANDIDATE_COMMIT_SHA;
+    const candidateTreeSha = process.env.SOAK_ARTIFACT_CANDIDATE_TREE_SHA;
+    const classification = process.env.SOAK_ARTIFACT_EVIDENCE_CLASSIFICATION;
+    if (!workerProgress || !executionIdentityHash || !/^[a-f0-9]{64}$/.test(executionIdentityHash)
+      || !candidateCommitSha || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(candidateCommitSha)
+      || !candidateTreeSha || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(candidateTreeSha)
+      || (classification !== "canonical" && classification !== "diagnostic-fixture")
+      || (classification === "canonical" && loadedProfile.purpose !== "canonical")) {
+      refuseArtifactConfiguration("Actual worker artifact campaign identity is incomplete or inconsistent");
+    }
+    evidenceClassification = classification;
+    const configuredFailurePath = process.env.SOAK_ARTIFACT_FAILURE_OUTPUT;
+    const failureOutput = resolve(configuredFailurePath ?? "artifacts/release/generated/long-career-artifact-failure.json");
+    const relativeFailurePath = relative(process.cwd(), failureOutput);
+    if (configuredFailurePath === "" || !relativeFailurePath || isAbsolute(relativeFailurePath)
+      || relativeFailurePath === ".." || relativeFailurePath.startsWith(`..${sep}`)
+      || /[\u0000-\u001f\u007f]/u.test(failureOutput)
+      || (process.platform === "win32" && failureOutput.split(/[\\/]/).slice(1)
+        .some((part) => part.endsWith(" ") || part.endsWith(".") || part.includes(":")))) {
+      refuseArtifactConfiguration("Artifact failure receipt path must remain within the repository");
+    }
+    artifactIo = Object.freeze({
+      schemaVersion: 1,
+      profileId: loadedProfile.profile.profileId,
+      profileSha256: loadedProfile.sha256,
+      purpose: loadedProfile.purpose,
+      expectedExecutionIdentityHash: executionIdentityHash,
+      expectedCandidateCommitSha: candidateCommitSha,
+      expectedCandidateTreeSha: candidateTreeSha,
+      failureReceiptPath: relativeFailurePath.split(sep).join("/"),
+    });
+  }
+  const context = createArtifactContext({
+    loadedProfile, domain: "worker", phase, evidenceClassification,
+  });
+  return Object.freeze({ context, artifactIo });
+})();
+const artifactContext = artifactAdmission.context;
 const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
   players: 32 * 1024 * 1024,
   // Historical evidence keeps numeric truth and narrative while completed
@@ -827,6 +925,7 @@ async function simulateCareer(
   seasonCount: number,
   chooserProfile: AutonomousCareerChooserProfileId = "commercial",
 ): Promise<RunEvidence> {
+  artifactContext.assertHealthy();
   const { useGameStore } = await import("@/stores/gameStore");
   await useGameStore.getState().startNewGame({
     scoutFirstName: "Release",
@@ -1183,6 +1282,7 @@ const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY ? it : it.skip;
 
 describe("full canonical-week release soak", () => {
   canonicalReleaseSoak("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
+    assertSupportedArtifactMode();
     expect(RELEASE_SEED_COUNT).toBeGreaterThan(0);
     expect(RELEASE_SEASON_COUNT).toBeGreaterThan(0);
     expect(PROFILE_MATRIX_SEED_COUNT).toBeGreaterThanOrEqual(0);
@@ -1214,6 +1314,7 @@ describe("full canonical-week release soak", () => {
     const summary = {
       schemaVersion: 2,
       generatedAt: new Date().toISOString(),
+      ...(artifactAdmission.artifactIo ? { artifactIo: artifactAdmission.artifactIo } : {}),
       profile: {
         kind: "full-canonical-weekly-career",
         authoritativeTicksPerSeason: "calendar-dependent",
@@ -1282,12 +1383,22 @@ describe("full canonical-week release soak", () => {
       persistenceReplay,
     };
 
+    const role = workerProgress
+      ? "worker-result"
+      : RELEASE_SEED_COUNT === 1 ? "single-seed-summary" : "campaign-summary";
+    const encoded = await artifactContext.encodeJson(summary, {
+      role, pretty: true, terminalNewline: true,
+    });
+    artifactContext.assertHealthy();
     await mkdir(dirname(OUTPUT_PATH), { recursive: true });
-    await writeFile(OUTPUT_PATH, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+    await artifactContext.writeJson(OUTPUT_PATH, encoded, {
+      method: "exclusive", role, assertHealthy: () => artifactContext.assertHealthy(),
+    });
     console.info(`LONG_CAREER_RELEASE_GATE ${JSON.stringify(summary.aggregate)}`);
   });
 
   chooserProfileMatrixReleaseSoak("captures supplemental chooser divergence once as non-gating evidence", async () => {
+    assertSupportedArtifactMode();
     expect(PROFILE_MATRIX_SEED_COUNT).toBeGreaterThan(0);
     expect(PROFILE_MATRIX_SEASON_COUNT).toBeGreaterThan(0);
 

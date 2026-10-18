@@ -1,9 +1,16 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { lstat, mkdir, opendir, realpath } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { validateReleaseCalendarReceipt } from "./release-calendar-receipt.mjs";
+import { loadArtifactProfile, createArtifactContext } from "./release-artifact-io.mjs";
 
+
+const loadedArtifactProfile = await loadArtifactProfile();
+const artifactContext = createArtifactContext({
+  loadedProfile: loadedArtifactProfile, domain: "aggregate", phase: null,
+  evidenceClassification: "diagnostic-fixture",
+});
 const seedCount = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
 const seasonCount = Number.parseInt(process.env.SOAK_SEASONS ?? "30", 10);
 const inputDirectory = resolve(
@@ -15,6 +22,47 @@ const outputPath = resolve(
     ?? "artifacts/release/generated/long-career-release-summary.json",
 );
 const repositoryRoot = resolve(".");
+
+function artifactDomainError(message) {
+  return Object.assign(new Error(message), { code: "ERR_RELEASE_ARTIFACT_DOMAIN" });
+}
+const artifactIoKeys = Object.freeze([
+  "schemaVersion", "profileId", "profileSha256", "purpose",
+  "expectedExecutionIdentityHash", "expectedCandidateCommitSha",
+  "expectedCandidateTreeSha", "failureReceiptPath",
+]);
+function artifactFailureReceiptPath(root) {
+  const path = resolve(root, process.env.SOAK_ARTIFACT_FAILURE_OUTPUT
+    ?? "artifacts/release/generated/long-career-artifact-failure.json");
+  const part = relative(root, path);
+  if (!part || isAbsolute(part) || part === ".." || part.startsWith(".." + sep)
+    || /[\u0000-\u001f\u007f]/.test(path)
+    || (process.platform === "win32" && path.split(/[\\/]/).slice(1)
+      .some((part) => part.endsWith(" ") || part.endsWith(".") || part.includes(":")))
+    || Buffer.byteLength(path, "utf8") > loadedArtifactProfile.profile.representation.maxCanonicalPathUtf8Bytes) {
+    throw artifactDomainError("Artifact failure receipt path must be an ordinary repository-contained path");
+  }
+  return part.split(sep).join("/");
+}
+function assertArtifactBinding(actual, expected, label) {
+  if (actual === null || typeof actual !== "object"
+    || Object.getPrototypeOf(actual) !== Object.prototype
+    || Object.keys(actual).length !== artifactIoKeys.length
+    || artifactIoKeys.some(key => !Object.hasOwn(actual, key) || actual[key] !== expected[key])) {
+    throw artifactDomainError(label + " artifactIo does not match the actual profile and campaign context");
+  }
+}
+
+const failureReceiptPath = artifactFailureReceiptPath(repositoryRoot);
+function expectedArtifactBinding(executionIdentityHash) {
+  return {
+    schemaVersion: 1, profileId: loadedArtifactProfile.profile.profileId,
+    profileSha256: loadedArtifactProfile.sha256, purpose: loadedArtifactProfile.purpose,
+    expectedExecutionIdentityHash: executionIdentityHash,
+    expectedCandidateCommitSha: candidateCommitSha, expectedCandidateTreeSha: candidateTreeSha,
+    failureReceiptPath,
+  };
+}
 const certifiedWorkerNodeArguments = [
   "--max-old-space-size=1440",
   "--max-semi-space-size=32",
@@ -22,10 +70,10 @@ const certifiedWorkerNodeArguments = [
 ];
 const certifiedWorkerHeapLimitBytes = 1536 * 1024 * 1024;
 
-if (!Number.isInteger(seedCount) || seedCount <= 0) {
+if (!Number.isSafeInteger(seedCount) || seedCount <= 0 || seedCount > loadedArtifactProfile.profile.campaign.maxPrimarySeeds) {
   throw new Error("SOAK_SEEDS must be positive");
 }
-if (!Number.isInteger(seasonCount) || seasonCount <= 0) {
+if (!Number.isSafeInteger(seasonCount) || seasonCount <= 0 || seasonCount > loadedArtifactProfile.profile.campaign.maxSeasons) {
   throw new Error("SOAK_SEASONS must be positive");
 }
 
@@ -42,13 +90,121 @@ if (git("status", "--porcelain", "--untracked-files=all")) {
   throw new Error("Refusing to aggregate release soak evidence from a dirty tree");
 }
 
-const files = (await readdir(inputDirectory, { recursive: true }))
-  .filter((file) => file.endsWith(".json"))
-  .map((file) => resolve(inputDirectory, file));
-const shards = await Promise.all(files.map(async (file) => ({
-  file,
-  document: JSON.parse(await readFile(file, "utf8")),
-})));
+
+const traversal = {
+  returnedEntries: 0, admittedEntries: 0, directoriesAdmitted: 0,
+  directoriesOpened: 0, directoriesClosed: 0, jsonFilesAdmitted: 0,
+  maximumAdmittedDepth: 0, closeFailures: [],
+};
+const ownedDirectories = new Set();
+const traversalLimits = loadedArtifactProfile.profile.readers;
+let traversalFailure = null;
+function assertAggregateHealthy() {
+  if (traversalFailure !== null) throw traversalFailure;
+  artifactContext.assertHealthy();
+}
+function enumerationLimit(message) {
+  return Object.assign(new Error(message), { code: "ERR_RELEASE_ARTIFACT_ENUMERATION_LIMIT" });
+}
+function boundedCloseFact(error) {
+  return {
+    name: typeof error?.name === "string" ? error.name.slice(0, 128) : "Error",
+    code: typeof error?.code === "string" ? error.code.slice(0, 128) : null,
+    message: typeof error?.message === "string" ? error.message.slice(0, 1024) : "Directory close failed",
+  };
+}
+function guardTraversalPath(path) {
+  if (resolve(path) !== path || /[\u0000-\u001f\u007f]/.test(path)
+    || Buffer.byteLength(path, "utf8") > loadedArtifactProfile.profile.representation.maxCanonicalPathUtf8Bytes) {
+    throw artifactDomainError("Aggregate traversal requires a bounded canonical ordinary path");
+  }
+}
+async function ordinaryTraversalEntry(path) {
+  guardTraversalPath(path);
+  const identity = await lstat(path, { bigint: true });
+  if (identity.isSymbolicLink() || await realpath(path) !== path) {
+    throw artifactDomainError("Aggregate traversal refuses an alias: " + path);
+  }
+  return identity;
+}
+function sameDirectoryIdentity(left, right) {
+  return ["dev", "ino", "mode", "mtimeNs", "ctimeNs", "birthtimeNs"]
+    .every(key => left[key] === right[key]);
+}
+const shards = [];
+async function collectShards(directoryPath, depth) {
+  if (depth > traversalLimits.directoryDepth) throw enumerationLimit("Aggregate directory depth admission exceeded");
+  if (traversal.directoriesAdmitted >= traversalLimits.directoriesIncludingRoot) {
+    throw enumerationLimit("Aggregate directory admission exceeded");
+  }
+  traversal.directoriesAdmitted += 1;
+  traversal.maximumAdmittedDepth = Math.max(traversal.maximumAdmittedDepth, depth);
+  const before = await ordinaryTraversalEntry(directoryPath);
+  if (!before.isDirectory()) throw artifactDomainError("Aggregate root/descent is not an ordinary directory");
+  let directory = null;
+  let primarySeen = false;
+  try {
+    directory = await opendir(directoryPath, { bufferSize: 1 });
+    ownedDirectories.add(directory);
+    traversal.directoriesOpened += 1;
+    if (!sameDirectoryIdentity(before, await ordinaryTraversalEntry(directoryPath))) {
+      throw Object.assign(new Error("Aggregate directory changed during open"), {
+        code: "ERR_RELEASE_ARTIFACT_READ_CONSISTENCY",
+      });
+    }
+    while (true) {
+      const entry = await directory.read();
+      if (entry === null) break;
+      traversal.returnedEntries += 1;
+      if (traversal.returnedEntries > traversalLimits.directoryEntriesAllKinds) {
+        throw enumerationLimit("Aggregate all-kind directory entry admission exceeded");
+      }
+      traversal.admittedEntries += 1;
+      const path = resolve(directoryPath, entry.name);
+      const identity = await ordinaryTraversalEntry(path);
+      if (identity.isDirectory()) {
+        await collectShards(path, depth + 1);
+      } else if (entry.name.endsWith(".json")) {
+        if (!identity.isFile()) throw artifactDomainError("Aggregate JSON input is not an ordinary file");
+        if (traversal.jsonFilesAdmitted >= traversalLimits.shardJsonFiles) {
+          throw enumerationLimit("Aggregate JSON input admission exceeded");
+        }
+        traversal.jsonFilesAdmitted += 1;
+        const read = await artifactContext.readJson(path, { role: "shard", expectedSha256: null });
+        shards.push({ file: path, document: read.value });
+      }
+    }
+  } catch (error) {
+    primarySeen = true;
+    throw error;
+  } finally {
+    if (directory !== null) {
+      try {
+        await directory.close();
+        ownedDirectories.delete(directory);
+        traversal.directoriesClosed += 1;
+      } catch (error) {
+        traversal.closeFailures.push(boundedCloseFact(error));
+        if (!primarySeen) throw error;
+      }
+    }
+  }
+  if (!sameDirectoryIdentity(before, await ordinaryTraversalEntry(directoryPath))) {
+    throw Object.assign(new Error("Aggregate directory changed during traversal"), {
+      code: "ERR_RELEASE_ARTIFACT_READ_CONSISTENCY",
+    });
+  }
+}
+try {
+  await collectShards(inputDirectory, 0);
+} catch (error) {
+  traversalFailure = error;
+  console.error("RELEASE_ARTIFACT_AGGREGATE_TRAVERSAL " + JSON.stringify({
+    traversal, helper: artifactContext.snapshot(),
+  }));
+  throw error;
+}
+console.info("RELEASE_ARTIFACT_AGGREGATE_TRAVERSAL " + JSON.stringify({ traversal }));
 
 const expectedSeeds = Array.from(
   { length: seedCount },
@@ -105,6 +261,14 @@ for (const shard of shards) {
   if (calendarFailures.length > 0) {
     throw new Error(`Invalid release soak shard ${shard.file}: ${calendarFailures.join("; ")}`);
   }
+  if (Object.hasOwn(document, "artifactIo")) {
+    assertArtifactBinding(document.artifactIo, expectedArtifactBinding(document.checkpoint.executionIdentityHash), "Release soak shard");
+    if (identity.artifactProfileId !== loadedArtifactProfile.profile.profileId
+      || identity.artifactProfileSha256 !== loadedArtifactProfile.sha256
+      || identity.artifactProfilePurpose !== loadedArtifactProfile.purpose) {
+      throw artifactDomainError("Release soak shard execution profile identity does not match the actual selected profile");
+    }
+  }
   if (shardBySeed.has(run.seed)) {
     throw new Error(`Duplicate release soak shard for ${run.seed}`);
   }
@@ -160,6 +324,9 @@ if (
 
 const executionIdentity = {
   protocolVersion: 1,
+  artifactProfileId: loadedArtifactProfile.profile.profileId,
+  artifactProfileSha256: loadedArtifactProfile.sha256,
+  artifactProfilePurpose: loadedArtifactProfile.purpose,
   candidateCommitSha,
   candidateTreeSha,
   seedCount,
@@ -190,6 +357,7 @@ const round = (value) => Math.round(value * 100) / 100;
 
 const summary = {
   schemaVersion: 3,
+  artifactIo: expectedArtifactBinding(executionIdentityHash),
   evidenceKind: "long-career-release-soak",
   generatedAt: new Date().toISOString(),
   candidateCommitSha,
@@ -254,6 +422,12 @@ const summary = {
   persistenceReplay: firstShard.persistenceReplay,
 };
 
+const encodedSummary = await artifactContext.encodeJson(summary, {
+  role: "campaign-summary", pretty: true, terminalNewline: true,
+});
+assertAggregateHealthy();
 await mkdir(dirname(outputPath), { recursive: true });
-await writeFile(outputPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+await artifactContext.writeJson(outputPath, encodedSummary, {
+  method: "atomic", role: "campaign-summary", assertHealthy: assertAggregateHealthy,
+});
 console.info(`LONG_CAREER_RELEASE_AGGREGATE ${JSON.stringify(summary.aggregate)}`);

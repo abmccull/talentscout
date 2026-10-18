@@ -16,6 +16,8 @@ const sourceNames = ['tests/release/longCareerReleaseGate.soak.ts',
   'src/stores/gameStore.ts', 'src/engine/core/gameDate.ts', 'scripts/relay-child-output.mjs', 'package.json',
   'node_modules/vitest/dist/index.js', 'node_modules/vitest/vitest.mjs', 'node_modules/vitest/package.json',
   'tests/release/releaseCareerCalendar.ts', 'scripts/run-calendar-worker-guard-e2e.mjs'];
+const candidateSourceNames = [...sourceNames, 'scripts/release-artifact-io.mjs', 'scripts/release-artifact-io-profile.json'];
+const sourceInputNames = mode => mode === 'candidate' ? candidateSourceNames : sourceNames;
 const packetNames = ['cases.json', 'calendarFault.setup.ts', 'calendarErrorWitness.reporter.mjs',
   'calendar-worker.config.mts', 'observe-calendar-worker.mjs'];
 function keys(value, names) {
@@ -34,7 +36,7 @@ async function readJson(path) { return JSON.parse(decode(await bytes(path))); }
 async function pins(root, names) {
   return Promise.all(names.map(async name => { const raw = await bytes(join(root, name)); return { path: name, bytes: raw.length, sha256: sha(raw) }; }));
 }
-export async function readCalendarWorkerSourcePins(source) { return pins(source, sourceNames); }
+export async function readCalendarWorkerSourcePins(source, mode = process.env.TALENTSCOUT_CALENDAR_GUARD_MODE ?? 'candidate') { return pins(source, sourceInputNames(mode)); }
 const errorFact = error => ({ name: error.name, code: error.code ?? null, message: error.message, stack: error.stack ?? null });
 
 async function runChild(source, directory, spec, catalog, createRelay) {
@@ -291,6 +293,7 @@ export async function runCalendarWorkerGuard(inputPath) {
   const inputRaw = await bytes(inputPath, 128 * 1024), input = JSON.parse(decode(inputRaw));
   keys(input, ['schemaVersion', 'ready', 'mode', 'source', 'fixtureRoot', 'evidenceOwner', 'sourceInputs']);
   assert.equal(input.schemaVersion, 1); assert.equal(input.ready, true); assert(['baseline', 'candidate'].includes(input.mode));
+  const sourceNames = sourceInputNames(input.mode);
   for (const path of [input.source, input.fixtureRoot, input.evidenceOwner]) assert(canonical(path));
   const source = await realpath(input.source), fixtureRoot = await realpath(input.fixtureRoot);
   assert.equal(source, input.source); assert.equal(fixtureRoot, input.fixtureRoot);

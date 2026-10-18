@@ -82,7 +82,7 @@ function globToRegExp(pattern) {
   return new RegExp(`${source}$`, "i");
 }
 
-export async function writeOwnedReport(root, outputPath, report, { allowCanonicalRelease = false, inputPaths = [] } = {}) {
+export async function writeOwnedReport(root, outputPath, report, { allowCanonicalRelease = false, inputPaths = [], writeJsonReport = undefined } = {}) {
   const rootMetadata = await lstat(root);
   if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) throw new Error("Report root is nonordinary");
   const path = normalized(relative(root, outputPath));
@@ -121,6 +121,12 @@ export async function writeOwnedReport(root, outputPath, report, { allowCanonica
     catch (error) { if (error?.code !== "EEXIST") throw error; }
     const metadata = await lstat(current);
     if (!metadata.isDirectory() || metadata.isSymbolicLink()) throw new Error("Report output parent is nonordinary");
+  }
+  // Ownership checks above apply equally to the bounded checker writer.
+  if (writeJsonReport !== undefined) {
+    if (typeof writeJsonReport !== "function") throw new Error("Invalid bounded report writer");
+    await writeJsonReport(outputPath, report);
+    return;
   }
   // Exclusive creation rejects existing files, hardlinks and symlink leaves.
   // No existing report is inspected as an excuse to replace or truncate it.

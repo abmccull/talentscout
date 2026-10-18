@@ -25,7 +25,9 @@ const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const inside = (root, file) => { const r = relative(root, file); return r === '' || (!r.startsWith('..' + sep) && r !== '..' && !isAbsolute(r)); };
 let owner, fixtureParent, cases, inputs;
 const results = [];
-const inputPaths = [fileURLToPath(import.meta.url), join(here, 'fixtures/production-output-grant-cases.json'), runner, relay, join(dirname(runner), 'release-calendar-receipt.mjs')];
+const inputPaths = [fileURLToPath(import.meta.url), join(here, 'fixtures/production-output-grant-cases.json'), runner, relay, join(dirname(runner), 'release-calendar-receipt.mjs'),
+  ...(mode === 'candidate' ? [join(dirname(runner), 'release-artifact-io.mjs'),
+    join(dirname(runner), 'release-artifact-io-profile.json')] : [])];
 async function inputPins() {
   return Promise.all(inputPaths.map(async path => { const bytes = await readFile(path); return { path, bytes: bytes.length, sha256: sha(bytes) }; }));
 }

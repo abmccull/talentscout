@@ -197,7 +197,7 @@ function check(cwd: string, overrides: Record<string, string> = {}) {
     ...overrides,
     RELEASE_EVIDENCE_OUTPUT: outputPath,
   });
-  const result = spawnSync(process.execPath, [checker, "--report-only"], {
+  const result = spawnSync(process.execPath, [checker, "--report-only", "--scope", "diagnostic"], {
     cwd,
     env,
     encoding: "utf8",
@@ -1401,7 +1401,7 @@ describe("release evidence checker", () => {
           mkdtempSync(join(cwd, "artifacts", "release", "generated", `calendar-${fault.id}-`)),
           "release-evidence-check.json",
         );
-        const refused = spawnSync(process.execPath, [checker], {
+        const refused = spawnSync(process.execPath, [checker, "--scope", "diagnostic"], {
           cwd,
           env: releaseNeutralEnvironment({ ...overrides, RELEASE_EVIDENCE_OUTPUT: failureOutput }),
           encoding: "utf8",
