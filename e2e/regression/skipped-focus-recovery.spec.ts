@@ -137,7 +137,7 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
   await expect(page.getByRole("heading", { name: "Planner", exact: true })).toBeVisible();
   if (await hideHelp.isVisible()) await hideHelp.click();
   await page.getByRole("button", { name: "Choose a day for this work", exact: true }).click();
-  await page.getByRole("button", { name: /^Place Follow-up Session on / }).and(page.locator("button:enabled")).first().click();
+  await page.getByRole("button", { name: /^Place Follow-Up Session on / }).and(page.locator("button:enabled")).first().click();
   await expect(page.locator('[data-activity-type="followUpSession"]').getByTestId("planner-activity-target").filter({ hasText: lead.name })).toBeVisible();
   let watchedFollowUp = false;
   await gamePage.advanceCanonicalWeek({ launchLiveSession: true, completeLiveSession: async () => {
@@ -152,6 +152,9 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
     watchedFollowUp = true;
   } });
   expect(watchedFollowUp).toBe(true);
+  const firstWeekMentor = page.getByRole("dialog", { name: "Mentor: Good First Week", exact: true });
+  await expect(firstWeekMentor).toBeVisible();
+  await firstWeekMentor.getByRole("button", { name: "Done", exact: true }).click();
   const showHelp = page.getByRole("button", { name: "Show mentor help", exact: true });
   if (await showHelp.isVisible()) await showHelp.click();
   await page.getByRole("button", { name: "Return to guided step", exact: true }).click();

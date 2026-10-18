@@ -58,6 +58,8 @@ export interface SeasonAward {
 }
 
 export interface LeagueAward {
+  /** Absent on historical awards that used hidden-ability or value proxies. */
+  evidenceSource?: "recordedSeasonFacts";
   id: string;
   name: string;
   description: string;

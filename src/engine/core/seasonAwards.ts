@@ -409,7 +409,7 @@ function generateLeagueAwards(state: GameState, season: number): LeagueAward[] {
     description: "Largest recorded season-to-season rating improvement among your discoveries this season",
     stat: `${name(breakthrough.playerId)} — ${breakthrough.previous.averageRating.toFixed(1)} to ${breakthrough.current.averageRating.toFixed(1)} average rating (+${breakthrough.improvement.toFixed(1)})`,
   });
-  return awards;
+  return awards.map((award) => ({ ...award, evidenceSource: "recordedSeasonFacts" as const }));
 }
 
 // =============================================================================

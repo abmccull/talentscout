@@ -48,7 +48,7 @@ export const ObservationPitch = memo(function ObservationPitch({
     onSelectPlayer(markers[nextIndex].playerId);
     const nextControl = controlsRef.current?.querySelectorAll<HTMLButtonElement>("[data-observation-pitch-marker]")[nextIndex];
     nextControl?.focus({ preventScroll: true });
-    nextControl?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+    nextControl?.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
   };
 
   return (
@@ -90,10 +90,10 @@ export const ObservationPitch = memo(function ObservationPitch({
               <li key={marker.playerId} className="w-[176px] shrink-0 snap-start sm:w-[136px]">
                 <button
                   type="button" data-observation-pitch-marker
-                  onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) event.currentTarget.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }); }}
+                  onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) event.currentTarget.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }); }}
                   onClick={(event) => {
                     onSelectPlayer(marker.playerId);
-                    event.currentTarget.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+                    event.currentTarget.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
                   }} onKeyDown={(event) => handleMarkerKeyDown(event, index)}
                   aria-label={`Track ${markerLabel(marker)}`} aria-pressed={isSelected} tabIndex={isSelected || (!selectedMarker && index === 0) ? 0 : -1}
                   className="group scroll-mx-2 scroll-mt-16 scroll-mb-28 flex w-full items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--surface)] sm:block"

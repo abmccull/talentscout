@@ -57,10 +57,11 @@ test("unfocused opening keeps uncertainty and can book a genuine follow-up", asy
   const chooseDay = page.getByRole("button", { name: "Choose a day for this work", exact: true });
   await expect(chooseDay, "Recovery must carry the selected lead into a concrete follow-up").toBeVisible();
   await chooseDay.click();
-  const place = page.getByRole("button", { name: /^Place Follow-up Session on / }).and(page.locator("button:enabled"));
+  const place = page.getByRole("button", { name: /^Place Follow-Up Session on / }).and(page.locator("button:enabled"));
   await place.first().click();
   await expect(page.locator('[data-activity-type="followUpSession"]').getByTestId("planner-activity-target").filter({ hasText: lead.name })).toBeVisible();
   let watched = false;
+  let followUpEvidence: { sessionId: string; permittedAttributes: string[]; withheldCues: Array<{ id: string; clarity: string; attributesHinted: string[] }> } | undefined;
   await gamePage.advanceCanonicalWeek({ launchLiveSession: true, completeLiveSession: async () => {
     const question = page.getByRole("group", { name: "What are you here to learn?" });
     await question.locator("summary").click();
@@ -69,24 +70,64 @@ test("unfocused opening keeps uncertainty and can book a genuine follow-up", asy
     await advanceGeneratedWatchToReflection(page, { lead, focus: true, hideMentorHelp: true });
     if (await hideHelp.isVisible()) await hideHelp.click();
     await classifyDisplayedLeadEvidence(page, lead, true);
+    followUpEvidence = await page.evaluate((playerId) => {
+      const session = (window as any).__GAME_STORE__.getState().activeSession;
+      const player = session.players.find((entry: any) => entry.playerId === playerId);
+      const cues = session.cueReadings.filter((cue: any) => cue.playerId === playerId);
+      const permitted = cues.filter((cue: any) => cue.clarity !== "missed" && cue.clarity !== "glimpse"
+        && session.evidenceDecisions[cue.id]?.classification !== "noConclusion"
+        && player.focusedPhases.includes(cue.phaseIndex) && cue.phaseIndex <= session.currentPhaseIndex
+        && session.phases.some((phase: any) => phase.index === cue.phaseIndex
+          && phase.moments.some((moment: any) => moment.id === cue.momentId && moment.playerId === playerId)));
+      return { sessionId: session.id as string,
+        permittedAttributes: [...new Set(permitted.flatMap((cue: any) => cue.attributesHinted))] as string[],
+        withheldCues: cues.filter((cue: any) => session.evidenceDecisions[cue.id]?.classification === "noConclusion")
+          .map((cue: any) => ({ id: cue.id, clarity: cue.clarity, attributesHinted: cue.attributesHinted })) };
+    }, lead.playerId);
     await page.getByRole("button", { name: "Complete Reflection", exact: true }).click();
     watched = true;
   } });
   expect(watched).toBe(true);
-  const afterWatch = await page.evaluate((playerId) => {
+  expect(followUpEvidence).toBeDefined();
+  const evidence = followUpEvidence!;
+  const afterWatch = await page.evaluate(({ playerId, sessionId }) => {
     const state = (window as any).__GAME_STORE__.getState().gameState;
     return { reports: Object.values(state.reports), observations: Object.values(state.observations)
-      .filter((entry: any) => entry.playerId === playerId) as any[] };
-  }, lead.playerId);
+      .filter((entry: any) => entry.playerId === playerId) as any[],
+      cards: state.reflectionJournal[sessionId].evidenceCards as any[] };
+  }, { playerId: lead.playerId, sessionId: evidence.sessionId });
   expect(afterWatch.reports).toEqual([]);
   expect(afterWatch.observations.length).toBeGreaterThan(0);
-  expect(afterWatch.observations.every((entry) => entry.attributeReadings.length === 0 && !entry.abilityReading)).toBe(true);
+  expect(afterWatch.observations.every((entry) => entry.sourceSessionId === evidence.sessionId)).toBe(true);
+  for (const observation of afterWatch.observations) {
+    for (const reading of observation.attributeReadings) expect(evidence.permittedAttributes).toContain(reading.attribute);
+    if (evidence.permittedAttributes.length === 0) {
+      expect(observation.attributeReadings).toEqual([]);
+      expect(observation.abilityReading).toBeUndefined();
+    }
+  }
+  expect(evidence.withheldCues.length).toBeGreaterThan(0);
+  for (const cue of evidence.withheldCues) {
+    // Withholding interpretation does not rewrite what was actually observed.
+    expect(afterWatch.cards.find((card) => card.id === cue.id)).toMatchObject({
+      ...cue, classification: "noConclusion",
+    });
+  }
+  const firstWeekMentor = page.getByRole("dialog", { name: "Mentor: Good First Week", exact: true });
+  await expect(firstWeekMentor).toBeVisible();
+  await firstWeekMentor.getByRole("button", { name: "Done", exact: true }).click();
   const showHelp = page.getByRole("button", { name: "Show mentor help", exact: true });
   if (await showHelp.isVisible()) await showHelp.click();
   await page.getByRole("button", { name: "Return to guided step", exact: true }).click();
   await expect(page.getByRole("group", { name: "Saved evidence", exact: true })).toBeVisible();
   await expect(page.getByText("Evidence needed", { exact: true })).toHaveCount(0);
-  await testInfo.attach("earned-recovery.json", { body: JSON.stringify({ beforeRecovery, afterWatch }, null, 2), contentType: "application/json" });
+  const savedEvidence = page.getByRole("group", { name: "Saved evidence", exact: true });
+  await savedEvidence.locator(`input[value="${evidence.withheldCues[0].id}"]`).locator("..").click();
+  const interpretations = page.getByRole("group", { name: "What it suggests", exact: true });
+  await expect(interpretations.getByRole("radio").first()).toHaveAccessibleName(/^Record it without a conclusion/);
+  await expect(interpretations).toContainText("Withheld");
+  await expect(interpretations).not.toContainText("· Supported");
+  await testInfo.attach("earned-recovery.json", { body: JSON.stringify({ beforeRecovery, evidence, afterWatch }, null, 2), contentType: "application/json" });
   await page.screenshot({ path: testInfo.outputPath("earned-recovery-assessment.png"), fullPage: true });
   gamePage.expectNoConsoleErrors();
 });

@@ -162,6 +162,11 @@ test.describe("Recorded season awards", () => {
       if (mode !== "unplayed") {
         await gamePage.page.locator("summary").filter({ hasText: "Around the league" }).click();
         await expect(gamePage.page.getByText("Awards RecordedScorer — 9 goals", { exact: true })).toBeVisible();
+        await expect(gamePage.page.getByText(award("best-young-player").stat, { exact: true })).toBeVisible();
+        await expect(gamePage.page.getByRole("heading", { name: "Biggest Transfer", exact: true })).toBeVisible();
+        await expect(gamePage.page.getByText(award("biggest-transfer").stat, { exact: true })).toBeVisible();
+        if (mode === "complete") await expect(gamePage.page.getByText(award("breakthrough-discovery").stat, { exact: true })).toBeVisible();
+        await expect(gamePage.page.getByText(/scoring estimate|highest market value/i)).toHaveCount(0);
       } else await expect(gamePage.page.getByRole("heading", { name: "Around the league", exact: true })).toHaveCount(0);
       await gamePage.page.screenshot({ path: test.info().outputPath(`recorded-awards-${mode}.png`), fullPage: true });
       await gamePage.page.evaluate(async () => { await (window as any).__GAME_STORE__.getState().saveToSlot(5, "Recorded season awards proof"); });
@@ -176,4 +181,37 @@ test.describe("Recorded season awards", () => {
       gamePage.expectNoConsoleErrors();
     });
   }
+});
+
+test("untagged legacy awards retain uncertainty and hide old ability proxies", async ({ gamePage, page }, testInfo) => {
+  await gamePage.goto();
+  await gamePage.injectMidGameState("youth");
+  await page.evaluate(() => {
+    const store = (window as any).__GAME_STORE__;
+    const state = store.getState().gameState;
+    const player = Object.values(state.players)[0] as any;
+    const name = `${player.firstName} ${player.lastName}`;
+    store.setState({ gameState: { ...state, seasonAwardsData: {
+      season: 1, clubName: "Legacy season", scoutAwards: [],
+      leagueAwards: [
+        { id: "golden-boot", name: "Golden Boot", relatedPlayerId: player.id, stat: `${name} — 9 goals`, description: "Old scoring proxy" },
+        { id: "best-young-player", name: "Best Young Player", relatedPlayerId: player.id, stat: "Hidden ability 198", description: "Hidden potential 200" },
+        { id: "biggest-transfer", name: "Biggest Transfer", relatedPlayerId: player.id, stat: `${name} — £99M`, description: "Old market value proxy" },
+        { id: "breakthrough-discovery", name: "Breakthrough Discovery", relatedPlayerId: player.id, stat: "Hidden ability gain 25", description: "Old hidden development proxy" },
+      ],
+      stats: { reportsSubmitted: 0, avgReportQuality: 0, matchesAttended: 0, playersDiscovered: 0,
+        highUpsideCalls: 0, transferRecommendations: 0, recommendationsAccepted: 0, recommendationsSigned: 0,
+        hitRate: 0, reputationStart: 0, reputationEnd: 0, reputationChange: 0, income: 0, expenses: 0,
+        profitLoss: 0, countriesScouted: 0, avgFatigue: 0 },
+    } }, currentScreen: "seasonAwards" });
+  });
+  await expect(page.getByRole("heading", { name: "Season 1 Complete", exact: true })).toBeVisible();
+  await page.locator("summary").filter({ hasText: "Around the league" }).click();
+  await expect(page.getByRole("heading", { name: "Golden Boot · scoring estimate", exact: true })).toBeVisible();
+  await expect(page.getByText(/— estimated 9 goals$/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Market value recognition", exact: true })).toBeVisible();
+  await expect(page.getByText(/This does not record a completed transfer/)).toBeVisible();
+  await expect(page.getByText(/Hidden ability|Hidden potential|Old hidden development proxy/)).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("legacy-awards-uncertainty.png"), fullPage: true });
+  gamePage.expectNoConsoleErrors();
 });
