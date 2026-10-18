@@ -1,3 +1,4 @@
+import { getFreshReportObservationIds, indexLatestPlayerReports, isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type {
   GameState,
   Observation,
@@ -18,6 +19,7 @@ export interface YouthCaseListItem {
   position: string;
   age: number;
   lastLookLabel: string;
+  questionLabel?: string;
   openQuestion: string;
   nextTest: string;
   rivalHeat: YouthRivalHeat;
@@ -72,7 +74,7 @@ const HEAT_LABEL: Record<YouthRivalHeat, string> = {
 
 export function buildYouthCaseListItem(
   youth: UnsignedYouth,
-  state: Pick<GameState, "scout" | "observations" | "reflectionJournal" | "rivalActivities" | "currentWeek" | "currentSeason">,
+  state: Pick<GameState, "scout" | "observations" | "reflectionJournal" | "rivalActivities" | "currentWeek" | "currentSeason"> & Partial<Pick<GameState, "reports">>,
   evidenceIndex = buildYouthDeskEvidenceIndex(state),
 ): YouthCaseListItem {
   const observations = evidenceIndex.get(youth.player.id)?.liveObservations ?? [];
@@ -94,6 +96,20 @@ export function buildYouthCaseListItem(
   const hypothesis = [...latestHypotheses.values()].find((entry) =>
     entry.state !== "confirmed" && entry.state !== "debunked");
   const question = SCOUTING_QUESTIONS.find((entry) => entry.id === journal?.scoutingQuestionId);
+  const eligibleReports = Object.values(state.reports ?? {}).filter((report) =>
+    report.submittedSeason < state.currentSeason
+    || (report.submittedSeason === state.currentSeason && report.submittedWeek <= state.currentWeek));
+  const report = indexLatestPlayerReports(eligibleReports, state.scout.id).get(youth.player.id);
+  const assessment = report?.evidenceAssessment;
+  const passedForNow = Boolean(report && isPrivateScoutingDecision(report));
+  const canReconsider = Boolean(passedForNow && report
+    && getFreshReportObservationIds(observations, report).length > 0);
+  const preservedPass = report?.summary?.trim() || assessment?.generatedSummary?.trim()
+    || "The original judgment and evidence remain on record.";
+  const reportIsLatest = report && (!journal || report.submittedSeason > journal.season
+    || (report.submittedSeason === journal.season && report.submittedWeek >= journal.week));
+  const unknown = reportIsLatest ? assessment?.unknowns[0]?.statement : undefined;
+  const witnessedNote = last?.notes?.find((note) => note.trim().length > 0)?.trim();
   const heat = rivalHeatFromYouth(youth, state.rivalActivities);
   return {
     playerId: youth.player.id,
@@ -104,10 +120,19 @@ export function buildYouthCaseListItem(
     lastLookLabel: last
       ? `Week ${last.week}, S${last.season}`
       : "No look yet",
-    openQuestion: hypothesis?.text
+    questionLabel: passedForNow ? canReconsider ? "Reconsideration available" : "Passed for now"
+      : unknown ? "Still to test" : hypothesis ? "Working hypothesis"
+      : question ? "The open question" : witnessedNote ? "Latest evidence" : "The open question",
+    openQuestion: passedForNow ? `Passed for now. ${preservedPass}`
+      : unknown ?? hypothesis?.text
       ?? question?.label
+      ?? witnessedNote
       ?? "What still needs another context?",
-    nextTest: observations.length === 0
+    nextTest: passedForNow
+      ? canReconsider ? "Optional: reconsider this pass against the new first-hand evidence."
+        : "No next look planned; spend attention elsewhere."
+      : reportIsLatest && assessment ? assessment.nextTest.label
+      : observations.length === 0
       ? "Arrange a first live observation before judging the player."
       : hypothesis
       ? "Test that hypothesis in a new context."

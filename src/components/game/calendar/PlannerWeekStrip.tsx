@@ -75,17 +75,13 @@ export function PlannerWeekStrip({
       id="planner-itinerary"
       data-tutorial-id="calendar-grid"
       aria-labelledby="itinerary-heading"
-      className={`relative z-20 -mx-2 mb-4 rounded-2xl border p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 sm:p-4 ${
-        openingShell
-          ? "border-[color:var(--primary)]/25 bg-[#14110c]/95"
-          : "border-emerald-400/20 bg-[#0c1217]/95"
-      }`}
+      className="relative mb-6 border-y border-[var(--border)] py-5"
     >
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 id="itinerary-heading" className="text-base font-semibold text-white">
-              Weekly itinerary
+              Your seven days
             </h2>
             <span className={`rounded-full border px-2.5 py-1 text-meta font-semibold ${
               openingShell
@@ -121,24 +117,23 @@ export function PlannerWeekStrip({
         )}
       </div>
 
-      {prelude && <div className="mb-4">{prelude}</div>}
 
       {receiptMessage && (
         <div
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          className="workspace-receipt-pulse mb-4 rounded-xl border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/[0.08] px-3 py-2 text-sm text-amber-50"
+          className="workspace-receipt-pulse mb-4 rounded border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/[0.08] px-3 py-2 text-sm text-amber-50"
         >
           {receiptMessage}
         </div>
       )}
 
       <div
-        className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] xl:grid xl:grid-cols-7 xl:overflow-visible xl:pb-0"
+        className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] xl:grid xl:grid-cols-4 2xl:grid-cols-7 xl:overflow-visible xl:pb-0"
         tabIndex={0}
         role="region"
-        aria-label="Weekly itinerary days. Use left and right arrow keys to scroll."
+        aria-label="Your seven days days. Use left and right arrow keys to scroll."
         onKeyDown={(event) => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
@@ -170,7 +165,7 @@ export function PlannerWeekStrip({
               key={dayKey}
               data-planner-day-index={dayIndex}
               data-activity-type={activity?.type}
-              className={`workspace-interactive relative min-h-11 w-60 shrink-0 snap-start rounded-xl border p-2 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] xl:w-auto xl:min-w-0 ${
+              className={`workspace-interactive relative min-h-11 w-60 shrink-0 snap-start rounded border p-2 transition sm:min-h-[120px] sm:p-3 xl:min-h-[132px] xl:w-auto xl:min-w-0 ${
                 activity
                   ? openingShell
                     ? "border-[color:var(--primary)]/30 bg-[color:var(--primary)]/[0.08]"
@@ -212,8 +207,8 @@ export function PlannerWeekStrip({
                         ? "Available start"
                         : canPromptSelection
                           ? isWeekBlank
-                            ? "Needs the first call"
-                            : "Open for a decision"
+                            ? "Available"
+                            : "Available"
                           : "Open day"}
                   </p>}
                 </div>
@@ -299,7 +294,7 @@ export function PlannerWeekStrip({
                     event.preventDefault();
                     next.focus();
                   }}
-                  className={`workspace-interactive mt-4 flex min-h-[68px] w-full flex-col items-start justify-center rounded-xl border px-3 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                  className={`workspace-interactive mt-4 flex min-h-[68px] w-full flex-col items-start justify-center rounded border px-3 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
                     selectedActivity
                       ? canPlaceSelected
                         ? "border-[color:var(--primary)] bg-[color:var(--primary)]/12 font-semibold text-[color:var(--primary)] hover:bg-[color:var(--primary)]/18"
@@ -318,8 +313,8 @@ export function PlannerWeekStrip({
                         : "Unavailable"
                       : renderExpandedEmptyState
                         ? isWeekBlank
-                          ? "Choose the first live look"
-                          : "Choose the next live look"
+                          ? "Choose work"
+                          : "Choose work"
                         : "Open day"}
                   </span>
                   {(selectedActivity || renderExpandedEmptyState) && (
@@ -345,6 +340,8 @@ export function PlannerWeekStrip({
           );
         })}
       </div>
+
+      {prelude && <div className="mt-4">{prelude}</div>}
 
       {(upcomingEvent || severity !== "ok") && (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-3 text-meta">

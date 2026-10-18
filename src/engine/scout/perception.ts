@@ -24,6 +24,7 @@ import {
   HIDDEN_ATTRIBUTES,
 } from "@/engine/core/types";
 import { generateAbilityReading } from "@/engine/scout/starRating";
+import { buildObservedAttributeReadings, type ObservedCueEvidence } from "@/engine/scout/observedKnowledge";
 import { checkPersonalityReveal } from "@/engine/players/personalityReveal";
 import { progressivePersonalityReveal } from "@/engine/players/personalityEffects";
 import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
@@ -433,6 +434,8 @@ const CONTEXT_VISIBLE_ATTRIBUTES: Record<ObservationContext, PlayerAttribute[]> 
 // ---------------------------------------------------------------------------
 
 export interface LightObservationEvidenceOptions {
+  /** Actual noticed cues; interactive sessions never supplement them with truth reads. */
+  observedCues?: readonly ObservedCueEvidence[];
   /** Attributes made visible by concrete moments in an interactive session. */
   evidenceAttributes?: PlayerAttribute[];
   /** Live observations may assess only attributes actually perceived in their saved cues. */
@@ -531,6 +534,32 @@ export function observePlayerLight(
   evidenceOptions?: LightObservationEvidenceOptions,
 ): Observation {
   const playerObservations = getPlayerObservations(existingObservations, player.id);
+  if (evidenceOptions?.observedCues !== undefined || evidenceOptions?.sourceSessionId !== undefined) {
+    const attributeReadings = buildObservedAttributeReadings(
+      rng, player.id, evidenceOptions.observedCues ?? [], playerObservations,
+    );
+    const suffix = rng.nextInt(100000, 999999).toString(16);
+    return {
+      id: `obs_${player.id.slice(0, 8)}_${suffix}`,
+      playerId: player.id,
+      scoutId: scout.id,
+      sourceSessionId: evidenceOptions.sourceSessionId,
+      activityInstanceId: evidenceOptions.activityInstanceId,
+      week: 0,
+      season: 0,
+      context,
+      situation: evidenceOptions.situation,
+      attributeReadings,
+      flaggedMoments: evidenceOptions.flaggedMoments ?? [],
+      focusLens: evidenceOptions.focusLens,
+      notes: attributeReadings.length > 0
+        ? [`${attributeReadings.length} provisional attribute readings retained from noticed football actions. One session is not a repeatable pattern.`]
+        : ["No usable first-hand cue was retained; this sighting does not establish player ability or personality."],
+      abilityReading: attributeReadings.length > 0
+        ? generateAbilityReading(rng, player, scout, existingObservations, context, playerObservations, attributeReadings)
+        : undefined,
+    };
+  }
   const history = summarizePlayerObservationHistory(playerObservations);
   // Count distinct prior evidence records, never cumulative display values.
   const priorCounts = history.priorAttributeCounts;
@@ -744,6 +773,7 @@ export function observePlayerLight(
     existingObservations,
     context,
     playerObservations,
+    attributeReadings,
   ) : undefined;
 
   // Personality reveal check — uses scout skills as raw numbers (Record<ScoutSkill, number>)
@@ -909,6 +939,7 @@ export function observePlayer(
     existingObservations,
     context,
     playerObservations,
+    attributeReadings,
   );
 
   // Personality reveal check — match contexts expose character under pressure

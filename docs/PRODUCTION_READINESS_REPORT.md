@@ -1,3 +1,5 @@
+> Historical implementation/evidence snapshot. Any READY label or pass below applies only to its explicitly recorded prior commit and scope. It is not a release verdict for the reconciled candidate; current full release evidence must be regenerated and independently accepted.
+
 # TalentScout production readiness report
 
 Final local assessment, 2026-09-04. All locally executed final acceptance checks below have passing results; exact-package and independent release certification remain open.

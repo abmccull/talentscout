@@ -27,17 +27,15 @@ import {
   calculateRevenueBreakdown,
   calculateNetWorth,
   getLoanEligibility,
-  getEquipmentItem,
-  ALL_EQUIPMENT_SLOTS,
 } from "@/engine/finance";
 import { calculateAgencyHealth } from "@/engine/finance/dashboard";
+import { getEquipmentLiquidationQuote } from "@/engine/finance/distress";
 import {
   canAcceptConsultingWork,
   canAcceptRetainerWork,
 } from "@/engine/finance/agencyCapacity";
 import { canCompleteConsulting } from "@/engine/finance/consulting";
 import type { ExpenseType, LoanType } from "@/engine/core/types";
-import type { EquipmentSlot } from "@/engine/finance";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -191,6 +189,7 @@ export function FinancialDashboard() {
   const netWorth = calculateNetWorth(finances);
   const forecast = forecastCashFlow(finances, scout, 12);
   const agencyHealth = calculateAgencyHealth(finances, scout);
+  const liquidationQuote = getEquipmentLiquidationQuote(finances, currentWeek, currentSeason);
 
   const activeRetainers = finances.retainerContracts.filter((r) => r.status === "active");
   const suspendedRetainers = finances.retainerContracts.filter((r) => r.status === "suspended");
@@ -229,10 +228,11 @@ export function FinancialDashboard() {
 
   return (
     <GameLayout>
-      <div className="p-6 space-y-6">
+      <div className="game-workspace space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Financial Dashboard</h1>
+            <p className="dossier-eyebrow text-zinc-400">Your working budget</p>
+            <h1 className="dossier-title mt-2">Finances</h1>
             <p className="text-sm text-zinc-400">
               {isIndependent ? "Independent Scout" : "Club Scout"} — current period overview
             </p>
@@ -248,7 +248,7 @@ export function FinancialDashboard() {
               className={`relative rounded-t-md px-4 py-2 text-sm font-medium transition cursor-pointer ${
                 activeTab === tab.key
                   ? "bg-zinc-800 text-white"
-                  : "text-zinc-500 hover:text-zinc-300"
+                  : "text-[var(--muted-foreground)] hover:text-zinc-100"
               }`}
             >
               {tab.label}
@@ -302,26 +302,17 @@ export function FinancialDashboard() {
                     : "Balance has been negative for over 2 weeks. Take action to avoid escalation."}
             </p>
             {/* Emergency: Sell Equipment for Cash */}
-            {finances.distressLevel !== "bankruptcy" && finances.equipment && (() => {
-              const totalValue = ALL_EQUIPMENT_SLOTS.reduce((sum, slot) => {
-                const itemId = finances.equipment?.loadout[slot as EquipmentSlot];
-                const item = itemId ? getEquipmentItem(itemId) : null;
-                return sum + (item?.purchaseCost ?? 0);
-              }, 0);
-              if (totalValue <= 0) return null;
-              const saleValue = Math.floor(totalValue * 0.4);
-              return (
+            {finances.distressLevel !== "bankruptcy" && liquidationQuote.cashReceived > 0 && (
                 <Button
                   size="sm"
                   variant="destructive"
                   className="mt-3"
-                  onClick={() => sellEquipmentForCashAction(totalValue)}
+                  onClick={() => sellEquipmentForCashAction(liquidationQuote.portfolioValue)}
                 >
                   <AlertCircle size={12} className="mr-1.5" />
-                  Emergency: Sell Equipment for £{saleValue.toLocaleString()}
+                  Emergency: Sell Equipment for £{liquidationQuote.cashReceived.toLocaleString()}
                 </Button>
-              );
-            })()}
+            )}
           </div>
         )}
 
@@ -330,84 +321,23 @@ export function FinancialDashboard() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         {activeTab === "overview" && (
           <>
-            {/* Overview cards */}
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-tutorial-id="finances-overview">
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-zinc-500 mb-1">Balance</p>
-                      <p className={`text-xl font-bold ${amountColor(finances.balance)}`}>
-                        {formatCurrency(finances.balance)}
-                      </p>
-                    </div>
-                    <Wallet size={18} className="text-zinc-600 mt-0.5" aria-hidden="true" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-zinc-500 mb-1">Net Worth</p>
-                      <p className={`text-xl font-bold ${amountColor(netWorth)}`}>
-                        {formatCurrency(netWorth)}
-                      </p>
-                    </div>
-                    <DollarSign size={18} className="text-zinc-600 mt-0.5" aria-hidden="true" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-zinc-500 mb-1">Recurring Monthly Income</p>
-                      <p className="text-xl font-bold text-emerald-400">
-                        {formatCurrency(monthlyRunRate.totalIncome)}
-                      </p>
-                    </div>
-                    <TrendingUp size={18} className="text-emerald-600 mt-0.5" aria-hidden="true" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs text-zinc-500 mb-1">Monthly Expenses</p>
-                      <p className="text-xl font-bold text-red-400">
-                        {formatCurrency(monthlyRunRate.totalExpenses)}
-                      </p>
-                    </div>
-                    <TrendingDown size={18} className="text-red-600 mt-0.5" aria-hidden="true" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Net profit callout */}
-            <div
-              className={`rounded-lg border px-4 py-3 flex items-center justify-between ${
-                monthlyRunRate.netProfit >= 0
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-red-500/30 bg-red-500/5"
-              }`}
-            >
-              <span className="text-sm text-zinc-400">Recurring Monthly Run Rate</span>
-              <span className={`text-lg font-bold ${amountColor(monthlyRunRate.netProfit)}`}>
-                {monthlyRunRate.netProfit >= 0 ? "+" : ""}
-                {formatCurrency(monthlyRunRate.netProfit)}
-              </span>
-            </div>
+            <section className="border-y border-[var(--border)] py-5" data-tutorial-id="finances-overview" aria-label="Current finances">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div><p className="text-sm text-zinc-400">Available cash</p><p className={`mt-1 font-editorial text-4xl ${amountColor(finances.balance)}`}>{formatCurrency(finances.balance)}</p></div>
+                <div className="text-sm text-zinc-300"><p>{agencyHealth.runwayMonths == null ? "Current commitments are sustainable" : `${agencyHealth.runwayMonths} months at current commitments`}</p><Button variant="outline" className="mt-3" onClick={() => setActiveTab("contracts")}>{hasPendingOffers ? "Review contract offers" : "Review contracts"}</Button></div>
+              </div>
+              <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+                <div><dt className="text-xs text-zinc-400">Recurring monthly income</dt><dd className="mt-1 text-[var(--primary)]">{formatCurrency(monthlyRunRate.totalIncome)}</dd></div>
+                <div><dt className="text-xs text-zinc-400">Monthly expenses</dt><dd className="mt-1 text-zinc-200">{formatCurrency(monthlyRunRate.totalExpenses)}</dd></div>
+                <div><dt className="text-xs text-zinc-400">Monthly balance change</dt><dd className={`mt-1 ${amountColor(monthlyRunRate.netProfit)}`}>{monthlyRunRate.netProfit >= 0 ? "+" : ""}{formatCurrency(monthlyRunRate.netProfit)}</dd></div>
+                {netWorth !== finances.balance && <div><dt className="text-xs text-zinc-400">Net worth including assets</dt><dd className="mt-1 text-zinc-200">{formatCurrency(netWorth)}</dd></div>}
+              </dl>
+            </section>
 
             {isIndependent && (
-              <Card className="border-emerald-400/20 bg-emerald-400/[0.04]">
+              <details open={agencyHealth.revenueAtRisk > 0 || agencyHealth.capacity.utilization > 1} className="border-b border-[var(--border)] pb-4"><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-zinc-200">Contract capacity and exposure</summary><Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-sm">
+                  <CardTitle as="h2" className="flex items-center justify-between text-sm">
                     <span>Agency pulse</span>
                     <Badge
                       variant={agencyHealth.capacity.utilization > 1 ? "destructive" : "outline"}
@@ -447,7 +377,7 @@ export function FinancialDashboard() {
                     <p className="text-[10px] text-zinc-500">largest retainer share</p>
                   </div>
                 </CardContent>
-              </Card>
+              </Card></details>
             )}
 
             {/* Breakdown columns */}
@@ -455,14 +385,14 @@ export function FinancialDashboard() {
               {/* Income breakdown */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-sm">
+                  <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                     <BarChart2 size={14} className="text-emerald-400" aria-hidden="true" />
                     Recurring Income Breakdown
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {incomeEntries.length === 0 ? (
-                    <p className="text-xs text-zinc-600">No income recorded this period.</p>
+                    <p className="text-xs text-zinc-400">No income recorded this period.</p>
                   ) : (
                     incomeEntries.map(([key, amount]) => (
                       <BreakdownRow
@@ -476,11 +406,11 @@ export function FinancialDashboard() {
                   )}
                   {monthlyRunRate.totalIncome > 0 && (
                     <div className="border-t border-[#27272a] pt-2 flex items-center justify-between text-xs">
-                      <span className="text-zinc-500">Total</span>
+                      <span className="text-[var(--muted-foreground)]">Total</span>
                       <span className="font-bold text-emerald-400">{formatCurrency(monthlyRunRate.totalIncome)}</span>
                     </div>
                   )}
-                  <p className="text-[10px] text-zinc-600">
+                  <p className="text-[10px] text-zinc-400">
                     Variable report, placement, consulting, sell-on, and award revenue is excluded from this run rate.
                   </p>
                 </CardContent>
@@ -489,14 +419,14 @@ export function FinancialDashboard() {
               {/* Expense breakdown */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-sm">
+                  <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                     <TrendingDown size={14} className="text-red-400" aria-hidden="true" />
                     Expense Breakdown
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {expenseEntries.length === 0 ? (
-                    <p className="text-xs text-zinc-600">No expenses recorded this period.</p>
+                    <p className="text-xs text-zinc-400">No expenses recorded this period.</p>
                   ) : (
                     expenseEntries.map(([key, amount]) => (
                       <BreakdownRow
@@ -510,7 +440,7 @@ export function FinancialDashboard() {
                   )}
                   {monthlyRunRate.totalExpenses > 0 && (
                     <div className="border-t border-[#27272a] pt-2 flex items-center justify-between text-xs">
-                      <span className="text-zinc-500">Total</span>
+                      <span className="text-[var(--muted-foreground)]">Total</span>
                       <span className="font-bold text-red-400">{formatCurrency(monthlyRunRate.totalExpenses)}</span>
                     </div>
                   )}
@@ -521,7 +451,7 @@ export function FinancialDashboard() {
             {/* Cash flow forecast */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <TrendingUp size={14} className="text-blue-400" aria-hidden="true" />
                   12-Week Cash Flow Forecast
                 </CardTitle>
@@ -529,19 +459,19 @@ export function FinancialDashboard() {
               <CardContent>
                 <div className="mb-3 flex gap-6 text-xs">
                   <div>
-                    <span className="text-zinc-500">Weekly income rate: </span>
+                    <span className="text-[var(--muted-foreground)]">Weekly income rate: </span>
                     <span className="text-emerald-400 font-semibold">
                       {formatCurrency(forecast.weeklyIncome)}/wk
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Weekly expense rate: </span>
+                    <span className="text-[var(--muted-foreground)]">Weekly expense rate: </span>
                     <span className="text-red-400 font-semibold">
                       {formatCurrency(forecast.weeklyExpenses)}/wk
                     </span>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
+                <div tabIndex={0} role="region" aria-label="12-week cash flow forecast" className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
                   <table className="w-full text-xs" aria-label="12-week cash flow projection">
                     <thead>
                       <tr className="border-b border-[#27272a]">
@@ -549,7 +479,7 @@ export function FinancialDashboard() {
                           <th
                             key={w}
                             scope="col"
-                            className="pb-1.5 text-center font-medium text-zinc-500 min-w-[52px]"
+                            className="pb-1.5 text-center font-medium text-[var(--muted-foreground)] min-w-[52px]"
                           >
                             Wk {w}
                           </th>
@@ -570,7 +500,7 @@ export function FinancialDashboard() {
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-3 text-[10px] text-zinc-600">
+                <p className="mt-3 text-[10px] text-zinc-400">
                   Twelve financial periods are distributed across the season. Variable income (report sales, fees) is not projected.
                 </p>
               </CardContent>
@@ -579,7 +509,7 @@ export function FinancialDashboard() {
             {/* ── Loans & Credit ─────────────────────────────────────── */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <Banknote size={14} className="text-amber-400" aria-hidden="true" />
                   Loans & Credit
                 </CardTitle>
@@ -607,7 +537,7 @@ export function FinancialDashboard() {
                       style={{ width: `${finances.creditScore ?? 50}%` }}
                     />
                   </div>
-                  <p className="text-[10px] text-zinc-600 mt-1">
+                  <p className="text-[10px] text-zinc-400 mt-1">
                     {(finances.creditScore ?? 50) >= 70
                       ? "Good standing — favorable loan terms"
                       : (finances.creditScore ?? 50) >= 40
@@ -679,7 +609,7 @@ export function FinancialDashboard() {
                         Repay Early — {formatCurrency(finances.activeLoan.remainingBalance)}
                       </Button>
                       {finances.balance < finances.activeLoan.remainingBalance && (
-                        <p className="text-[10px] text-zinc-600 mt-1">
+                        <p className="text-[10px] text-zinc-400 mt-1">
                           Insufficient balance for early repayment
                         </p>
                       )}
@@ -706,9 +636,9 @@ export function FinancialDashboard() {
                             }`}
                           >
                             <p className="font-medium text-white mb-0.5">{LOAN_LABELS[type]}</p>
-                            <p className="text-zinc-500">Up to {formatCurrency(offer.maxAmount)}</p>
-                            <p className="text-zinc-500">{(offer.interestRate * 100).toFixed(1)}% monthly</p>
-                            <p className="text-zinc-500">{offer.termMonths}-month term</p>
+                            <p className="text-[var(--muted-foreground)]">Up to {formatCurrency(offer.maxAmount)}</p>
+                            <p className="text-[var(--muted-foreground)]">{(offer.interestRate * 100).toFixed(1)}% monthly</p>
+                            <p className="text-[var(--muted-foreground)]">{offer.termMonths}-month term</p>
                           </button>
                         );
                       })}
@@ -756,7 +686,7 @@ export function FinancialDashboard() {
                       .filter((offer) => offer && !offer.eligible && offer.reason)
                       .slice(0, 2)
                       .map((offer) => (
-                        <p key={offer!.type} className="text-[10px] text-zinc-600">
+                        <p key={offer!.type} className="text-[10px] text-zinc-400">
                           {LOAN_LABELS[offer!.type]}: {offer!.reason}
                         </p>
                       ))}
@@ -786,7 +716,7 @@ export function FinancialDashboard() {
                 {hasPendingOffers && (
                   <Card className="border-amber-500/20">
                     <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-sm">
+                      <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                         <AlertCircle size={14} className="text-amber-400" aria-hidden="true" />
                         Pending Offers
                         <Badge variant="warning" className="text-[10px] ml-auto">
@@ -912,7 +842,7 @@ export function FinancialDashboard() {
                 {/* Active Retainers */}
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-sm">
+                    <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                       <FileText size={14} className="text-amber-400" aria-hidden="true" />
                       Active Retainers
                       <span className="ml-auto text-xs text-zinc-500 font-normal">
@@ -922,7 +852,7 @@ export function FinancialDashboard() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {activeRetainers.length === 0 && suspendedRetainers.length === 0 ? (
-                      <p className="text-xs text-zinc-600">No retainer contracts.</p>
+                      <p className="text-xs text-zinc-400">No retainer contracts.</p>
                     ) : (
                       <>
                         {activeRetainers.map((r) => {
@@ -1011,7 +941,7 @@ export function FinancialDashboard() {
                 {/* Active Consulting */}
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-sm">
+                    <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                       <Users size={14} className="text-blue-400" aria-hidden="true" />
                       Active Consulting
                       <span className="ml-auto text-xs text-zinc-500 font-normal">
@@ -1021,7 +951,7 @@ export function FinancialDashboard() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {activeConsulting.length === 0 ? (
-                      <p className="text-xs text-zinc-600">No active consulting contracts.</p>
+                      <p className="text-xs text-zinc-400">No active consulting contracts.</p>
                     ) : (
                       activeConsulting.map((c) => {
                         const weeksRemaining = Math.max(
@@ -1094,7 +1024,7 @@ export function FinancialDashboard() {
           <div className="space-y-6" data-tutorial-id="finances-marketplace">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <BarChart2 size={14} className="text-emerald-400" aria-hidden="true" />
                   Recorded Career Revenue
                 </CardTitle>
@@ -1117,21 +1047,21 @@ export function FinancialDashboard() {
                     {formatCurrency(lifetimeRevenue.total)}
                   </span>
                 </div>
-                <p className="text-[10px] text-zinc-600">
+                <p className="text-[10px] text-zinc-400">
                   Source totals are lifetime counters. Salary includes payroll recorded in the transaction ledger.
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <DollarSign size={14} className="text-emerald-400" aria-hidden="true" />
                   Placement Fee Records
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {finances.placementFeeRecords.length === 0 ? (
-                  <p className="text-xs text-zinc-600">
+                  <p className="text-xs text-zinc-400">
                     No placement fees earned yet. Fees are earned when players you scouted are transferred.
                   </p>
                 ) : (
@@ -1171,7 +1101,7 @@ export function FinancialDashboard() {
                                   Sell-on: {(record.sellOnPercentage * 100).toFixed(1)}%
                                 </span>
                               ) : (
-                                <span className="text-zinc-600">No sell-on clause</span>
+                                <span className="text-zinc-400">No sell-on clause</span>
                               )}
                             </div>
                           </div>

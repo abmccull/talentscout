@@ -114,6 +114,31 @@ const moves = (state: GameState, id = subjectId) => expandPlayerMovementHistory(
   .filter(event => event.playerId === id);
 
 describe("release feedback follows actual public weekly settlement", () => {
+  it("settles an overdue unaffordable loan through the public weekly loop without buying the player", () => {
+    const state = world(); state.currentWeek = 4;
+    addSubject(state, parentId, borrowerId, 5); addLoan(state);
+    state.activeLoans![0].endWeek = 3;
+    state.clubs[borrowerId].budget = 0;
+    const { tick, advanced } = run(state, "overdue-unaffordable-return");
+    expect(tick.loanReturns?.map(deal => deal.id)).toContain("publication-loan");
+    expect(moves(advanced).map(event => event.type)).toEqual(["loanReturn"]);
+    expect(advanced.activeLoans!.some(deal => deal.id === "publication-loan")).toBe(false);
+    expect(advanced.loanHistory!.map(deal => expandLoanDeal(deal)).find(deal => deal.id === "publication-loan")!.outcome).not.toBe("buy-option-exercised");
+    expect(advanced.players[subjectId].contractClubId).toBe(parentId);
+    expect(advanced.clubs[borrowerId].budget).toBeLessThanOrEqual(0);
+  }, 60_000);
+  it("closes a retiring loanee's recommendation without publishing a purchase reward", () => {
+    const state = world(); addSubject(state, parentId, borrowerId, 5); addLoan(state);
+    state.players[subjectId].age = 40;
+    state.loanRecommendations = [{ id: "terminal-rec", loanDealId: "publication-loan", scoutId: state.scout.id,
+      playerId: subjectId, status: "accepted", reputationApplied: false }] as GameState["loanRecommendations"];
+    const { advanced } = run(state, "terminal-recommendation");
+    expect(moves(advanced).map(event => event.type)).toEqual(["retirement"]);
+    expect(advanced.loanRecommendations!.find(rec => rec.id === "terminal-rec")).toMatchObject({
+      status: "completed", outcome: "terminated", reputationApplied: true,
+    });
+    expect(stories(advanced, "loan-closure-")).toEqual([]);
+  }, 60_000);
   it("suppresses a former parent's release story when a real buy option wins", () => {
     const state = world(); addSubject(state, parentId, borrowerId); addLoan(state);
     state.clubs[parentId].weeklyWageBudget = 1;
@@ -142,7 +167,7 @@ describe("release feedback follows actual public weekly settlement", () => {
     expect(stories(advanced, "fa_release")).toHaveLength(1);
     expect(stories(advanced, "fa_release")[0]).toMatchObject({ relatedId: subjectId, relatedEntityType: "player" });
     expect(stories(advanced, "fa_discover")).toHaveLength(1);
-    expect(advanced.loanHistory!.map(expandLoanDeal).filter(deal => deal!.id === "publication-loan")).toHaveLength(1);
+    expect(advanced.loanHistory!.map(deal => expandLoanDeal(deal)).filter(deal => deal!.id === "publication-loan")).toHaveLength(1);
     expect(advanced.freeAgentPool.agents.filter(agent => agent.playerId === subjectId)).toHaveLength(1);
     expect(advanced.freeAgentPool.totalReleasedThisSeason).toBe(0);
   }, 60_000);

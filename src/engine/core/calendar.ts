@@ -49,6 +49,7 @@ import {
   resolveScoutPerkModifiers,
 } from "@/engine/specializations/perks";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
+import { indexLatestPlayerReports, isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -1123,13 +1124,12 @@ export function getAvailableActivities(
         "parentCoachMeeting",
       ),
     });
-    const authoredPlayerIds = new Set(
-      Object.values(reports ?? {})
-        .filter((report) => report.scoutId === scout.id)
-        .map((report) => report.playerId),
-    );
+    const latestReports = indexLatestPlayerReports(Object.values(reports ?? {}), scout.id);
     const unsignedIds = new Set(actionableProspects.filter(target => target.source === "unsigned").map(target => target.player.id));
-    const pitchPool = youthPool.filter((target) => authoredPlayerIds.has(target.id) && unsignedIds.has(target.id));
+    const pitchPool = youthPool.filter((target) => {
+      const report = latestReports.get(target.id);
+      return unsignedIds.has(target.id) && report && !isPrivateScoutingDecision(report);
+    });
     if (pitchPool.length > 0) {
       activities.push({
         type: "writePlacementReport",

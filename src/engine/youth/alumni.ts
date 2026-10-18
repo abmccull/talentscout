@@ -170,14 +170,19 @@ export function processAlumniWeek(
     const name = `${player.firstName} ${player.lastName}`;
     const afterPlacement = (date: { season?: number; week: number }) =>
       (date.season ?? season) > record.placedSeason
-      || ((date.season ?? season) === record.placedSeason && date.week >= record.placedWeek);
+      || ((date.season ?? season) === record.placedSeason && date.week > record.placedWeek);
     const fixtureDate = (fixture: import("@/engine/core/types").Fixture) => ({
       week: fixture.week, season: getFixtureSeason(fixture) ?? season,
     });
+    const isDatedPastAppearance = (fixture: import("@/engine/core/types").Fixture): boolean => {
+      const recordedSeason = getFixtureSeason(fixture);
+      return recordedSeason !== undefined && Number.isInteger(fixture.week) && fixture.week >= 1
+        && (recordedSeason < season || (recordedSeason === season && fixture.week <= week));
+    };
     const appearances = (appearancesByPlayer.get(player.id) ?? [])
-      .filter(({ fixture }) => afterPlacement(fixtureDate(fixture)))
+      .filter(({ fixture }) => isDatedPastAppearance(fixture) && afterPlacement(fixtureDate(fixture)))
       .sort((left, right) => left.fixture.week - right.fixture.week || left.fixture.id.localeCompare(right.fixture.id));
-    const history = (knownAppearanceHistory.get(player.id) ?? []).filter(({ fixture }) => afterPlacement(fixtureDate(fixture)))
+    const history = (knownAppearanceHistory.get(player.id) ?? []).filter(({ fixture }) => isDatedPastAppearance(fixture) && afterPlacement(fixtureDate(fixture)))
       .sort((left, right) => fixtureDate(left.fixture).season - fixtureDate(right.fixture).season
         || left.fixture.week - right.fixture.week || left.fixture.id.localeCompare(right.fixture.id));
     const weekAppearances = appearances.filter(({ fixture }) => fixture.week === week);

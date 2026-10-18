@@ -13,20 +13,23 @@ import {
   Loader2,
   LogOut,
   Map,
-  Settings,
   ShieldCheck,
   Trash2,
+  Volume2,
+  VolumeX,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { APP_VERSION } from "@/config/version";
 import { AuthModal } from "./AuthModal";
-import { supabase } from "@/lib/supabase";
+import { SUPABASE_CONFIGURED } from "@/lib/supabaseConfiguration";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import {
   BETA_CLOUD_SAVES_ENABLED,
   BETA_CLOUD_SAVES_MESSAGE,
 } from "@/config/beta";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { useAudio } from "@/lib/audio/useAudio";
 
 // Session flag — splash only shown once per browser session.
 let splashShownThisSession = false;
@@ -71,6 +74,8 @@ export function MainMenu() {
     signOut: state.signOut,
     cloudSaveEnabled: state.cloudSaveEnabled,
   })));
+
+  const { volumes, toggleMute } = useAudio();
 
   const [showLoadPicker, setShowLoadPicker] = useState(false);
   const [showSplash, setShowSplash] = useState(!splashShownThisSession);
@@ -174,7 +179,7 @@ export function MainMenu() {
 
   const hasSaveEntries = compatibleSaveSlots.length > 0;
   const hasLoadableSave = Boolean(continueSave);
-  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
+  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && SUPABASE_CONFIGURED;
   const pendingScenario = selectedScenarioId
     ? getScenarioById(selectedScenarioId)
     : undefined;
@@ -231,30 +236,25 @@ export function MainMenu() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4 py-10">
-      <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.65} />
+    <main className="relative isolate flex min-h-dvh flex-col items-start justify-center bg-[var(--background)] px-6 py-10 sm:px-12 lg:px-24">
+      <div className="absolute inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: "url('/images/backgrounds/activities/touchline-documentary.webp')" }} aria-hidden="true" />
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(16,20,17,.97)_0%,rgba(16,20,17,.88)_40%,rgba(16,20,17,.28)_100%)] max-sm:bg-black/65" aria-hidden="true" />
       {/* Title */}
-      <div className="relative z-10 mb-10 text-center md:mb-14">
+      <div className="relative z-10 mb-8 max-w-2xl text-left md:mb-10">
         {IS_YOUTH_EARLY_ACCESS && (
-          <Badge className="mb-4 border border-[color:var(--primary)]/30 bg-[color:var(--primary)]/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">
+          <Badge className="mb-5 rounded-none border-0 bg-transparent px-0 text-xs font-medium uppercase tracking-[0.16em] text-[var(--primary)]">
             Youth Scout Career · Early Access
           </Badge>
         )}
-        <h1 className="mb-2 text-6xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
-          Talent<span className="text-amber-400">Scout</span>
+        <h1 className="mb-5 font-editorial text-5xl leading-none tracking-tight text-[var(--foreground)] sm:text-7xl lg:text-8xl">
+          Talent <span className="text-[var(--primary)]">Scout</span>
         </h1>
-        <p className="text-lg text-zinc-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+        <p className="max-w-lg text-lg leading-relaxed text-zinc-200">
           {IS_YOUTH_EARLY_ACCESS
             ? "Discover young players. Build the evidence. Back your judgement."
             : "Football Scout Career Simulator"}
         </p>
-        {IS_YOUTH_EARLY_ACCESS && (
-          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-zinc-400">
-            Begin as a Youth Scout. Follow leads, watch young players, build trusted reports,
-            and grow from an unknown observer into a sought-after talent expert. More scouting
-            careers will arrive as Early Access grows.
-          </p>
-        )}
+
       </div>
 
       {loadError && (
@@ -271,12 +271,13 @@ export function MainMenu() {
 
       {!showLoadPicker ? (
         <div
-          className="relative z-10 flex w-64 flex-col gap-3"
+          className="relative z-10 flex w-full max-w-sm flex-col gap-2"
           data-testid="main-menu-actions"
         >
           <Button
             size="lg"
-            className="w-full text-base"
+            variant={hasLoadableSave ? "outline" : "default"}
+            className="w-full justify-between text-base"
             onClick={() => {
               setLoadError(null);
               if (selectedScenarioId) {
@@ -288,9 +289,9 @@ export function MainMenu() {
             {IS_YOUTH_EARLY_ACCESS ? "Start Youth Scout Career" : "New Game"}
           </Button>
           <Button
-            variant="secondary"
+            variant="default"
             size="lg"
-            className="w-full text-base"
+            className={hasLoadableSave ? "order-first w-full justify-between text-base" : "hidden"}
             disabled={!hasLoadableSave}
             onClick={() => void handleContinue()}
           >
@@ -303,7 +304,7 @@ export function MainMenu() {
           <Button
             variant="outline"
             size="lg"
-            className="w-full text-base"
+            className={hasSaveEntries ? "w-full justify-between text-base" : "hidden"}
             disabled={!hasSaveEntries}
             onClick={() => {
               setLoadError(null);
@@ -311,16 +312,6 @@ export function MainMenu() {
             }}
           >
             Load Career
-          </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full text-base"
-            data-testid="main-menu-settings"
-            onClick={() => setScreen("settings")}
-          >
-            <Settings size={16} className="mr-2" aria-hidden="true" />
-            Settings
           </Button>
           <Button
             variant="ghost"
@@ -331,6 +322,33 @@ export function MainMenu() {
             <Map size={16} className="mr-2" aria-hidden="true" />
             What&apos;s Coming
           </Button>
+
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="lg"
+              className="flex-1 text-base text-zinc-300"
+              onClick={toggleMute}
+              title={volumes.muted ? "Unmute audio" : "Mute audio"}
+            >
+              {volumes.muted ? (
+                <VolumeX size={18} className="mr-2" aria-hidden="true" />
+              ) : (
+                <Volume2 size={18} className="mr-2" aria-hidden="true" />
+              )}
+              {volumes.muted ? "Unmute" : "Mute"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              className="flex-1 text-base text-zinc-300"
+              data-testid="main-menu-settings"
+              onClick={() => setScreen("settings")}
+            >
+              <SettingsIcon size={18} className="mr-2" aria-hidden="true" />
+              Settings
+            </Button>
+          </div>
 
           {continueSave?.recovery && (
             <div
@@ -525,7 +543,7 @@ export function MainMenu() {
         </div>
       )}
 
-      <p className="mt-16 text-xs text-zinc-600">
+      <p className="relative z-10 mt-10 text-xs text-zinc-400">
         v{APP_VERSION} — The scout&apos;s eye sees what others miss
       </p>
 

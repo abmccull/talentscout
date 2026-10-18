@@ -2,6 +2,7 @@ import { matchFormRating } from "@/engine/players/matchFormArchive";
 import { expandPlayerInjuryHistory } from "../../players/playerStateArchive";
 import type { RNG } from "../../rng/index";
 import {
+  applySemanticPlayerDevelopment,
   computeSemanticBreakthrough,
   computeSemanticPlayerDevelopment,
 } from "../../players/development";
@@ -303,7 +304,7 @@ export function processPlayerDevelopment(
     }
 
     const semanticBreakthrough = computeSemanticBreakthrough(
-      player,
+      hasChanges ? applySemanticPlayerDevelopment(player, result).player : player,
       rng,
       environment.mechanics.breakthroughMultiplier,
     );

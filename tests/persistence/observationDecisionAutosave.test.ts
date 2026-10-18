@@ -50,17 +50,25 @@ describe("observation decisions queue resumable checkpoints", () => {
   it("refreshes the displayed and commit-ready instinct when the scout withholds the finding", () => {
     const trigger = vi.spyOn(RNG.prototype, "chance").mockReturnValue(true);
     try {
+      const seedSession = setup().current().activeSession!;
+      const moment: PlayerMoment = {
+        id: "moment", playerId: "lead", actionId: "track-mark", momentType: "tacticalDecision",
+        quality: 3, attributesHinted: ["marking"], description: "Ari lost the runner.",
+        vagueDescription: "A passage.", pressureContext: true, isStandout: false,
+      };
       const { actions, current, savedSession } = setup({
-        state: "reflection", mode: "fullObservation",
-        cueReadings: [{ id: "cue-1", momentId: "moment", playerId: "lead", clarity: "clear",
+        state: "reflection", mode: "fullObservation", currentPhaseIndex: 0,
+        phases: seedSession.phases.map((phase, index) => index === 0 ? { ...phase, moments: [moment] } : phase),
+        players: seedSession.players.map((player) => ({ ...player, isFocused: true, focusedPhases: [0],
+          focusHistory: [{ phaseIndex: 0, lens: "tactical" }], currentLens: "tactical" })),
+        cueReadings: [{ id: "cue-1", momentId: "moment", playerId: "lead", clarity: "strong", phaseIndex: 0,
+          actionId: "track-mark", pressureContext: true,
           score: 0.3, detail: "Ari lost the runner.", attributesHinted: ["marking"],
-          suggestedClassifications: ["preReceiveDecision", "noConclusion"],
+          suggestedClassifications: ["defensiveReading", "noConclusion"],
         }] as unknown as ScoutCueReading[],
-        flaggedMoments: [{ reaction: "concerning", moment: {
-          id: "moment", playerId: "lead", momentType: "tacticalDecision", vagueDescription: "A passage.",
-        } }] as unknown as ObservationSession["flaggedMoments"],
+        flaggedMoments: [{ id: "flag", phaseIndex: 0, minute: 12, reaction: "concerning", moment }],
       });
-      actions.classifySessionEvidence("cue-1", "preReceiveDecision");
+      actions.classifySessionEvidence("cue-1", "defensiveReading");
       expect(current().lastReflectionResult?.gutFeelingCandidate?.narrative).toContain("concern you flagged");
       actions.classifySessionEvidence("cue-1", "noConclusion");
       expect(current().lastReflectionResult?.gutFeelingCandidate?.narrative).toContain("saved read remains open");
@@ -106,7 +114,8 @@ describe("observation decisions queue resumable checkpoints", () => {
   });
 
   it("saves reflection interpretation and private notes in the same latest session", () => {
-    const cue = { id: "cue-1", suggestedClassifications: ["technicalExecution"] } as ScoutCueReading;
+    const cue = { id: "cue-1", actionId: "pass", clarity: "usable", attributesHinted: ["passing"],
+      pressureContext: false, suggestedClassifications: ["technicalExecution", "noConclusion"] } as ScoutCueReading;
     const { actions, savedSession } = setup({ state: "reflection", cueReadings: [cue] });
     actions.classifySessionEvidence("cue-1", "technicalExecution");
     actions.addSessionNote("See the player against stronger pressure.");

@@ -139,14 +139,16 @@ describe("save envelope migrations", () => {
       },
     ]);
     expect(migratedContact.exclusiveWindow).toBeUndefined();
+    // Completed-season exclusive windows keep post-fixture weeks (e.g. S1 W40)
+    // instead of wrapping into the active season calendar.
     expect(migrated.accessAgreements).toMatchObject({
-      "access:legacy-contact:contact-legacy:player:player-legacy:expires:s2:w2": {
+      "access:legacy-contact:contact-legacy:player:player-legacy:expires:s1:w40": {
         grantor: { kind: "contact", id: "contact-legacy" },
         beneficiary: { kind: "scout", id: migrated.scout.id },
         scope: "playerEarlyAccess",
         status: "active",
         subject: { kind: "player", id: "player-legacy" },
-        expiresAt: { season: 2, week: 2 },
+        expiresAt: { season: 1, week: 40 },
       },
     });
     expect(migratedContact.gossipQueue).toEqual(expect.arrayContaining([

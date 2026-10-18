@@ -1,3 +1,4 @@
+import { getSupportedCueClassifications } from "@/engine/scout/cueSemantics";
 /**
  * Observation Session State Machine
  *
@@ -521,7 +522,8 @@ export function classifySessionEvidence(
 ): ObservationSession {
   if (session.state !== "reflection") return session;
   const cue = session.cueReadings?.find((candidate) => candidate.id === cueId);
-  if (!cue || !cue.suggestedClassifications.includes(classification)) return session;
+  if (!cue || !getSupportedCueClassifications(cue).includes(classification)
+    || (classification !== "noConclusion" && !cue.suggestedClassifications.includes(classification))) return session;
   return {
     ...session,
     evidenceDecisions: {

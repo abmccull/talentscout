@@ -417,7 +417,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
           }],
       }, [product.playerId], "tracked");
       set({ gameState: nextState });
-      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession), set);
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
     },
 
     rejectStaffWorkProduct: (workProductId: string) => {
@@ -529,6 +529,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const listedReport = gameState.reports[listing.reportId];
+      if (!listedReport || !hasReportBuyerEvidence(listedReport)) return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending") return;
       const buyer = gameState.clubs[bid.clubId];
@@ -630,6 +632,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const listedReport = gameState.reports[listing.reportId];
+      if (!listedReport || !hasReportBuyerEvidence(listedReport)) return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return;
       const buyer = gameState.clubs[bid.clubId];
@@ -738,7 +742,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
           finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
         };
         set({ gameState: nextState });
-        queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
       }
     },
 
@@ -865,7 +869,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const nextState = attemptClientPitch(gameState, clubId, pitchType, rng);
       if (nextState === gameState) return;
       set({ gameState: nextState });
-      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession), set);
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
     },
 
     resolveAgencyEmployeeEvent: (eventId: string, optionIndex: number) => {

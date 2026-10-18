@@ -1,10 +1,22 @@
 # TalentScout security review
 
-Review date: July 13, 2026
+Historical review date: July 13, 2026. Scoped implementation refresh: September 4, 2026 (local date).
+
+## Current implementation refresh
+
+Target: `codex/quality-implementation-20260904`, base commit `a246a48fee373f406a8ffa2c80bbac5f1b69ce38` plus the explicitly recorded dirty implementation. `../quality-implementation-20260904/batch2-build-identity.json` binds the tested product and instrumented export. This is supporting development evidence, not an accepted release candidate or a new blanket security certification.
+
+- Optional cloud configuration now lives in `src/lib/supabaseConfiguration.ts`; the SDK is loaded only for enabled operations. Disabled auth still removes only the known legacy session key and keeps account features off. `src/lib/reportRendererError.ts` loads Sentry only for configured error capture; existing event privacy filtering remains authoritative.
+- The full 1,653-test run includes Electron sender/origin/file boundaries, save integrity, disabled online feature gates, sanitized telemetry, and the new lazy-loading contracts. The exact log is `../quality-implementation-20260904/batch2-full-unit.log`.
+- `release:validate-candidate` is a local validation-only entry point. Certification still requires exact candidate/tree/control/package identities and real provider receipts. The certification workflow remains a mutation path because it can bind a tag even with publishing disabled.
+- The September dependency read-backs report zero known vulnerabilities in both runtime dependencies and the full lockfile. See `batch2-runtime-dependency-audit.json` and `batch3-all-dependency-audit.json` in the implementation evidence directory. This reports the audit result at that time, not absence of every possible vulnerability.
+- All 582 source assets are tracked with zero provenance audit blockers; Steam store and achievement import checks pass. These source checks do not assert legal clearance or external platform acceptance.
+
+Real Steam/Sentry provider read-backs, signed/native package behavior, physical storage faults, and production service configuration remain separate requirements. No provider or production writes were made by this refresh. The findings below retain their historical scope and dates; their old artifact references must not be reused as current-candidate certification.
 
 Scope: shipped React/Next static client, Electron privilege boundary, imported data and saves, optional Supabase services, dependency graph, navigation, storage, and release configuration.
 
-## Result
+## Historical result
 
 No confirmed Critical or High vulnerability remains in the reviewed source. Production dependencies and development dependencies currently pass `npm audit`. The packaged desktop runtime and production Supabase policies still require environment-level verification; source review cannot certify them.
 

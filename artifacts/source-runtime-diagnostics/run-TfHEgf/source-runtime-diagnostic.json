@@ -1,0 +1,271 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "source-electron-runtime-diagnostic",
+  "generatedAt": "2026-09-04T22:48:58.078Z",
+  "sourceHead": "8b9ce2eb36ceec270cc50e1a66a576848f40b038",
+  "sourceDirtyEntryCount": 116,
+  "candidateBound": false,
+  "packagedRuntime": false,
+  "executable": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\node_modules\\electron\\dist\\electron.exe",
+  "entryPath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\electron\\main.js",
+  "entrySha256": "0fb110e5cead58c8c6fd4e62c520bd7f56bea4abc5606bf85b1411223bb508d0",
+  "controls": {
+    "completedOpeningAndManualSave": true,
+    "closedAfterSaveWithoutForce": true,
+    "reopenedExactManualSave": true,
+    "reopenedCareerIdentity": true,
+    "secondCloseWithoutForce": true,
+    "rendererErrorsAbsent": true
+  },
+  "runs": [
+    {
+      "name": "create-save-close",
+      "persistence": {
+        "databaseVersion": 50,
+        "head": {
+          "slot": 1,
+          "name": "Save 1",
+          "schemaVersion": 4,
+          "rulesVersion": "youth-ea.4",
+          "buildVersion": "8b9ce2eb36ceec270cc50e1a66a576848f40b038",
+          "savedAt": 1788562154904,
+          "storageRevision": 1,
+          "scoutName": "Offline Verifier",
+          "season": 1,
+          "week": 1,
+          "recordHash": "69E4E4C3EEA7E6886D0B8EBFBEAF3735D158AC17B7AFD2CC1EF608A5AC019E3E",
+          "stateHash": "A239C139A0CE515D5732704AD2886ECE658B15998F0B1EE1AF290843793D533F"
+        },
+        "keySnapshot": {
+          "season": 1,
+          "week": 1,
+          "scoutName": "Offline Verifier",
+          "reputation": 12,
+          "balance": 2000,
+          "reportCount": 1,
+          "transferCount": 0,
+          "obligationCount": 0,
+          "runId": "run_d7dc713a192c99e1"
+        },
+        "archiveCount": 3,
+        "archives": [
+          {
+            "id": "previous:0:3:1788562147522",
+            "slot": 0,
+            "kind": "previous-generation",
+            "recordRevision": 3,
+            "verified": true,
+            "recordHash": "FF8AB1DE8DB2E4309D6AE6ACDB2D30EE98A7F79276AE979E46F98E8F1E3AB545",
+            "stateHash": "BA7711184D896B62E5920E24B7E0A4DDDC5C725E7637EA81BBE1E9ECD521FC93",
+            "keySnapshot": {
+              "season": 1,
+              "week": 1,
+              "scoutName": "Offline Verifier",
+              "reputation": 10,
+              "balance": 2000,
+              "reportCount": 0,
+              "transferCount": 0,
+              "obligationCount": 0,
+              "runId": "run_d7dc713a192c99e1"
+            }
+          },
+          {
+            "id": "previous:0:4:1788562148984",
+            "slot": 0,
+            "kind": "previous-generation",
+            "recordRevision": 4,
+            "verified": true,
+            "recordHash": "61D159F238B6AE74EC1520BAF0EF178484F48C5F37E5DC5B6AEE0F86DF9AABAE",
+            "stateHash": "F01EB943CBDDBFCD82636F4AFB722AB3FCC950F374B0DEFFDC80B7250616353E",
+            "keySnapshot": {
+              "season": 1,
+              "week": 1,
+              "scoutName": "Offline Verifier",
+              "reputation": 10,
+              "balance": 2000,
+              "reportCount": 0,
+              "transferCount": 0,
+              "obligationCount": 0,
+              "runId": "run_d7dc713a192c99e1"
+            }
+          },
+          {
+            "id": "previous:0:5:1788562150439",
+            "slot": 0,
+            "kind": "previous-generation",
+            "recordRevision": 5,
+            "verified": true,
+            "recordHash": "38ECC3C57518C61132059747931F67FF1121940A5F6269B63FBAEC45D682673C",
+            "stateHash": "3AA23C8B1908321578EBDBFBCC487074C5126A5A8C80961A623F826A5395C42B",
+            "keySnapshot": {
+              "season": 1,
+              "week": 1,
+              "scoutName": "Offline Verifier",
+              "reputation": 10,
+              "balance": 2000,
+              "reportCount": 0,
+              "transferCount": 0,
+              "obligationCount": 0,
+              "runId": "run_d7dc713a192c99e1"
+            }
+          }
+        ],
+        "queue": [
+          {
+            "id": "sync:steam:0",
+            "slot": 0,
+            "target": "steam",
+            "operation": "upload",
+            "status": "failed",
+            "attempts": 1,
+            "lastError": "Steam Cloud is unavailable. The local save remains queued."
+          },
+          {
+            "id": "sync:steam:1",
+            "slot": 1,
+            "target": "steam",
+            "operation": "upload",
+            "status": "failed",
+            "attempts": 1,
+            "lastError": "Steam Cloud is unavailable. The local save remains queued."
+          }
+        ]
+      },
+      "exit": {
+        "exitedWithoutForce": true,
+        "exitCode": 0,
+        "signalCode": null,
+        "stdout": "\r\n",
+        "stderr": "\r\nDevTools listening on ws://127.0.0.1:58318/devtools/browser/a3353eb4-4e19-4666-a8c8-a00ba82f0a04\r\n[Steam] Failed to initialize (Steam client may not be running): Cannot create IPC pipe to Steam client process.  Steam is probably not running.\n"
+      }
+    },
+    {
+      "name": "reopen-load-close",
+      "persistence": {
+        "databaseVersion": 50,
+        "head": {
+          "slot": 1,
+          "name": "Save 1",
+          "schemaVersion": 4,
+          "rulesVersion": "youth-ea.4",
+          "buildVersion": "8b9ce2eb36ceec270cc50e1a66a576848f40b038",
+          "savedAt": 1788562154904,
+          "storageRevision": 1,
+          "scoutName": "Offline Verifier",
+          "season": 1,
+          "week": 1,
+          "recordHash": "69E4E4C3EEA7E6886D0B8EBFBEAF3735D158AC17B7AFD2CC1EF608A5AC019E3E",
+          "stateHash": "A239C139A0CE515D5732704AD2886ECE658B15998F0B1EE1AF290843793D533F"
+        },
+        "keySnapshot": {
+          "season": 1,
+          "week": 1,
+          "scoutName": "Offline Verifier",
+          "reputation": 12,
+          "balance": 2000,
+          "reportCount": 1,
+          "transferCount": 0,
+          "obligationCount": 0,
+          "runId": "run_d7dc713a192c99e1"
+        },
+        "archiveCount": 3,
+        "archives": [
+          {
+            "id": "previous:0:3:1788562147522",
+            "slot": 0,
+            "kind": "previous-generation",
+            "recordRevision": 3,
+            "verified": true,
+            "recordHash": "FF8AB1DE8DB2E4309D6AE6ACDB2D30EE98A7F79276AE979E46F98E8F1E3AB545",
+            "stateHash": "BA7711184D896B62E5920E24B7E0A4DDDC5C725E7637EA81BBE1E9ECD521FC93",
+            "keySnapshot": {
+              "season": 1,
+              "week": 1,
+              "scoutName": "Offline Verifier",
+              "reputation": 10,
+              "balance": 2000,
+              "reportCount": 0,
+              "transferCount": 0,
+              "obligationCount": 0,
+              "runId": "run_d7dc713a192c99e1"
+            }
+          },
+          {
+            "id": "previous:0:4:1788562148984",
+            "slot": 0,
+            "kind": "previous-generation",
+            "recordRevision": 4,
+            "verified": true,
+            "recordHash": "61D159F238B6AE74EC1520BAF0EF178484F48C5F37E5DC5B6AEE0F86DF9AABAE",
+            "stateHash": "F01EB943CBDDBFCD82636F4AFB722AB3FCC950F374B0DEFFDC80B7250616353E",
+            "keySnapshot": {
+              "season": 1,
+              "week": 1,
+              "scoutName": "Offline Verifier",
+              "reputation": 10,
+              "balance": 2000,
+              "reportCount": 0,
+              "transferCount": 0,
+              "obligationCount": 0,
+              "runId": "run_d7dc713a192c99e1"
+            }
+          },
+          {
+            "id": "previous:0:5:1788562150439",
+            "slot": 0,
+            "kind": "previous-generation",
+            "recordRevision": 5,
+            "verified": true,
+            "recordHash": "38ECC3C57518C61132059747931F67FF1121940A5F6269B63FBAEC45D682673C",
+            "stateHash": "3AA23C8B1908321578EBDBFBCC487074C5126A5A8C80961A623F826A5395C42B",
+            "keySnapshot": {
+              "season": 1,
+              "week": 1,
+              "scoutName": "Offline Verifier",
+              "reputation": 10,
+              "balance": 2000,
+              "reportCount": 0,
+              "transferCount": 0,
+              "obligationCount": 0,
+              "runId": "run_d7dc713a192c99e1"
+            }
+          }
+        ],
+        "queue": [
+          {
+            "id": "sync:steam:0",
+            "slot": 0,
+            "target": "steam",
+            "operation": "upload",
+            "status": "failed",
+            "attempts": 1,
+            "lastError": "Steam Cloud is unavailable. The local save remains queued."
+          },
+          {
+            "id": "sync:steam:1",
+            "slot": 1,
+            "target": "steam",
+            "operation": "upload",
+            "status": "failed",
+            "attempts": 1,
+            "lastError": "Steam Cloud is unavailable. The local save remains queued."
+          }
+        ]
+      },
+      "exit": {
+        "exitedWithoutForce": true,
+        "exitCode": 0,
+        "signalCode": null,
+        "stdout": "\r\n",
+        "stderr": "\r\nDevTools listening on ws://127.0.0.1:59673/devtools/browser/e486c477-7c8c-4a61-a66d-5927ad3659c3\r\n[Steam] Failed to initialize (Steam client may not be running): Cannot create IPC pipe to Steam client process.  Steam is probably not running.\n"
+      }
+    }
+  ],
+  "error": null,
+  "limitations": [
+    "Runs Electron source and the production export, not a built installer or ASAR.",
+    "Does not verify signing, Electron packaging fuses, installation, uninstallation, native Steam, or other operating systems.",
+    "Network isolation is simulated using CDP plus an unreachable proxy; no live provider writes are intended."
+  ],
+  "result": "diagnostic_pass"
+}

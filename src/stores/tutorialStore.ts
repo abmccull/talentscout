@@ -334,7 +334,7 @@ export interface TutorialState {
   skipGuidedSession: () => void;
 
   // Screen guides
-  recordScreenVisit: (screen: string) => void;
+  recordScreenVisit: (screen: string, autoOpen?: boolean) => void;
   openScreenGuide: (screen: string) => void;
   closeScreenGuide: () => void;
   advanceScreenGuide: () => void;
@@ -775,7 +775,6 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     );
     milestones.flaggedBreakthrough = started && session.flaggedMoments.some((flag) =>
       flag.phaseIndex <= session.currentPhaseIndex
-      && flag.moment.isStandout
       && flag.moment.playerId === opening.playerId,
     );
     // Reflection has not yet committed the completed match or discovery choice.
@@ -795,13 +794,19 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
       guidedSessionActive: false,
       guidedSessionForcedReplay: false,
       currentGuidedTask: null,
+      tutorialActive: false,
+      currentSequence: null,
+      pendingSequence: null,
+      activeScreenGuide: null,
+      pendingScreenGuide: null,
+      activeHint: null,
     });
     persistAll(get());
   },
 
   // ── Screen guide actions ─────────────────────────────────────────────────
 
-  recordScreenVisit(screen) {
+  recordScreenVisit(screen, autoOpen = true) {
     const {
       visitedScreens,
       dismissed,
@@ -813,6 +818,12 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
 
     const updated = new Set(visitedScreens);
     updated.add(screen);
+
+    if (!autoOpen && !guidedSessionForcedReplay) {
+      set({ visitedScreens: updated });
+      persistAll(get());
+      return;
+    }
 
     if (guidedSessionActive) {
       // Queue the screen guide to show after the current milestone spotlight.

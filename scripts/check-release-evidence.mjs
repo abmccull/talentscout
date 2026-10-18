@@ -1,3 +1,4 @@
+import { validateSentryProviderReceipt } from "./validate-sentry-provider-receipt.mjs";
 import { validateAcceptedFontHandoff } from "./accepted-package-font-handoff.mjs";
 import { validateReleaseCalendarReceipt } from "./release-calendar-receipt.mjs";
 import { auditAssetProvenance, listShippingFontFiles, readOrdinaryFile, safeRelativePath, writeOwnedReport } from "./audit-asset-provenance.mjs";
@@ -53,6 +54,7 @@ const fullReleaseGateIds = Object.freeze([
   "packagedLinux",
   "assetCommercialRights",
   "onlineFeedbackBackend",
+  "sentryProviderReceipt",
   "longSaveGrowthAndCompaction",
 ]);
 const fullReleasePackageKinds = Object.freeze([
@@ -341,6 +343,11 @@ if (validationScope === "full-release") {
       policyCompletenessFailures.push("release policy completeness: missing gate " + gateId);
     }
   }
+  const sentryPolicy = policyGates.sentryProviderReceipt;
+  if (sentryPolicy?.status === "N/A" || sentryPolicy?.generatedEvidence?.kind !== "sentry-provider-receipt"
+    || !safeRelativePath(sentryPolicy?.generatedEvidence?.path)) {
+    policyCompletenessFailures.push("release policy completeness: mandatory Sentry provider receipt policy is missing or weakened");
+  }
 }
 if (statusDocument.schemaVersion !== 2) {
   failures.push(`release evidence status has unsupported schemaVersion ${String(statusDocument.schemaVersion)}`);
@@ -556,6 +563,7 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     "candidate-core-suites",
     "windows-packaged-runtime",
     "release-gate-attestation",
+    "sentry-provider-receipt",
   ]);
   if (!supportedKinds.has(result.kind)) {
     result.failures.push(`unsupported generated evidence kind ${result.kind || "<missing>"}`);
@@ -578,7 +586,9 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   try {
     const role = result.kind === "long-career-release-soak" ? "campaign"
       : result.kind === "candidate-core-suites" ? "core" : "other-supported-json";
-    evidence = (await artifactContext.readJson(evidencePath, { role, expectedSha256: null })).value;
+    evidence = (result.kind === "sentry-provider-receipt"
+      ? await readOrdinaryPolicyJson(result.path, role, null, result)
+      : await artifactContext.readJson(evidencePath, { role, expectedSha256: null })).value;
   } catch (error) {
     retainArtifactReadFailure(result, error);
     if (validationScope === "full-release" && result.kind === "long-career-release-soak") {
@@ -619,6 +629,20 @@ async function validateGeneratedGateEvidence(gateId, policy) {
         );
       }
     }
+  }
+
+  if (result.kind === "sentry-provider-receipt") {
+    try {
+      result.failures.push(...await validateSentryProviderReceipt({
+        evidence, candidateSha, candidateTreeSha: currentTreeSha, candidateTag: configuredTag,
+        packageManifest, packageManifestSha256,
+        readBoundJson: (path, expectedSha256) => readOrdinaryPolicyJson(path, "other-supported-json", expectedSha256, result),
+      }));
+    } catch (error) {
+      result.failures.push(`Sentry receipt validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    result.status = result.failures.length === 0 ? "Passed" : "Failed";
+    return result;
   }
 
   if (result.kind === "candidate-core-suites") {

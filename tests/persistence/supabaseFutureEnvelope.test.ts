@@ -39,6 +39,11 @@ const remote = vi.hoisted(() => {
   return { rows, state, getUser, upsert, from };
 });
 
+// The wrapper admits optional cloud providers through the configuration module.
+// Keep this suite on its mocked configured-cloud path; the network SDK below
+// remains replaced by the in-memory query mock.
+vi.mock("@/lib/supabaseConfiguration", () => ({ SUPABASE_CONFIGURED: true }));
+
 vi.mock("@/lib/supabase", () => ({
   supabase: { auth: { getUser: remote.getUser }, from: remote.from },
 }));

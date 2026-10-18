@@ -47,8 +47,30 @@ test.describe("Academy placement case", () => {
           flaggedMoments: [],
         }];
       }));
+      const normalizeCountry = (value: unknown) => String(value ?? "")
+        .toLocaleLowerCase()
+        .replace(/[^a-z]/g, "");
+      const youthCountry = normalizeCountry(youth.country);
+      const targetClub = (Object.values(state.clubs) as any[])
+        .filter((club) =>
+          club.youthAcademyRating >= 5
+          && club.playerIds.length + (club.academyPlayerIds?.length ?? 0) < 40
+        )
+        .sort((left, right) => {
+          const leftDomestic = normalizeCountry(state.leagues[left.leagueId]?.country)
+            === youthCountry;
+          const rightDomestic = normalizeCountry(state.leagues[right.leagueId]?.country)
+            === youthCountry;
+          return Number(rightDomestic) - Number(leftDomestic)
+            || right.youthAcademyRating - left.youthAcademyRating
+            || left.id.localeCompare(right.id);
+        })[0];
+      if (!targetClub) {
+        throw new Error("No credible domestic academy destination is available for the case fixture");
+      }
       const brief = {
         ...sourceBrief,
+        clubId: targetClub.id,
         requiredPositions: [player.position],
         preferredRole: undefined,
         maxAge: Math.max(sourceBrief.maxAge, player.age),
@@ -60,6 +82,13 @@ test.describe("Academy placement case", () => {
       };
       store.getState().loadGame({
         ...state,
+        currentWeek: 2,
+        schedule: {
+          week: 2,
+          season: state.currentSeason,
+          activities: Array(7).fill(null),
+          completed: false,
+        },
         unsignedYouth: {
           ...state.unsignedYouth,
           [youth.id]: {
@@ -77,9 +106,9 @@ test.describe("Academy placement case", () => {
     await seedStructuredEvidenceForPlayer(gamePage.page, setup.playerId);
 
     await gamePage.waitForScreen("playerProfile");
-    await expect(gamePage.page.getByRole("heading", { name: "Brief fit and opportunity cost" })).toBeVisible();
-    await expect(gamePage.page.getByRole("heading", { name: "Next evidence to consider" })).toBeVisible();
-    await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+    await expect(gamePage.page.getByRole("heading", { name: "Recruitment fit" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "What to test next" })).toBeVisible();
+    await gamePage.page.getByRole("button", { name: "Write the report", exact: true }).click();
     await gamePage.waitForScreen("reportWriter");
 
     await gamePage.page.getByRole("tab", { name: /^Brief\b/ }).click();
@@ -88,7 +117,7 @@ test.describe("Academy placement case", () => {
     await expect(identityBriefing).toBeVisible();
     await expect(identityBriefing).toContainText(/same case can land differently/i);
     await gamePage.page.getByRole("tab", { name: /^Build the case\b/ }).click();
-    await expect(gamePage.page.getByRole("group", { name: "Development potential", exact: true })).toBeVisible();
+    await expect(gamePage.page.getByTestId("report-judgment-potential")).toBeVisible();
     const presentationRoom = gamePage.page.getByTestId("report-presentation-room");
     await expect(presentationRoom).toBeVisible();
     await presentationRoom.getByRole("radio", { name: /^Pathway-led\b/ }).click();
@@ -119,7 +148,7 @@ test.describe("Academy placement case", () => {
       const store = (window as any).__GAME_STORE__;
       store.getState().scheduleActivity({
         type: "writePlacementReport",
-        slots: 4,
+        slots: 1,
         targetId: playerId,
         destinationClubId: clubId,
         description: "Pitch the authored academy report",

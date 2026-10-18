@@ -19,3 +19,27 @@ tests/release/fixtures/production-output-grant-cases.json text eol=lf
 
 # Preserve frozen actual-worker calendar fixture bytes on Windows checkouts.
 tests/release/fixtures/calendar-worker-guard/* text eol=lf
+
+# Preserve ledger-bound source/evidence bytes exactly; no line-ending hash normalization.
+artifacts/release/asset-provenance-audit.json -text
+docs/HUMGEN_FULL_SETUP.md -text
+docs/HUMGEN_GAME_INTEGRATION.md -text
+docs/asset-provenance.json -text
+docs/portraits/ORIGINAL_ART_PROVENANCE.md -text
+docs/portraits/asset-generation-evidence.json -text
+docs/portraits/humgen-v2-curated-review.json -text
+docs/release/achievement-source-inventory-20261018.json -text
+docs/release/asset-rights-attestation.md -text
+docs/release/documentary-rights-review-20261018.json -text
+docs/release/humgen-rights-review-20261018.json -text
+docs/release/steam-store-art-provenance.md -text
+docs/release/touchline-rights-review-20261018.json -text
+e2e/visual/steam-store-screenshots.spec.ts -text
+scripts/generate-achievement-icons.mjs -text
+src/components/game/ClubCrest.tsx -text
+src/components/game/PlayerAvatar.tsx -text
+src/lib/avatarGenerator.ts -text
+
+docs/release/achievement-vector-replacements-20261018.json -text
+
+scripts/release-artifact-io-profile.json text eol=lf

@@ -73,6 +73,8 @@ export interface Club {
   budget: number;
   /** Latest annual board transfer allocation; also prevents duplicate awards. */
   recruitmentAllocation?: { season: number; amount: number; budgetBefore: number; budgetAfter: number };
+  /** Completed-season league transition already applied to this club. */
+  lastLeagueTransitionSeason?: number;
   weeklyWageBudget?: number;
   scoutingBudget?: number;
   financialObligations?: FinancialObligationsStored;

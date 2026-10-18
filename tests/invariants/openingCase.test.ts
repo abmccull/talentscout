@@ -117,9 +117,9 @@ describe("opening discovery case", () => {
     const state = openingState();
     const entry: ReflectionJournalEntry = {
       id: "journal-opening", sessionId: "opening-session", activityInstanceId: "opening-discovery:test",
-      activityType: "schoolMatch", week: 1, season: 1, playerIds: ["lead"],
+      activityType: "schoolMatch", week: 1, season: 1, playerIds: [state.openingCase!.playerId],
       notes: [], hypotheses: [], evidenceVersion: 1, createdAt: 1,
-      evidenceCards: [{ id: "missed", playerId: "lead", clarity: "missed", classification: "noConclusion",
+      evidenceCards: [{ id: "missed", playerId: state.openingCase!.playerId, clarity: "missed", classification: "noConclusion",
         detail: "You could not isolate a defensible cue from this passage.", summary: "No clean read",
       } as ScoutingEvidenceCard],
     };
@@ -134,7 +134,7 @@ describe("opening discovery case", () => {
       evidenceCards: [{ ...entry.evidenceCards![0], clarity: "usable", classification: "preReceiveDecision", detail: "Later-session detail" }],
     };
     expect(buildOpeningCaseProjection(state)?.signal).toBe(projection.signal);
-    entry.evidenceCards = [{ ...entry.evidenceCards![0], clarity: "usable", classification: "preReceiveDecision", detail: "Scanned before receiving and found the exit." }];
+    entry.evidenceCards = [{ ...entry.evidenceCards![0], clarity: "usable", classification: "technicalExecution", attributesHinted: ["passing"], pressureContext: false, detail: "Scanned before receiving and found the exit." }];
     expect(buildOpeningCaseProjection(state)?.signal).toBe("Scanned before receiving and found the exit.");
   });
 
@@ -142,7 +142,7 @@ describe("opening discovery case", () => {
     const state = openingState();
     state.reflectionJournal = { unrelated: {
       id: "unrelated", sessionId: "other", activityInstanceId: "ordinary-booking",
-      activityType: "schoolMatch", week: 1, season: 1, playerIds: ["lead"],
+      activityType: "schoolMatch", week: 1, season: 1, playerIds: [state.openingCase!.playerId],
       notes: [], hypotheses: [], createdAt: 1,
       flaggedMoments: [{ id: "other-cue", playerId: "lead", description: "Unrelated detail",
         phaseIndex: 0, minute: 12, reaction: "promising", momentType: "tacticalDecision",
@@ -157,7 +157,7 @@ describe("opening discovery case", () => {
     const first = setup();
     const second = setup();
 
-    expect(first.openingCase.playerId).toBe("lead");
+    expect(Object.values(first.unsignedYouth).some((entry) => entry.player.id === first.openingCase.playerId)).toBe(true);
     expect(second.openingCase).toEqual(first.openingCase);
 
     const projection = buildOpeningCaseProjection({
@@ -205,7 +205,7 @@ describe("opening discovery case", () => {
     expect(unsignedYouth[localCase!.youthId].country).toBe("england");
   });
 
-  it("turns the opening watch into three authored beats of the real session", () => {
+  it("retains generated football outcomes while compressing the opening watch", () => {
     const { openingCase, unsignedYouth } = setup();
     const session = {
       id: "session-1",
@@ -215,7 +215,9 @@ describe("opening discovery case", () => {
         index,
         minute: index * 15,
         description: `Phase ${index}`,
-        moments: [],
+        moments: [{ id: `source-${index}`, playerId: openingCase.playerId, quality: 2 + index,
+          momentType: "technicalAction", actionId: "pass", attributesHinted: ["passing"],
+          description: `Generated passage ${index}`, vagueDescription: "A passage", pressureContext: false, isStandout: false }],
       })),
       currentPhaseIndex: 0,
       players: openingCase.playerPoolIds.map((playerId) => ({ playerId })),
@@ -223,9 +225,12 @@ describe("opening discovery case", () => {
 
     const shaped = shapeOpeningObservationSession(session, unsignedYouth[openingCase.youthId].player);
     expect(shaped.phases).toHaveLength(3);
-    expect(shaped.phases[0].moments[0]).toMatchObject({ quality: 6 });
-    expect(shaped.phases[1].moments[0]).toMatchObject({ quality: 9, isStandout: true });
-    expect(shaped.phases[2].moments[0]).toMatchObject({ quality: 4, pressureContext: true });
+    expect(shaped.phases.map((phase) => phase.moments[0].quality)).toEqual([2, 4, 6]);
+    expect(shaped.phases.map((phase) => phase.moments[0].description)).toEqual([
+      "Generated passage 0", "Generated passage 2", "Generated passage 4",
+    ]);
+    expect(new Set(shaped.phases.flatMap((phase) => phase.moments.map((moment) => moment.id))).size).toBe(3);
+    expect(shaped.phases[1].isHalfTime).toBe(true);
   });
 
   it("claims and resolves the first career decision exactly once", () => {

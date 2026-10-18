@@ -20,6 +20,32 @@ function compareReportDate(left: ScoutReport, right: ScoutReport): number {
     || left.id.localeCompare(right.id);
 }
 
+/** The current authored judgment used when a player-targeted pitch is selected. */
+export function indexLatestPlayerReports(
+  reports: Iterable<ScoutReport>,
+  scoutId: string,
+): Map<string, ScoutReport> {
+  const latest = new Map<string, ScoutReport>();
+  // Revision numbers belong to a case; revision 3 of one brief must not
+  // outrank a newly authored, separate brief merely because it is revision 1.
+  const cases = new Map<string, ScoutReport>();
+  for (const report of reports) {
+    if (report.scoutId !== scoutId) continue;
+    const key = getReportCaseKey(report);
+    const current = cases.get(key);
+    // Include passes here: the separate career-credit selector intentionally
+    // excludes them, but a current pitch must honor a withdrawn judgment.
+    if (!current || compareReportDate(report, current) > 0) cases.set(key, report);
+  }
+  for (const report of cases.values()) {
+    const current = latest.get(report.playerId);
+    if (!current || (compareReportCalendarDate(report, current) || report.id.localeCompare(current.id)) > 0) {
+      latest.set(report.playerId, report);
+    }
+  }
+  return latest;
+}
+
 type ReportDate = Pick<ScoutReport, "submittedSeason" | "submittedWeek">;
 
 function compareReportCalendarDate(left: ReportDate, right: ReportDate): number {
@@ -77,11 +103,28 @@ export function getLatestReportInScope(
 export function getFreshReportObservationIds(
   observations: Iterable<Observation>,
   previousReport?: ScoutReport,
+  decisionHistory: Iterable<ScoutReport> = [],
 ): string[] {
+  // A private pass consumes its decision-time evidence across recruitment briefs.
+  // Keep scoped revision identity, but changing briefs cannot undo that judgment.
+  const privateEvidence = new Map<string, Set<string>>();
+  const privateEvidenceWithoutIds: ScoutReport[] = [];
+  for (const report of [...decisionHistory, ...(previousReport ? [previousReport] : [])]) {
+    if (!isPrivateScoutingDecision(report)) continue;
+    const key = `${report.scoutId}:${report.playerId}`;
+    const consumed = privateEvidence.get(key) ?? new Set<string>();
+    const evidenceIds = report.decisionReceipt!.evidenceObservationIds ?? report.evidenceObservationIds;
+    if (evidenceIds === undefined) privateEvidenceWithoutIds.push(report);
+    else for (const id of evidenceIds) consumed.add(id);
+    privateEvidence.set(key, consumed);
+  }
   const ordered = [...observations]
     .filter((observation) =>
       observation.scoutId === (previousReport?.scoutId ?? observation.scoutId)
       && observation.playerId === (previousReport?.playerId ?? observation.playerId)
+      && !privateEvidence.get(`${observation.scoutId}:${observation.playerId}`)?.has(observation.id)
+      && !privateEvidenceWithoutIds.some((report) => report.scoutId === observation.scoutId
+        && report.playerId === observation.playerId && !observationIsAfterReport(observation, report))
     )
     .sort((left, right) =>
       left.season - right.season
@@ -89,6 +132,8 @@ export function getFreshReportObservationIds(
       || left.id.localeCompare(right.id)
     );
   if (!previousReport) return [...new Set(ordered.map((observation) => observation.id))];
+
+  if (isPrivateScoutingDecision(previousReport)) return [...new Set(ordered.map((observation) => observation.id))];
 
   if (previousReport.evidenceObservationIds !== undefined) {
     const consumed = new Set(previousReport.evidenceObservationIds);
@@ -137,6 +182,7 @@ export function selectLatestReportsByCase(
 ): ScoutReport[] {
   const latest = new Map<string, ScoutReport>();
   for (const report of reports) {
+    if (isPrivateScoutingDecision(report)) continue;
     const key = getReportCaseKey(report);
     const current = latest.get(key);
     if (!current || compareReportDate(report, current) > 0) latest.set(key, report);
@@ -157,6 +203,7 @@ export function selectLatestReportsByCaseOpenedInRange(
   const allReports = [...reports];
   const openingByCase = new Map<string, ScoutReport>();
   for (const report of allReports) {
+    if (isPrivateScoutingDecision(report)) continue;
     const key = getReportCaseKey(report);
     const current = openingByCase.get(key);
     if (!current || compareReportDate(report, current) < 0) {
@@ -221,7 +268,7 @@ export function hasCompleteReportSubmissionSnapshot(report: ScoutReport): boolea
  * cases: a transfer is an outcome, not a prerequisite for accountability.
  */
 export function isReportOutcomeValidatable(report: ScoutReport): boolean {
-  return report.attributeAssessments.length > 0;
+  return !isPrivateScoutingDecision(report) && report.attributeAssessments.length > 0;
 }
 
 /**
@@ -234,7 +281,9 @@ export function selectMatureReportCasesForValidation(
   completedSeason: number,
   scoutId?: string,
 ): ReportRevisionCase[] {
-  return groupReportRevisionsByCase(reports).filter((reportCase) => {
+  return groupReportRevisionsByCase(
+    [...reports].filter((report) => !isPrivateScoutingDecision(report)),
+  ).filter((reportCase) => {
     const report = reportCase.latestReport;
     return report.postTransferRating === undefined
       && report.validationStatus !== "unverifiable"
@@ -299,4 +348,9 @@ export function calculateReportAccountabilityMetrics(
     averageCalibration: round(average(calibration)),
     averageDecisionValue: round(average(decisionValue)),
   };
+}
+
+/** Only an authored receipt establishes a private pass; legacy professional history is unchanged. */
+export function isPrivateScoutingDecision(report: Pick<ScoutReport, "decisionReceipt">): boolean {
+  return report.decisionReceipt?.action === "pass";
 }

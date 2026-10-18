@@ -177,12 +177,14 @@ export function createMatchActions(get: GetState, set: SetState) {
         },
       });
     }
+    // Focus is the first photograph boundary for the legacy match experience.
+    // Do not spend a finite catalog on every unselected starting player.
     const current = get();
     if (current.gameState) {
       const nextState = revealGamePortraits(current.gameState, [playerId], "observed");
       if (nextState !== current.gameState) {
         set({ gameState: nextState });
-        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession, current.weekSimulation), set);
       }
     }
     // Tutorial auto-advance: step expects "playerFocused"

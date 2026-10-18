@@ -135,6 +135,15 @@ export async function injectGameState(
       if (overrides.currentSeason !== undefined) {
         patchedState.currentSeason = overrides.currentSeason;
       }
+      if (overrides.currentWeek !== undefined || overrides.currentSeason !== undefined) {
+        patchedState.schedule = {
+          ...patchedState.schedule,
+          week: patchedState.currentWeek,
+          season: patchedState.currentSeason,
+          activities: Array(7).fill(null),
+          completed: false,
+        };
+      }
       if (overrides.scout) {
         patchedState.scout = { ...patchedState.scout };
         if (overrides.scout.careerTier !== undefined) {

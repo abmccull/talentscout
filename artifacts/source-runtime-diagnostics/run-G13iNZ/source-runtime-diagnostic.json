@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "source-electron-runtime-diagnostic",
+  "generatedAt": "2026-09-04T20:48:02.969Z",
+  "sourceHead": "8b9ce2eb36ceec270cc50e1a66a576848f40b038",
+  "sourceDirtyEntryCount": 112,
+  "candidateBound": false,
+  "packagedRuntime": false,
+  "executable": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\node_modules\\electron\\dist\\electron.exe",
+  "entryPath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\electron\\main.js",
+  "entrySha256": "0fb110e5cead58c8c6fd4e62c520bd7f56bea4abc5606bf85b1411223bb508d0",
+  "controls": {},
+  "runs": [
+    {
+      "name": "failed-journey",
+      "screen": {
+        "url": "app://host/play",
+        "title": "TalentScout — Football Scout Career Simulator",
+        "visibleText": "Skip to game content\nTalentScout\nYOUTH SCOUT · EARLY ACCESS\n\nWeek 1 — Season 1\n\nGuided assignment in progress. Finish the highlighted action to unlock navigation.\n\nSCOUT WORKSPACE\n\nDesk\nPlanner\nProspects\nReports\n\nSUPPORT\n\nHandbook\nSettings\nSCOUT\n\nOffline Verifier\n\nYouth Scout — Tier 1\n\nReputation\n10\nBack to Profile\n\nSCOUTING JUDGMENT\n\nWrite Scouting Report\n\nDean Shearer — CB, Age 15\n\nREPORT PROGRESS\n\n0 decisions remaining\n1/1 ready\nAssessment\n\nFive decisions logged\n\nINITIAL ASSESSMENT\nShape the first football read on Dean Shearer\n\nKeep this first read anchored to one saved cue, one explicit claim, one named uncertainty, one next test, and one confidence level. Nothing fills itself in until you choose it.\n\nProgress\n\n5 of 5 decisions chosen\n\nSuggested choices are coaching, not an answer key. Every decision still has to be made and can carry a calibration cost.\n\nInitial assessment step 5 of 5. 5 of 5 steps complete. Current step: Confidence.\n\nEvidence lane\nSAVED EVIDENCE\n31' No clean read\nOne player appears to see a passing lane before everyone around him. You could not isolate a defensible cue from this passage.\nPre Receive Decision\nPressure\nMissed\n14% cue confidence\n✓\nRECOMMENDED\nSelected cue\n\nOne player appears to see a passing lane before everyone around him. You could not isolate a defensible cue from this passage.\n\nMINUTE\n\n31'\n\nQUESTION\n\nPressure\n\nCLARITY\n\nMissed\n\nCUE CONFIDENCE\n\n14%\n\nDecision lane\nWHAT IT SUGGESTS\nMake the measured read\nThe player appeared to prepare the decision before receiving the ball.\nCategory: Role Fit | Support: Supported\n✓\nRECOMMENDED\nBack the stronger interpretation\nThe player may process the game earlier than peers in the same age group.\nCategory: Role Fit | Support: Stretch\n✓\nRecord it without a conclusion\nThe passage is worth retaining, but it does not yet support a reportable trait claim.\nCategory: Role Fit | Support: Withheld\n✓\nWHAT REMAINS UNTESTED\nUntested under sustained pressure\nWe have not seen whether the same decision survives sustained pressure.\nNext question: Pressure | Needed context: A live period with repeated pressure and little recovery time.\n✓\nRECOMMENDED\nUntested in another role\nWe have not seen whether the read survives a different tactical responsibility.\nNext question: Movement | Needed context: A second live look with a different starting role or team shape.\n✓\nUntested against stronger opposition\nWe have not seen this signal against a faster or more organised opponent.\nNext question: Pressure | Needed context: A stronger opponent or tournament match with less time and space.\n✓\nNEXT TEST\nArrange another live look\nReturn with one question: untested under sustained pressure.\nActivity: Follow Up Session | Requirement: A live period with repeated pressure and little recovery time.\n✓\nRECOMMENDED\nAsk for an independent view\nUse a trusted source to challenge the first read before presenting it as settled.\nActivity: Parent Coach Meeting | Requirement: An independent source who has seen the player in a different setting.\n✓\nRECOMMENDED ACTION\nKeep private\nRetain the name and set up another look before escalating the case.\nCurrent tone: Measured\n✓\nRECOMMENDED\nTest in harder context\nMove the player into a more demanding environment to challenge the first read.\nCurrent tone: Testing\n✓\nEscalate now\nPresent the player as ready for immediate recruitment attention.\nCurrent tone: Immediate escalation\n✓\nCONFIDENCE\nTentative\nUseful first impression only. The read is easy to overturn.\nCue band on saved evidence: Tentative\n✓\nRECOMMENDED\nWorking\nPlausible for planning, but still fragile without another context.\nCue band on saved evidence: Tentative\n✓\nSupported\nCredible enough to guide a next action with measured language.\nCue band on saved evidence: Tentative\n✓\nRobust\nStrong conviction. Use only when the cue can carry this weight.\nCue band on saved evidence: Tentative\n✓\n\nYOUR DRAFT\n\nInitial assessment ready\nREADY TO FILE\n\nAt 31 minutes, Dean Shearer produced the passage you kept: One player appears to see a passing lane before everyone around him. You could not isolate a defensible cue from this passage. The player appeared to prepare the decision before receiving the ball. We have not seen whether the same decision survives sustained pressure. Return with one question: untested under sustained pressure. Keep the name private and arrange another look.\n\nRECOMMENDATION\n\nKeep private\n\nCONFIDENCE\n\nTentative\n\nCLAIMS NEEDING CAUTION\n\n1 to revisit\n\nEVIDENCE STRENGTH\n\nDeveloping\n\nReady to file. This first assessment opens the case.\n\nBack to Profile\nFile initial assessment\nScouting dossier\nReview the observation record, current ability ranges, context, and supporting detail behind your case.\nOpen evidence\nOptional pricing guidance\nReview a market range without adding another required report decision.\nReview\nTR\n\nTommy Reyes\n\nSenior Scout\n\nTASK\nFile the first assessment\n\nSelect File initial assessment once the five decisions are ready. A tight first read beats hype.\n\nDisable tutorials\nSelect File initial assessment once the five decisions are ready."
+      },
+      "screenshot": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\artifacts\\source-runtime-diagnostics\\run-G13iNZ\\failure-1.png",
+      "rendererPageErrors": [],
+      "rendererConsoleErrors": []
+    }
+  ],
+  "error": "Tentative confidence was not selected",
+  "limitations": [
+    "Runs Electron source and the production export, not a built installer or ASAR.",
+    "Does not verify signing, Electron packaging fuses, installation, uninstallation, native Steam, or other operating systems.",
+    "Network isolation is simulated using CDP plus an unreachable proxy; no live provider writes are intended."
+  ],
+  "result": "diagnostic_fail"
+}

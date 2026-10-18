@@ -1,5 +1,6 @@
 import { persistCareerEnd } from "@/lib/careerDisposition";
 import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import { processScoutingDecisionReviews } from "@/engine/youth/decisionReviews";
 /**
  * Weekly cycle, calendar scheduling, match, day simulation, and season
  * transition actions extracted from gameStore.
@@ -321,6 +322,9 @@ export function createWeeklyActions(
     const tutorial = runtime.getTutorialState();
     tutorial.checkAutoAdvance("activityScheduled");
     tutorial.completeMilestone("scheduledActivity");
+    // Scheduling records progress, but opting out must not reopen onboarding.
+    const automaticGuidance = gameState.guidedSessionRequested !== false
+      || tutorial.guidedSessionForcedReplay;
 
     const YOUTH_ACTIVITIES = new Set([
       "schoolMatch", "grassrootsTournament", "streetFootball",
@@ -330,7 +334,7 @@ export function createWeeklyActions(
       tutorial.checkAutoAdvance("youthActivityScheduled");
       // Contextual trigger: first youth activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("youth", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("youth", hasClub));
     }
 
     const DATA_ACTIVITIES = new Set([
@@ -341,7 +345,7 @@ export function createWeeklyActions(
       tutorial.checkAutoAdvance("dataActivityScheduled");
       // Contextual trigger: first data activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("data", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("data", hasClub));
     }
 
     // Contextual trigger: first opposition analysis → first team onboarding
@@ -350,7 +354,7 @@ export function createWeeklyActions(
     ]);
     if (FT_ACTIVITIES.has(effectiveActivity.type)) {
       const hasClub = !!gameState.scout.currentClubId;
-      tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
+      if (automaticGuidance) tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
     }
   },
 
@@ -929,8 +933,6 @@ export function createWeeklyActions(
       };
     });
 
-    // Complete due one- and two-season reviews from canonical movement,
-    // appearance/rating, and injury history. Hidden ability is never read.
     let recommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
     let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
@@ -939,7 +941,7 @@ export function createWeeklyActions(
       player: Player;
     }> = [];
     const dueRecommendationReviews = Object.values(recommendationReviews).filter((review) => {
-      if (review.status !== "scheduled") return false;
+      if (review.status !== "scheduled" || review.origin === "decision") return false;
       return stateWithScheduleApplied.currentSeason > review.dueSeason
         || (
           stateWithScheduleApplied.currentSeason === review.dueSeason
@@ -1067,7 +1069,7 @@ export function createWeeklyActions(
         season: stateWithScheduleApplied.currentSeason,
         type: "feedback",
         title: `${review.checkpoint === "oneSeason" ? "One-Season" : "Two-Season"} Recommendation Review`,
-        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} scored ${review.overallScore ?? "unresolved"}/100. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
+        body: `Your recommendation for ${reviewedPlayer.firstName} ${reviewedPlayer.lastName} ${review.overallScore !== undefined ? `scored ${review.overallScore}/100` : "cannot yet be scored from the recorded outcomes"}. ${(review.findings ?? []).join(" ")}${calibratedClaimIds.length > 0 ? ` ${calibratedClaimIds.length} attributed source claim${calibratedClaimIds.length === 1 ? " was" : "s were"} calibrated against the observable outcome.` : ""}`,
         read: false,
         actionRequired: false,
         relatedId: reviewedPlayer.id,
@@ -1378,9 +1380,12 @@ export function createWeeklyActions(
       endOfSeasonTriggered: tickResult.endOfSeasonTriggered,
       predictionAccuracyBonus: weekEquipBonuses?.predictionAccuracy ?? 0,
     });
+    // Review once after dated world history and season rollover have committed.
+    // Interactive and worker execution share this authoritative state.
+    const reviewedState = processScoutingDecisionReviews(seasonRollover.state);
     if (seasonRollover.terminal === "ironman-fired") {
       const endedState: GameState = {
-        ...seasonRollover.state,
+        ...reviewedState,
         careerEnd: { reason: "ironman-fired", season: gameState.currentSeason, week: gameState.currentWeek },
         activeObservationSession: null,
         pendingWeekRecovery: null,
@@ -1394,7 +1399,7 @@ export function createWeeklyActions(
       set({ gameState: runtime.persistenceEnabled ? null : endedState, isLoaded: false, currentScreen: "mainMenu" });
       return;
     }
-    newState = seasonRollover.state;
+    newState = reviewedState;
     if (tickResult.endOfSeasonTriggered) {
       newState = {
         ...newState,

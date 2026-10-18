@@ -1,3 +1,4 @@
+import { getEligibleMatchRoster } from "@/engine/match/eligibleRoster";
 import { calculateFixtureExpectedGoals, sampleFixtureGoals } from "../match/scoreModel";
 import { calculateTacticalMatchup } from "../match/tactics";
 import type {
@@ -322,42 +323,7 @@ function getClubRoster(
   players: Record<string, Player>,
   disciplinaryRecords: Record<string, DisciplinaryRecord>,
 ): Player[] {
-  const seniorRosterIds = uniqueSorted([
-    ...club.playerIds,
-    ...(club.loanedInPlayerIds ?? []),
-  ]);
-
-  const seniorRoster = seniorRosterIds
-    .map((playerId) => players[playerId])
-    .filter((player): player is Player => Boolean(player))
-    .filter((player) => player.clubId === club.id && !player.injured
-      && (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0);
-
-  let needsKeeper = !seniorRoster.some(player => positionGroup(player.position) === "gk");
-  let outfieldNeeded = Math.max(0, 10 - seniorRoster.filter(player => positionGroup(player.position) !== "gk").length);
-  if (!needsKeeper && outfieldNeeded === 0) return seniorRoster.sort(comparePlayers);
-
-  // Eligible academy cover fills real available-player shortages, without
-  // reinstating injured/suspended seniors or automatically selecting children.
-  const seniorIds = new Set(seniorRosterIds);
-  const academy = uniqueSorted(club.academyPlayerIds ?? [])
-    .filter(playerId => !seniorIds.has(playerId))
-    .map((playerId) => players[playerId])
-    .filter((player): player is Player => Boolean(player))
-    .filter(player => player.clubId === club.id && player.age >= 16 && !player.injured
-      && (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0)
-    .sort(comparePlayers);
-  for (const player of academy) {
-    if (positionGroup(player.position) === "gk") {
-      if (!needsKeeper) continue;
-      needsKeeper = false;
-    } else {
-      if (outfieldNeeded <= 0) continue;
-      outfieldNeeded -= 1;
-    }
-    seniorRoster.push(player);
-  }
-  return seniorRoster.sort(comparePlayers);
+  return getEligibleMatchRoster(club, players, disciplinaryRecords).sort(comparePlayers);
 }
 
 function takeBestPlayers(

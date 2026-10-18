@@ -355,10 +355,21 @@ function buildInteractiveObservationBatch(
 
     const focusedPhases = new Set(sessionPlayer.focusedPhases);
     const flaggedMoments = toObservationFlaggedMoments(session, sessionPlayer.playerId);
-    const evidenceAttributes = collectMomentAttributes(
-      session,
-      sessionPlayer.playerId,
-    );
+    const observedCues = (session.cueReadings ?? []).flatMap((cue) => {
+      if (cue.playerId !== player.id || !focusedPhases.has(cue.phaseIndex)
+        || cue.phaseIndex > session.currentPhaseIndex || cue.clarity === "missed") return [];
+      const moment = session.phases.find((phase) => phase.index === cue.phaseIndex)
+        ?.moments.find((candidate) => candidate.id === cue.momentId && candidate.playerId === player.id);
+      if (!moment) return [];
+      // A retained no-conclusion decision preserves the visit without inventing
+      // a numeric reading, including after a save/reload of the same passage.
+      const retainedCue = session.evidenceDecisions?.[cue.id]?.classification === "noConclusion"
+        ? { ...cue, clarity: "glimpse" as const, attributesHinted: [] }
+        : cue;
+      return [{ cue: retainedCue, moment }];
+    });
+    if (observedCues.length === 0) continue;
+    const evidenceAttributes = collectMomentAttributes(session, sessionPlayer.playerId);
     const focusLens = getDominantFocusLens(sessionPlayer);
     const focusDepth = focusedPhases.size;
     const extraAttributes = Math.min(
@@ -381,6 +392,7 @@ function buildInteractiveObservationBatch(
       existingObservations,
       extraAttributes > 0 ? extraAttributes : undefined,
       {
+        observedCues,
         evidenceAttributes,
         evidenceOnly: true,
         focusLens,
@@ -1023,10 +1035,9 @@ export function createObservationActions(get: GetState, set: SetState) {
       const replacesWrongOpeningFlag = Boolean(
         gameState?.openingCase
         && isOpeningDiscoverySession(activeSession)
-        && requestedMoment?.isStandout
-        && requestedMoment.playerId === gameState.openingCase.playerId
+        && requestedMoment?.playerId === gameState.openingCase.playerId
         && existingPhaseFlag
-        && !existingPhaseFlag.moment.isStandout,
+        && existingPhaseFlag.moment.playerId !== gameState.openingCase.playerId,
       );
       const sessionForFlagging = replacesWrongOpeningFlag
         ? {
@@ -1049,7 +1060,7 @@ export function createObservationActions(get: GetState, set: SetState) {
       if (
         gameState?.scout.primarySpecialization === "youth"
         && isOpeningDiscoverySession(updatedSession)
-        && flaggedMoment?.moment.isStandout
+        && flaggedMoment !== undefined
         && flaggedMoment.moment.playerId === gameState.openingCase?.playerId
       ) {
         useTutorialStore.getState().completeMilestone("flaggedBreakthrough");
@@ -1088,7 +1099,7 @@ export function createObservationActions(get: GetState, set: SetState) {
       commitSessionUpdate(updatedSession, gameState);
     },
 
-    endObservationSession: () => {
+    endObservationSession: (options?: { discard?: boolean }) => {
       const {
         activeSession,
         gameState,
@@ -1102,6 +1113,23 @@ export function createObservationActions(get: GetState, set: SetState) {
         && activeSession.state !== "reflection"
         && activeSession.state !== "complete"
       ) {
+        return;
+      }
+      if (options?.discard) {
+        // Leaving is different from finishing early: abandon the unfiled watch
+        // without processing evidence, reflection, rewards, or activity completion.
+        if (activeSession.state !== "active") return;
+        const discarded = snapshotPersistedGameState(
+          { ...gameState, activeObservationSession: null }, null, weekSimulation,
+        );
+        set({
+          gameState: discarded,
+          activeSession: null,
+          sessionReturnScreen: null,
+          lastReflectionResult: null,
+          currentScreen: sessionReturnScreen ?? (weekSimulation ? "weekSimulation" : "dashboard"),
+        });
+        queueGameplayAutosave(discarded, set);
         return;
       }
       if (activeSession.mode === "fullObservation" && activeSession.state === "active") {

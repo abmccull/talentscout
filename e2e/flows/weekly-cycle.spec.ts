@@ -9,6 +9,19 @@ test.describe("Weekly Cycle", () => {
     });
   });
 
+  test("unplanned days needs only one informed week confirmation", async ({ gamePage }) => {
+    await gamePage.page.evaluate(() => {
+      (window as any).__SETTINGS_STORE__.getState().setSetting("confirmBeforeAdvance", true);
+    });
+    await gamePage.setScreen("calendar");
+    await gamePage.page.getByRole("button", { name: "Advance Week", exact: true }).click();
+    const warning = gamePage.page.getByRole("dialog", { name: "Unplanned Days" });
+    await expect(warning).toContainText("This cannot be undone");
+    await warning.getByRole("button", { name: "Advance", exact: true }).click();
+    await gamePage.waitForScreen("weekSimulation");
+    await expect(gamePage.page.getByRole("dialog", { name: "Advance this week?" })).toHaveCount(0);
+  });
+
   test("advance week increments week number", async ({ gamePage }) => {
     const weekBefore = await gamePage.getCurrentWeek();
     await gamePage.advanceWeek();

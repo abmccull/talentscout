@@ -79,7 +79,7 @@ export async function createSubmittedSupportedYouthReportFixture(
     contentType: "application/json",
   });
 
-  const writeReport = gamePage.page.getByRole("button", { name: /^Write Report$/ });
+  const writeReport = gamePage.page.getByRole("button", { name: "Write the report", exact: true });
   await expect(writeReport).toBeVisible();
   await expect(writeReport).toBeEnabled();
   await writeReport.click();

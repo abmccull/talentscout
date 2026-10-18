@@ -100,6 +100,11 @@ export function MentorOverlay() {
   const observationPhaseIndex = useGameStore(
     (s) => s.activeSession?.currentPhaseIndex ?? null,
   );
+  const observationHasLeadMoment = useGameStore((s) => Boolean(
+    s.activeSession?.phases[s.activeSession.currentPhaseIndex]?.moments.some(
+      (moment) => moment.playerId === s.gameState?.openingCase?.playerId,
+    ),
+  ));
   const observationIsHalfTime = useGameStore((s) => Boolean(
     s.activeSession
     && isHalfTimePhase(s.activeSession, s.activeSession.currentPhaseIndex),
@@ -314,7 +319,7 @@ export function MentorOverlay() {
   }, [activeMode.kind, measure]);
 
   useEffect(() => {
-    if (activeMode.kind === "none" || !targetSelectorKey) return;
+    if (activeMode.kind === "none" || !targetSelectorKey || (canCollapse && !isOffGuidedScreen)) return;
 
     let settleId: number | null = null;
     const id = window.setTimeout(() => {
@@ -342,6 +347,8 @@ export function MentorOverlay() {
     };
   }, [
     activeMode.kind,
+    canCollapse,
+    isOffGuidedScreen,
     currentGameScreen,
     measure,
     observationPhaseIndex,
@@ -402,14 +409,12 @@ export function MentorOverlay() {
   const isWaitingForStandout = activeMode.kind === "guided"
     && activeMode.milestone.id === "flaggedBreakthrough"
     && currentGameScreen === "observation"
-    && (observationPhaseIndex ?? 0) < 1;
+    && !observationHasLeadMoment;
 
   const title = ((): string => {
     switch (activeMode.kind) {
       case "tutorial":    return activeMode.step.title;
-      case "guided":      return isWaitingForStandout
-        ? "Keep watching"
-        : activeMode.milestone.title;
+      case "guided":      return activeMode.milestone.title;
       default:            return "";
     }
   })();
@@ -498,8 +503,8 @@ export function MentorOverlay() {
   const spotlightStyle: React.CSSProperties = targetRect
     ? {
         boxShadow: [
-          "0 0 0 9999px rgba(0,0,0,0.65)",
-          `inset 0 0 0 2px ${isAha ? "rgba(245,158,11,0.6)" : "rgba(16,185,129,0.6)"}`,
+          trapFocus ? "0 0 0 9999px rgba(0,0,0,0.45)" : "0 0 0 1px var(--primary)",
+          "inset 0 0 0 1px var(--primary)",
         ].join(", "),
         position: "fixed",
         top: targetRect.top - 4,
@@ -515,7 +520,7 @@ export function MentorOverlay() {
         // Ambient mode — no target found, just a subtle full-screen dim.
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.35)",
+        background: trapFocus ? "rgba(0,0,0,0.35)" : "transparent",
         pointerEvents: "none",
         zIndex: 9998,
       };
@@ -525,7 +530,7 @@ export function MentorOverlay() {
   const dotActiveClass = "bg-[color:var(--primary)]";
   const dotPastClass = "bg-[color:var(--primary)]/50";
   const btnClass = "bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--primary)]/90 focus-visible:outline-[color:var(--ring)]";
-  const interactiveTextClass = "text-[color:var(--primary)]/70";
+  const interactiveTextClass = "text-[color:var(--primary)]";
 
   // ---------------------------------------------------------------------------
   // Render
@@ -561,8 +566,8 @@ export function MentorOverlay() {
       <div
         id="mentor-help-panel"
         ref={cardRef}
-        role="dialog"
-        aria-modal={trapFocus && !gameDialogOpen}
+        role={trapFocus ? "dialog" : "complementary"}
+        aria-modal={(trapFocus && !gameDialogOpen) || undefined}
         aria-label={isCompact ? undefined : `Mentor: ${title}`}
         aria-hidden={mentorHidden || undefined}
         inert={mentorHidden || undefined}
@@ -581,19 +586,19 @@ export function MentorOverlay() {
           zIndex: 9999,
           transition: "top 150ms ease, left 150ms ease",
         }}
-        className={`rounded-xl border ${borderClass} bg-zinc-900 p-5 shadow-2xl`}
+        className={`rounded-md border ${borderClass} bg-[var(--surface-overlay)] p-4 shadow-xl`}
       >
         {/* Mentor identity row */}
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-2 flex items-center gap-2">
           <div
             aria-hidden="true"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--primary)] text-sm font-bold text-[color:var(--primary-foreground)]"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[color:var(--surface-selected)] text-xs font-bold text-[color:var(--primary)]"
           >
             {getInitials(mentorName)}
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white">{mentorName}</p>
-            <p className="truncate text-xs text-zinc-400">{mentorTitle}</p>
+            {!canCollapse && <p className="truncate text-xs text-zinc-400">{mentorTitle}</p>}
           </div>
           <span className={`ml-auto shrink-0 text-xs font-semibold uppercase tracking-wider ${accentTextClass}`}>
             {activeMode.kind === "guided"
@@ -618,9 +623,15 @@ export function MentorOverlay() {
         </div>
 
         {/* Speech bubble */}
-        <div className="mb-4 rounded-lg bg-zinc-800/60 px-4 py-3">
-          <h2 className="mb-1 text-sm font-bold text-white">{title}</h2>
-          <p className="text-sm leading-relaxed text-zinc-400">{parseConceptText(description)}</p>
+        <div className="mb-2">
+          <h2 className="mb-1 text-sm font-semibold text-white">{title}</h2>
+          <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">{parseConceptText(canCollapse ? actionInstruction : description)}</p>
+          {canCollapse && (
+            <details className="mt-2 text-xs text-[var(--muted-foreground)]">
+              <summary className="cursor-pointer py-2">More from {mentorName.split(" ")[0]}</summary>
+              <p className="pb-2 leading-5">{parseConceptText(description)}</p>
+            </details>
+          )}
         </div>
 
         {isOffGuidedScreen && (
@@ -691,7 +702,7 @@ export function MentorOverlay() {
               <ArrowLeft size={14} aria-hidden="true" />
               Return to guided step
             </button>
-          ) : isInteractive || activeMode.kind === "guided" ? (
+          ) : canCollapse ? null : isInteractive || activeMode.kind === "guided" ? (
             <span className={`text-xs italic ${interactiveTextClass}`}>
               {activeMode.kind === "guided" ? actionInstruction : "Complete the action to continue"}
             </span>

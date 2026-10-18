@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Club, LoanDeal, Player } from "@/engine/core/types";
+import type { Club, GameState, LoanDeal, LoanRecommendation, Player } from "@/engine/core/types";
+import { projectAppliedLoanClosures } from "@/engine/core/weekly/loanClosureFeedback";
+import { RNG } from "@/engine/rng";
+import { processLoanReturns } from "@/engine/world/loans";
 import { expandLoanDeal, expandClubFinancialObligation } from "@/engine/finance/terminalRecordArchive";
 import { resolvePlayerMovements, type LifecycleWorldState, type PlayerMovementIntent } from "@/engine/world/playerLifecycle";
 
@@ -38,6 +41,37 @@ function verifyClosed(result: ReturnType<typeof resolvePlayerMovements>) {
 }
 
 describe("compatible loan closure and expired owner contract", () => {
+  it("plans an overdue active loan return after a legacy save skipped its exact deadline", () => {
+    const state = world() as unknown as GameState;
+    const result = processLoanReturns(state, 1, 3, new RNG("overdue-return"), 46);
+    expect(result.deals.map(deal => deal.id)).toEqual(["loan"]);
+    expect(state.activeLoans?.[0]?.status).toBe("active");
+  });
+  it("returns an unaffordable due purchase without an NPC-only flag, while rejecting an early purchase", () => {
+    const input = world(); input.clubs.borrower.budget = 0;
+    const early = resolvePlayerMovements(input, [end("buyOption")], 45, 2, 46);
+    expect(early.applied).toEqual([]);
+    expect(early.state.activeLoans).toHaveLength(1);
+    const due = resolvePlayerMovements(input, [end("buyOption"), release], 46, 2, 46);
+    expect(due.applied.map(event => event.type)).toEqual(["loanReturn", "release"]);
+    verifyClosed(due);
+    expect(expandLoanDeal(due.state.loanHistory[0]).outcome).not.toBe("buy-option-exercised");
+    expect(due.state.clubs.borrower.budget).toBe(0);
+  });
+  it("closes a terminal loan recommendation from committed compact history without rewards", () => {
+    const input = world();
+    const result = resolvePlayerMovements(input, [{ type: "retirement", playerId: "p" }], 46, 2, 46);
+    const recommendations = [{ id: "rec", loanDealId: "loan", scoutId: "scout", status: "accepted", reputationApplied: false }] as LoanRecommendation[];
+    const feedback = projectAppliedLoanClosures({ scout: { id: "scout" } as GameState["scout"],
+      previousLoanHistory: [], loanHistory: result.state.loanHistory, movements: result.applied,
+      recommendations, players: result.state.players, clubs: result.state.clubs, week: 46, season: 2,
+    }, new RNG("terminal-closure"));
+    expect(feedback.updatedRecommendations[0]).toMatchObject({ status: "completed", outcome: "terminated", reputationApplied: true });
+    expect(feedback.messages).toEqual([]);
+    expect(feedback.reputationDelta).toBe(0);
+    expect(feedback.xpAward).toBe(0);
+    expect(recommendations[0].status).toBe("accepted");
+  });
   it("returns then releases into the planned pool with no duplicate registration or settlement", () => {
     const input = world(), before = JSON.stringify(input);
     const result = resolvePlayerMovements(input, [release, end()], 46, 2, 46);

@@ -354,70 +354,25 @@ export function evaluateDressingRoomImpact(
 // =============================================================================
 
 /**
- * Determine if a personality trait should be revealed during observation,
- * and if the archetype should be uncovered.
- *
- * Progressive discovery thresholds:
- *  - Observation 1-2: chance to reveal 0-1 traits
- *  - Observation 3+:  archetype revealed (hiddenUntilRevealed = false)
- *  - Observation 5+:  full personality profile visible (all traits revealed)
- *
- * @param rng              - RNG instance.
- * @param profile          - The player's current personality profile.
- * @param observationCount - How many times this player has been observed.
- * @param scoutPsychSkill  - Scout's psychologicalRead skill level (1-20).
- * @returns Updated profile (new object, never mutated).
+ * Merge a contextual observation into the retained character evidence.
+ * Observation count and skill cannot uncover an archetype or every true trait.
+ * Optional evidence preserves legacy call compatibility without granting new
+ * knowledge to callers that have no supported behavioral insight.
  */
 export function progressivePersonalityReveal(
-  rng: { next(): number },
+  _rng: { next(): number },
   profile: PersonalityProfile,
-  observationCount: number,
-  scoutPsychSkill: number,
+  _observationCount: number,
+  _scoutPsychSkill: number,
+  supportedTraits: readonly PersonalityTrait[] = [],
 ): PersonalityProfile {
-  const revealedSet = new Set(profile.revealedTraits);
-  const unrevealed = profile.traits.filter((t) => !revealedSet.has(t));
-
-  let hiddenUntilRevealed = profile.hiddenUntilRevealed;
-
-  // Archetype reveal: 3+ observations or high skill scout (skill >= 15 can do it in 2)
-  const archetypeThreshold = scoutPsychSkill >= 15 ? 2 : 3;
-  if (observationCount >= archetypeThreshold) {
-    hiddenUntilRevealed = false;
-  }
-
-  // Full reveal: 5+ observations or very high skill scout
-  const fullRevealThreshold = scoutPsychSkill >= 18 ? 4 : 5;
-  if (observationCount >= fullRevealThreshold) {
-    return {
-      ...profile,
-      hiddenUntilRevealed: false,
-      revealedTraits: [...profile.traits],
-    };
-  }
-
-  // Individual trait reveal: chance per observation
-  if (unrevealed.length > 0) {
-    // Base 15% chance, boosted by scout skill
-    const revealChance = 0.15 + (scoutPsychSkill / 100);
-    if (rng.next() < revealChance) {
-      const idx = Math.floor(rng.next() * unrevealed.length);
-      const newRevealed = [...profile.revealedTraits, unrevealed[idx]];
-      return {
-        ...profile,
-        hiddenUntilRevealed,
-        revealedTraits: newRevealed,
-      };
-    }
-  }
-
-  // Only update hiddenUntilRevealed if it changed
-  if (hiddenUntilRevealed !== profile.hiddenUntilRevealed) {
-    return { ...profile, hiddenUntilRevealed };
-  }
-
-  return profile;
+  const revealedTraits = [...new Set([
+    ...profile.revealedTraits,
+    ...supportedTraits.filter((trait) => profile.traits.includes(trait)),
+  ])];
+  if (revealedTraits.length === profile.revealedTraits.length) return profile;
+  return { ...profile, revealedTraits };
 }
-
 // =============================================================================
 // DISPLAY HELPERS
 // =============================================================================

@@ -15,6 +15,7 @@ import {
 } from "../agencyStrategy";
 import { openSatelliteOffice } from "../internationalExpansion";
 import { applyBalanceTransaction } from "../expenses";
+import { buildYouthRetainerBrief } from "../retainerBriefs";
 import { clamp, createLockedUntil, gameDate, normalizeRegion, activeClients } from "./helpers";
 
 function findSelectedAgencyDecision(state: GameState, decisionId: string) {
@@ -66,6 +67,7 @@ function updateEmployees(finances: FinancialRecord, mapper: (employee: AgencyEmp
 
 function ensureRetainer(
   finances: FinancialRecord,
+  state: Pick<GameState, "clubs" | "players" | "fixtures">,
   clubId: string,
   now: GameDate,
   monthlyFee: number,
@@ -77,6 +79,10 @@ function ensureRetainer(
   if (existingIndex >= 0) {
     return finances;
   }
+  const club = state.clubs[clubId];
+  if (!club) return finances;
+  const nextSettlement = addGameWeeks(state.fixtures, now, 4);
+  const termEnds = addGameWeeks(state.fixtures, now, 16);
   const contract: RetainerContract = {
     id: `retainer:agency-dilemma:${clubId}:s${now.season}w${now.week}`,
     clubId,
@@ -87,12 +93,16 @@ function ensureRetainer(
     status: "active",
     startWeek: now.week,
     startSeason: now.season,
-    nextSettlementWeek: now.week + 4,
-    nextSettlementSeason: now.season,
+    nextSettlementWeek: nextSettlement.week,
+    nextSettlementSeason: nextSettlement.season,
     termMonths: 4,
-    termEndsWeek: now.week + 16,
-    termEndsSeason: now.season,
+    termEndsWeek: termEnds.week,
+    termEndsSeason: termEnds.season,
     deliveredReportIds: [],
+    brief: buildYouthRetainerBrief(club, state.players, 2),
+    averageDeliveredQuality: 0,
+    consecutivePeriodsMet: 0,
+    consecutivePeriodsMissed: 0,
   };
   return {
     ...finances,
@@ -206,8 +216,9 @@ function applyClientConcentrationChoice(state: GameState, decisionId: string, op
     .split("|")
     .filter(Boolean);
   if (optionId === "exclusiveAnchor") {
+    if (!state.clubs[anchorClientId]) return state;
     finances = setAgencyPolicy(finances, "stableRetainers", now);
-    finances = ensureRetainer(finances, anchorClientId, now, 250, 1);
+    finances = ensureRetainer(finances, state, anchorClientId, now, 250, 1);
     finances = updateClient(finances, anchorClientId, 10, "active");
     for (const clubId of alternatives) finances = updateClient(finances, clubId, -6);
     finances = applyBalanceTransaction(finances, 1_200, now.week, now.season, "Anchor client advance accepted", `agency-dilemma:${decisionId}:exclusiveAnchor`);
@@ -321,8 +332,9 @@ function applyCapitalCrossroadsChoice(state: GameState, decisionId: string, opti
     }));
     for (const client of activeClients(finances)) finances = updateClient(finances, client.clubId, -3);
   } else if (optionId === "signatureRetainer") {
+    if (!state.clubs[targetClubId]) return state;
     finances = setAgencyPolicy(finances, "stableRetainers", now);
-    finances = ensureRetainer(finances, targetClubId, now, 2_400, 3);
+    finances = ensureRetainer(finances, state, targetClubId, now, 2_400, 3);
     finances = updateClient(finances, targetClubId, 8, "active");
   } else if (optionId === "backJudgment") {
     finances = setAgencyPolicy(finances, "placementUpside", now);

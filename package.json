@@ -67,7 +67,8 @@
     "test:e2e:youth-ea": "node scripts/run-youth-ea-e2e.mjs",
     "test:e2e:soak": "playwright test e2e/regression/long-career-invariants.spec.ts --workers=1",
     "portraits:index": "node scripts/prepare-portrait-runtime.cjs --write",
-    "portraits:verify": "node scripts/prepare-portrait-runtime.cjs --check && node scripts/verify-bundled-portraits.cjs"
+    "portraits:verify": "node scripts/prepare-portrait-runtime.cjs --check && node scripts/verify-bundled-portraits.cjs",
+    "release:validate-candidate": "node scripts/validate-release-candidate.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.69.0",

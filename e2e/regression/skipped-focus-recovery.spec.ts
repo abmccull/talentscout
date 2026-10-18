@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures";
+import { advanceGeneratedWatchToReflection, classifyDisplayedLeadEvidence, readOpeningLead } from "../helpers/generated-watch";
 
 /** Read only the durable autosave; observing the store is not save acceptance. */
 async function readReflectionCheckpoint(page: Page, sessionId: string, completionId: string) {
@@ -51,17 +52,13 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
   await gamePage.waitForScreen("observation", 60_000);
   await expect(page.getByRole("heading", { level: 1, name: "The match started early." })).toBeVisible();
   await page.getByRole("button", { name: "Watch the match", exact: true }).click();
-  const controls = page.getByTestId("mobile-observation-controls");
-  await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  await page.locator('[data-tutorial-id="observation-flag-moment"]:visible').first().click();
-  await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').click();
-  await page.getByRole("button", { name: /^Confirm the first read\b/ }).click();
-  await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  await controls.getByRole("button", { name: "Reflect", exact: true }).click();
-  const classification = page.getByRole("group", { name: "What did this passage show?", exact: true });
-  if (await classification.count()) {
-    await classification.getByRole("radio", { name: /^No reliable conclusion/ }).check();
-  }
+  const lead = await readOpeningLead(page);
+  const watch = await advanceGeneratedWatchToReflection(page, { lead, focus: false });
+  const inconclusive = await classifyDisplayedLeadEvidence(page, lead, true);
+  expect(inconclusive.every((choice) => choice.classification === "noConclusion")).toBe(true);
+  await testInfo.attach("unfocused-generated-watch.json", {
+    body: JSON.stringify({ watch, inconclusive }, null, 2), contentType: "application/json",
+  });
   const artifacts: unknown[] = [];
   for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
@@ -134,7 +131,7 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
   await gamePage.waitForScreen("reportWriter");
   for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
-    await expect(page.getByRole("heading", { level: 2, name: /^Shape the first football read on / })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Your judgment", exact: true })).toBeVisible();
     const axe = await new AxeBuilder({ page }).withRules(["heading-order"]).analyze();
     artifacts.push({ screen: "report-before-submit", viewport, violations: axe.violations });
     expect(axe.violations).toEqual([]);
@@ -142,6 +139,15 @@ test("skipped Focus keeps truthful evidence and a reachable guide after reflecti
   }
   await gamePage.submitCurrentReportViaUI("note");
   await gamePage.waitForScreen("calendar");
+  const filedInconclusion = await page.evaluate(() => {
+    const state = (window as any).__GAME_STORE__.getState().gameState;
+    return { report: (Object.values(state.reports) as any[]).at(-1), listings: state.finances.reportListings };
+  });
+  expect(filedInconclusion.report.evidenceAssessment.claims.some((claim: any) => claim.support === "supported")).toBe(false);
+  expect(filedInconclusion.listings).toEqual([]);
+  await testInfo.attach("inconclusive-opening-report.json", {
+    body: JSON.stringify(filedInconclusion, null, 2), contentType: "application/json",
+  });
   await testInfo.attach("skipped-focus-accessibility.json", {
     body: JSON.stringify(artifacts, null, 2), contentType: "application/json",
   });

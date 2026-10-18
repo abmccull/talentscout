@@ -128,7 +128,7 @@ export const financesArticles: WikiArticle[] = [
     summary:
       "Monthly costs include rent, travel, subscriptions, lifestyle, office, employee salaries, loan payments, and insurance.",
     searchText:
-      "Expenses are deducted at the same 12 financial-period closes distributed across each competition season. Rent by tier: Tier 1 100, Tier 2 350, Tier 3 500, Tier 4 650, Tier 5 800. Travel base by tier: Tier 1 50, Tier 2 175, Tier 3 250, Tier 4 325, Tier 5 400. International travel adds 100 surcharge. Subscriptions are based on equipment loadout monthly total. Lifestyle costs: Level 1 Budget 200, Level 2 Comfortable 500, Level 3 Professional 1000, Level 4 Upscale 2000, Level 5 Luxury 5000. Higher lifestyle provides networking bonuses up to 20% and salary offer bonuses up to 15% but Luxury level carries a 10 point credit score penalty. Office costs: Home 0, Coworking 200, Small 500, Professional 1500, HQ 4000 monthly. Employee salaries vary by role: Scout 500-2000, Analyst 400-1500, Administrator 300-1000, Relationship Manager 600-2500, Mentee 200-600. Insurance costs 50 per employee per month. Loan payments are deducted based on active loan terms. NPC scout salaries at Tier 4 cost 500 each, Tier 5 costs 2000 each. Other incidentals: 35 at Tier 1, 50 at higher tiers.",
+      "Expenses are deducted at the same 12 financial-period closes distributed across each competition season. Rent by tier: Tier 1 100, Tier 2 350, Tier 3 500, Tier 4 650, Tier 5 800. Travel base by tier: Tier 1 50, Tier 2 175, Tier 3 250, Tier 4 325, Tier 5 400. International travel adds 100 surcharge. Subscriptions are based on equipment loadout monthly total. Lifestyle costs: Level 1 Budget 200, Level 2 Comfortable 500, Level 3 Professional 1000, Level 4 Upscale 2000, Level 5 Luxury 5000. Higher lifestyle provides networking bonuses up to 20% but Luxury level carries a 10 point credit score penalty. Office costs: Home 0, Coworking 200, Small 500, Professional 1500, HQ 4000 monthly. Employee salaries vary by role: Scout 500-2000, Analyst 400-1500, Administrator 300-1000, Relationship Manager 600-2500, Mentee 200-600. Insurance costs 50 per employee per month. Loan payments are deducted based on active loan terms. NPC scout salaries at Tier 4 cost 500 each, Tier 5 costs 2000 each. Other incidentals: 35 at Tier 1, 50 at higher tiers.",
     content: (
       <SectionBlock>
         <Para>
@@ -373,7 +373,7 @@ export const financesArticles: WikiArticle[] = [
     summary:
       "Sustained negative balance triggers escalating distress: warnings, cutbacks, staff loss, and eventually bankruptcy.",
     searchText:
-      "Financial distress is an escalating cascade triggered by sustained negative balance. It moves from warning signs to cutbacks, then to staff and reputation damage, and finally to bankruptcy if the situation keeps worsening. Recovery happens when balance returns positive. Common recovery moves include lowering lifestyle costs, selling equipment, taking emergency consulting, requesting salary support from a club employer, or using short-term borrowing.",
+      "Financial distress is an escalating cascade triggered by sustained negative balance. It moves from warning signs to cutbacks, then to staff and reputation damage, and finally to bankruptcy if the situation keeps worsening. Recovery happens when balance returns positive. Common recovery moves include lowering lifestyle costs, selling equipment, taking consulting work or using short-term borrowing.",
     content: (
       <SectionBlock>
         <Para>
@@ -433,7 +433,6 @@ export const financesArticles: WikiArticle[] = [
             "Reduce lifestyle tier to lower monthly expenses",
             "Sell equipment for emergency cash (40% of value)",
             "Take emergency consulting work",
-            "Request a salary advance (club path)",
             "Take an emergency loan (less restrictive eligibility)",
           ]}
         />

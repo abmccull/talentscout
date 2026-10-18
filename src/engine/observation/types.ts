@@ -631,6 +631,8 @@ export interface ObservationSession {
   observerContext?: ObservationExperienceSnapshot;
   /** Visible opponent descriptors used to tailor this watch. */
   opponentContext?: ObservationOpponentContext;
+  /** Internal session performance draws; never part of scout knowledge. */
+  performanceOffsets?: Record<string, number>;
   /** Environmental/atmospheric context for this session. */
   venueAtmosphere?: VenueAtmosphere;
   /** Persisted context that explains what this specific watch could reveal. */
@@ -682,6 +684,8 @@ export interface SessionConfig {
   observerContext?: ObservationExperienceSnapshot;
   /** Optional visible match/opponent context. */
   opponentContext?: ObservationOpponentContext;
+  /** Internal session performance draws; never part of scout knowledge. */
+  performanceOffsets?: Record<string, number>;
   /** Venue type string for atmosphere generation. Defaults to activityType. */
   venueType?: string;
   /** Country whose football environment shapes this session. */

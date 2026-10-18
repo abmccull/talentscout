@@ -27,7 +27,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Volume2 }[] = [
 ];
 
 const SLIDER_CLASS =
-  "h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-emerald-500 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500";
+  "h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-[var(--ring)] [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--primary)] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--primary)]";
 
 export function SettingsPreferences() {
   const [tab, setTab] = useState<SettingsTab>("audio");
@@ -57,7 +57,7 @@ export function SettingsPreferences() {
         aria-label="Settings categories"
         className="grid grid-cols-2 gap-2 sm:grid-cols-4"
       >
-        {TABS.map(({ id, label, icon: Icon }) => {
+        {TABS.map(({ id, label, icon: Icon }, tabIndex) => {
           const selected = tab === id;
           return (
             <button
@@ -67,12 +67,21 @@ export function SettingsPreferences() {
               id={`settings-tab-${id}`}
               aria-selected={selected}
               aria-controls={`settings-panel-${id}`}
+              tabIndex={selected ? 0 : -1}
               onClick={() => setTab(id)}
-              className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition ${
-                selected
-                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
-                  : "border-white/10 bg-black/20 text-zinc-400 hover:border-white/20 hover:text-white"
-              }`}
+              onKeyDown={(event) => {
+                const nextIndex = event.key === "Home" ? 0
+                  : event.key === "End" ? TABS.length - 1
+                    : event.key === "ArrowRight" || event.key === "ArrowDown" ? (tabIndex + 1) % TABS.length
+                      : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (tabIndex - 1 + TABS.length) % TABS.length
+                        : null;
+                if (nextIndex === null) return;
+                event.preventDefault();
+                setTab(TABS[nextIndex]!.id);
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
+              }}
+              data-selected={selected}
+              className="dossier-choice flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-medium transition"
             >
               <Icon size={15} aria-hidden="true" />
               {label}
@@ -82,13 +91,13 @@ export function SettingsPreferences() {
       </div>
 
       {tab === "audio" && (
-        <Card id="settings-panel-audio" role="tabpanel" aria-labelledby="settings-tab-audio">
+        <Card className="dossier-panel rounded-none" id="settings-panel-audio" role="tabpanel" aria-labelledby="settings-tab-audio">
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               {volumes.muted ? (
-                <VolumeX size={18} className="text-emerald-500" aria-hidden="true" />
+                <VolumeX size={18} className="text-[var(--primary)]" aria-hidden="true" />
               ) : (
-                <Volume2 size={18} className="text-emerald-500" aria-hidden="true" />
+                <Volume2 size={18} className="text-[var(--primary)]" aria-hidden="true" />
               )}
               Audio
             </h2>
@@ -166,10 +175,10 @@ export function SettingsPreferences() {
       )}
 
       {tab === "graphics" && (
-        <Card id="settings-panel-graphics" role="tabpanel" aria-labelledby="settings-tab-graphics">
+        <Card className="dossier-panel rounded-none" id="settings-panel-graphics" role="tabpanel" aria-labelledby="settings-tab-graphics">
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <Monitor size={18} className="text-emerald-500" aria-hidden="true" />
+              <Monitor size={18} className="text-[var(--primary)]" aria-hidden="true" />
               Graphics
             </h2>
           </CardHeader>
@@ -233,10 +242,10 @@ export function SettingsPreferences() {
       )}
 
       {tab === "gameplay" && (
-        <Card id="settings-panel-gameplay" role="tabpanel" aria-labelledby="settings-tab-gameplay">
+        <Card className="dossier-panel rounded-none" id="settings-panel-gameplay" role="tabpanel" aria-labelledby="settings-tab-gameplay">
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <Gamepad2 size={18} className="text-emerald-500" aria-hidden="true" />
+              <Gamepad2 size={18} className="text-[var(--primary)]" aria-hidden="true" />
               Gameplay
             </h2>
           </CardHeader>
@@ -276,7 +285,7 @@ export function SettingsPreferences() {
                     event.target.value as AppSettings["cinematicMoments"],
                   )
                 }
-                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
               >
                 <option value="full">Full presentation</option>
                 <option value="reduced">Reduced effects</option>
@@ -309,7 +318,7 @@ export function SettingsPreferences() {
         >
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <Accessibility size={18} className="text-emerald-500" aria-hidden="true" />
+              <Accessibility size={18} className="text-[var(--primary)]" aria-hidden="true" />
               Accessibility
             </h2>
           </CardHeader>

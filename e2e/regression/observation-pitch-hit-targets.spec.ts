@@ -1,7 +1,9 @@
 import { test, expect } from "../fixtures";
+import { observationRail, expectUniquePlayerControls, readRailGeometry, railGeometryProblems, readRailReveal } from "../helpers/observation-rail";
 
-// Integrate at e2e/regression/observation-pitch-hit-targets.spec.ts before the
-// presentation correction. No mock, forced tap, new bridge, or fabricated player.
+
+// Current player-rail contract: one control per real player, normal taps,
+// complete captions and stable scroll-content geometry. No forced interaction.
 test.describe("observation pitch touch targets", () => {
   test.use({ hasTouch: true });
 
@@ -31,67 +33,14 @@ test.describe("observation pitch touch targets", () => {
         return pool;
       });
       await page.getByRole("button", { name: "Begin Observation", exact: true }).click();
-      const field = page.getByRole("group", { name: /^Interactive observation pitch at / });
-      const markers = field.locator("button[data-observation-pitch-marker]");
-      const roster = page.locator('ul[aria-label="Synchronized list of players on the observation pitch"] button');
-      await expect(markers).toHaveCount(pool.length);
-      await expect(roster).toHaveCount(pool.length);
-
-      const readGeometry = () => field.evaluate(fieldElement => {
-        const bounds = fieldElement.getBoundingClientRect();
-        const markers = [...fieldElement.querySelectorAll<HTMLButtonElement>("button[data-observation-pitch-marker]")];
-        return { width: bounds.width, height: bounds.height, targets: markers.map(marker => {
-          const rect = marker.getBoundingClientRect();
-          const caption = marker.querySelector<HTMLElement>("[data-observation-pitch-caption]")?.getBoundingClientRect();
-          return { name: marker.getAttribute("aria-label"), x: rect.x - bounds.x, y: rect.y - bounds.y,
-            width: rect.width, height: rect.height, caption: caption ? { x: caption.x - bounds.x,
-              y: caption.y - bounds.y, width: caption.width, height: caption.height } : null };
-        }) };
-      });
-      const violations = (geometry: Awaited<ReturnType<typeof readGeometry>>) => {
-        const problems: string[] = [];
-        for (let index = 0; index < geometry.targets.length; index++) {
-          const target = geometry.targets[index];
-          if (target.width < 44 || target.height < 44) problems.push(`small:${index}`);
-          // Four pixels reserve the entire selected ring, not just its body.
-          if (target.x < 4 - 0.5 || target.y < 4 - 0.5
-            || target.x + target.width + 4 > geometry.width + 0.5
-            || target.y + target.height + 4 > geometry.height + 0.5) problems.push(`clipped:${index}`);
-          for (let otherIndex = index + 1; otherIndex < geometry.targets.length; otherIndex++) {
-            const other = geometry.targets[otherIndex];
-            const overlapX = Math.min(target.x + target.width + 4, other.x + other.width + 4)
-              - Math.max(target.x - 4, other.x - 4);
-            const overlapY = Math.min(target.y + target.height + 4, other.y + other.height + 4)
-              - Math.max(target.y - 4, other.y - 4);
-            if (overlapX > 0.5 && overlapY > 0.5) problems.push(`ring-overlap:${index}:${otherIndex}`);
-          }
-          const caption = target.caption;
-          if (!caption) { problems.push(`missing-caption:${index}`); continue; }
-          if (caption.x < -0.5 || caption.y < -0.5
-            || caption.x + caption.width > geometry.width + 0.5
-            || caption.y + caption.height > geometry.height + 0.5) problems.push(`caption-clipped:${index}`);
-          for (let otherIndex = 0; otherIndex < geometry.targets.length; otherIndex++) {
-            if (otherIndex === index) continue;
-            const other = geometry.targets[otherIndex];
-            const overlapX = Math.min(caption.x + caption.width, other.x + other.width + 4)
-              - Math.max(caption.x, other.x - 4);
-            const overlapY = Math.min(caption.y + caption.height, other.y + other.height + 4)
-              - Math.max(caption.y, other.y - 4);
-            if (overlapX > 0.5 && overlapY > 0.5) problems.push(`caption-over-target:${index}:${otherIndex}`);
-            const otherCaption = other.caption;
-            if (otherIndex > index && otherCaption) {
-              const captionOverlapX = Math.min(caption.x + caption.width, otherCaption.x + otherCaption.width)
-                - Math.max(caption.x, otherCaption.x);
-              const captionOverlapY = Math.min(caption.y + caption.height, otherCaption.y + otherCaption.height)
-                - Math.max(caption.y, otherCaption.y);
-              if (captionOverlapX > 0.5 && captionOverlapY > 0.5) problems.push(`caption-overlap:${index}:${otherIndex}`);
-            }
-          }
-        }
-        return problems;
-      };
-      // Fail the original occlusion promptly, before the known tap timeout.
+      const rail = observationRail(page);
+      const markers = rail.locator("button[data-observation-pitch-marker]");
+      const names = pool.map(player => player.name);
+      await expectUniquePlayerControls(page, names);
+      const readGeometry = () => readRailGeometry(rail, names);
+      const violations = railGeometryProblems;
       await expect.poll(async () => violations(await readGeometry()), { timeout: 5_000 }).toEqual([]);
+      const reveals: unknown[] = [];
       const before = await page.evaluate(() => {
         const session = (window as any).__GAME_STORE__.getState().activeSession;
         return { id: session.id, phase: session.currentPhaseIndex, moments: session.phases.map((phase: any) => phase.moments),
@@ -101,7 +50,10 @@ test.describe("observation pitch touch targets", () => {
       for (let index = 0; index < pool.length; index++) {
         await markers.nth(index).tap();
         await expect(markers.nth(index)).toHaveAttribute("aria-pressed", "true");
-        await expect(roster.nth(index)).toHaveAttribute("aria-pressed", "true");
+        await expect(rail.locator('button[aria-pressed="true"]')).toHaveCount(1);
+        await expect(page.getByRole("group", { name: `Observation lens for ${pool[index].name}`, exact: true })).toHaveCount(1);
+        await expect.poll(async () => (await readRailReveal(markers.nth(index), pool[index].name)).problems).toEqual([]);
+        reveals.push(await readRailReveal(markers.nth(index), pool[index].name));
       }
       const afterTaps = await page.evaluate(() => {
         const session = (window as any).__GAME_STORE__.getState().activeSession;
@@ -112,9 +64,8 @@ test.describe("observation pitch touch targets", () => {
       expect(afterTaps).toEqual(before);
       await markers.first().tap();
       const beforeFocus = await readGeometry();
-      await page.getByRole("button", { name: /Focus targets and lenses/i }).click();
       await page.getByRole("button", { name: `Use technical lens for ${pool[0].name}`, exact: true }).click();
-      await page.getByRole("button", { name: "Close focus controls", exact: true }).click();
+      await expect(page.getByRole("button", { name: `Remove focus from ${pool[0].name}`, exact: true })).toHaveCount(1);
       const afterFocus = await readGeometry();
       expect({ ...afterFocus, targets: afterFocus.targets.map(target => ({ ...target, name: null })) })
         .toEqual({ ...beforeFocus, targets: beforeFocus.targets.map(target => ({ ...target, name: null })) });
@@ -126,7 +77,7 @@ test.describe("observation pitch touch targets", () => {
       });
       expect(focused).toEqual({ players: [{ id: pool[0].playerId, lens: "technical" }], available: before.available - 1 });
       gamePage.expectNoConsoleErrors();
-      await testInfo.attach(`pitch-${width}-geometry.json`, { body: JSON.stringify({ pool, beforeFocus, afterFocus, before, afterTaps, focused }, null, 2),
+      await testInfo.attach(`pitch-${width}-geometry.json`, { body: JSON.stringify({ pool, beforeFocus, afterFocus, reveals, before, afterTaps, focused }, null, 2),
         contentType: "application/json" });
       await page.screenshot({ path: testInfo.outputPath(`pitch-${width}.png`), fullPage: true });
     });

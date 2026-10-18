@@ -47,13 +47,16 @@ test("opening watch resumes saved decisions through real browser reloads", async
 
   await checkpointAndReload(page);
   await expect(page.getByRole("button", { name: "Watch the match", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: /^Focus targets and lenses/ }).click();
-  const focusSheet = page.getByRole("dialog", { name: "Choose your focus" });
-  await focusSheet.getByRole("button", { name: /^Use technical lens for / }).click();
-  await expect(focusSheet.getByLabel(/^technical observation lens locked for /)).toBeVisible();
-  await focusSheet.getByRole("button", { name: "Close focus controls" }).click();
+  await page.getByRole("button", { name: /^Use technical lens for / }).click();
+  await expect(page.getByRole("button", { name: /^Remove focus from / }).first()).toBeVisible();
+  // A generated first passage may already offer a useful moment. Preserve the
+  // actual guide instruction instead of assuming the scout must wait for one.
+  const mentorBeforeReload = page.getByRole("complementary", { name: /^Mentor: / });
+  await expect(mentorBeforeReload).toBeVisible();
+  const mentorLabel = await mentorBeforeReload.getAttribute("aria-label");
+  expect(mentorLabel).toMatch(/^Mentor: /);
   await checkpointAndReload(page);
-  const resumedMentor = page.getByLabel("Mentor: Keep watching", { exact: true });
+  const resumedMentor = page.getByLabel(mentorLabel!, { exact: true });
   await expect(resumedMentor).toBeVisible();
   // Resizing can capture a frame before the mentor has remeasured its target.
   // Require the actual settled panel to fit before saving visual evidence.
@@ -73,7 +76,9 @@ test("opening watch resumes saved decisions through real browser reloads", async
 
   const controls = page.getByTestId("mobile-observation-controls");
   await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  await page.getByRole("button", { name: "Flag standout moment", exact: true }).click();
+  // Any observed passage can be saved; the generated opening need not contain
+  // an exceptional performance to test durable scouting decisions.
+  await page.locator('[data-tutorial-id="observation-flag-moment"]:visible').first().click();
   await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').click();
   await page.getByRole("button", { name: /^Confirm the first read\b/ }).click();
   await checkpointAndReload(page);
@@ -84,7 +89,7 @@ test("opening watch resumes saved decisions through real browser reloads", async
   })).toEqual({ phase: 1, approach: "confirm", reaction: "promising" });
 
   await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  await controls.getByRole("button", { name: "Reflect", exact: true }).click();
+  await controls.getByRole("button", { name: "Reflect on the watch", exact: true }).click();
   await checkpointAndReload(page);
   const interpretation = page.getByRole("group", { name: "What did this passage show?" });
   await expect(interpretation).toBeVisible();

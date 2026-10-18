@@ -22,6 +22,11 @@
   --border: #29313a;
   --ring: #d4a843;
   --radius: 0.75rem;
+  --surface: var(--card);
+  --surface-elevated: var(--muted);
+  --surface-interactive: var(--secondary);
+  --surface-selected: #28271e;
+  --surface-overlay: var(--background);
   --text-eyebrow: 0.75rem;
   --text-meta: 0.8125rem;
   --text-ui: 0.875rem;
@@ -31,6 +36,28 @@
   --signal-warn: #e07a3d;
   --signal-danger: #c44b6a;
   --signal-general: #aeb7c2;
+}
+
+/* Shared football editorial vocabulary. Layout, rather than nested cards,
+   separates the subject, the evidence and the decision. */
+.font-editorial { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.dossier-eyebrow { color: var(--muted-foreground); font-size: .75rem; font-weight: 600; line-height: 1.4; letter-spacing: .14em; text-transform: uppercase; }
+.dossier-section { padding-block: 1.5rem; border-top: 1px solid var(--border); }
+/* Solid reading surfaces keep scene art from competing with evidence and controls. */
+.dossier-panel { background: var(--surface); border-block: 1px solid var(--border); }
+.dossier-choice { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-overlay); color: var(--foreground); }
+.dossier-choice:hover { border-color: var(--primary); }
+.dossier-choice[data-selected="true"] { border-color: var(--primary); background: var(--surface-selected); box-shadow: inset 0 -3px 0 var(--primary); }
+.dossier-choice:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
+.dossier-title { font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.75rem, 2.5vw, 2.5rem); line-height: 1.12; font-weight: 400; letter-spacing: -.025em; }
+.game-workspace { margin-inline: auto; max-width: 1480px; padding: 1.5rem clamp(1rem, 3vw, 3rem) 3rem; }
+.game-workspace :where(h1, h2, h3) { text-wrap: balance; }
+.game-workspace :where(p) { overflow-wrap: break-word; }
+
+@media (max-width: 639px) {
+  .game-workspace { padding-top: .75rem; }
+  #game-main :where(button, [role="button"]) { min-height: 2.75rem; min-width: 2.75rem; }
+  .game-workspace :where(select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"])) { min-height: 2.75rem; }
 }
 
 .text-eyebrow {
@@ -51,10 +78,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  background-image:
-    radial-gradient(circle at 85% -10%, rgba(212, 168, 67, 0.08), transparent 32rem),
-    linear-gradient(180deg, #0b1220 0%, #0a1628 100%);
-  background-attachment: fixed;
+  background-image: none;
   text-rendering: optimizeLegibility;
 }
 

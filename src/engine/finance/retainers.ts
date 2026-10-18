@@ -4,6 +4,7 @@
  */
 
 import type { RNG } from "../rng/index";
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type {
   FinancialRecord,
   RetainerContract,
@@ -449,9 +450,10 @@ export function closeRetainerPeriod(
 export function recordRetainerDelivery(
   finances: FinancialRecord,
   clubId: string,
-  report?: Pick<ScoutReport, "id" | "qualityScore">,
+  report?: Pick<ScoutReport, "id" | "qualityScore" | "decisionReceipt">,
   player?: Pick<Player, "position" | "age">,
 ): FinancialRecord {
+  if (report && isPrivateScoutingDecision(report)) return finances;
   const updatedContracts = finances.retainerContracts.map((c) => {
     if (c.clubId === clubId && (c.status === "active" || c.status === "suspended")) {
       if (!isValidYouthRetainerBrief(c.brief) || !report || !player) return c;

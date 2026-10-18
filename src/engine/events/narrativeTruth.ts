@@ -137,6 +137,7 @@ function recommendationCallbackSignals(state: GameState, calendar: GameCalendarI
   return Object.values(state.recommendationReviews ?? {}).flatMap((review) => {
     if (
       review.status !== "complete"
+      || review.origin === "decision"
       || review.completedWeek === undefined
       || review.completedSeason === undefined
     ) return [];
@@ -162,7 +163,7 @@ function recommendationCallbackSignals(state: GameState, calendar: GameCalendarI
       evidence: {
         source: "recommendation-review" as const,
         sourceId: review.id,
-        relatedIds: [review.playerId, review.clubId, review.caseId, review.reportId],
+        relatedIds: [review.playerId, ...(review.clubId ? [review.clubId] : []), review.caseId, review.reportId],
         context: { playerName: name },
       },
       narrativeType: "reportCitedInBoardMeeting" as const,

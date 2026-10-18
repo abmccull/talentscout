@@ -17,6 +17,18 @@ function state(): GameState {
 }
 const rejectRng = { chance: () => false } as unknown as RNG;
 describe("earned client acquisition", () => {
+  it("keeps private receipts out of showcases while retaining legacy professional reports", () => {
+    const initial = state();
+    initial.reports.report = { id: "report", scoutId: "scout", qualityScore: 90, submittedWeek: 1, submittedSeason: 1,
+      recommendedAction: "monitor", decisionReceipt: { id: "private-receipt", action: "pass" },
+    } as unknown as ScoutReport;
+    expect(getClientPitchEligibility(initial, club.id, "showcase").eligible).toBe(false);
+    expect(attemptClientPitch(initial, club.id, "showcase", { chance: () => { throw new Error("private report must not be pitched"); } } as unknown as RNG)).toBe(initial);
+    initial.reports.report = { id: "legacy-report", scoutId: "scout", qualityScore: 90,
+      submittedWeek: 1, submittedSeason: 1, recommendedAction: "pass" } as ScoutReport;
+    expect(getClientPitchEligibility(initial, club.id, "showcase").eligible).toBe(true);
+  });
+
   it("charges one unsuccessful attempt and persists the cooldown across reload and season rollover", () => {
     const initial = state();
     const first = attemptClientPitch(initial, club.id, "coldCall", rejectRng);

@@ -1,8 +1,9 @@
-import type { PlayerAttribute } from "@/engine/core/types";
+import type { EvidenceClassificationId, PlayerAttribute } from "@/engine/core/types";
 import type { PlayerMoment } from "./types";
 
 export interface FootballAction {
   id: string;
+  classifications: readonly EvidenceClassificationId[];
   momentType: PlayerMoment["momentType"];
   attributes: PlayerAttribute[];
   outfieldOnly: boolean;
@@ -12,11 +13,90 @@ export interface FootballAction {
   outcomes: { high: string; medium: string; low: string };
 }
 
+const ACTION_CLASSIFICATIONS: Record<string, readonly EvidenceClassificationId[]> = {
+  "receive": [
+    "technicalExecution"
+  ],
+  "pass": [
+    "technicalExecution"
+  ],
+  "dribble": [
+    "technicalExecution"
+  ],
+  "cross": [
+    "technicalExecution"
+  ],
+  "distance-shot": [
+    "technicalExecution"
+  ],
+  "finish": [
+    "technicalExecution"
+  ],
+  "header": [
+    "technicalExecution"
+  ],
+  "tackle": [
+    "technicalExecution"
+  ],
+  "chase": [
+    "physicalExecution"
+  ],
+  "shield": [
+    "physicalExecution"
+  ],
+  "repeat-run": [
+    "physicalRepeatability",
+    "physicalExecution"
+  ],
+  "turn": [
+    "physicalExecution"
+  ],
+  "leap": [
+    "physicalExecution"
+  ],
+  "recover-balance": [
+    "physicalExecution"
+  ],
+  "composed-release": [
+    "pressureResponse"
+  ],
+  "choose-outlet": [
+    "decisionMaking"
+  ],
+  "read-bounce": [
+    "offBallMovement"
+  ],
+  "cover-angle": [
+    "defensiveReading"
+  ],
+  "recover-effort": [],
+  "organise": [],
+  "support-run": [
+    "offBallMovement"
+  ],
+  "press-angle": [
+    "defensiveReading",
+    "offBallMovement"
+  ],
+  "cover-runner": [
+    "defensiveReading"
+  ],
+  "spot-route": [],
+  "track-mark": [
+    "defensiveReading"
+  ],
+  "coordinate-cover": [
+    "offBallMovement"
+  ],
+  "reset-after-error": [],
+  "respond-to-feedback": []
+};
+
 function action(
   id: string, momentType: FootballAction["momentType"], attributes: PlayerAttribute[],
   high: string, medium: string, low: string, outfieldOnly = false, requiresPressure = false,
 ): FootballAction {
-  return { id, momentType, attributes, outfieldOnly, requiresPressure, outcomes: { high, medium, low } };
+  return { id, classifications: ACTION_CLASSIFICATIONS[id] ?? [], momentType, attributes, outfieldOnly, requiresPressure, outcomes: { high, medium, low } };
 }
 
 /** Observable actions own their evidence. A single episode never diagnoses a personality or injury trait. */

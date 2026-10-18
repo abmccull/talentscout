@@ -43,7 +43,11 @@ export function WeeklyStrategyPanel({
       contentClassName="space-y-4"
       data-testid="weekly-strategy-panel"
     >
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div
+        role="region"
+        aria-labelledby="weekly-strategy-heading"
+        className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+      >
         <div>
           <div className="flex items-center gap-2">
             <Compass size={17} className="text-violet-300" aria-hidden="true" />

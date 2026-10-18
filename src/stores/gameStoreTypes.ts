@@ -224,6 +224,8 @@ export interface GameStoreState {
   saveSyncStatus: PersistentCloudSyncStatus;
   isSaving: boolean;
   isLoadingSave: boolean;
+  /** Transient owner of a slot load, recovery restore, or conflict resolution. */
+  activeSaveLoadId: number | null;
   saveConflict: SaveConflictState | null;
   isResolvingSaveConflict: boolean;
   autosaveStatus: "idle" | "pending" | "saved" | "error";
@@ -270,6 +272,8 @@ export interface GameStoreState {
   advanceWeek: () => void;
   advanceWeekAsync: () => Promise<"committed" | "cancelled" | "failed" | "skipped">;
   isAdvancingWeek: boolean;
+  /** Transient invocation ownership; never included in persisted GameState. */
+  activeWeeklyTransactionId: number | null;
   lastWeeklyExecutionRoute: "worker" | "main-thread-fallback" | null;
   lastWeeklyWorkerTelemetry: WeeklyWorkerTelemetry | null;
   weeklyTransactionError: string | null;
@@ -333,7 +337,7 @@ export interface GameStoreState {
   selectDataPoint: (pointId: string) => void;
   selectStrategicChoice: (choiceId: string) => void;
   addSessionNote: (note: string) => void;
-  endObservationSession: () => void;
+  endObservationSession: (options?: { discard?: boolean }) => void;
   resolveOpeningDiscoveryChoice: (choiceId: OpeningCaseChoiceId) => void;
 
   useInsight: (actionId: InsightActionId) => boolean;

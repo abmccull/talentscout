@@ -28,7 +28,7 @@ import {
   resetModData,
   getModdedKeys,
 } from "@/lib/modLoader";
-import { supabase } from "@/lib/supabase";
+import { SUPABASE_CONFIGURED } from "@/lib/supabaseConfiguration";
 import { getLastCloudSyncStatus } from "@/lib/saveProvider";
 import { getCountryData, getAvailableCountries } from "@/data/index";
 import { SaveLoadModal } from "./SaveLoadModal";
@@ -139,7 +139,7 @@ export function SettingsScreen() {
       .map((save) => save.slot),
   );
   const unsupportedSaveCount = allManualSaves.length - manualSaves.length;
-  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
+  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && SUPABASE_CONFIGURED;
   const feedbackSubmissionAvailable = isFeedbackSubmissionAvailable();
 
   const handleSave = async (slot: number) => {
@@ -192,7 +192,7 @@ export function SettingsScreen() {
         data-testid="settings-screen"
       >
         <div className="flex items-center justify-between gap-3">
-          <h1 id="settings-title" className="text-2xl font-bold">Settings</h1>
+          <h1 id="settings-title" className="dossier-title">Settings</h1>
           <Button
             variant="outline"
             size="sm"
@@ -208,20 +208,20 @@ export function SettingsScreen() {
 
         {hasActiveCareer ? (
         <>
-        <Card>
+        <Card className="dossier-panel rounded-none">
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <User size={18} className="text-emerald-500" aria-hidden="true" />
+              <User size={18} className="text-[var(--primary)]" aria-hidden="true" />
               Account
             </h2>
           </CardHeader>
           <CardContent className="space-y-4">
             {!cloudAuthAvailable ? (
-              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+              <div className="rounded-sm border border-[var(--border)] bg-[var(--surface-overlay)] px-3 py-3">
                 <p className="text-sm font-medium text-white">
                   {BETA_CLOUD_SAVES_ENABLED
                     ? "Cloud account unavailable"
-                    : "Cloud saves unavailable in this build"}
+                    : "Account cloud saves are unavailable"}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-400">
                   {BETA_CLOUD_SAVES_ENABLED
@@ -230,7 +230,7 @@ export function SettingsScreen() {
                 </p>
               </div>
             ) : isAuthLoading ? (
-              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+              <div className="rounded-sm border border-[var(--border)] bg-[var(--surface-overlay)] px-3 py-3">
                 <p className="text-sm font-medium text-white">
                   Checking account...
                 </p>
@@ -262,7 +262,7 @@ export function SettingsScreen() {
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+                <div className="flex items-center justify-between gap-3 rounded-sm border border-[var(--border)] bg-[var(--surface-overlay)] px-3 py-3">
                   <div>
                     <p className="text-sm font-medium">Cloud Save Sync</p>
                     <p className="text-xs text-zinc-400">
@@ -282,7 +282,7 @@ export function SettingsScreen() {
                   />
                 </div>
 
-                <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+                <div className="rounded-sm border border-[var(--border)] bg-[var(--surface-overlay)] px-3 py-3">
                   <p className="text-sm font-medium text-white">
                     {cloudSaveEnabled
                       ? saveSyncStatus.pendingCount > 0
@@ -318,7 +318,7 @@ export function SettingsScreen() {
                 </div>
               </>
             ) : (
-              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+              <div className="rounded-sm border border-[var(--border)] bg-[var(--surface-overlay)] px-3 py-3">
                 <p className="text-sm font-medium text-white">
                   Sign in to connect cloud saves
                 </p>
@@ -343,10 +343,10 @@ export function SettingsScreen() {
         </Card>
 
 
-        <Card>
+        <Card className="dossier-panel rounded-none">
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <Download size={18} className="text-emerald-500" aria-hidden="true" />
+              <Download size={18} className="text-[var(--primary)]" aria-hidden="true" />
               Data Mods
             </h2>
           </CardHeader>
@@ -440,7 +440,7 @@ export function SettingsScreen() {
             )}
 
             {moddedKeys.length > 0 && (
-              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
+              <div className="rounded-sm border border-[var(--border)] bg-[var(--surface-overlay)] p-3">
                 <p className="mb-1 text-xs font-medium text-zinc-300">
                   Active Mods
                 </p>
@@ -456,10 +456,10 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dossier-panel rounded-none">
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
-              <Save size={18} className="text-emerald-500" aria-hidden="true" />
+              <Save size={18} className="text-[var(--primary)]" aria-hidden="true" />
               Saves
             </h2>
           </CardHeader>
@@ -533,12 +533,12 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dossier-panel rounded-none">
           <CardHeader>
             <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               <MessageSquarePlus
                 size={18}
-                className="text-emerald-500"
+                className="text-[var(--primary)]"
                 aria-hidden="true"
               />
               Feedback &amp; Support
@@ -548,7 +548,7 @@ export function SettingsScreen() {
             <p className="text-xs text-zinc-400">
               {feedbackSubmissionAvailable
                 ? "Found a bug? Have a suggestion? We'd love to hear from you."
-                : "Offline mode opens a pre-filled email draft so feedback is never submitted to a dead endpoint."}
+                : "Open an email draft with your feedback. You can review it before sending."}
             </p>
             <Button
               variant="outline"
@@ -561,7 +561,7 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dossier-panel rounded-none">
           <CardContent className="p-4">
             <Button
               variant="outline"

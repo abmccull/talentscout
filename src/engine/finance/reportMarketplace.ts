@@ -6,6 +6,7 @@
  */
 
 import { isSubmissionAccuracy } from "@/engine/scout/accuracyHistory";
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type { RNG } from "../rng/index";
 import type {
   FinancialRecord,
@@ -372,13 +373,13 @@ export function listReport(
 }
 
 /** A structured report needs an evidenced finding before clubs bid for it. */
-export function hasReportBuyerEvidence(report: Pick<ScoutReport, "evidenceAssessment">): boolean {
-  return !report.evidenceAssessment
-    || (report.evidenceAssessment.claims ?? []).some((claim) => claim.support === "supported");
+export function hasReportBuyerEvidence(report: Pick<ScoutReport, "evidenceAssessment" | "decisionReceipt">): boolean {
+  return !isPrivateScoutingDecision(report) && (!report.evidenceAssessment
+    || (report.evidenceAssessment.claims ?? []).some((claim) => claim.support === "supported"));
 }
 
 /** Monitoring remains private by default; the scout may still explicitly list it. */
-export function shouldPromptReportListing(report: Pick<ScoutReport, "evidenceAssessment" | "recommendedAction">): boolean {
+export function shouldPromptReportListing(report: Pick<ScoutReport, "evidenceAssessment" | "recommendedAction" | "decisionReceipt">): boolean {
   return report.recommendedAction !== "monitor" && hasReportBuyerEvidence(report);
 }
 
@@ -487,7 +488,7 @@ function generateBidsForListing(
   // Determine candidate clubs
   const candidateClubs = listing.targetClubId
     ? [clubs[listing.targetClubId]].filter(Boolean) as Club[]
-    : Object.values(clubs).filter((c) => getClubScoutingBudget(c) >= listing.price * 0.5);
+    : Object.values(clubs);
   const scoredCandidates = candidateClubs.filter((club) =>
     !previousBuyerIds.has(club.id) && getClubScoutingBudget(club) >= 50
   ).map((club) => ({
@@ -530,7 +531,11 @@ function generateBidsForListing(
 
     // Bid probability
     const availableScoutingBudget = getClubScoutingBudget(club);
-    const affordability = Math.min(1, availableScoutingBudget / (listing.price * 5));
+    // A seller can negotiate below assessed value, but raising the ask cannot
+    // increase the club's valuation or hide a sensible first counteroffer.
+    const assessedValue = calculateReportPrice(report, scout, club, listing.isExclusive, marketTemperature);
+    const negotiationBase = Math.min(listing.price, assessedValue);
+    const affordability = Math.min(1, availableScoutingBudget / (negotiationBase * 5));
     const scoutRep = Math.max(0.1, scout.reputation / 100);
     const marketTemp = scout.careerPath === "independent"
       ? ({ hot: 1.3, normal: 1.0, cold: 0.7, deadline: 1.5 } as Record<MarketTemperature, number>)[marketTemperature]
@@ -561,14 +566,18 @@ function generateBidsForListing(
     const repeatBuyerMult = 1.0 + Math.min(10, reportsDelivered) * 0.03;
 
     let amount = Math.round(
-      listing.price * needMult * budgetMult * priorityMult * competitionMult
+      negotiationBase * needMult * budgetMult * priorityMult * competitionMult
       * repeatBuyerMult * accuracyMult * noise * marketContext.valueMultiplier,
     );
+    // Preserve bargaining premiums within a ceiling based on report quality,
+    // scout reputation, club level, market context and the procurement budget.
+    const reservationValue = Math.min(availableScoutingBudget,
+      Math.round(assessedValue * 2.5 * marketContext.valueMultiplier));
     amount = Math.max(
-      Math.round(listing.price * 0.6 * marketContext.valueMultiplier),
-      Math.min(Math.round(listing.price * 2.5 * marketContext.valueMultiplier), amount),
+      Math.round(negotiationBase * 0.6 * marketContext.valueMultiplier),
+      Math.min(reservationValue, Math.round(negotiationBase * 2.5 * marketContext.valueMultiplier), amount),
     );
-    amount = Math.min(availableScoutingBudget, amount);
+    amount = Math.min(reservationValue, isGuaranteedFirstBid ? Math.max(50, amount) : amount);
     if (amount < 50) continue;
 
     const bidDurationWeeks = rng.nextInt(2, 3);
@@ -592,6 +601,7 @@ function generateBidsForListing(
     if (competitionMult > 1.0) reasons.push(`${listing.bids.filter((b) => b.status === "pending").length} competing bids`);
     if (marketContext.valueMultiplier > 1.01) reasons.push("strong seasonal demand");
     if (marketContext.valueMultiplier < 0.99) reasons.push("cautious seasonal market");
+    if (listing.price > assessedValue) reasons.push("asking price exceeds assessed report value");
     const bidReason = reasons.join(" · ");
 
     const bid: MarketplaceBid = {
@@ -618,7 +628,7 @@ function generateBidsForListing(
       season,
       type: "marketplaceBid",
       title: `Bid from ${club.name}`,
-      body: `${club.name} has placed a bid of £${amount.toLocaleString()} on your report.\nThey have a ${positionNeed} need at ${player?.position ?? "this position"} and appear ${interestLevel}.\nThe bid expires in ${bidDurationWeeks} week${bidDurationWeeks > 1 ? "s" : ""}.`,
+      body: `${club.name} has ${amount < listing.price ? "made a counteroffer" : "placed a bid"} of £${amount.toLocaleString()} on your report.\nThey have a ${positionNeed} need at ${player?.position ?? "this position"} and appear ${interestLevel}.\nThe bid expires in ${bidDurationWeeks} week${bidDurationWeeks > 1 ? "s" : ""}.`,
       read: false,
       actionRequired: true,
       relatedId: bid.id,
@@ -649,10 +659,12 @@ function generateBidsForListing(
         // 8% base chance
         if (!rng.chance(Math.min(0.16, 0.08 * marketContext.demandMultiplier))) continue;
 
-        // Upgrade price: 2-3x the listing price
+        // Apply the exclusivity premium to independently assessed nonexclusive
+        // value, so an arbitrary asking price cannot inflate an upgrade offer.
         const upgradeMult = 2.0 + rng.next(); // 2.0 - 3.0
+        const assessedValue = calculateReportPrice(report, scout, club, false, marketTemperature);
         const upgradeAmount = Math.min(getClubScoutingBudget(club), Math.round(
-          listing.price * upgradeMult * marketContext.valueMultiplier,
+          Math.min(listing.price, assessedValue) * upgradeMult * marketContext.valueMultiplier,
         ));
         if (upgradeAmount < 50) continue;
         const bidDurationWeeks = rng.nextInt(2, 3);

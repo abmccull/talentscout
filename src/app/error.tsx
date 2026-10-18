@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { captureException } from "@/lib/deferredErrorReporting";
+import { reportRendererError as captureException } from "@/lib/reportRendererError";
 
 export default function Error({
   error,

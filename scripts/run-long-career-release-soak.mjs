@@ -1,3 +1,4 @@
+import { assertNoSupportingDiagnostics } from "./supporting-diagnostic-isolation.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
@@ -59,6 +60,7 @@ if (!Number.isInteger(maxSerializedBytes) || maxSerializedBytes <= 0) {
   throw new Error("SOAK_MAX_SERIALIZED_BYTES must be positive");
 }
 
+assertNoSupportingDiagnostics();
 const loadedArtifactProfile = await loadArtifactProfile();
 const artifactProfile = loadedArtifactProfile.profile;
 if (!Number.isSafeInteger(seedCount) || !Number.isSafeInteger(seedStart)

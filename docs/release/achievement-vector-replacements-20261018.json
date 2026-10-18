@@ -1,0 +1,407 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "project-authored-asset-replacement",
+  "status": "pass",
+  "reviewedAt": "2026-10-18",
+  "sourceReviewOnly": true,
+  "packageAcceptance": false,
+  "commercialReleaseApproved": false,
+  "scope": "Exactly 28 explicitly replaced text-bearing Steam achievement PNGs; no other media replacement",
+  "sourceParents": [
+    "2364cbfbdf694784a31aae193f867b84df33d3a9",
+    "70cc6232ce4b8492053f85eea4862ea3f27b9a91"
+  ],
+  "priorLedgerSha256": "6f917c99a049ef2c6362efa4d2af278a3970687d9566ee1729185a8b96ecdc99",
+  "priorGeneratorSha256": "dbe959a7d72700af512fb80210551d938511f1b826a3cf7c236f52338b3df52c",
+  "generator": {
+    "path": "scripts/generate-achievement-icons.mjs",
+    "sha256": "332d4c43c1773d7a02c706d2e5ca71ff813f2a9bf5ec5c6bf3c54a6934892601"
+  },
+  "authorship": "Eight basic geometric numeral/multiplication shapes authored directly as SVG path instructions for this project by Codex. No font outlines, font tracing, downloaded fonts, or third-party artwork are used.",
+  "glyphs": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "7",
+    "×"
+  ],
+  "preserved": "Existing achievement IDs, labels, geometry, palette, position, baseline and PNG pipeline. Every changed pixel lies inside its original text-label area; the other 110 PNGs remain exact.",
+  "visualReview": {
+    "reviewers": [
+      "Lead asset reviewer",
+      "Independent UI reviewer"
+    ],
+    "result": "All 14 unlocked/locked pairs inspected at 64px; representative pairs also inspected at 256px. No clipping, symbol collision, unreadable numeral or change of meaning found.",
+    "previewSha256": [
+      {
+        "path": "preview/before-64px.png",
+        "sha256": "1981eec69699bc3675a60b3979ba3f6cae860bc9670f5f977de2af36471b1bf2"
+      },
+      {
+        "path": "preview/after-64px.png",
+        "sha256": "9a315cb28d00a94a5e4a7dbd75835ae09c2daa8fb3a1030799cf554ed46695b3"
+      },
+      {
+        "path": "preview/before-after-256px.png",
+        "sha256": "a594ff87ee30bfd0f5d6d7d56498163b9d624e038fdf281a4f618bbdba4627d6"
+      }
+    ]
+  },
+  "reproduction": {
+    "freshClone": true,
+    "fixtureCommit": "b7a4ea3fe62c6778bff025247c041287f219570b",
+    "sourceBlobSha256": "332d4c43c1773d7a02c706d2e5ca71ff813f2a9bf5ec5c6bf3c54a6934892601",
+    "fontconfig": "Explicit empty configuration; no system fonts are included",
+    "usesInstalledPinnedRenderer": true,
+    "freshDependencyInstall": false,
+    "node": "v22.14.0",
+    "sharp": {
+      "aom": "3.15.1",
+      "archive": "3.8.9",
+      "cairo": "1.18.6",
+      "cgif": "0.5.4",
+      "exif": "0.6.26",
+      "expat": "2.8.5",
+      "ffi": "3.8.0",
+      "fontconfig": "2.18.3",
+      "freetype": "2.14.3",
+      "fribidi": "1.0.17",
+      "glib": "2.90.0",
+      "harfbuzz": "14.5.0",
+      "heif": "1.23.5",
+      "highway": "1.4.0",
+      "imagequant": "2.4.1",
+      "lcms": "2.19.1",
+      "mozjpeg": "0826579",
+      "pango": "1.58.2",
+      "pixman": "0.46.4",
+      "png": "1.6.58",
+      "proxy-libintl": "0.5",
+      "rsvg": "2.63.2",
+      "tiff": "4.7.2",
+      "uhdr": "2.0.2",
+      "vips": "8.18.7",
+      "webp": "1.6.0",
+      "xml2": "2.15.4",
+      "zlib-ng": "2.3.3",
+      "sharp": "0.35.5"
+    },
+    "outputsMatched": 138,
+    "stdout": "Generated 69 achievement icons (138 PNG files) in C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\production-ready-20260930\\release-completion-20261018\\proposals\\achievement-glyphs\\fresh-clone\\build\\achievements",
+    "stderr": ""
+  },
+  "verificationRecordSha256": "a123828919cb48066698021fd6861f2329e024fb19f632436ec217a37625c612",
+  "replacements": [
+    {
+      "path": "build/achievements/MATCHES_100.png",
+      "sourceSha256": "d2cdfa109a07ae7eff60268a16123a7b9223c105a259c603d97a2442cf7eab89",
+      "sha256": "c3f504f03ce374258ad5fccd73f96470f804f8efff98c3fb99a3553b68e25e15",
+      "bytes": 9116,
+      "label": "100",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/MATCHES_100_locked.png",
+      "sourceSha256": "62ee13baabe7942125bdc96a325c3314c370a1ff002060338ea7f4b5ce2af419",
+      "sha256": "290b64bbbbf9826a81c04703119aa988102857a391834b7ffc9f1b3b3e5aa7db",
+      "bytes": 9243,
+      "label": "100",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/MATCHES_25.png",
+      "sourceSha256": "369032873b4bbe93ceccf145e823b5869b353ba24c4617d6b182e83d28617e8b",
+      "sha256": "eaec04a091b817abb39353bb32332372319c9a63f835d5233b01d168e79c3b28",
+      "bytes": 8979,
+      "label": "25",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/MATCHES_25_locked.png",
+      "sourceSha256": "1d4995616693e6e7c18a2642ce1a6d70818efe3f13d02d7a65e4f2067567ca2f",
+      "sha256": "70962290142e35d2d9d35f61abb5b2e41cc6065d9627b66a05fd18dfbfb621bf",
+      "bytes": 9084,
+      "label": "25",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/MATCHES_50.png",
+      "sourceSha256": "4c3dd62c323289586a606d899f3c62f5e57fbd06c6b6a331d324ad92723f91b8",
+      "sha256": "57b50dae100ad526ecc678f9123461012dbdce631baafd6bf3f42ca8845fd576",
+      "bytes": 9004,
+      "label": "50",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/MATCHES_50_locked.png",
+      "sourceSha256": "3e9e5effb8efa98880ca9d340b144284585a7b8184ef16155bbd18496208190c",
+      "sha256": "75a3b9738d54ba412d5062aaa1b423b1da25578500576bf806c7f1f1f7aa4327",
+      "bytes": 9139,
+      "label": "50",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REACH_TIER_2.png",
+      "sourceSha256": "975ff90fa6007cd05e656ac5572c66ebb37d49400d098cab8b5879a087c8ef71",
+      "sha256": "2b5ebe8132a01dfd1325c00266a96728a5844b22599a491517aef5f4255c747e",
+      "bytes": 7074,
+      "label": "2",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REACH_TIER_2_locked.png",
+      "sourceSha256": "cd141549bd639679b0ca0d2a74b57c9d2a034a6790b9f04f73ac7aaf2739b278",
+      "sha256": "8df0873eb65b7b40920bd1c148e83dc99e649c13fc7709b8236e426346f5e86f",
+      "bytes": 7260,
+      "label": "2",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REACH_TIER_3.png",
+      "sourceSha256": "3143545a1efd385e1ef3186618118f174992b5c2f75c29d9c9a12854c10d3752",
+      "sha256": "e168f22f1ec127a003936a344dc5508d3aa8cb651f582c9acb83bf20eda18409",
+      "bytes": 7094,
+      "label": "3",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REACH_TIER_3_locked.png",
+      "sourceSha256": "623264c5c31712964a16badbdaada86eee1bad98936dca8854f5cfc69eec751d",
+      "sha256": "f44bee801a2f0aec4853eb02f7dddaa699113d5465df60325b6fad9ef126cd16",
+      "bytes": 7306,
+      "label": "3",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REACH_TIER_4.png",
+      "sourceSha256": "2a9b62d3b64292cf9fd6400cacec37a79ff9d49b2f7311a38028d8c6a42c81bf",
+      "sha256": "51cef645a5aeecec3c1120b0b0e575a90edabc91992e1ce7aa9488e2cb4a1364",
+      "bytes": 6930,
+      "label": "4",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REACH_TIER_4_locked.png",
+      "sourceSha256": "e47a2896d05ff8d99cafeada460fc38ea31d1b3d3bb5a4618a7a5471815f8d1d",
+      "sha256": "e9af60c282c63c63b52b60cc0c4f65e2ba0263ad814e4bf3f19bf86bc2488337",
+      "bytes": 7136,
+      "label": "4",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REP_100.png",
+      "sourceSha256": "e2bb5eb2854e9debd799d987eb2993e3cf8a9acbb88af15b004feb630eb8a7f0",
+      "sha256": "9ab71f04b1094fb5c85ff8f2a4d4d44753ef08ddf9bf5c8949a24c8e33cc7cef",
+      "bytes": 8284,
+      "label": "100",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REP_100_locked.png",
+      "sourceSha256": "9aa6c31a871c3b7d6e98f4f74c8989f90cdc8c5238ba23cf9218e61934ebd166",
+      "sha256": "1e7d59bb84ecb1a8f05a5bb0f27af40858a123e385b95d70e5260ef2dca24cd2",
+      "bytes": 8500,
+      "label": "100",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REP_75.png",
+      "sourceSha256": "bff4a128a46db5670d0636fdfac03b650e12e707d26b70a253be40f92c9cfa61",
+      "sha256": "fb825b878f9c4bb8b34cc13e8a93edd73fece5b3e300eee224001aacba0891b4",
+      "bytes": 7953,
+      "label": "75",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REP_75_locked.png",
+      "sourceSha256": "51bb7376396d2e42825c81683b432566ecd1b10e098c55d5ee132a4ead2c3ede",
+      "sha256": "1ea700dbdfbce3184ffdb85fba240b7a0747d3571ed3734e3df9e0e9f438ac8a",
+      "bytes": 8163,
+      "label": "75",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REPORTS_100.png",
+      "sourceSha256": "ee94e18bd8782ebbbf8f6aff1fa071bb45c76cd0906d06818c0a97156e131e63",
+      "sha256": "fd4d094114cb8cd5698624af3a0269e52c2b79af97fa5890bc454942a60d6598",
+      "bytes": 7503,
+      "label": "100",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REPORTS_100_locked.png",
+      "sourceSha256": "cb310a32d8d066f74a7b2ce933b1e193c83e51df165ff2e1b493ff2cd76d7a85",
+      "sha256": "3df6a653c07431296e676f5f630570601456a00c0a5698cb1d980396ecc1c3b0",
+      "bytes": 7787,
+      "label": "100",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REPORTS_25.png",
+      "sourceSha256": "e1d5f1b39c24947995f0337c7bf2b761d52bbc9920020e6879d0965b9fdc17e2",
+      "sha256": "6bc140c77db577ff10ab83a1f9c09d425ed0c73132daa75b3c337284c6937d2d",
+      "bytes": 7949,
+      "label": "25",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REPORTS_25_locked.png",
+      "sourceSha256": "87f871c1651cb703fcc246804c9e0eddc469d1dbb18970cd08db93d39d2b0423",
+      "sha256": "d861c8966571082b747d58d06a2f44d4eed8b981c246cb45d263da0dbc8942b9",
+      "bytes": 8217,
+      "label": "25",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REPORTS_50.png",
+      "sourceSha256": "2980cca547750df59e4c4db1eb145b52e5a3e2dea57fac18589ea0e50268e9df",
+      "sha256": "4ad5bd42221a9591616cd3d89e5aad3e369ae8067b08878af7e8beb9919a90bb",
+      "bytes": 7602,
+      "label": "50",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/REPORTS_50_locked.png",
+      "sourceSha256": "8cbd5c6973e7bb0007e1cf15442acd23d776c6e73a0923f4b83e7e75c15007b9",
+      "sha256": "5b82a3f2dcc24bfd96b73d76b63f6297b73a31121958a91aa057942d9f629873",
+      "bytes": 7792,
+      "label": "50",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/SEASON_10.png",
+      "sourceSha256": "072061cb6c649a2e188e7599fc1906d1c359f46f52b5abe672b70398b6efa53e",
+      "sha256": "0b385fc0be6e358574cc257a3c210046c71e761236cbd2e1b187f06fc2697e43",
+      "bytes": 9291,
+      "label": "10",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/SEASON_10_locked.png",
+      "sourceSha256": "9aaed0bdd6bfd9ee2847954acc8cee6b2283adc3bc1c0f04681d03403db4b5a7",
+      "sha256": "60faf0b397e56a06084b7bb61e45be127cb6533c91b1748421396cbfb5b12654",
+      "bytes": 9402,
+      "label": "10",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/SEASON_5.png",
+      "sourceSha256": "6854a658bcf60422e52ae3ad5e447a98e9c78f728f4a5bd093a75ebcc26a30b4",
+      "sha256": "77cb792c7c0cdc335f02f37f9562149e5641639b89b596d82fccb49bc070b173",
+      "bytes": 9742,
+      "label": "5",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/SEASON_5_locked.png",
+      "sourceSha256": "a82c3b61a5e6b3eb62c0e6bf9e97ac6d655a340541abc779273dda3c541c6f0e",
+      "sha256": "626dacec32118a8b30d0a4c2001809644a2f0b6ed501f8ead9531f106c3078a4",
+      "bytes": 9681,
+      "label": "5",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/TRIPLE_STORYLINE.png",
+      "sourceSha256": "84caab9f4917624e2aef235aca84ed2de173a308f2f5e498469919f996abb91c",
+      "sha256": "91c2b817f7a6937d7ff3d5187ff376ee16fab764d1ffbab2e1da5e345050fbf8",
+      "bytes": 8741,
+      "label": "×3",
+      "locked": false,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    },
+    {
+      "path": "build/achievements/TRIPLE_STORYLINE_locked.png",
+      "sourceSha256": "7a41357864e0839e4740fc60fc357565790b1ecdfb35276372a41a00d889e6bb",
+      "sha256": "9a7a14657714f3ed423d5da37040eedb61976180363a0c58506feca93a19c4f3",
+      "bytes": 9041,
+      "label": "×3",
+      "locked": true,
+      "width": 256,
+      "height": 256,
+      "unchangedOutsideLabel": true
+    }
+  ]
+}

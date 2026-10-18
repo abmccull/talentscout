@@ -6,7 +6,9 @@ import type {
 import {
   buildDashboardPriorityCandidates,
   buildDashboardWeekSummary,
+  getDashboardPlannerObjectiveKey,
 } from "@/components/game/dashboard/dashboardPriorityModel";
+import type { DashboardYouthDeskAction } from "./types";
 import type { BuildDashboardPriorityModelInput } from "@/components/game/dashboard/dashboardPriorityModel";
 import {
   buildOutcomeExplanations,
@@ -57,6 +59,7 @@ function toPriorityItem(
 ): DashboardPriorityItem {
   return {
     id: candidate.id,
+    objectiveKey: candidate.canonicalKey,
     category: candidate.category,
     severity: candidate.severity,
     title: candidate.title,
@@ -73,6 +76,26 @@ function toPriorityItem(
     snoozable: candidate.snoozable,
     pinnable: candidate.pinnable,
   };
+}
+
+/** Advancing booked work and using spare days are distinct decisions, even
+ * when both can lead to Planner. Only the explicit allocation action owns it. */
+export function getYouthDeskRepresentedObjectiveKey(
+  actionKind: DashboardYouthDeskAction["kind"],
+  season: number,
+  week: number,
+): string | undefined {
+  return actionKind === "planner" ? getDashboardPlannerObjectiveKey(season, week) : undefined;
+}
+
+/** Suppress only an objective already presented by the active case. Distinct
+ * deadlines, people and rival decisions can share a screen and remain visible.
+ * This projection never dismisses or resolves the underlying responsibility. */
+export function selectDashboardSupportingItems(
+  items: readonly DashboardPriorityItem[],
+  representedObjectiveKey?: string,
+): DashboardPriorityItem[] {
+  return items.filter((item) => !representedObjectiveKey || item.objectiveKey !== representedObjectiveKey);
 }
 
 function isAttentionCandidate(candidate: DashboardPriorityCandidate): boolean {

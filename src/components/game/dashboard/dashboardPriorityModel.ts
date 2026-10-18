@@ -1103,6 +1103,10 @@ function collectReportCandidates(
   return candidates;
 }
 
+export function getDashboardPlannerObjectiveKey(season: number, week: number): string {
+  return `planner-gap:s${season}:w${week}`;
+}
+
 function collectPlannerCandidate(state: GameState): DashboardPriorityCandidate[] {
   const openDays = countOpenScheduleDays(state.schedule);
   if (openDays <= 0) return [];
@@ -1115,8 +1119,8 @@ function collectPlannerCandidate(state: GameState): DashboardPriorityCandidate[]
     collector: "planner",
     category: "opportunity",
     title: openDays === 1
-      ? "1 day is still unallocated this week"
-      : `${openDays} days are still unallocated this week`,
+      ? "Choose how to spend your remaining day"
+      : `Plan your next ${openDays} days`,
     explanation: scheduledObservationCount > 0
       ? `You have ${scheduledObservationCount} observation block${scheduledObservationCount === 1 ? "" : "s"} booked. Add work if another question is worth the time and fatigue.`
       : "Choose the evidence, relationships or recovery worth your time this week.",
@@ -1129,7 +1133,7 @@ function collectPlannerCandidate(state: GameState): DashboardPriorityCandidate[]
       week: state.currentWeek,
       season: state.currentSeason,
     },
-    canonicalKey: `planner-gap:s${state.currentSeason}:w${state.currentWeek}`,
+    canonicalKey: getDashboardPlannerObjectiveKey(state.currentSeason, state.currentWeek),
     aliasKeys: [],
     mustResolveBeforeAdvance: false,
   })];
@@ -1320,6 +1324,7 @@ export function buildDashboardPriorityItems(
 ): DashboardPriorityItem[] {
   return buildDashboardPriorityCandidates(input).map((candidate) => ({
     id: candidate.id,
+    objectiveKey: candidate.canonicalKey,
     category: candidate.category,
     severity: candidate.severity,
     title: candidate.title,

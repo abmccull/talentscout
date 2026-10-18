@@ -98,7 +98,7 @@ export function WorldOutlookDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="world-outlook-title"
-        className="flex h-full w-full max-w-3xl flex-col border-l border-emerald-400/20 bg-[#0b1010]/98 shadow-2xl shadow-black/60"
+        className="flex h-full w-full max-w-3xl flex-col border-l border-emerald-400/20 bg-[var(--surface)] shadow-2xl shadow-black/60"
         data-testid="world-outlook-drawer"
       >
         <header className="flex items-start justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-6">
@@ -111,8 +111,7 @@ export function WorldOutlookDrawer({
               World outlook
             </h1>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-400">
-              Read the football landscape, protect the regions where your word carries weight,
-              and decide where your next advantage should come from.
+              Your regional reach, changing conditions and rival pressure.
             </p>
           </div>
           <button
@@ -127,7 +126,36 @@ export function WorldOutlookDrawer({
         </header>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
-          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.045] p-4" aria-labelledby="territorial-position-title">
+          <section className="border-b border-[var(--border)] pb-5" aria-labelledby="recruitment-pressure-title">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--primary)]">
+                  <Swords size={14} aria-hidden="true" />
+                  Recruitment pressure
+                </p>
+                <h2 id="recruitment-pressure-title" className="mt-1 text-base font-semibold text-white">
+                  {rivalCount > 0
+                    ? `${rivalCount} rival organization${rivalCount === 1 ? "" : "s"} are active`
+                    : "The market is quiet for now"}
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-zinc-400">
+                  {openRivalOpportunities > 0
+                    ? `${openRivalOpportunities} opening${openRivalOpportunities === 1 ? "" : "s"} can be acted on now. Waiting may protect your information, but it gives competitors time.`
+                    : "Keep building evidence and relationships. Rival interest can turn a private lead into a contested decision quickly."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenRivals}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[var(--primary)] bg-[var(--primary)] px-4 text-sm font-semibold text-[var(--primary-foreground)] transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+              >
+                Open rival desk
+                <ArrowRight size={15} className="ml-2" aria-hidden="true" />
+              </button>
+            </div>
+          </section>
+
+          <section className="border-b border-[var(--border)] pb-5" aria-labelledby="territorial-position-title">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
@@ -140,20 +168,6 @@ export function WorldOutlookDrawer({
               <span className="rounded-full border border-emerald-300/20 bg-black/20 px-3 py-1.5 text-xs font-semibold text-emerald-100">
                 {territorialStrategy.coveredCountryCount} active market{territorialStrategy.coveredCountryCount === 1 ? "" : "s"}
               </span>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-xl font-bold text-emerald-200">{territorialStrategy.deepCountryCount}</p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">Strongholds</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-xl font-bold text-cyan-200">{territorialStrategy.breadthScore}%</p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">Reach</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-xl font-bold text-amber-200">{territorialStrategy.staleCountryIds.length}</p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">Stale markets</p>
-              </div>
             </div>
             <div className="mt-3 grid gap-2 text-xs leading-5 sm:grid-cols-2">
               <p className="rounded-lg border border-emerald-300/10 bg-black/15 px-3 py-2 text-zinc-300">
@@ -178,17 +192,33 @@ export function WorldOutlookDrawer({
               </div>
             )}
 
+            <details className="mt-3 border-t border-[var(--border)]">
+              <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">Your regional network</summary>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="py-2">
+                <p className="text-xl font-bold text-emerald-200">{territorialStrategy.deepCountryCount}</p>
+                <p className="mt-1 text-xs text-quiet">Strongholds</p>
+              </div>
+              <div className="py-2">
+                <p className="text-xl font-bold text-cyan-200">{territorialStrategy.breadthScore}%</p>
+                <p className="mt-1 text-xs text-quiet">Reach</p>
+              </div>
+              <div className="py-2">
+                <p className="text-xl font-bold text-amber-200">{territorialStrategy.staleCountryIds.length}</p>
+                <p className="mt-1 text-xs text-quiet">Stale markets</p>
+              </div>
+            </div>
             {topRegions.length > 0 && (
               <ol className="mt-4 space-y-2" aria-label="Strongest regional networks">
                 {topRegions.map((region, index) => (
-                  <li key={region.countryId} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+                  <li key={region.countryId} className="flex items-center gap-3 border-b border-[var(--border)] py-3">
                     <span className="w-5 text-center text-xs font-bold text-zinc-500">{index + 1}</span>
                     <MapPinned size={15} className="shrink-0 text-emerald-300" aria-hidden="true" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">
+                      <p className="break-words text-sm font-semibold text-white">
                         {getCountryDisplayName(region.countryId)}
                       </p>
-                      <p className="truncate text-[11px] text-zinc-500">
+                      <p className="text-xs leading-5 text-quiet">
                         {region.territorialContext.calendar.intensity} calendar · {region.territorialContext.intel.freshness} intel · {region.territorialContext.rivalMarket.pressureBand} pressure
                       </p>
                     </div>
@@ -199,38 +229,11 @@ export function WorldOutlookDrawer({
                 ))}
               </ol>
             )}
+            </details>
           </section>
 
           <WorldConditionPanel state={state} />
 
-          <section className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/[0.04] p-4" aria-labelledby="recruitment-pressure-title">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-300">
-                  <Swords size={14} aria-hidden="true" />
-                  Recruitment pressure
-                </p>
-                <h2 id="recruitment-pressure-title" className="mt-1 text-base font-semibold text-white">
-                  {rivalCount > 0
-                    ? `${rivalCount} rival organization${rivalCount === 1 ? "" : "s"} are active`
-                    : "The market is quiet for now"}
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-zinc-400">
-                  {openRivalOpportunities > 0
-                    ? `${openRivalOpportunities} opening${openRivalOpportunities === 1 ? "" : "s"} can be acted on now. Waiting may protect your information, but it gives competitors time.`
-                    : "Keep building evidence and relationships. Rival interest can turn a private lead into a contested decision quickly."}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onOpenRivals}
-                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-fuchsia-300/25 bg-fuchsia-400/10 px-4 text-sm font-semibold text-fuchsia-100 transition hover:border-fuchsia-300/50 hover:bg-fuchsia-400/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fuchsia-300"
-              >
-                Open rival desk
-                <ArrowRight size={15} className="ml-2" aria-hidden="true" />
-              </button>
-            </div>
-          </section>
 
           <details
             className="group rounded-2xl border border-white/10 bg-black/20"

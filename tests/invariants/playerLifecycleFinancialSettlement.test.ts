@@ -164,6 +164,12 @@ describe("player lifecycle financial settlement", () => {
       a: club("a", { playerIds: ["p1", "p2"] }),
       b: club("b", { weeklyWageBudget: 7_500 }),
     });
+    // This case isolates arrival payroll; the NPC seller has real spare cover.
+    for (let index = 0; index < 14; index++) {
+      const id = `seller-cover-${index}`;
+      input.players[id] = player({ id, position: index === 0 ? "GK" : "CM", wage: 0 });
+      input.clubs.a.playerIds.push(id);
+    }
     const intents = ["p1", "p2"].map((playerId) => ({
       type: "permanentTransfer" as const, playerId, fromClubId: "a", toClubId: "b",
       fee: 100, wage: 2_000, preserveSquadWageReserve: true,

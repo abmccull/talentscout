@@ -27,7 +27,6 @@ import {
 } from "@/engine/career/courses";
 import type { Course, CourseEffect, CourseEnrollment } from "@/engine/core/types";
 import { getSeasonLength } from "@/engine/core/gameDate";
-import { ScreenBackground } from "@/components/ui/screen-background";
 
 // Category labels and tab keys
 const CATEGORY_TABS = [
@@ -96,7 +95,11 @@ export function TrainingScreen() {
   if (!gameState?.finances) {
     return (
       <GameLayout>
-        <div className="p-6 text-zinc-400">No financial data available.</div>
+        <section className="p-6">
+          <h1 className="font-editorial text-3xl text-white">Training &amp; Courses</h1>
+          <p className="mt-3 text-sm text-zinc-300">Course funding is unavailable for this career.</p>
+          <Button className="mt-6" variant="outline" onClick={() => setScreen("career")}>Back to Career</Button>
+        </section>
       </GameLayout>
     );
   }
@@ -172,11 +175,11 @@ export function TrainingScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6 space-y-6">
-        <ScreenBackground src="/images/backgrounds/training-classroom.png" opacity={0.82} />
-        <div className="relative z-10">
+      <div className="relative min-h-full p-4 sm:p-6">
+
+        <div className="relative z-10 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Training & Courses</h1>
+          <h1 className="font-editorial text-3xl text-white">Training &amp; Courses</h1>
           <p className="text-sm text-zinc-400">
             Enroll in courses to earn qualifications and unlock career progression
           </p>
@@ -187,7 +190,7 @@ export function TrainingScreen() {
           <Card className="border-emerald-500/30 bg-emerald-500/5" data-tutorial-id="training-progress">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <BookOpen size={14} className="text-emerald-400" />
                   Active Course
                 </CardTitle>
@@ -267,79 +270,12 @@ export function TrainingScreen() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Completed Courses */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <CheckCircle size={14} className="text-emerald-400" />
-                Completed ({completedCourses.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {completedCourses.length === 0 ? (
-                <p className="text-xs text-zinc-600">No courses completed yet.</p>
-              ) : (
-                completedCourses.map((id) => {
-                  const course = COURSE_CATALOG.find((c) => c.id === id);
-                  if (!course) return null;
-                  return (
-                    <div
-                      key={id}
-                      className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2 text-xs">
-                        <CheckCircle
-                          size={12}
-                          className="text-emerald-400 shrink-0"
-                        />
-                        <span className="text-zinc-300 font-medium">
-                          {course.name}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {course.effects.map((e, i) => (
-                          <span
-                            key={i}
-                            className="text-[10px] text-emerald-500/70"
-                          >
-                            {effectLabel(e)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-
-              {/* Tier readiness */}
-              {[4, 5].map((tier) => {
-                const ready = hasRequiredCoursesForTier(
-                  completedCourses,
-                  tier as 1 | 2 | 3 | 4 | 5,
-                );
-                return (
-                  <div
-                    key={tier}
-                    className={`flex items-center justify-between rounded px-2 py-1 text-[11px] ${
-                      ready
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : "bg-zinc-800 text-zinc-500"
-                    }`}
-                  >
-                    <span>Tier {tier} Qualification</span>
-                    <span>{ready ? "Ready" : "Not met"}</span>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
+        <div className={`grid grid-cols-1 gap-6 ${completedCourses.length > 0 ? "lg:grid-cols-3" : ""}`}>
           {/* Course Catalog */}
-          <div className="lg:col-span-2" data-tutorial-id="training-courses">
+          <div className={`order-1 ${completedCourses.length > 0 ? "lg:col-span-2" : ""}`} data-tutorial-id="training-courses">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <GraduationCap size={14} className="text-amber-400" />
                   Course Catalog
                 </CardTitle>
@@ -354,7 +290,7 @@ export function TrainingScreen() {
                       className={`rounded-md px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
                         activeTab === tab.key
                           ? "bg-emerald-500/20 text-emerald-400"
-                          : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+                          : "text-[var(--muted-foreground)] hover:text-zinc-100 hover:bg-zinc-800"
                       }`}
                     >
                       {tab.label}
@@ -386,7 +322,7 @@ export function TrainingScreen() {
                             : isActive
                               ? "border-emerald-500/30 bg-emerald-500/10"
                               : isLocked
-                                ? "border-zinc-800 bg-zinc-900/50 opacity-60"
+                                ? "border-zinc-800 bg-zinc-900/50"
                                 : "border-zinc-700 bg-zinc-900"
                         }`}
                       >
@@ -400,7 +336,7 @@ export function TrainingScreen() {
                             ) : isLocked ? (
                               <Lock
                                 size={14}
-                                className="text-zinc-600 shrink-0 mt-0.5"
+                                className="text-zinc-400 shrink-0 mt-0.5"
                               />
                             ) : (
                               <BookOpen
@@ -409,7 +345,7 @@ export function TrainingScreen() {
                               />
                             )}
                             <span
-                              className={`text-sm font-medium ${isLocked ? "text-zinc-500" : "text-white"}`}
+                              className="text-sm font-medium text-[var(--foreground)]"
                             >
                               {course.name}
                             </span>
@@ -422,7 +358,7 @@ export function TrainingScreen() {
                           )}
                         </div>
 
-                        <p className="text-xs text-zinc-500 mb-2 ml-6">
+                        <p className="text-xs text-zinc-400 mb-2 ml-6">
                           {course.description}
                         </p>
 
@@ -460,9 +396,9 @@ export function TrainingScreen() {
                         </div>
 
                         {/* Prerequisites */}
-                        {course.prerequisites.length > 0 && (
+                        {course.prerequisites.length > 0 && !isLocked && (
                           <div className="ml-6 mb-2 text-[10px]">
-                            <span className="text-zinc-600">Prerequisites: </span>
+                            <span className="text-zinc-400">Prerequisites: </span>
                             {course.prerequisites.map((pid, i) => {
                               const met = completedCourses.includes(pid);
                               const pName =
@@ -495,7 +431,7 @@ export function TrainingScreen() {
                               In Progress — {weeksElapsed}/{totalWeeks} study weeks banked
                             </span>
                           ) : isLocked ? (
-                            <span className="text-[11px] text-zinc-600">
+                            <span className="text-[11px] text-zinc-400">
                               {lockedReason}
                             </span>
                           ) : (
@@ -516,6 +452,72 @@ export function TrainingScreen() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Qualifications follow the actionable catalog in mobile reading order. */}
+          {completedCourses.length > 0 && (
+          <Card className="order-2">
+            <CardHeader className="pb-3">
+              <CardTitle as="h2" className="flex items-center gap-2 text-sm">
+                <CheckCircle size={14} className="text-emerald-400" />
+                Completed ({completedCourses.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {completedCourses.map((id) => {
+                  const course = COURSE_CATALOG.find((c) => c.id === id);
+                  if (!course) return null;
+                  return (
+                    <div
+                      key={id}
+                      className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 text-xs">
+                        <CheckCircle
+                          size={12}
+                          className="text-emerald-400 shrink-0"
+                        />
+                        <span className="text-zinc-300 font-medium">
+                          {course.name}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {course.effects.map((e, i) => (
+                          <span
+                            key={i}
+                            className="text-[10px] text-emerald-500/70"
+                          >
+                            {effectLabel(e)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {/* Tier readiness */}
+              {[4, 5].map((tier) => {
+                const ready = hasRequiredCoursesForTier(
+                  completedCourses,
+                  tier as 1 | 2 | 3 | 4 | 5,
+                );
+                return (
+                  <div
+                    key={tier}
+                    className={`flex items-center justify-between rounded px-2 py-1 text-[11px] ${
+                      ready
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-zinc-800 text-zinc-500"
+                    }`}
+                  >
+                    <span>Tier {tier} Qualification</span>
+                    <span>{ready ? "Ready" : "Not met"}</span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+          )}
+
         </div>
         </div>
       </div>

@@ -1,3 +1,5 @@
+> Historical readiness snapshot. Results and scores below describe their recorded source revision, not the reconciled release candidate. Current certification is governed by `docs/release/release-evidence-status.json`; missing current campaign, package, provider, hardware, and human evidence remains a release blocker.
+
 # TalentScout production readiness audit
 
 Date: 2026-09-04. Initial candidate: `integration/canonical`, HEAD `8b9ce2eb36ceec270cc50e1a66a576848f40b038`, including the pre-existing working changes. Source fingerprint: `sha256:40dde648f8b7fc9a979c09dc0633dd7b927fc3a9fa0df47e2b56cb37753c686c`.

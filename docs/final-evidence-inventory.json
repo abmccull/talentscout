@@ -1,0 +1,936 @@
+{
+  "status": "final",
+  "auditRoot": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904",
+  "createdUtc": "2026-09-04T23:58:34.5936145Z",
+  "personallyViewedUIImageArtifacts": 101,
+  "additionalPortraitArtArtifacts": 45,
+  "portraitArtInventory": "portrait-art-evidence.json",
+  "method": "Personally viewed with view_image; hashes bind reviewed files. Counts describe image artifacts, not distinct game states. Latest targeted evidence supersedes earlier states; generated images not personally opened are not included.",
+  "images": [
+    {
+      "relativePath": "after-final-loop-confirmed/00-main-menu-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\00-main-menu-desktop.png",
+      "sha256": "2e877b9d063ed7c824a040b2b9f47d3cacb0409879ee4c12250514dd22d8938c",
+      "bytes": 1563389,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/00-main-menu-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\00-main-menu-mobile.png",
+      "sha256": "c61ceac05ab71b00df71d468a56a9bc24eb3ac0587b13776e1f6ca532a8f0d18",
+      "bytes": 226701,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/00-career-creation-tablet.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\00-career-creation-tablet.png",
+      "sha256": "1bba3cb0063f2f08a2678acb173031a8dced593cc92bb87e982d8686aae06c63",
+      "bytes": 335864,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/01-observation-setup-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\01-observation-setup-mobile.png",
+      "sha256": "12b01e2b084242cd372d3f07f48126b4dafd9a9418deba92a8efeadd04cc4373",
+      "bytes": 131461,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/03-observation-focused-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\03-observation-focused-desktop.png",
+      "sha256": "b07cf6ba71577762520522cf560e305420fd7652ca6c6e579125eb264dbd2edf",
+      "bytes": 1184048,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/03-observation-focused-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\03-observation-focused-mobile.png",
+      "sha256": "323dad718a46c264eabcb798472226043817be44201d642a867deff4991c0e42",
+      "bytes": 155201,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/03-observation-focused-tablet.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\03-observation-focused-tablet.png",
+      "sha256": "9e8c564cfe81133e5eb5273dc3c69b97b9d200a5882b2aab50babb4f53000ee3",
+      "bytes": 440800,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/05a-reflection-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\05a-reflection-laptop.png",
+      "sha256": "f7dc74153322204ebf667053fe5ea722b9023f77d3b7c63a6cb0da64ea77db42",
+      "bytes": 803180,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/05b-opening-decision-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\05b-opening-decision-mobile.png",
+      "sha256": "458a8f1c416db9cf4334a6efe499ad8c32327b302c7e7789a0066173405330a9",
+      "bytes": 228911,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/06-report-incomplete-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\06-report-incomplete-mobile.png",
+      "sha256": "97c9e353f903cd04779860670aae8d174b7ed689b1f1d7e3a9951b07d8797c63",
+      "bytes": 67044,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/07-report-ready-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\07-report-ready-laptop.png",
+      "sha256": "222b7f09044c054550e8ebe4cb8dd3d4e931fd83bbae7a9b4e545c3c62d2caf7",
+      "bytes": 141066,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/07-report-ready-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\07-report-ready-mobile.png",
+      "sha256": "db600a0aabaaa79d5bde2f7101b23cbcc7b0b664410ee29e6bcab9f42216229c",
+      "bytes": 64166,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop/07a-first-week-planner-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop\\07a-first-week-planner-laptop.png",
+      "sha256": "302f51cf40cedbd70056d455364f38fa516ea6d78fad20b6e66d792441fa657b",
+      "bytes": 94887,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-final-loop/07b-week-simulation-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop\\07b-week-simulation-mobile.png",
+      "sha256": "db70d0fc2e1534d9685ee1b291d67f21ac98b68a65b5ad25a2f8ca232d2cdce3",
+      "bytes": 103229,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-final-loop/07c-week-completed-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop\\07c-week-completed-mobile.png",
+      "sha256": "38acb6d62471008eb35b739dbbdea76de2f582dcb4e8c0673637efe3f7c8d4c2",
+      "bytes": 64299,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-pass3/seed-dashboard-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-dashboard-laptop.png",
+      "sha256": "f5b92cc61c354c80cb491bd8ca53702318af7506126dba131e9815083bb0da94",
+      "bytes": 125422,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-dashboard-decisions-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-dashboard-decisions-mobile.png",
+      "sha256": "d047a0cbfc2e1af352a2bd63033eaedb87306b53ede1dc7d5055e7091a4a6fa7",
+      "bytes": 57523,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-career-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-career-desktop.png",
+      "sha256": "170369b4061b70786eab4818ce0f3f34f68eed4e324d055cd7377b7563384be3",
+      "bytes": 334898,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-playerProfile-observed-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-playerProfile-observed-laptop.png",
+      "sha256": "81a629e339c387a4cb8ab062fad6b84f11aefb6c300a36d66e69854b3b16a591",
+      "bytes": 160153,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/detail-profile-evidence-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\detail-profile-evidence-mobile.png",
+      "sha256": "6b95aff5a7248188b77936cec4cfcf3fb478b2df58d9da49481408949f4b635a",
+      "bytes": 72680,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/detail-prospects-populated-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\detail-prospects-populated-laptop.png",
+      "sha256": "6eaa3c8559754f20559d31d17fa340c95ecfb52715b689ccb410c6ddcae1a2c1",
+      "bytes": 211860,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-reportComparison-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-reportComparison-desktop.png",
+      "sha256": "0c61ad416e497b663986698a061cb61cf753ca0256442b9dd334a4ab0fbfbe19",
+      "bytes": 174507,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-reportComparison-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-reportComparison-mobile.png",
+      "sha256": "987a4cd181d61d0463e6897ea7fc8a297b40fe6288704276b9dbb34a267b1298",
+      "bytes": 76672,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-reportHistory-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-reportHistory-laptop.png",
+      "sha256": "248eae571afe032fdd7e7b9fb9985ced933cca515d01d60cc220b66d6bc5c353",
+      "bytes": 128164,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-reportComparison-mobile-full.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-reportComparison-mobile-full.png",
+      "sha256": "f7793a1bd8c5ec3507547c2566bd73744336af3104ac1d8877448d08ea714502",
+      "bytes": 279452,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-reportWriter-final-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-reportWriter-final-laptop.png",
+      "sha256": "972aa4ee0e1bbccb956fe309a725f6d75ca8e5b1bd8b6def60b3f67de2ff55bb",
+      "bytes": 165292,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-internationalView-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-internationalView-desktop.png",
+      "sha256": "a7f3f15fc818f51a683c58ba5135b0a0a2184b872b1c37054bce1aac51659d61",
+      "bytes": 1126715,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-internationalView-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-internationalView-mobile.png",
+      "sha256": "dcd8aa85d22659722d36d696eb55963094b1884c0063925ff35faf4344e9ce1f",
+      "bytes": 131864,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/detail-contact-thread-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\detail-contact-thread-laptop.png",
+      "sha256": "ff824ec6a2bb44365ca399da0e34326424f7702b9f99b51cf3a8b2102cd7ce32",
+      "bytes": 150278,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-a11y-final/final-finances-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-a11y-final\\final-finances-laptop.png",
+      "sha256": "24e562ed0a8199824937da0aec8fd8f0f6a562d7dc8145865cf9f3adc2815330",
+      "bytes": 96780,
+      "role": "corrected-accessibility-layout",
+      "note": "Personally inspected corrected family; Roadmap is governed by its separate later pass."
+    },
+    {
+      "relativePath": "after-a11y-final/final-finances-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-a11y-final\\final-finances-mobile.png",
+      "sha256": "a3dcec00095848ab9ddb36639aa12874a22492273b6fddf67112586024c0f4dd",
+      "bytes": 55981,
+      "role": "corrected-accessibility-layout",
+      "note": "Personally inspected corrected family; Roadmap is governed by its separate later pass."
+    },
+    {
+      "relativePath": "after-a11y-final/final-training-tablet.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-a11y-final\\final-training-tablet.png",
+      "sha256": "9f596c24608b040a1c2d80f3ff5ba94b886c0af4fa2b270c3a983f690e35a015",
+      "bytes": 118692,
+      "role": "corrected-accessibility-layout",
+      "note": "Personally inspected corrected family; Roadmap is governed by its separate later pass."
+    },
+    {
+      "relativePath": "after-a11y-final/final-achievements-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-a11y-final\\final-achievements-mobile.png",
+      "sha256": "9bcdb41c6edf419dd7c41aa32c668863ccda0ec7f16ac691f4799769362f369d",
+      "bytes": 40680,
+      "role": "corrected-accessibility-layout",
+      "note": "Personally inspected corrected family; Roadmap is governed by its separate later pass."
+    },
+    {
+      "relativePath": "after-a11y-final/final-handbook-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-a11y-final\\final-handbook-laptop.png",
+      "sha256": "a821a2e73033c9a040a0b8cbc500b08900ebd92b932f6a8620fc22b2629dd51f",
+      "bytes": 167315,
+      "role": "corrected-accessibility-layout",
+      "note": "Personally inspected corrected family; Roadmap is governed by its separate later pass."
+    },
+    {
+      "relativePath": "after-roadmap-final/final-futureRoadmap-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-roadmap-final\\final-futureRoadmap-mobile.png",
+      "sha256": "2116affdbcfad56d768cdd8d4548d39bfc42aa050bbc0a77de70c517fc12de7b",
+      "bytes": 57934,
+      "role": "corrected-accessibility-layout",
+      "note": "Personally inspected corrected family; Roadmap is governed by its separate later pass."
+    },
+    {
+      "relativePath": "after-pass3/seed-agency-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-agency-laptop.png",
+      "sha256": "905be55c05c4997049ddff04db2e948bbac0bb70854426692b2d5910053c5699",
+      "bytes": 90953,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-inbox-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-inbox-mobile.png",
+      "sha256": "813ddbcd87cfa64b31de1bafb24d1688632bb488e572a2ac3a1e885654cb4e56",
+      "bytes": 43787,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-equipment-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-equipment-laptop.png",
+      "sha256": "29a9c73a5e004b4a48556c9500b378151772171453a3632883274cbb5797c6f8",
+      "bytes": 100422,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-alumniDashboard-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-alumniDashboard-laptop.png",
+      "sha256": "f300942c59e4ce3f73c57dbd147cefad4b721455d634c3592dcd0fdee1a306d7",
+      "bytes": 62143,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-hallOfFame-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-hallOfFame-mobile.png",
+      "sha256": "401354d89a10fd26839fcd1f5adbf625e21bba87450b1e175575d470d96b4560",
+      "bytes": 227961,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-discoveries-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-discoveries-laptop.png",
+      "sha256": "4a0ca9f33414c5d3dd088e7cb29a773185addbcd272bfc7ed0f21aa0ea2bf949",
+      "bytes": 64617,
+      "role": "superseded-review-history",
+      "note": "Former weak secondary layout; final secondary/built images govern final acceptance."
+    },
+    {
+      "relativePath": "after-pass3/seed-npcManagement-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-npcManagement-laptop.png",
+      "sha256": "d834fee4359f7bfca29f66b4ec90aa96d5387e6e398cb9410c054e6b224211d1",
+      "bytes": 546306,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-performance-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-performance-mobile.png",
+      "sha256": "01ede6bdf4528400c0ca502ec9344c70e3eda9967f38eed584b20f4432700412",
+      "bytes": 41423,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/rich-rivals-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-rivals-laptop.png",
+      "sha256": "c01cf5b1d93e473b702d097114e46466cb2dbf70c0d84c533c60ad7a0b554fce",
+      "bytes": 345333,
+      "role": "superseded-review-history",
+      "note": "Former weak secondary layout; final secondary/built images govern final acceptance."
+    },
+    {
+      "relativePath": "after-pass3/rich-seasonAwards-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\rich-seasonAwards-laptop.png",
+      "sha256": "4988e2aa97e1e717aaa43ba4173abb23191fd658a0a97c81975768d93d2fb181",
+      "bytes": 878696,
+      "role": "superseded-review-history",
+      "note": "Former weak secondary layout; final secondary/built images govern final acceptance."
+    },
+    {
+      "relativePath": "after-pass3/seed-demoEnd-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-demoEnd-mobile.png",
+      "sha256": "a9ef70764adc6d2c9cb3ef92e959cb8e30534b05aa6cddadd9a7ec42f2a22dc2",
+      "bytes": 79030,
+      "role": "superseded-review-history",
+      "note": "Former weak secondary layout; final secondary/built images govern final acceptance."
+    },
+    {
+      "relativePath": "after-pass3/seed-settings-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-settings-laptop.png",
+      "sha256": "5303a51b6391f56a29ce1553af675f4ef50f8fc6a29be6b4f3a53b3cbe9e6d76",
+      "bytes": 76605,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-youthScouting-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-youthScouting-mobile.png",
+      "sha256": "8c0188c10e7a54d56ac2f1a14190d7292e61ebec256251c3b18e67758b42a44d",
+      "bytes": 34783,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/dialog-country-browser-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\dialog-country-browser-laptop.png",
+      "sha256": "635b11b3deeae80e08dddfda306cce3ea8c5f72e55954bc72ffea00f244229ec",
+      "bytes": 642059,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/dialog-open-days-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\dialog-open-days-mobile.png",
+      "sha256": "7563fcf980a85ae575d2314dcd9acb9711cbce8de2d589a404b71e3b7516f298",
+      "bytes": 66569,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/dialog-world-archive-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\dialog-world-archive-mobile.png",
+      "sha256": "eb2710dd8c63f4197d5967d9f17e820c2bc0109b793eb7873617cbf3a5cc713d",
+      "bytes": 74549,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/dialog-world-outlook-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\dialog-world-outlook-laptop.png",
+      "sha256": "f7da2f508b515188af3d1c67bd45f817510abde500fa3163394db0c5a7cb231e",
+      "bytes": 166694,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/dialog-manage-saves-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\dialog-manage-saves-mobile.png",
+      "sha256": "97c1730ec881608c4eb36b3e584aa15cc905b56dd95e35411fde2f50e7a29019",
+      "bytes": 40075,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-save-aging/01-real-first-record-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-save-aging\\01-real-first-record-laptop.png",
+      "sha256": "8c1844541e4d609da01247693a1fc0b7b974a66cdff9f7112dbc61b185d1c2ab",
+      "bytes": 158183,
+      "role": "identity-and-fallback-evidence",
+      "note": "Real first-record plus explicitly synthetic aging, failure, retirement and pruning states; not a naturally played 20-season career."
+    },
+    {
+      "relativePath": "after-save-aging/02-synthetic-age35-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-save-aging\\02-synthetic-age35-desktop.png",
+      "sha256": "3c5acc4cf88ef7265acba42a0818ea320b7223550f44159f2b44f45d92c2cf0b",
+      "bytes": 247093,
+      "role": "identity-and-fallback-evidence",
+      "note": "Real first-record plus explicitly synthetic aging, failure, retirement and pruning states; not a naturally played 20-season career."
+    },
+    {
+      "relativePath": "after-save-aging/02-synthetic-age35-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-save-aging\\02-synthetic-age35-mobile.png",
+      "sha256": "93387aff776e61444213b008636a5f57db422a3c235df78a133cd177299eadf4",
+      "bytes": 112209,
+      "role": "identity-and-fallback-evidence",
+      "note": "Real first-record plus explicitly synthetic aging, failure, retirement and pruning states; not a naturally played 20-season career."
+    },
+    {
+      "relativePath": "after-save-aging/03-synthetic-image404-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-save-aging\\03-synthetic-image404-laptop.png",
+      "sha256": "4adeff08926a3d662a72eee7a729c15e8e90452953e6866cb73db5a44dfea158",
+      "bytes": 156487,
+      "role": "identity-and-fallback-evidence",
+      "note": "Real first-record plus explicitly synthetic aging, failure, retirement and pruning states; not a naturally played 20-season career."
+    },
+    {
+      "relativePath": "after-save-aging/04-synthetic-recovered-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-save-aging\\04-synthetic-recovered-mobile.png",
+      "sha256": "e6197377a24f3e0fcdff280511874681e4ab6aae0b470d1d1cb817ff3b4204e4",
+      "bytes": 127440,
+      "role": "identity-and-fallback-evidence",
+      "note": "Real first-record plus explicitly synthetic aging, failure, retirement and pruning states; not a naturally played 20-season career."
+    },
+    {
+      "relativePath": "after-save-aging/06-synthetic-pruned-history-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-save-aging\\06-synthetic-pruned-history-laptop.png",
+      "sha256": "b138ab63ae9d8770e1f4d7e50408f79c1187e9fa15ac2a2da2accac43b5dbd8d",
+      "bytes": 113592,
+      "role": "identity-and-fallback-evidence",
+      "note": "Real first-record plus explicitly synthetic aging, failure, retirement and pruning states; not a naturally played 20-season career."
+    },
+    {
+      "relativePath": "after-save-aging/05-synthetic-retired-tablet.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-save-aging\\05-synthetic-retired-tablet.png",
+      "sha256": "1659d9d4bdb84855bceb84de3845869e81f5b7da093ac65ce0ced1b122121039",
+      "bytes": 218989,
+      "role": "identity-and-fallback-evidence",
+      "note": "Real first-record plus explicitly synthetic aging, failure, retirement and pruning states; not a naturally played 20-season career."
+    },
+    {
+      "relativePath": "after-final-loop-accepted/07c-week-summary-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-accepted\\07c-week-summary-mobile.png",
+      "sha256": "8c228cf96bff5bebaf1b9420e82a4f071d77d9982a1badec6dbc023ea37b5da3",
+      "bytes": 58427,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-final-loop-accepted/07d-week-completed-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-accepted\\07d-week-completed-mobile.png",
+      "sha256": "53890ee34d91e372f26cc2516892a664e8bebe1ced5588b1e6f835455d9a82c8",
+      "bytes": 43398,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-pass3/detail-profile-development-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\detail-profile-development-laptop.png",
+      "sha256": "461da06e3fbad216874b18179755535ab6372f7bea8d1c9d9140321e4e95e18b",
+      "bytes": 139886,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-reportHistory-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-reportHistory-mobile.png",
+      "sha256": "4bfaf664d0d6e03aa70b7b51fabe304d5dc0c0bd7f79a5056871775b0240cb61",
+      "bytes": 40497,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/dialog-feedback-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\dialog-feedback-mobile.png",
+      "sha256": "8e89f92ac988a26f09b6a77a4f3f915ea87ef2eea71ae5ec212d3bce146c4d50",
+      "bytes": 47325,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-final-loop-confirmed/07-report-ready-tablet.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-loop-confirmed\\07-report-ready-tablet.png",
+      "sha256": "b574c05197966e4db3a9f3261958b8184b6a51014d1b885f63c08e14f417f70d",
+      "bytes": 111682,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-pass3/seed-calendar-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-pass3\\seed-calendar-mobile.png",
+      "sha256": "9875d6d89ed0ea6a37ab178a49af45bf67f2bc226aa712264a3a303f47a2e36b",
+      "bytes": 61015,
+      "role": "observed-layout-evidence",
+      "note": "Use the latest targeted pass for any state that was subsequently corrected."
+    },
+    {
+      "relativePath": "after-a11y-final/final-handbook-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-a11y-final\\final-handbook-mobile.png",
+      "sha256": "4df2281b0dda57393df7b1a3551fec877e4c2a5ef9779ca89fd30aaa2fdf7fd4",
+      "bytes": 54637,
+      "role": "corrected-accessibility-layout",
+      "note": "Personally inspected corrected family; Roadmap is governed by its separate later pass."
+    },
+    {
+      "relativePath": "after-guidance-final/07c-week-summary-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-guidance-final\\07c-week-summary-mobile.png",
+      "sha256": "a993780b08fd828ebcc7fbd594e46c6fe3da84c4f909e867dad2329dea5c5cfd",
+      "bytes": 58664,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-guidance-final/07d-week-completed-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-guidance-final\\07d-week-completed-mobile.png",
+      "sha256": "fd8774aec04a7c8c65380a24d731effb01c2cb50e095cc82a2261946b57539b4",
+      "bytes": 57413,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-guidance-final/09-desk-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-guidance-final\\09-desk-laptop.png",
+      "sha256": "1796717d37df1cefd709d40f80cab7621c6841102ab08e5fadbb6148a6a753be",
+      "bytes": 160526,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary/final-rivals-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary\\final-rivals-laptop.png",
+      "sha256": "bbcbfaccc3751893f77a9b8835e4237ed18aa7b98263c4f68db641f01c55178e",
+      "bytes": 120189,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-final-secondary/final-rivals-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary\\final-rivals-mobile.png",
+      "sha256": "bc91f2de9b53e3ff56ac45c456acaba1c6856becf32f3c774a496a4a71c99436",
+      "bytes": 66863,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-final-secondary/final-discoveries-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary\\final-discoveries-laptop.png",
+      "sha256": "2e0dcefb73af57cb8efd4a61c7b1900260754c44066ace98648cb89e0523ad2b",
+      "bytes": 95230,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-rivals-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-rivals-laptop.png",
+      "sha256": "bbcbfaccc3751893f77a9b8835e4237ed18aa7b98263c4f68db641f01c55178e",
+      "bytes": 120189,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-discoveries-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-discoveries-mobile.png",
+      "sha256": "c6cd06770f639ce118b2d6417529d7c7af6049639c3b58ce2d003b4cb1c31cb3",
+      "bytes": 66991,
+      "role": "superseded-phone-defect",
+      "note": "Narrow name wrapping was observed here and is visibly corrected in after-built-accepted."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-alumni-history-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-alumni-history-laptop.png",
+      "sha256": "07e571d353a6f7782d47f59b884be2ed45ca0b2bb88df95a19441f83cf231151",
+      "bytes": 127173,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-alumni-pruned-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-alumni-pruned-mobile.png",
+      "sha256": "6a7adab363037b7637689fd418702207926850b73b311f6e56ea8232bc089d74",
+      "bytes": 62324,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-season-awards-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-season-awards-laptop.png",
+      "sha256": "6c7a06b06bf83f3505b062ff6b4145110fc009645b7c179ca48284bf9aeafe10",
+      "bytes": 46211,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-season-no-awards-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-season-no-awards-mobile.png",
+      "sha256": "29f2340befad11408db365a7bab2efee6d9c50bf3408be3a5fe7294ec1a36df6",
+      "bytes": 33842,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-season-details-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-season-details-laptop.png",
+      "sha256": "987d0d1366be07cfe731a291c4073414f1b6c17d00e7c942e4bc4de44a2ac83f",
+      "bytes": 53561,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-demoEnd-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-demoEnd-mobile.png",
+      "sha256": "669093e4468d3545f8b40ee360705df4e0c529e7357c0ea3b22fbd674ef07132",
+      "bytes": 37250,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-demoEnd-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-demoEnd-desktop.png",
+      "sha256": "03d6de55e1d079d3cf397443ddf089845d26d26a1fa73bcf7eb66bc2dbd85829",
+      "bytes": 46416,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-demo-details-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-demo-details-mobile.png",
+      "sha256": "660f283a7fed9fef3067c8bcd908ecf13d30de70d9423fc6c69ccbfbe32d1ffb",
+      "bytes": 58687,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-career-consequence-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-career-consequence-mobile.png",
+      "sha256": "6659f0e64b7ece085aa3558cd427e1ebb31ba542102778f30807c80fba1a85a6",
+      "bytes": 54290,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-career-consequence-tablet.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-career-consequence-tablet.png",
+      "sha256": "fa3b707ec83af9e3587b3263754a7a9c11cd7ad571b052ad382510b20ddd0a7a",
+      "bytes": 95920,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-career-consequence-dismissed-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-career-consequence-dismissed-mobile.png",
+      "sha256": "177daaffc2a3ed72d61a038780c1447fe0ae99cba777af1b3857dd46a4e4044e",
+      "bytes": 58118,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-rivals-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-rivals-mobile.png",
+      "sha256": "bc91f2de9b53e3ff56ac45c456acaba1c6856becf32f3c774a496a4a71c99436",
+      "bytes": 66863,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-alumni-history-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-alumni-history-mobile.png",
+      "sha256": "3efd360c9c2ad09973cea90fec40da856b5ed39d3e7e08e7595c2b11507db482",
+      "bytes": 90509,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-season-details-desktop-full.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-season-details-desktop-full.png",
+      "sha256": "4e11c0d14faed706eafd31bb053f47588cdcf3d0fb113aa5c6f7e1430c507d40",
+      "bytes": 127661,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-final-secondary-clean/final-rivals-mobile-full.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-final-secondary-clean\\final-rivals-mobile-full.png",
+      "sha256": "b57ff05a4b401de0396e1f9c6d9139de7f68d525f27108754dbcb1c6233e54b6",
+      "bytes": 224291,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-guidance-final/03-observation-focused-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-guidance-final\\03-observation-focused-mobile.png",
+      "sha256": "aae51641473b14fe0ee95cf7fff89246c3b962c5425cb7e247c3402279feea9f",
+      "bytes": 156102,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-guidance-final/07-report-ready-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-guidance-final\\07-report-ready-mobile.png",
+      "sha256": "0a5469c843feedf9db281193347e8c554b54eb9ed53c82025e08f55ecc116519",
+      "bytes": 64523,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-guidance-final/03-observation-focused-desktop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-guidance-final\\03-observation-focused-desktop.png",
+      "sha256": "0b73583262ae8613b5857adb65bc61d7bcc6e8f50d69305e23e27e2cd048dc91",
+      "bytes": 1193192,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-guidance-final/07-report-ready-tablet.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-guidance-final\\07-report-ready-tablet.png",
+      "sha256": "7a09e347ac8ccd4f299b55a329082adc8965311bf329246cc237dfde2aaa1eaa",
+      "bytes": 111100,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-built-final/built-career-tracker-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-built-final\\built-career-tracker-mobile.png",
+      "sha256": "3446317b0a1bdf071abaa4a35793ead393338adb551f4e33b64c2bc5bc708691",
+      "bytes": 68091,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-built-final/built-career-tracker-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-built-final\\built-career-tracker-laptop.png",
+      "sha256": "6a3dbda020d3770276a67735e86850f447104c911bdacdbb5497383f6cc0b681",
+      "bytes": 101599,
+      "role": "superseded-review-history",
+      "note": "Retained earlier evidence. Later guidance, clean secondary or built accepted captures govern final acceptance."
+    },
+    {
+      "relativePath": "after-built-accepted/built-career-tracker-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-built-accepted\\built-career-tracker-mobile.png",
+      "sha256": "3446317b0a1bdf071abaa4a35793ead393338adb551f4e33b64c2bc5bc708691",
+      "bytes": 68091,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-built-accepted/built-tracker-open-profile-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-built-accepted\\built-tracker-open-profile-mobile.png",
+      "sha256": "d9f2e4bd65785eac78c58a2d39f4f4dc9b8d237154525d1478567ade41e4dacf",
+      "bytes": 68515,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-built-accepted/built-planner-mobile.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-built-accepted\\built-planner-mobile.png",
+      "sha256": "5054ccaf51e6756645f9db1e17580354dac460e4f5fabb32cf32afbfce5d9606",
+      "bytes": 60951,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    },
+    {
+      "relativePath": "after-built-accepted/built-planner-laptop.png",
+      "absolutePath": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\visual-overhaul-20260904\\after-built-accepted\\built-planner-laptop.png",
+      "sha256": "00666073db4af9d3a4f8d61867f207474bf623f9e59efb1b167abdba7a7e4863",
+      "bytes": 182472,
+      "role": "final-targeted-acceptance",
+      "note": "Personally inspected final targeted rendered state."
+    }
+  ],
+  "supportingArtifacts": [
+    {
+      "relativePath": "after-pass3/captures/index.json",
+      "sha256": "f575026d663a6b2b952b034bd76f1176c2a5960f39bdb1f90017a5ab0144c2a5",
+      "bytes": 132744
+    },
+    {
+      "relativePath": "after-pass3/captures/axe.json",
+      "sha256": "59d01f4aea5967176242732144438bb029195f9ada24b84428c53049f8f7fea9",
+      "bytes": 360160
+    },
+    {
+      "relativePath": "after-pass3/captures/errors.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2
+    },
+    {
+      "relativePath": "after-a11y-final/captures/axe.json",
+      "sha256": "540853dc91a84688e0b14fbf5dec9b036ff5011f13e95ec68ab185758ba0ab41",
+      "bytes": 3395
+    },
+    {
+      "relativePath": "after-roadmap-final/captures/axe.json",
+      "sha256": "b622c6ba961cd23fd0e92d26021eb4d93c83a0ea61dc041b10676c22c7b39b7e",
+      "bytes": 185
+    },
+    {
+      "relativePath": "after-guidance-final/results.json",
+      "sha256": "b8ea955962923ff24ab92b6dc8833b1994b1b3db25fc46a1e6724973750de268",
+      "bytes": 73182
+    },
+    {
+      "relativePath": "after-save-aging/results.json",
+      "sha256": "c908951780d5e65247041b1501c90f7247acf7f7c98f7415cfb1c659fe32f165",
+      "bytes": 22858
+    },
+    {
+      "relativePath": "after-final-secondary-clean/captures/index.json",
+      "sha256": "dfcb3416608bc354762771baf8164d742f1b4acc388c6c32e76550b7c53a04ca",
+      "bytes": 30614
+    },
+    {
+      "relativePath": "after-final-secondary-clean/captures/axe.json",
+      "sha256": "a3dbdc8ee368c0808313f760581d336ab1294a62d016b1d0462e88809c5ec979",
+      "bytes": 2033
+    },
+    {
+      "relativePath": "after-final-secondary-clean/captures/errors.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2
+    },
+    {
+      "relativePath": "after-final-secondary-clean/source-changes.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2
+    },
+    {
+      "relativePath": "after-built-final/captures/errors.json",
+      "sha256": "c191abec580b3d229823bd9ce0e81e5359eb75f9e7776c57c68eff01659342f6",
+      "bytes": 275
+    },
+    {
+      "relativePath": "after-built-accepted/captures/index.json",
+      "sha256": "2141452d706c55b60ae050da50d976ccd6674c5224927097dc967673d179e94a",
+      "bytes": 8238
+    },
+    {
+      "relativePath": "after-built-accepted/captures/axe.json",
+      "sha256": "c832ba0e3a6add8f8f46b735d28af953f4d0aafadd63156a2ce092f0aabd3ce0",
+      "bytes": 555
+    },
+    {
+      "relativePath": "after-built-accepted/captures/errors.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2
+    },
+    {
+      "relativePath": "after-built-accepted/source-before.json",
+      "sha256": "c4f85ea2a6fcd0cbecb7f05693523456eedc8f58c06b7a5abef1a916ebe22d14",
+      "bytes": 81789
+    },
+    {
+      "relativePath": "after-built-accepted/source-after.json",
+      "sha256": "c4f85ea2a6fcd0cbecb7f05693523456eedc8f58c06b7a5abef1a916ebe22d14",
+      "bytes": 81789
+    },
+    {
+      "relativePath": "after-built-accepted/source-changes.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2
+    },
+    {
+      "relativePath": "after-built-accepted/tracker-phone-layout.json",
+      "sha256": "9f06274bd3cc52e2fa8d6ac0dd0a18679f53085ba7de7d2bddca76b49c9c9bb9",
+      "bytes": 196
+    },
+    {
+      "relativePath": "build-e2e-runtime-index.log",
+      "sha256": "08dfa16b7f5f666aaa993c5a73bc93750a514459d5fd86ee009d4bdc3662a292",
+      "bytes": 1650
+    },
+    {
+      "relativePath": "full-unit-runtime-index.log",
+      "sha256": "5c6db8e7077eb2f5c523dc39a8534ace606b3787572a1ab08992c65ac772f5a0",
+      "bytes": 767
+    },
+    {
+      "relativePath": "typecheck-runtime-index.log",
+      "sha256": "60340972cbb3dd42b4781d933b2b51d0209027e18c4ec9443b0b03d9c0fa244c",
+      "bytes": 71
+    },
+    {
+      "relativePath": "proposals/final-visual-critic/portrait-art-evidence.json",
+      "sha256": "e41735acad82787be7e1b3589565e6632acaa932c960ee83c2dea32a9ba993a7",
+      "bytes": 12317
+    }
+  ]
+}

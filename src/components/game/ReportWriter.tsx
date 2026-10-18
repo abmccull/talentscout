@@ -41,7 +41,6 @@ import { hasReportBuyerEvidence } from "@/engine/finance/reportMarketplace";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { useAudio } from "@/lib/audio/useAudio";
-import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
@@ -53,7 +52,7 @@ import {
   getFreshReportObservationIds,
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
-import { InitialAssessmentBuilder } from "@/components/game/InitialAssessmentBuilder";
+import { InitialAssessmentBuilder, type InitialAssessmentBuilderResult } from "@/components/game/InitialAssessmentBuilder";
 import {
   addGameWeeks,
   gameWeeksBetween,
@@ -135,6 +134,7 @@ export function ReportWriter() {
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
   const [initialAssessmentInput, setInitialAssessmentInput] = useState<InitialAssessmentInput | null>(null);
   const [initialAssessmentCompletedSteps, setInitialAssessmentCompletedSteps] = useState(0);
+  const [initialAssessmentDraftResult, setInitialAssessmentDraftResult] = useState<InitialAssessmentBuilderResult | null>(null);
   const [briefId, setBriefId] = useState("");
   const [intendedAudience, setIntendedAudience] = useState<StructuredReportInput["intendedAudience"]>("academyDirector");
   const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
@@ -318,8 +318,8 @@ export function ReportWriter() {
     [activeBrief?.id, canonicalPlayerId, gameState, isYouthCase],
   );
   const freshObservationIds = useMemo(
-    () => getFreshReportObservationIds(observations, previousReport),
-    [observations, previousReport],
+    () => getFreshReportObservationIds(observations, previousReport, Object.values(gameState?.reports ?? {})),
+    [observations, previousReport, gameState?.reports],
   );
   const preparedWorkItem = useMemo(
     () => gameState && canonicalPlayerId
@@ -496,7 +496,9 @@ export function ReportWriter() {
     : isYouthCase
       ? formalAssessmentResult?.assessment?.generatedSummary ?? ""
       : summary;
-  const effectiveConviction = initialAssessmentMode
+  const effectiveConviction = (initialAssessmentMode ? initialAssessmentInput?.recommendation : recommendedAction) === "pass"
+    ? "note"
+    : initialAssessmentMode
     ? initialAssessmentConviction(initialAssessmentInput?.confidence)
     : conviction;
   const totalReportQualityBonus =
@@ -599,9 +601,10 @@ export function ReportWriter() {
   // Live pricing estimate for independent scouts
   const isIndependent = gameState?.scout.careerPath === "independent";
   const draftAssessment = initialAssessmentResult?.assessment ?? formalAssessmentResult?.assessment;
-  const hasSaleEvidence = initialAssessmentMode || structuredInput?.evidenceVersion === 1
+  const isPrivateDraft = (initialAssessmentMode ? initialAssessmentInput?.recommendation : recommendedAction) === "pass";
+  const hasSaleEvidence = !isPrivateDraft && (initialAssessmentMode || structuredInput?.evidenceVersion === 1
     ? Boolean(draftAssessment && hasReportBuyerEvidence({ evidenceAssessment: draftAssessment }))
-    : true;
+    : true);
   const priceEstimate = useMemo(() => {
     if (!isIndependent || !hasSaleEvidence || !gameState?.finances) return null;
     return estimateReportPriceRange(
@@ -680,18 +683,17 @@ export function ReportWriter() {
     );
   }
 
-  if (isYouthCase && initialAssessmentCards.length === 0) {
+  if (isYouthCase && (initialAssessmentCards.length === 0 || observations.length === 0)) {
     return (
       <GameLayout>
         <div className="relative flex min-h-[70vh] items-center justify-center p-4 sm:p-6">
-          <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
           <Card className="relative z-10 w-full max-w-2xl border-amber-400/25 bg-[#10151b]/98 shadow-2xl shadow-black/40">
             <CardContent className="p-6 text-center sm:p-8">
               <Target className="mx-auto text-amber-300" size={30} aria-hidden="true" />
               <p className="mt-4 text-eyebrow font-semibold uppercase tracking-[0.18em] text-amber-300">Evidence needed</p>
               <h1 className="mt-2 text-2xl font-bold text-white">Return with one question to answer</h1>
               <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-zinc-300">
-                Your existing view of {player.firstName} {player.lastName} did not leave a classified moment you can defend in a report. Plan a focused observation, choose what you are testing, and save the cue that changes your read.
+                Your existing view of {player.firstName} {player.lastName} did not leave first-hand evidence you can use in a report. Plan a focused observation, choose what you are testing, and save a cue to assess.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <Button variant="outline" className="min-h-11" onClick={() => setScreen("playerProfile")}>
@@ -848,7 +850,6 @@ export function ReportWriter() {
   return (
     <GameLayout>
       <div className="relative min-h-full p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
-        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={initialAssessmentMode ? 0.5 : 0.82} />
         <div className="relative z-10 mx-auto max-w-6xl">
         <button
           onClick={handleBack}
@@ -859,39 +860,62 @@ export function ReportWriter() {
           {t("backToProfile")}
         </button>
 
-        <div className="mb-5 flex items-center gap-4 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 sm:p-6">
+        <header className="mb-5 flex items-center gap-5 border-b border-[color:var(--border)] pb-6 sm:gap-7">
           <YouthPortraitWithFallback
             playerId={player.id}
             nationality={player.nationality}
             age={player.age}
-            size={64}
-            alt={`${player.firstName} ${player.lastName}`}
+            size={96}
+            className="shrink-0"
+            alt=""
           />
-          <div>
-            <p className="mb-1 text-eyebrow font-semibold uppercase tracking-[0.18em] text-[color:var(--primary)]">
-              Scouting judgment
+          <div className="min-w-0">
+            <h1 className="dossier-eyebrow">{t("title")}</h1>
+            <p className="font-editorial mt-2 text-3xl leading-tight text-[color:var(--foreground)] sm:text-4xl">
+              {player.firstName} {player.lastName}
             </p>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              {t("title")}
-            </h1>
-            <p className="text-sm text-zinc-400 mt-1">
-              {player.firstName} {player.lastName} — {player.position}, Age {player.age}
-              {club ? ` — ${club.name}` : ""}
+            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+              {player.position} · Age {player.age} · {player.nationality}
+              {club ? ` · ${club.name}` : ""}
             </p>
           </div>
-        </div>
+        </header>
 
-        <ReportWorkflowNavigator
-          decisionsRemaining={decisionsRemaining}
-          completedSectionCount={completedSectionCount}
-          requiredSectionCount={requiredSectionCount}
-          previousReportRevision={previousReport?.revision}
-          nextSectionTask={nextSectionTask}
-          activeSectionId={activeSectionId}
-          sectionNavigatorItems={sectionNavigatorItems}
-          nextRequiredStepId={workflow.nextRequiredStepId}
-          onOpenSection={openWorkflowSection}
-        />
+        {initialAssessmentMode ? (
+          <div
+            className="sticky top-0 z-20 mb-6 grid gap-3 border-y border-[color:var(--border)] bg-[color:var(--background)] py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            data-tutorial-id="report-submit"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[color:var(--foreground)]">Initial assessment</p>
+              <p id="initial-assessment-filing-status" className="mt-1 text-sm leading-5 text-[color:var(--muted-foreground)]" aria-live="polite">
+                {canSubmit
+                  ? "Ready to file and open the case."
+                  : observationsBlocker?.message
+                    ?? freshEvidenceBlocker?.message
+                    ?? initialAssessmentDraftResult?.result.errors[0]
+                    ?? reportStatus.primaryBlocker
+                    ?? "Choose one saved observation cue."}
+              </p>
+            </div>
+            <Button className="min-h-11" onClick={handleSubmit} disabled={!canSubmit} aria-describedby="initial-assessment-filing-status">
+              <FileText size={16} className="mr-2" aria-hidden="true" />
+              File initial assessment
+            </Button>
+          </div>
+        ) : (
+          <ReportWorkflowNavigator
+            decisionsRemaining={decisionsRemaining}
+            completedSectionCount={completedSectionCount}
+            requiredSectionCount={requiredSectionCount}
+            previousReportRevision={previousReport?.revision}
+            nextSectionTask={nextSectionTask}
+            activeSectionId={activeSectionId}
+            sectionNavigatorItems={sectionNavigatorItems}
+            nextRequiredStepId={workflow.nextRequiredStepId}
+            onOpenSection={openWorkflowSection}
+          />
+        )}
 
         {preparedWorkItem && (
           <PreparedReportWorkCallout
@@ -1072,8 +1096,9 @@ export function ReportWriter() {
 
                 <fieldset>
                   <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Recommended next step</legend>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {([
+                      ["pass", "Pass for now", "Keep the judgment on record without pursuing recruitment. Reconsider after new evidence."],
                       ["monitor", "Monitor", "Preserve optionality and seek more evidence."],
                       ["inviteForTrial", "Invite for trial", "Ask the club to test the weakest part of the case."],
                       ["offerAcademyPlace", "Offer academy place", "Stand behind a signing recommendation now."],
@@ -1554,12 +1579,13 @@ export function ReportWriter() {
 
         <div id="report-section-evidence" className="scroll-mt-28 space-y-6">
           {initialAssessmentMode ? (
-            <div data-tutorial-id="report-conviction" className="space-y-4 rounded-2xl border border-[color:var(--primary)]/20 bg-[#14110c] p-4 shadow-xl sm:p-6">
+            <div data-tutorial-id="report-conviction" className="min-w-0">
               <InitialAssessmentBuilder
                 key={canonicalPlayerId}
                 cards={initialAssessmentCards}
                 playerName={`${player.firstName} ${player.lastName}`}
                 value={initialAssessmentInput}
+                onResultChange={setInitialAssessmentDraftResult}
                 onProgressChange={setInitialAssessmentCompletedSteps}
                 onChange={(nextValue) => {
                   setInitialAssessmentInput(nextValue);
@@ -1569,23 +1595,7 @@ export function ReportWriter() {
                   }
                 }}
               />
-              <div
-                className="sticky bottom-3 z-20 grid gap-3 rounded-2xl border border-[#0A1628]/15 bg-[#0A1628] p-4 text-[#F0EBE3] shadow-2xl sm:grid-cols-[1fr_auto_auto] sm:items-center"
-                data-tutorial-id="report-submit"
-              >
-                <p className={`text-sm ${canSubmit ? "text-[#F0EBE3]" : "text-amber-200"}`} aria-live="polite">
-                  {canSubmit
-                    ? "Ready to file. This first assessment opens the case."
-                    : reportStatus.primaryBlocker ?? "Complete the six assessment decisions to file this first read."}
-                </p>
-                <Button className="min-h-11" variant="outline" onClick={handleBack}>
-                  {t("backToProfile")}
-                </Button>
-                <Button className="min-h-11" onClick={handleSubmit} disabled={!canSubmit}>
-                  <FileText size={14} className="mr-2" aria-hidden="true" />
-                  File initial assessment
-                </Button>
-              </div>
+
             </div>
           ) : (
             <ReportFinalReview
@@ -1594,7 +1604,7 @@ export function ReportWriter() {
               displayQualityScore={displayQualityScore}
               craftReadLabel={craftRead.label}
               activeBriefClubName={activeBriefClub?.name}
-              recommendedActionLabel={attrLabel(recommendedAction)}
+              recommendedActionLabel={recommendedAction === "pass" ? "Pass for now" : attrLabel(recommendedAction)}
               completedJudgmentCount={completedJudgmentCount}
               riskSignalCount={riskSignalCount}
               selectedNoMaterialSignal={selectedRiskAssessments.some((risk) => risk.id === "noMaterialSignal")}
@@ -1627,15 +1637,15 @@ export function ReportWriter() {
             />
           )}
 
-          <details id="report-dossier" className="group scroll-mt-24 rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5">
+          <details id="report-dossier" className="group dossier-section scroll-mt-24">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
               <div>
                 <span className="text-sm font-semibold text-white">
-                  {isYouthCase ? "Scouting dossier" : "Scouting notes and supporting detail"}
+                  {isYouthCase ? "Supporting observation record" : "Scouting notes and supporting detail"}
                 </span>
                 <span className="mt-1 block text-xs text-zinc-400">
                   {isYouthCase
-                    ? "Review the observation record, current ability ranges, context, and supporting detail behind your case."
+                    ? "Observed ability ranges, context, and field notes."
                     : "Review observations, ability ranges, form, attributes, strengths, weaknesses, and character."}
                 </span>
               </div>

@@ -157,4 +157,77 @@ describe("weekly async transaction ownership", () => {
     expect(get().weeklyTransactionError).toMatch(/simulation interrupted/);
     log.mockRestore();
   });
+
+  it.each(["resolved", "rejected"] as const)("releases an invalidated finance edit after worker %s and accepts a fresh retry", async (outcome) => {
+    const { get, set, actions } = setup("same-career");
+    const job = deferred();
+    mocks.runTransaction.mockReturnValueOnce(job.promise);
+    const pending = actions.advanceWeekAsync();
+    const edited = { ...get().gameState!, finances: { balance: 100 } } as GameState;
+    set({ gameState: edited });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      if (outcome === "resolved") job.resolve(completed(edited));
+      else job.reject(new Error("Worker interrupted; retry the week"));
+      await expect(pending).resolves.toBe(outcome === "resolved" ? "cancelled" : "failed");
+      expect(get().gameState).toBe(edited);
+      expect(get().isAdvancingWeek).toBe(false);
+      expect(get().weeklyTransactionError).toMatch(/changed|again|retry/i);
+      expect(mocks.applyTutorialCommands).not.toHaveBeenCalled();
+      expect(mocks.queueAutosave).not.toHaveBeenCalled();
+      mocks.runTransaction.mockResolvedValueOnce(completed(edited));
+      await expect(actions.advanceWeekAsync()).resolves.toBe("committed");
+      expect(mocks.runTransaction).toHaveBeenCalledTimes(2);
+      expect(get().gameState).toMatchObject({ currentWeek: 2, finances: { balance: 100 } });
+      expect(get().isAdvancingWeek).toBe(false);
+      expect(get().weeklyTransactionError).toBeNull();
+      expect(mocks.applyTutorialCommands).toHaveBeenCalledTimes(1);
+      expect(mocks.queueAutosave).toHaveBeenCalledTimes(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each(["resolved", "rejected"] as const)("does not unlock a newer invocation over the identical football state when old work is %s", async (outcome) => {
+    const { get, set, actions } = setup("same-career");
+    const source = get().gameState!;
+    const old = deferred();
+    const fresh = deferred();
+    mocks.runTransaction.mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
+    const oldPending = actions.advanceWeekAsync();
+    // A restore can retire an operation without changing the football snapshot.
+    set({ isAdvancingWeek: false });
+    const newPending = actions.advanceWeekAsync();
+    if (outcome === "resolved") old.resolve(completed(source));
+    else old.reject(new Error("old invocation interrupted"));
+    await expect(oldPending).resolves.toBe("cancelled");
+    expect(get().gameState).toBe(source);
+    expect(get().isAdvancingWeek).toBe(true);
+    expect(mocks.applyTutorialCommands).not.toHaveBeenCalled();
+    expect(mocks.queueAutosave).not.toHaveBeenCalled();
+    fresh.resolve(completed(source));
+    await expect(newPending).resolves.toBe("committed");
+    expect(get().gameState!.currentWeek).toBe(2);
+    expect(get().isAdvancingWeek).toBe(false);
+    expect(mocks.applyTutorialCommands).toHaveBeenCalledTimes(1);
+    expect(mocks.queueAutosave).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards a worker result after the active save is replaced without a new invocation", async () => {
+    const { get, set, actions } = setup();
+    const source = get().gameState!;
+    const job = deferred();
+    mocks.runTransaction.mockReturnValueOnce(job.promise);
+    const pending = actions.advanceWeekAsync();
+    const replacement = { ...source, seed: "replacement", currentSeason: 4, currentWeek: 9 };
+    mocks.generation += 1;
+    set({ gameState: replacement, weekSimulation: null, isAdvancingWeek: false });
+    job.resolve(completed(source));
+    await expect(pending).resolves.toBe("cancelled");
+    expect(get().gameState).toBe(replacement);
+    expect(get().weekSimulation).toBeNull();
+    expect(get().isAdvancingWeek).toBe(false);
+    expect(mocks.applyTutorialCommands).not.toHaveBeenCalled();
+    expect(mocks.queueAutosave).not.toHaveBeenCalled();
+  });
 });

@@ -354,6 +354,15 @@
           "rollbackAndMonitoringPlanPresent"
         ]
       }
+    },
+    "sentryProviderReceipt": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/sentry-provider-receipt.md",
+      "generatedEvidence": {
+        "kind": "sentry-provider-receipt",
+        "path": "artifacts/release/generated/certifications/sentry-provider-receipt.json"
+      }
     }
   }
 }

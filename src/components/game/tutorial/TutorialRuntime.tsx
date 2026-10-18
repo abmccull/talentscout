@@ -5,8 +5,8 @@ import { GuidedChecklist } from "@/components/game/tutorial/GuidedChecklist";
 import { HintToast } from "@/components/game/tutorial/HintToast";
 import { MentorOverlay } from "@/components/game/tutorial/MentorOverlay";
 import { ScreenGuidePanel } from "@/components/game/tutorial/ScreenGuidePanel";
-import { useTutorialStore } from "@/stores/tutorialStore";
 import { useGameStore } from "@/stores/gameStore";
+import { useTutorialStore } from "@/stores/tutorialStore";
 
 /**
  * Owns tutorial-surface priority after a career starts, allowing the launch

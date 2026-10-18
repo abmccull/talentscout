@@ -5,6 +5,8 @@
  * quality scoring, club response generation, discovery recording,
  * prediction auto-generation, and retainer/client delivery tracking.
  */
+import { createScoutingDecisionReceipt, reconcileScoutingDecisionReviews } from "@/engine/youth/decisionReviews";
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import type { GetState, SetState } from "./types";
 import {
   queueGameplayAutosave,
@@ -39,6 +41,7 @@ import {
 } from "@/engine/reports/scoutingCases";
 import {
   attachReportEvidence,
+  isPrivateScoutingDecision,
   getFreshReportObservationIds,
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
@@ -197,6 +200,10 @@ export function createReportActions(get: GetState, set: SetState) {
       const evidenceAssessment = initialAssessmentResult?.assessment
         ?? formalAssessmentResult?.assessment;
       const authoritativeSummary = evidenceAssessment?.generatedSummary ?? summary;
+      const isPass = (evidenceAssessment?.recommendation ?? structured?.recommendedAction) === "pass";
+      // Passing is a private allocation of attention, never a table-pound or
+      // an implicit request to recruit the player.
+      if (isPass) conviction = "note";
 
       if (
         conviction === "tablePound"
@@ -270,6 +277,13 @@ export function createReportActions(get: GetState, set: SetState) {
         canonicalPlayerId,
         structured?.briefId,
       );
+      // Private decisions consume evidence but do not replace the last public stance.
+      const previousProfessionalReport = getLatestReportInScope(
+        Object.values(gameState.reports).filter((candidate) => !isPrivateScoutingDecision(candidate)),
+        gameState.scout.id,
+        canonicalPlayerId,
+        structured?.briefId,
+      );
       const analystReview = gameState.finances
         ? getApplicableAnalystReview(
             gameState.finances.analystReviews ?? [],
@@ -277,7 +291,12 @@ export function createReportActions(get: GetState, set: SetState) {
             previousReport,
           )
         : undefined;
-      const freshObservationIds = getFreshReportObservationIds(observations, previousReport);
+      const freshObservationIds = getFreshReportObservationIds(
+        observations, previousReport, Object.values(gameState.reports),
+      );
+      const hasPrivateDecision = Object.values(gameState.reports).some((candidate) =>
+        candidate.scoutId === gameState.scout.id && candidate.playerId === canonicalPlayerId
+        && isPrivateScoutingDecision(candidate));
       const preparedWorkItem = Object.values(gameState.reportWorkItems ?? {})
         .filter((item) =>
           item.status === "ready"
@@ -404,7 +423,7 @@ export function createReportActions(get: GetState, set: SetState) {
         );
         set({
           currentScreen: isOpeningRetry ? "dashboard" : "reportHistory",
-          ...(isOpeningRetry || gameState.scout.careerPath !== "independent"
+          ...(isOpeningRetry || isPass || gameState.scout.careerPath !== "independent"
             || !shouldPromptReportListing(gameState.reports[report.id])
             ? {}
             : { pendingListingReportId: report.id }),
@@ -424,8 +443,11 @@ export function createReportActions(get: GetState, set: SetState) {
                   week: gameState.currentWeek,
                   season: gameState.currentSeason,
                   type: "feedback",
-                  title: previousReport ? "Report revision needs new evidence" : "Observe before reporting",
-                  body: previousReport
+                  title: previousReport ? "Report revision needs new evidence"
+                    : hasPrivateDecision ? "Reconsideration needs new evidence" : "Observe before reporting",
+                  body: hasPrivateDecision && !previousReport
+                    ? "Your private pass already records this evidence. Observe the player again before reconsidering; changing recruitment briefs does not create new evidence."
+                    : previousReport
                     ? "This case has no unreported evidence. Observe the player again in a meaningful context before filing a revision; rewriting the same evidence cannot create reputation, client credit, or assignment progress."
                     : "A professional report needs at least one first-hand observation. Schedule a match, training visit, video review, or another valid observation context first.",
                   read: false,
@@ -445,12 +467,18 @@ export function createReportActions(get: GetState, set: SetState) {
         return;
       }
       const isNewCase = previousReport === undefined;
+      const isFirstProfessionalReport = !isPass && !Object.values(gameState.reports).some((candidate) =>
+        candidate.scoutId === report.scoutId
+        && candidate.playerId === report.playerId
+        && candidate.briefId === report.briefId
+        && !isPrivateScoutingDecision(candidate),
+      );
 
       const qualityDetailed = prepared.quality;
       const quality = evidenceAssessment?.score.total ?? qualityDetailed.score;
 
       const repBefore = gameState.scout.reputation;
-      const baseUpdatedScout = isNewCase
+      const baseUpdatedScout = isFirstProfessionalReport
         ? updateReputation(gameState.scout, {
             type: "reportSubmitted",
             quality,
@@ -459,7 +487,7 @@ export function createReportActions(get: GetState, set: SetState) {
               : undefined,
         })
         : gameState.scout;
-      const practicedScout = evidenceAssessment
+      const practicedScout = evidenceAssessment && !isPass
         ? applyScoutSkillXp(
             baseUpdatedScout,
             calculateAssessmentPracticeXp(evidenceAssessment),
@@ -468,8 +496,8 @@ export function createReportActions(get: GetState, set: SetState) {
       // Difficulty is sign-aware: easier modes improve gains and soften
       // losses, while harder modes do the reverse.
       const repDelta = baseUpdatedScout.reputation - gameState.scout.reputation;
-      const publicRevisionCost = calculatePublicRevisionReputationCost(
-        previousReport,
+      const publicRevisionCost = isPass ? 0 : calculatePublicRevisionReputationCost(
+        previousProfessionalReport,
         report,
         gameState.difficulty,
       );
@@ -481,7 +509,7 @@ export function createReportActions(get: GetState, set: SetState) {
       const updatedScout = {
         ...practicedScout,
         reputation: adjustedRep,
-        reportsSubmitted: isNewCase
+        reportsSubmitted: isFirstProfessionalReport
           ? practicedScout.reportsSubmitted + 1
           : practicedScout.reportsSubmitted,
         ...(pendingInsightReportEffect && practicedScout.insightState
@@ -509,6 +537,7 @@ export function createReportActions(get: GetState, set: SetState) {
           ]),
         ),
       };
+      scoredReport = { ...scoredReport, decisionReceipt: createScoutingDecisionReceipt(scoredReport) };
       const caseLink = ensureScoutingCaseForReport(
         gameState.scoutingCases ?? {},
         scoredReport,
@@ -519,7 +548,7 @@ export function createReportActions(get: GetState, set: SetState) {
       const alreadyDiscovered = gameState.discoveryRecords.some(
         (r) => r.playerId === canonicalPlayerId,
       );
-      const newDiscoveryRecord = alreadyDiscovered
+      const newDiscoveryRecord = alreadyDiscovered || isPass
         ? null
         : recordDiscovery(player, gameState.scout, gameState.currentWeek, gameState.currentSeason);
 
@@ -535,7 +564,7 @@ export function createReportActions(get: GetState, set: SetState) {
       let updatedSystemFitCache = gameState.systemFitCache;
 
       if (
-        isNewCase &&
+        isFirstProfessionalReport &&
         gameState.scout.primarySpecialization === "firstTeam" &&
         gameState.scout.currentClubId
       ) {
@@ -633,7 +662,7 @@ export function createReportActions(get: GetState, set: SetState) {
       // Data scout: auto-generate prediction when submitting strong-conviction reports
       let updatedPredictions = gameState.predictions;
       if (
-        isNewCase &&
+        isFirstProfessionalReport &&
         gameState.scout.primarySpecialization === "data" &&
         (conviction === "strongRecommend" || conviction === "tablePound")
       ) {
@@ -667,7 +696,7 @@ export function createReportActions(get: GetState, set: SetState) {
         gameState.youthRecruitmentBriefs,
         player.clubId,
       );
-      if (isNewCase && updatedFinances && intendedClientClubId) {
+      if (isFirstProfessionalReport && updatedFinances && intendedClientClubId) {
         // W3a: record report-credit deliverables against the intended client,
         // not the current registration of the player.
         updatedFinances = recordRetainerReportDelivery(
@@ -716,7 +745,7 @@ export function createReportActions(get: GetState, set: SetState) {
         && gameState.openingCase.playerId === scoredReport.playerId,
       );
       // The first report returns to its booked follow-up in Planner; listing stays optional.
-      const shouldOfferMarketplaceListing = isNewCase
+      const shouldOfferMarketplaceListing = isFirstProfessionalReport
         && shouldPromptReportListing(scoredReport)
         && gameState.scout.careerPath === "independent"
         && !isOpeningReport;
@@ -735,7 +764,7 @@ export function createReportActions(get: GetState, set: SetState) {
           }
         : null;
 
-      const committedState = synchronizeInternationalAssignmentProgress({
+      const committedState = reconcileScoutingDecisionReviews(synchronizeInternationalAssignmentProgress({
         ...gameState,
         reportWorkItems: preparedWorkItem
           ? Object.fromEntries(
@@ -763,19 +792,31 @@ export function createReportActions(get: GetState, set: SetState) {
           ...gameState.inbox,
           ...(responseInboxMessage ? [responseInboxMessage] : []),
           ...(revisionCostMessage ? [revisionCostMessage] : []),
+          ...(isPass ? [{
+            id: `pass-filed-${scoredReport.id}`,
+            week: gameState.currentWeek,
+            season: gameState.currentSeason,
+            type: "feedback" as const,
+            title: `Passed for now: ${player.firstName} ${player.lastName}`,
+            body: "Your judgment and evidence are preserved. Spend your attention elsewhere, or observe this player again before reconsidering. Future career reviews will show what became of this decision.",
+            read: false,
+            actionRequired: false,
+            relatedId: canonicalPlayerId,
+            relatedEntityType: "player" as const,
+          }] : []),
         ],
-      });
+      }));
       const activeWeek = get().weekSimulation;
       const reconciledState = isOpeningReport ? reconcileOpeningReportStage(committedState) : committedState;
       // An itinerary remains authoritative through its pending world tick.
       // Filing during that itinerary must not insert work into elapsed days.
-      const nextState = isOpeningReport && !activeWeek
+      const nextState = isOpeningReport && !isPass && !activeWeek
         ? bookOpeningFollowUp(reconciledState)
         : reconciledState;
       set({
         gameState: nextState,
-        currentScreen: isOpeningReport ? (activeWeek ? "weekSimulation" : "calendar") : "reportHistory",
-        ...(shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),
+        currentScreen: activeWeek && isOpeningReport ? "weekSimulation" : isOpeningReport && !isPass ? "calendar" : "reportHistory",
+        ...(isPass ? { pendingListingReportId: null } : shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),
       });
       queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, activeWeek), set);
       const tutorialAfterReport = useTutorialStore.getState();
@@ -785,7 +826,7 @@ export function createReportActions(get: GetState, set: SetState) {
         tutorialAfterReport.checkAutoAdvance("reportSubmitted");
         tutorialAfterReport.completeMilestone("submittedReport");
       }
-      if (isOpeningReport) {
+      if (isOpeningReport && !isPass) {
         tutorialAfterReport.completeMilestone("checkedInbox");
         tutorialAfterReport.completeMilestone("openedCalendar");
         tutorialAfterReport.completeMilestone("scheduledActivity");

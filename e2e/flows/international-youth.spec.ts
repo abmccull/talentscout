@@ -90,7 +90,7 @@ test.describe("Youth geography and travel", () => {
     });
 
     await gamePage.navigateTo("internationalView");
-    await gamePage.page.getByRole("button", { name: /Browse countries/i }).click();
+    await gamePage.page.getByRole("button", { name: /^Choose a scouting destination\b/i }).click();
     const browser = gamePage.page.getByTestId("country-browser");
     await expect(browser).toBeVisible();
     await expect(browser.getByRole("button", { name: /England, Live calendar/i })).toBeVisible();
@@ -116,7 +116,7 @@ test.describe("Youth geography and travel", () => {
     ).toEqual([]);
     await gamePage.page.keyboard.press("Escape");
     await expect(dossier).toBeHidden();
-    const browserTrigger = gamePage.page.getByRole("button", { name: /Browse countries/i });
+    const browserTrigger = gamePage.page.getByRole("button", { name: /^Choose a scouting destination\b/i });
     await expect(browserTrigger).toBeFocused();
     await browserTrigger.click();
     await expect(browser).toBeVisible();
@@ -143,7 +143,7 @@ test.describe("Youth geography and travel", () => {
     });
 
     await gamePage.navigateTo("internationalView");
-    const browserTrigger = gamePage.page.getByRole("button", { name: /Browse countries/i });
+    const browserTrigger = gamePage.page.getByRole("button", { name: /^Choose a scouting destination\b/i });
     await expect(browserTrigger).toBeVisible();
     await browserTrigger.click();
 
@@ -188,7 +188,9 @@ test.describe("Youth geography and travel", () => {
 
     await expect(gamePage.page.locator(navItem("internationalView"))).toBeVisible();
     await gamePage.navigateTo("internationalView");
-    await expect(gamePage.page.getByText(/Currently in:/).first()).toBeVisible();
+    const location = gamePage.page.locator('[data-tutorial-id="travel-location-hud"]');
+    await expect(location.getByRole("heading", { name: "England", exact: true })).toBeVisible();
+    await expect(gamePage.page.getByRole("button", { name: /^England \(current location\), familiarity/i })).toBeVisible();
 
     const booked = await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;

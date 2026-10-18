@@ -165,7 +165,7 @@ function clampAttributeReadingValue(value: number): number {
   return Math.max(1, Math.min(20, Math.round(value)));
 }
 
-function resolveInsightReadingRange(
+export function resolveInsightReadingRange(
   value: number,
   confidence: number,
 ): { perceivedValue: number; rangeLow: number; rangeHigh: number } {

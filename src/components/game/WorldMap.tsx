@@ -42,9 +42,9 @@ interface TierColors {
 }
 
 function getTierColors(familiarity: number): TierColors {
-  if (familiarity >= 80) return { core: "#16a34a", glow: "#22c55e", label: "Master" };
-  if (familiarity >= 50) return { core: "#2563eb", glow: "#3b82f6", label: "Expert" };
-  if (familiarity >= 25) return { core: "#d97706", glow: "#f59e0b", label: "Familiar" };
+  if (familiarity >= 80) return { core: "#658658", glow: "#b7d6a0", label: "Master" };
+  if (familiarity >= 50) return { core: "#587287", glow: "#9bbccc", label: "Expert" };
+  if (familiarity >= 25) return { core: "#927a51", glow: "#ddb777", label: "Familiar" };
   if (familiarity >= 1)  return { core: "#78716c", glow: "#a8a29e", label: "Novice" };
   return { core: "#3f3f46", glow: "#52525b", label: "Unknown" };
 }
@@ -64,11 +64,6 @@ function GradientDefs() {
           <feMergeNode in="SourceGraphic" />
         </feMerge>
       </filter>
-      {/* Sonar pulse gradient */}
-      <radialGradient id="sonar-gradient">
-        <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
-        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-      </radialGradient>
     </defs>
   );
 }
@@ -117,22 +112,11 @@ function FamiliarityArc({
 }
 
 // =============================================================================
-// SONAR PULSE (current location)
+// CURRENT LOCATION
 // =============================================================================
 
-function SonarPulse({ cx, cy }: { cx: number; cy: number }) {
-  return (
-    <>
-      <circle cx={cx} cy={cy} r={14} fill="url(#sonar-gradient)" opacity={0}>
-        <animate attributeName="r" values="14;28;14" dur="3s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.6;0;0.6" dur="3s" repeatCount="indefinite" />
-      </circle>
-      <circle cx={cx} cy={cy} r={14} fill="none" stroke="#f59e0b" strokeWidth={1.5} opacity={0.8}>
-        <animate attributeName="r" values="14;22" dur="3s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.8;0" dur="3s" repeatCount="indefinite" />
-      </circle>
-    </>
-  );
+function CurrentLocationRing({ cx, cy }: { cx: number; cy: number }) {
+  return <circle cx={cx} cy={cy} r={16} fill="none" stroke="#ddb777" strokeWidth={1.5} opacity={0.8} />;
 }
 
 // =============================================================================
@@ -161,22 +145,12 @@ function FlightPath({
       <path
         d={pathD}
         fill="none"
-        stroke="#60a5fa"
+        stroke="#9bbccc"
         strokeWidth={1.5}
         strokeDasharray="6 4"
         opacity={0.6}
-      >
-        <animate
-          attributeName="stroke-dashoffset"
-          values="0;-10"
-          dur="1s"
-          repeatCount="indefinite"
-        />
-      </path>
-      {/* Airplane icon animating along path */}
-      <circle r={3} fill="#93c5fd">
-        <animateMotion dur="4s" repeatCount="indefinite" path={pathD} rotate="auto" />
-      </circle>
+      />
+      <circle cx={to.x} cy={to.y} r={3} fill="#9bbccc" />
     </g>
   );
 }
@@ -251,11 +225,12 @@ function CountryMarker({
           onClick();
         }
       }}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Sonar pulse for current location */}
-      {isCurrent && <SonarPulse cx={x} cy={y} />}
+      {isCurrent && <CurrentLocationRing cx={x} cy={y} />}
 
       {/* Outer glow ring */}
       <circle
@@ -288,7 +263,7 @@ function CountryMarker({
         cy={y}
         r={coreR}
         fill={tier.core}
-        stroke={isCurrent ? "#f59e0b" : "#1c1917"}
+        stroke={isCurrent ? "#ddb777" : "#1c1917"}
         strokeWidth={isCurrent ? 2 : 1}
         filter={hovered ? "url(#marker-glow)" : undefined}
         style={{
@@ -298,8 +273,8 @@ function CountryMarker({
         }}
       />
 
-      {/* Country abbreviation — always visible on core dot */}
-      <text
+      {/* Labels appear on focus; the country browser provides a readable full list. */}
+      {(hovered || isCurrent || hasActiveAssignment) && <text
         x={x}
         y={y + 1}
         textAnchor="middle"
@@ -316,7 +291,7 @@ function CountryMarker({
         }}
       >
         {country.abbreviation}
-      </text>
+      </text>}
 
       {/* Full country name on hover — appears above marker */}
       {hovered && (
@@ -345,16 +320,14 @@ function CountryMarker({
           cx={x + (isCompact && !hovered ? 4 : 6)}
           cy={y - (isCompact && !hovered ? 4 : 6)}
           r={3}
-          fill="#10b981"
+          fill="#b7d6a0"
           aria-hidden="true"
         >
-          <animate attributeName="r" values="2.5;4;2.5" dur="1.8s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="1;0.5;1" dur="1.8s" repeatCount="indefinite" />
         </circle>
       )}
 
       {/* Knowledge level indicator (F13) — small diamond badge bottom-right */}
-      {knowledgeLevel > 0 && (
+      {hovered && knowledgeLevel > 0 && (
         <g aria-hidden="true">
           <rect
             x={x + (isCompact && !hovered ? 3 : 5) - 3.5}
@@ -457,10 +430,11 @@ export function WorldMap({
         width="800"
         height="450"
         preserveAspectRatio="xMidYMid slice"
+        style={{ filter: "grayscale(0.8) saturate(0.35)" }}
       />
 
       {/* Dark overlay to improve marker contrast */}
-      <rect x="0" y="0" width="800" height="450" fill="#0a0a0a" opacity="0.3" />
+      <rect x="0" y="0" width="800" height="450" fill="#101411" opacity="0.48" />
 
       {/* Flight path for active booking */}
       {travelDestination && currentLocation && (

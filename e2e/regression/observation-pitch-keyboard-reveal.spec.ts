@@ -1,8 +1,9 @@
 import { test, expect } from "../fixtures";
+import { observationRail, expectUniquePlayerControls, readRailGeometry, readRailReveal } from "../helpers/observation-rail";
+
 import { getVisualEvidenceProvenance } from "../helpers/releaseEvidencePath";
 
-// Integrate separately at e2e/regression/observation-pitch-keyboard-reveal.spec.ts.
-// Existing geometry tests remain unchanged. No focus/scroll helper repairs the
+// Current single player-rail contract. No focus/scroll helper repairs the
 // result: every navigation action below is a native key after a normal tap.
 test.describe("observation pitch keyboard visibility", () => {
   test.use({ hasTouch: true });
@@ -28,26 +29,12 @@ test.describe("observation pitch keyboard visibility", () => {
       return pool;
     });
     await page.getByRole("button", { name: "Begin Observation", exact: true }).click();
-    const field = page.getByRole("group", { name: /^Interactive observation pitch at / });
-    const markers = field.locator("button[data-observation-pitch-marker]");
-    const roster = page.locator('ul[aria-label="Synchronized list of players on the observation pitch"] button');
-    const focusToggle = page.getByRole("button", { name: /Focus targets and lenses/i });
-    await expect(markers).toHaveCount(pool.length);
-    await expect(roster).toHaveCount(pool.length);
+    const rail = observationRail(page);
+    const markers = rail.locator("button[data-observation-pitch-marker]");
+    const names = pool.map(player => player.name);
+    await expectUniquePlayerControls(page, names);
     await expect(page.getByTestId("mobile-observation-controls")).toBeVisible();
-
-    const readLayout = () => field.evaluate(element => {
-      const bounds = element.getBoundingClientRect();
-      return { width: bounds.width, height: bounds.height,
-        targets: [...element.querySelectorAll<HTMLButtonElement>("button[data-observation-pitch-marker]")].map(marker => {
-          const rect = marker.getBoundingClientRect();
-          const caption = marker.querySelector<HTMLElement>("[data-observation-pitch-caption]")?.getBoundingClientRect();
-          const round = (value: number) => Number(value.toFixed(2));
-          return { x: round(rect.x - bounds.x), y: round(rect.y - bounds.y), width: rect.width, height: rect.height,
-            caption: caption ? { x: round(caption.x - bounds.x), y: round(caption.y - bounds.y),
-              width: caption.width, height: caption.height } : null };
-        }) };
-    });
+    const readLayout = () => readRailGeometry(rail, names);
     const readDomain = () => page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState();
       const session = state.activeSession;
@@ -59,36 +46,7 @@ test.describe("observation pitch keyboard visibility", () => {
           focused: player.isFocused, lens: player.currentLens ?? null })),
         flaggedMomentIds: session.flaggedMoments.map((flag: any) => flag.moment.id) };
     });
-    const readReveal = (index: number) => page.evaluate(index => {
-      const field = document.querySelector<HTMLElement>('[role="group"][aria-label^="Interactive observation pitch at "]');
-      const marker = field?.querySelectorAll<HTMLButtonElement>("button[data-observation-pitch-marker]")[index];
-      const caption = marker?.querySelector<HTMLElement>("[data-observation-pitch-caption]");
-      const controls = document.querySelector<HTMLElement>('[data-testid="mobile-observation-controls"]');
-      const header = document.querySelector<HTMLElement>("header");
-      if (!marker || !caption || !controls || !header) throw new Error("Required watch visibility region is missing");
-      const rect = marker.getBoundingClientRect();
-      const name = caption.getBoundingClientRect();
-      const footer = controls.getBoundingClientRect();
-      const banner = header.getBoundingClientRect();
-      const top = Math.min(rect.top - 4, name.top);
-      const bottom = Math.max(rect.bottom + 4, name.bottom);
-      const left = Math.min(rect.left - 4, name.left);
-      const right = Math.max(rect.right + 4, name.right);
-      const visibleTop = Math.max(0, banner.bottom);
-      const visibleBottom = Math.min(window.innerHeight, footer.top);
-      const centerHit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
-      const problems: string[] = [];
-      if (document.activeElement !== marker) problems.push("keyboard-focus-is-elsewhere");
-      if (top < visibleTop + 4 - 0.5) problems.push("ring-or-caption-hidden-under-header");
-      if (bottom > visibleBottom - 4 + 0.5) problems.push("ring-or-caption-hidden-under-footer");
-      if (left < 4 - 0.5 || right > window.innerWidth - 4 + 0.5) problems.push("ring-or-caption-outside-viewport-width");
-      if (!centerHit || !marker.contains(centerHit)) problems.push("focused-target-center-is-occluded");
-      return { index, ariaLabel: marker.getAttribute("aria-label"), caption: caption.textContent?.trim(),
-        pressed: marker.getAttribute("aria-pressed"), top, bottom, left, right, visibleTop, visibleBottom,
-        body: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        scrollY: window.scrollY, centerHit: centerHit?.tagName ?? null, problems };
-    }, index);
+    const readReveal = (index: number) => readRailReveal(markers.nth(index), pool[index].name, true);
 
     const evidence: Array<{ key: string; reveal: Awaited<ReturnType<typeof readReveal>> }> = [];
     let finalDomain: Awaited<ReturnType<typeof readDomain>> | null = null;
@@ -98,8 +56,9 @@ test.describe("observation pitch keyboard visibility", () => {
       await expect(markers.nth(index)).toBeFocused();
       await expect(markers.nth(index)).toHaveAttribute("aria-pressed", "true");
       await expect(markers.nth(index)).toHaveAttribute("aria-label", new RegExp(`^Track ${pool[index].name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},`));
-      await expect(roster.nth(index)).toHaveAttribute("aria-pressed", "true");
-      await expect(focusToggle).toContainText(`${pool[index].name} selected`);
+      await expect(rail.locator('button[aria-pressed="true"]')).toHaveCount(1);
+      await expect(rail.locator('button[tabindex="0"]')).toHaveCount(1);
+      await expect(page.getByRole("group", { name: `Observation lens for ${pool[index].name}`, exact: true })).toHaveCount(1);
       let observed = await readReveal(index);
       try {
         await expect.poll(async () => {
@@ -114,11 +73,11 @@ test.describe("observation pitch keyboard visibility", () => {
 
     try {
       // A real marker tap selects the first player. Native Tab leaves the
-      // roving group for the roster; Shift+Tab must re-enter its selected marker.
+      // rail for its single inline lens control; Shift+Tab re-enters the selected player.
       await markers.first().tap();
       await expect(markers.first()).toBeFocused();
       await page.keyboard.press("Tab");
-      await expect(roster.first()).toBeFocused();
+      await expect(page.getByRole("button", { name: `Use technical lens for ${pool[0].name}`, exact: true })).toBeFocused();
       await page.keyboard.press("Shift+Tab");
       await requireRevealed(0, "Tab re-entry");
 
@@ -126,7 +85,7 @@ test.describe("observation pitch keyboard visibility", () => {
       await requireRevealed(pool.length - 1, "End");
       await page.keyboard.press("Home");
       await requireRevealed(0, "Home");
-      // Traverse every real player, including lower rows. No locator action
+      // Traverse every real player across the horizontal rail. No locator action
       // scrolls each target into view or focuses it after the key press.
       for (let index = 1; index < pool.length; index++) {
         await page.keyboard.press("ArrowRight");

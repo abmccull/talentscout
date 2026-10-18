@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../fixtures";
+import { advanceGeneratedWatchToReflection, readOpeningLead } from "../helpers/generated-watch";
 
 async function inspectUnobscured(locator: Locator, textOnly = false) {
   return locator.evaluate((element, measureText) => {
@@ -105,17 +106,10 @@ test("watch and reflection show quiet save feedback only after accepted persiste
   await expect.poll(() => readSavedWatch(page)).toMatchObject({ ...identity, sessionState: "active", phase: 0 });
   const activeCheckpoint = await readSavedWatch(page);
 
-  const controls = page.getByTestId("mobile-observation-controls");
-  await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  // The opening requires recording its standout before phase two can advance.
-  // Keep Focus unused while fulfilling that real gameplay prerequisite.
-  await page.locator('[data-tutorial-id="observation-flag-moment"]:visible').first().click();
-  await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').click();
-  await page.getByRole("button", { name: /^Confirm the first read\b/ }).click();
-  await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  await controls.getByRole("button", { name: "Reflect", exact: true }).click();
+  const lead = await readOpeningLead(page);
+  const watch = await advanceGeneratedWatchToReflection(page, { lead, focus: false });
   await expect(page.getByRole("heading", { name: "Post-Observation Reflection", exact: true })).toBeVisible();
-  await expect.poll(() => readSavedWatch(page)).toMatchObject({ ...identity, sessionState: "reflection", phase: 2 });
+  await expect.poll(() => readSavedWatch(page)).toMatchObject({ ...identity, sessionState: "reflection", phase: watch.phase });
   await expect(feedback).toHaveText("Saved locally");
   const reflectionCheckpoint = await readSavedWatch(page);
 
@@ -154,7 +148,7 @@ test("watch and reflection show quiet save feedback only after accepted persiste
     return (window as any).__watchSaveTransitions;
   });
   await testInfo.attach("watch-save-acceptance.json", {
-    body: JSON.stringify({ identity, transitions, activeCheckpoint, reflectionCheckpoint, bounds }, null, 2),
+    body: JSON.stringify({ identity, transitions, activeCheckpoint, reflectionCheckpoint, watch, bounds }, null, 2),
     contentType: "application/json",
   });
   gamePage.expectNoConsoleErrors();

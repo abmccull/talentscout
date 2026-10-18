@@ -8,6 +8,7 @@ import { createObservationActions } from "./actions/observationActions";
 import { createReportActions } from "./actions/reportActions";
 import { createProgressionActions } from "./actions/progressionActions";
 import { createFinanceActions } from "./actions/financeActions";
+import { createDurableGameplaySetter } from "./actions/durableGameplayCommit";
 import { createWeeklyActions } from "./actions/weeklyActions";
 import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
 import { createDashboardActions } from "./actions/dashboardActions";
@@ -381,6 +382,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastWeekSummary: null,
   batchSummary: null,
   isAdvancingWeek: false,
+  activeWeeklyTransactionId: null,
   lastWeeklyExecutionRoute: null,
   lastWeeklyWorkerTelemetry: null,
   weeklyTransactionError: null,
@@ -397,6 +399,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   isSaving: false,
   isLoadingSave: false,
+  activeSaveLoadId: null,
   saveConflict: null,
   isResolvingSaveConflict: false,
   autosaveStatus: "idle",
@@ -448,6 +451,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       autosaveStatus: "idle",
       autosaveError: null,
       isAdvancingWeek: false,
+      activeWeeklyTransactionId: null,
+      activeSaveLoadId: null,
+      isLoadingSave: false,
+      isResolvingSaveConflict: false,
       lastWeeklyExecutionRoute: null,
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
@@ -1118,8 +1125,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastWeekSummary: null,
       batchSummary: null,
       saveConflict: null,
+      activeSaveLoadId: null,
+      isLoadingSave: false,
       isResolvingSaveConflict: false,
       isAdvancingWeek: false,
+      activeWeeklyTransactionId: null,
       lastWeeklyExecutionRoute: null,
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
@@ -1348,10 +1358,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ...createReportActions(get, set),
 
   // Progression actions (extracted to actions/progressionActions.ts)
-  ...createProgressionActions(get, set),
+  ...createProgressionActions(get, createDurableGameplaySetter(get, set)),
 
   // Finance actions (extracted to actions/financeActions.ts)
-  ...createFinanceActions(get, set),
+  ...createFinanceActions(get, createDurableGameplaySetter(get, set)),
 
   // Helpers
 

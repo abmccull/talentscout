@@ -16,13 +16,14 @@ export function processWeeklyTutorialMilestones(
   tutorial: TutorialState,
 ): void {
   tutorial.completeMilestone("advancedWeek");
-  if (nextState.currentSeason === 1) {
+  if (nextState.currentSeason === 1 && nextState.guidedSessionRequested !== false) {
     const week = nextState.currentWeek;
     if (week === 2) tutorial.startSequence("mentorCheckin:week2");
     else if (week === 3) tutorial.startSequence("mentorCheckin:week3");
     else if (week === 4) tutorial.startSequence("mentorCheckin:week4");
   }
-  if (tierPromoted) tutorial.startSequence("careerProgression");
+  const automaticGuidance = nextState.guidedSessionRequested !== false || tutorial.guidedSessionForcedReplay;
+  if (tierPromoted && automaticGuidance) tutorial.startSequence("careerProgression");
 
   if ((nextState.finances?.equipment?.ownedItems.length ?? 0) > 0) {
     tutorial.recordFeatureDiscovery("equipment");
@@ -40,6 +41,7 @@ export function processWeeklyTutorialMilestones(
     tutorial.recordFeatureDiscovery("rival");
   }
 
+  if (!automaticGuidance) return;
   const completed = tutorial.completedSequences;
   const hadAcceptedPlacement = Object.values(previousState.placementReports)
     .some((report) => report.clubResponse === "accepted");
@@ -94,6 +96,7 @@ export function processWeeklyContextualHint(
   state: GameState,
   tutorial: TutorialState,
 ): void {
+  if (state.guidedSessionRequested === false && !tutorial.guidedSessionForcedReplay) return;
   const npcHiredCount = Object.keys(state.npcScouts).length;
   const totalNpcSlots = Object.values(state.territories)
     .reduce((sum, territory) => sum + territory.maxScouts, 0);

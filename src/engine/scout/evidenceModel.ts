@@ -1,3 +1,4 @@
+import { getSupportedCueClassifications, getSupportedMomentClassifications } from "./cueSemantics";
 import type {
   EvidenceClassificationId,
   EvidenceConfidenceBand,
@@ -57,7 +58,7 @@ export const SCOUTING_QUESTIONS: readonly ScoutingQuestionDefinition[] = [
     lens: "tactical",
     primarySkill: "tacticalUnderstanding",
     secondarySkill: "playerJudgment",
-    classifications: ["preReceiveDecision", "pressureResponse"],
+    classifications: ["decisionMaking", "preReceiveDecision", "defensiveReading"],
     momentTypes: ["tacticalDecision", "mentalResponse"],
   },
   {
@@ -90,7 +91,7 @@ export const SCOUTING_QUESTIONS: readonly ScoutingQuestionDefinition[] = [
     lens: "physical",
     primarySkill: "physicalAssessment",
     secondarySkill: "playerJudgment",
-    classifications: ["physicalRepeatability", "pressureResponse"],
+    classifications: ["physicalExecution", "physicalRepeatability"],
     momentTypes: ["physicalTest"],
   },
   {
@@ -116,6 +117,8 @@ const CLARITY_ORDER = ["missed", "glimpse", "usable", "strong", "exceptional"] a
 
 const CLASSIFICATION_LABELS: Record<EvidenceClassificationId, string> = {
   technicalExecution: "technical execution",
+  decisionMaking: "decision-making",
+  physicalExecution: "physical execution",
   preReceiveDecision: "pre-receive decision",
   defensiveReading: "defensive reading",
   offBallMovement: "off-ball movement",
@@ -133,18 +136,13 @@ const CONFIDENCE_VALUE: Record<EvidenceConfidenceBand, number> = {
 };
 
 const RECOMMENDATION_LABEL: Record<ReportRecommendedAction, string> = {
+  pass: "Pass for now; reconsider when new evidence changes the question",
   monitor: "Keep the name private and arrange another look",
   inviteForTrial: "Test the read in a more demanding context",
   offerAcademyPlace: "Escalate the player to the recruitment team now",
 };
 
-const MOMENT_CLASSIFICATION: Record<PlayerMoment["momentType"], EvidenceClassificationId> = {
-  technicalAction: "technicalExecution",
-  physicalTest: "physicalRepeatability",
-  mentalResponse: "pressureResponse",
-  tacticalDecision: "preReceiveDecision",
-  characterReveal: "pressureResponse",
-};
+
 
 function clamp(value: number, low = 0, high = 1): number {
   return Math.max(low, Math.min(high, value));
@@ -162,10 +160,6 @@ function hashUnit(value: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0) / 0xffffffff;
-}
-
-function unique<T>(values: T[]): T[] {
-  return [...new Set(values)];
 }
 
 function questionDefinition(questionId: ScoutingQuestionId): ScoutingQuestionDefinition {
@@ -249,9 +243,13 @@ function cueText(
   }
   if (clarity === "glimpse") {
     return {
-      summary: `Possible ${label}`,
-      detail: `${moment.vagueDescription} There may be a ${label} signal here, but the view was incomplete.`,
+      summary: "Incomplete view",
+      detail: `${moment.vagueDescription} The view was too incomplete to support a trait conclusion.`,
     };
+  }
+  if (classification === "noConclusion") {
+    return { summary: "Observed behavior; interpretation open",
+      detail: `${moment.description} The behavior is retained without a trait conclusion.` };
   }
   const qualifier = clarity === "usable"
     ? "This is a usable first-hand cue, not yet a pattern."
@@ -259,7 +257,7 @@ function cueText(
       ? "The action is clear enough to support a working claim, but it still needs another context."
       : "This was an unusually clear cue. It remains one passage of play rather than proof of a repeatable trait.";
   return {
-    summary: `${clarity === "exceptional" ? "Exceptional" : clarity === "strong" ? "Strong" : "Usable"} ${label}`,
+    summary: `${clarity === "exceptional" ? "Exceptional" : clarity === "strong" ? "Strong" : "Usable"} evidence: ${label}`,
     detail: `${moment.description} ${qualifier}`,
   };
 }
@@ -283,12 +281,16 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
       const player = input.session.players.find((candidate) => candidate.playerId === moment.playerId);
       const focused = player?.focusedPhases.includes(phase.index) ?? false;
       const lens = activeLensForPhase(input.session, moment.playerId, phase.index);
-      const aligned = definition.momentTypes.includes(moment.momentType);
+      const supported = getSupportedMomentClassifications(moment);
+      const aligned = definition.id === "projection" || supported.some((classification) =>
+        classification !== "noConclusion" && definition.classifications.includes(classification));
       const domainSkill = ((input.scout.skills?.[definition.primarySkill] ?? 1) / 20) * 0.23;
       const judgment = ((input.scout.skills?.[definition.secondarySkill] ?? 1) / 20) * 0.12;
-      const focus = focused ? 0.15 + (lens === definition.lens || lens === "general" ? 0.06 : 0) : -0.12;
+      const focus = focused ? 0.15 + (lens === definition.lens ? 0.08 : lens === "general" ? 0.01 : 0) : -0.12;
       const questionAlignment = aligned ? 0.15 : -0.03;
-      const eventSignal = (moment.quality / 10) * 0.15 + (moment.isStandout ? 0.08 : 0);
+      // Visibility is not success: a conspicuous error is as readable as a
+      // conspicuous success. The event's direction remains a separate fact.
+      const eventSignal = 0.12 + (moment.pressureContext ? 0.03 : 0);
       const regionalContext = (regionalKnowledge - 30) / 700;
       const fatigue = -(clamp(input.scout.fatigue ?? 0, 0, 100) / 100) * 0.18;
       const conditions = -(input.session.venueAtmosphere?.chaosLevel ?? 0) * 0.1;
@@ -301,9 +303,8 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
         direction,
       );
       const uncertainty = (hashUnit(`${input.session.id}:${moment.id}:${input.questionId}`) - 0.5) * 0.16;
-      const intuitionSpark = moment.isStandout
-        ? ((input.scout.attributes?.intuition ?? 1) / 20) * hashUnit(`${moment.id}:spark`) * 0.05
-        : 0;
+      const intuitionSpark = ((input.scout.attributes?.intuition ?? 1) / 20)
+        * hashUnit(`${moment.id}:spark`) * 0.05;
       const score = clamp(
         0.05
         + domainSkill
@@ -317,23 +318,18 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
         + halftime
         + uncertainty
         + intuitionSpark,
+        0,
+        focused ? 1 : 0.43,
       );
       const clarity = cueClarity(score);
       const confidence = clamp(score * 0.86 + Math.min(0.04, regionalKnowledge / 2500), 0.12, 0.88);
-      const attributeLimit = clarity === "exceptional" ? 3 : clarity === "strong" ? 2 : clarity === "usable" ? 1 : 0;
-      const visibleAttributes = moment.attributesHinted.slice(0, attributeLimit);
-      const defensiveCue = moment.momentType === "tacticalDecision"
-        && visibleAttributes.some((attribute) =>
-          attribute === "marking" || attribute === "defensiveAwareness" || attribute === "pressing");
-      const primaryClassification = defensiveCue
-        ? "defensiveReading"
-        : moment.momentType === "tacticalDecision" && visibleAttributes.includes("offTheBall")
-          ? "offBallMovement"
-          : MOMENT_CLASSIFICATION[moment.momentType];
+      const primaryClassification = supported[0];
       const text = cueText(moment, clarity, primaryClassification);
+      const attributeLimit = clarity === "exceptional" ? 3 : clarity === "strong" ? 2 : clarity === "usable" ? 1 : 0;
 
       readings.push({
         id: `cue:${input.session.id}:${moment.id}`,
+        actionId: moment.actionId,
         sessionId: input.session.id,
         momentId: moment.id,
         playerId: moment.playerId,
@@ -348,12 +344,12 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
         direction,
         summary: text.summary,
         detail: text.detail,
-        suggestedClassifications: [...unique([
-          primaryClassification,
-          ...(moment.pressureContext ? ["pressureResponse" as const] : []),
-          "anomaly" as const,
-        ]).filter((classification) => classification !== "noConclusion").slice(0, 3), "noConclusion"],
-        attributesHinted: visibleAttributes,
+        // Withholding judgment must survive the option limit. An unreadable
+        // passage cannot support a football classification in the first place.
+        suggestedClassifications: clarity === "glimpse" || clarity === "missed"
+          ? ["noConclusion"]
+          : [...supported.filter((classification) => classification !== "noConclusion").slice(0, 3), "noConclusion"],
+        attributesHinted: moment.attributesHinted.slice(0, attributeLimit),
         pressureContext: moment.pressureContext,
         contextKey: input.session.situation?.repetitionKey ?? input.session.activityType,
         countryId: input.session.countryId,
@@ -380,13 +376,25 @@ export function resolveSessionCueReadings(input: ResolveSessionCueInput): ScoutC
 export function buildSessionEvidenceCards(session: ObservationSession): ScoutingEvidenceCard[] {
   const cueByMoment = new Map((session.cueReadings ?? []).map((cue) => [cue.momentId, cue]));
   return session.flaggedMoments.flatMap((flagged) => {
-    const cue = cueByMoment.get(flagged.moment.id);
-    if (!cue) return [];
+    const savedCue = cueByMoment.get(flagged.moment.id);
+    if (!savedCue || savedCue.playerId !== flagged.moment.playerId) return [];
+    const focused = session.players.some((player) => player.playerId === savedCue.playerId
+      && player.focusedPhases.includes(flagged.phaseIndex));
+    const cue: ScoutCueReading = session.mode === "fullObservation" && !focused
+      ? { ...savedCue, clarity: "glimpse", confidence: Math.min(0.3, savedCue.confidence),
+          confidenceBand: "tentative", score: Math.min(0.43, savedCue.score),
+          detail: flagged.moment.vagueDescription, summary: "Peripheral glimpse",
+          direction: "mixed", attributesHinted: [], suggestedClassifications: ["noConclusion"] }
+      : savedCue;
+    const semanticCue = { ...cue, actionId: flagged.moment.actionId, pressureContext: flagged.moment.pressureContext };
+    const supported = getSupportedCueClassifications(semanticCue);
     const decision = session.evidenceDecisions?.[cue.id];
-    const classification = decision?.classification
-      ?? (cue.clarity === "missed" ? "noConclusion" : cue.suggestedClassifications[0]);
+    const classification = decision && supported.includes(decision.classification)
+      ? decision.classification : supported[0];
     return [{
-      ...cue,
+      ...semanticCue,
+      ...cueText(flagged.moment, cue.clarity, classification),
+      suggestedClassifications: supported,
       version: 1 as const,
       sourceType: "liveObservation" as const,
       classification,
@@ -405,7 +413,7 @@ export interface EvidenceClaimOption {
 }
 
 function categoryForClassification(classification: EvidenceClassificationId): JudgmentCategory {
-  if (classification === "preReceiveDecision" || classification === "offBallMovement" || classification === "defensiveReading") return "roleFit";
+  if (classification === "decisionMaking" || classification === "preReceiveDecision" || classification === "offBallMovement" || classification === "defensiveReading") return "roleFit";
   if (classification === "pressureResponse") return "characterRisk";
   return "potential";
 }
@@ -413,16 +421,18 @@ function categoryForClassification(classification: EvidenceClassificationId): Ju
 function measuredClaim(classification: EvidenceClassificationId, direction: ScoutCueReading["direction"]): string {
   if (classification !== "noConclusion") {
     const subject = CLASSIFICATION_LABELS[classification];
-    if (direction === "negative") return `The observed ${subject} raised a concern in this passage; a recurring weakness is not established.`;
+    if (direction === "negative") return `The observed ${subject} raised a concern in this passage: the action broke down. A recurring weakness is not established.`;
     if (direction === "mixed") return `The observed ${subject} was mixed in this passage; the conditions behind the uneven execution need another test.`;
   }
   switch (classification) {
+    case "decisionMaking": return "The player selected an effective option in this passage; this alone does not establish a decision-making pattern.";
+    case "physicalExecution": return "The action showed useful physical execution, but repeatability remains untested.";
     case "technicalExecution": return "The action supports a working read of clean technical execution at this level.";
     case "preReceiveDecision": return "The player appeared to prepare the decision before receiving the ball.";
     case "defensiveReading": return "The player recognised and responded to defensive danger in this passage; another context is still needed.";
-    case "offBallMovement": return "The movement created a useful passing option before the space became obvious.";
-    case "pressureResponse": return "The response to pressure was composed in this specific moment.";
-    case "physicalRepeatability": return "The action showed useful physical control, but repeatability remains untested.";
+    case "offBallMovement": return "The off-ball action was effective in this passage; role and instruction remain relevant context.";
+    case "pressureResponse": return "The response held up in this pressured passage; this alone does not establish a character trait.";
+    case "physicalRepeatability": return "The player sustained the repeated effort in this passage; it needs another test under different demands.";
     case "anomaly": return "The passage was unusual enough to justify a deliberate second look.";
     case "noConclusion": return "This passage does not support a stable football conclusion.";
   }
@@ -431,10 +441,12 @@ function measuredClaim(classification: EvidenceClassificationId, direction: Scou
 function stretchClaim(classification: EvidenceClassificationId, direction: ScoutCueReading["direction"]): string {
   if (classification !== "noConclusion") {
     const subject = CLASSIFICATION_LABELS[classification];
-    if (direction === "negative") return `The concern about ${subject} may recur against stronger opposition; this extends beyond the observed passage.`;
+    if (direction === "negative") return `The concern about ${subject} may signal a recurring limitation against stronger opposition; this extends beyond the observed passage.`;
     if (direction === "mixed") return `The uncertainty around ${subject} may indicate a repeatability problem; the current passage does not establish that pattern.`;
   }
   switch (classification) {
+    case "decisionMaking": return "The player's choice may indicate decision-making that translates to more demanding opposition.";
+    case "physicalExecution": return "The player's physical tools may translate to a higher competitive level, although repeatability remains untested.";
     case "technicalExecution": return "The player may possess a repeatable technical advantage over this level.";
     case "preReceiveDecision": return "The player may process the game earlier than peers in the same age group.";
     case "defensiveReading": return "The player may read defensive danger consistently against stronger opposition.";
@@ -446,7 +458,9 @@ function stretchClaim(classification: EvidenceClassificationId, direction: Scout
   }
 }
 
-export function getEvidenceClaimOptions(card: ScoutingEvidenceCard): EvidenceClaimOption[] {
+export function getEvidenceClaimOptions(inputCard: ScoutingEvidenceCard): EvidenceClaimOption[] {
+  const card: ScoutingEvidenceCard = getSupportedCueClassifications(inputCard).includes(inputCard.classification)
+    ? inputCard : { ...inputCard, classification: "noConclusion" };
   const category = categoryForClassification(card.classification);
   const unclear = card.clarity === "missed" || card.clarity === "glimpse";
   const options: EvidenceClaimOption[] = [
@@ -482,6 +496,32 @@ export function getEvidenceClaimOptions(card: ScoutingEvidenceCard): EvidenceCla
     : options;
 }
 
+/** Score the actual claim against its cited passages, including contrary cues. */
+function claimEvidenceFit(
+  cards: ScoutingEvidenceCard[],
+  claim: Pick<EvidenceClaimOption, "statement" | "support" | "classification">,
+): number {
+  if (claim.support === "withheld") return 18;
+  if (cards.length === 0) return 0;
+  const relevant = cards.filter((card) => card.classification === claim.classification
+    && getSupportedCueClassifications(card).includes(claim.classification));
+  const matching = relevant.filter((card) => getEvidenceClaimOptions(card).some((option) =>
+    option.statement === claim.statement && option.support === claim.support
+  ));
+  if (matching.length === 0) return 0;
+  const readable = matching.filter((card) => card.clarity !== "missed" && card.clarity !== "glimpse");
+  const fit = readable.length / cards.length;
+  return Math.round((claim.support === "stretch" ? 9 : 20) * fit);
+}
+
+function recommendationTarget(
+  recommendation: ReportRecommendedAction | "pass",
+  evidenceConfidence: number,
+): number {
+  if (recommendation === "pass") return evidenceConfidence;
+  return recommendation === "monitor" ? 0.3 : recommendation === "inviteForTrial" ? 0.55 : 0.8;
+}
+
 export interface EvidenceUnknownOption {
   id: string;
   category: JudgmentCategory;
@@ -507,8 +547,8 @@ export const FORMAL_CATEGORY_UNKNOWN_OPTIONS: Record<
   potential: [
     {
       id: "formal-unknown:potential:repeatability",
-      label: "You have only seen this once",
-      statement: "You have only seen this development cue once, so it may not hold against different opposition.",
+      label: "Development needs independent confirmation",
+      statement: "The development projection needs corroboration across different opposition and demands.",
       questionId: "projection",
       contextRequirement: "A second live setting with different opposition and development demands.",
     },
@@ -523,15 +563,15 @@ export const FORMAL_CATEGORY_UNKNOWN_OPTIONS: Record<
   roleFit: [
     {
       id: "formal-unknown:role:alternate",
-      label: "Another tactical role is untested",
-      statement: "The player has not been tested with a different tactical responsibility.",
+      label: "Role translation needs testing",
+      statement: "The role projection needs comparison with a different tactical responsibility.",
       questionId: "movement",
       contextRequirement: "A second role or team shape that changes the player's off-ball responsibilities.",
     },
     {
       id: "formal-unknown:role:speed",
-      label: "Faster opposition is untested",
-      statement: "The role fit has not been tested against a faster, more organised opponent.",
+      label: "Fit against faster opposition",
+      statement: "The role fit needs comparison against faster, more organised opposition.",
       questionId: "decisions",
       contextRequirement: "A stronger opponent that reduces time and space.",
     },
@@ -539,15 +579,15 @@ export const FORMAL_CATEGORY_UNKNOWN_OPTIONS: Record<
   characterRisk: [
     {
       id: "formal-unknown:character:pressure",
-      label: "Sustained pressure is untested",
-      statement: "The player's response to sustained pressure remains untested.",
+      label: "Response under sustained pressure",
+      statement: "The character assessment needs repeated evidence under sustained pressure.",
       questionId: "pressure",
       contextRequirement: "A live period with mistakes, contact, and little recovery time.",
     },
     {
       id: "formal-unknown:character:independent",
-      label: "Independent character view is missing",
-      statement: "The character read has not been challenged by an independent source.",
+      label: "Independent character view",
+      statement: "The character read needs independent corroboration from another setting.",
       questionId: "pressure",
       contextRequirement: "A coach or family source who has seen the player in another setting.",
     },
@@ -574,8 +614,8 @@ export function getEvidenceUnknownOptions(card: ScoutingEvidenceCard): EvidenceU
     {
       id: `unknown:${card.id}:pressure`,
       category,
-      label: "Untested under sustained pressure",
-      statement: "We have not seen whether the same decision survives sustained pressure.",
+      label: "Repeatability under sustained pressure",
+      statement: "This passage alone cannot establish how reliably the decision holds under sustained pressure.",
       recommendedQuestionId: "pressure",
       activityType: "followUpSession",
       contextRequirement: "A live period with repeated pressure and little recovery time.",
@@ -583,8 +623,10 @@ export function getEvidenceUnknownOptions(card: ScoutingEvidenceCard): EvidenceU
     {
       id: `unknown:${card.id}:late`,
       category,
-      label: "Untested late in the session",
-      statement: "We have not seen whether the quality holds when fatigue changes the picture.",
+      label: card.minute >= 60 ? "Repeat the late-game test" : "Quality later in the session",
+      statement: card.minute >= 60
+        ? "Another late-game look is needed to distinguish fatigue from a one-off action."
+        : "This passage alone cannot establish how the quality changes later in a tiring match.",
       recommendedQuestionId: "repeatability",
       activityType: "followUpSession",
       contextRequirement: "A full session where the player can be watched after the hour mark.",
@@ -592,19 +634,19 @@ export function getEvidenceUnknownOptions(card: ScoutingEvidenceCard): EvidenceU
     {
       id: `unknown:${card.id}:level`,
       category,
-      label: "Untested against stronger opposition",
-      statement: "We have not seen this signal against a faster or more organised opponent.",
+      label: "Translation to stronger opposition",
+      statement: "Another context is needed to judge whether this signal transfers to faster or better-organised opposition.",
       recommendedQuestionId: card.questionId,
       activityType: "youthTournament",
       contextRequirement: "A stronger opponent or tournament match with less time and space.",
     },
   ];
-  if (card.classification === "offBallMovement" || card.classification === "preReceiveDecision" || card.classification === "defensiveReading") {
+  if (card.classification === "offBallMovement" || card.classification === "preReceiveDecision" || card.classification === "decisionMaking" || card.classification === "defensiveReading") {
     shared[1] = {
       id: `unknown:${card.id}:role`,
       category,
-      label: "Untested in another role",
-      statement: "We have not seen whether the read survives a different tactical responsibility.",
+      label: "Translation to another role",
+      statement: "This passage cannot by itself establish whether the read translates to a different tactical responsibility.",
       recommendedQuestionId: card.classification === "defensiveReading" ? "decisions" : "movement",
       activityType: "followUpSession",
       contextRequirement: "A second live look with a different starting role or team shape.",
@@ -650,18 +692,17 @@ function scoreAssessment(
     exceptional: 25,
   };
   const evidenceSufficiency = Math.min(25, Math.max(...cards.map((card) => clarityScore[card.clarity])) + Math.min(4, cards.length - 1));
-  const claimEvidenceFit = claim.support === "supported" ? 20 : claim.support === "withheld" ? 18 : 9;
+  const evidenceFit = claimEvidenceFit(cards, claim);
   const contextDiversity = Math.min(15, new Set(cards.map((card) => card.contextKey)).size * 5);
   const evidenceConfidence = cards.reduce((sum, card) => sum + card.confidence, 0) / Math.max(1, cards.length);
   const confidenceGap = Math.max(0, CONFIDENCE_VALUE[confidence] - evidenceConfidence);
   const calibration = Math.max(0, Math.round(15 - confidenceGap * 35 - (claim.support === "stretch" ? 3 : 0)));
   const unknownHandling = 10;
   const briefFit = 6;
-  const recommendationTarget = recommendation === "monitor" ? 0.3 : recommendation === "inviteForTrial" ? 0.55 : 0.8;
-  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget - evidenceConfidence) * 10));
+  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget(recommendation, evidenceConfidence) - evidenceConfidence) * 10));
   return {
     evidenceSufficiency,
-    claimEvidenceFit,
+    claimEvidenceFit: evidenceFit,
     contextDiversity,
     calibration,
     unknownHandling,
@@ -669,7 +710,7 @@ function scoreAssessment(
     deliveryFit,
     total: Math.round(
       evidenceSufficiency
-      + claimEvidenceFit
+      + evidenceFit
       + contextDiversity
       + calibration
       + unknownHandling
@@ -793,14 +834,12 @@ function scoreFormalAssessment(
     cards.reduce((sum, card) => sum + clarityValue[card.clarity], 0) / Math.max(1, cards.length)
       + Math.min(5, cards.length - 1),
   );
-  const supportScore = claims.reduce((sum, claim) => {
-    if (claim.support === "supported") return sum + 20;
-    if (claim.support === "withheld") return sum + 17;
-    return sum + 9;
-  }, 0) / Math.max(1, claims.length);
+  const supportScore = claims.reduce((sum, claim) => sum + claimEvidenceFit(
+    cards.filter((card) => claim.evidenceIds.includes(card.id)), claim,
+  ), 0) / Math.max(1, claims.length);
   const contextDiversity = Math.min(
     15,
-    new Set(cards.map((card) => `${card.contextKey}:${card.independenceKey}`)).size * 5,
+    new Set(cards.map((card) => card.contextKey)).size * 5,
   );
   const calibrationValues = claims.map((claim) => {
     const supportCards = cards.filter((card) => claim.evidenceIds.includes(card.id));
@@ -816,8 +855,7 @@ function scoreFormalAssessment(
   const unknownHandling = Math.min(10, unknowns.length * 3 + (unknowns.length >= 3 ? 1 : 0));
   const briefFit = 10;
   const averageConfidence = cards.reduce((sum, card) => sum + card.confidence, 0) / Math.max(1, cards.length);
-  const recommendationTarget = recommendation === "monitor" ? 0.3 : recommendation === "inviteForTrial" ? 0.55 : 0.8;
-  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget - averageConfidence) * 10));
+  const deliveryFit = Math.max(0, Math.round(5 - Math.abs(recommendationTarget(recommendation, averageConfidence) - averageConfidence) * 10));
   return {
     evidenceSufficiency: Math.round(evidenceSufficiency),
     claimEvidenceFit: Math.round(supportScore),
@@ -859,6 +897,9 @@ export function buildFormalAssessment(
     if (verdict.status === "assessed") {
       if (!verdict.classification || !verdict.claimSupport || evidenceIds.length === 0) {
         errors.push(`${category} is missing traceable evidence.`);
+      } else if (!evidenceIds.some((id) => getEvidenceClaimOptions(cardById.get(id)!).some((option) =>
+        option.classification === verdict.classification && option.support === verdict.claimSupport))) {
+        errors.push(`${category} asserts an interpretation that its saved action does not support.`);
       } else {
         claims.push({
           id: `formal-claim:${category}:${evidenceIds.join(":")}`,
@@ -981,6 +1022,8 @@ export function calculateEvidencePracticeXp(
   const gains: Partial<Record<ScoutSkill, number>> = {};
   const skillForClassification: Record<EvidenceClassificationId, ScoutSkill> = {
     technicalExecution: "technicalEye",
+    decisionMaking: "tacticalUnderstanding",
+    physicalExecution: "physicalAssessment",
     preReceiveDecision: "tacticalUnderstanding",
     defensiveReading: "tacticalUnderstanding",
     offBallMovement: "tacticalUnderstanding",

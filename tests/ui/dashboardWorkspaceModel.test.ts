@@ -5,6 +5,8 @@ import { createWeekSchedule } from "@/engine/core/calendar";
 import {
   DASHBOARD_OWNERSHIP_CONTRACT,
   buildDashboardWorkspaceModel,
+  getYouthDeskRepresentedObjectiveKey,
+  selectDashboardSupportingItems,
 } from "@/components/game/dashboard/dashboardWorkspaceModel";
 
 function createState(): GameState {
@@ -53,6 +55,36 @@ function createState(): GameState {
 }
 
 describe("dashboardWorkspaceModel", () => {
+  it("keeps spare-day planning visible beside advancing an already booked follow-up", () => {
+    const state = createState();
+    state.schedule.activities[0] = {
+      type: "followUpSession", slots: 1, targetId: "player-1", description: "Monday follow-up",
+    };
+    const model = buildDashboardWorkspaceModel({ gameState: state });
+    expect(model.weekSummary.unallocatedDays).toBe(6);
+    const represented = getYouthDeskRepresentedObjectiveKey("advance", 1, 6);
+    expect(represented).toBeUndefined();
+    const supporting = selectDashboardSupportingItems(model.visibleItems, represented);
+    expect(supporting.some((item) => item.objectiveKey === "planner-gap:s1:w6")).toBe(true);
+    expect(state.schedule.activities[0]?.targetId).toBe("player-1");
+  });
+
+  it("suppresses the same unplanned-week allocation only for an explicit Planner action", () => {
+    const model = buildDashboardWorkspaceModel({ gameState: createState() });
+    const represented = getYouthDeskRepresentedObjectiveKey("planner", 1, 6);
+    expect(selectDashboardSupportingItems(model.visibleItems, represented)
+      .some((item) => item.objectiveKey === "planner-gap:s1:w6")).toBe(false);
+    expect(model.activeItemIds).toContain("dashboard-planner-gap-s1w6");
+  });
+
+  it("carries canonical objective identity into presentation without resolving the source item", () => {
+    const state = createState();
+    const model = buildDashboardWorkspaceModel({ gameState: state });
+    const diary = model.visibleItems.find((item) => item.sourceSystem === "planner");
+    expect(diary?.objectiveKey).toBe("planner-gap:s1:w6");
+    expect(model.activeItemIds).toContain(diary?.id);
+  });
+
   it("exports the dashboard ownership contract inline", () => {
     expect(DASHBOARD_OWNERSHIP_CONTRACT.owns).toContain("Prioritize information from existing systems.");
     expect(DASHBOARD_OWNERSHIP_CONTRACT.excludes).toContain("Recalculating simulation outcomes.");

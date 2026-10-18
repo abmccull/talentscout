@@ -1,3 +1,5 @@
+> Historical readiness snapshot. Results and scores below describe their recorded source revision, not the reconciled release candidate. Current certification is governed by `docs/release/release-evidence-status.json`; missing current campaign, package, provider, hardware, and human evidence remains a release blocker.
+
 # TalentScout production readiness plan
 
 Created 2026-09-04 after the four-branch initial audit. Objective: a reliable, understandable Youth Scout career with validated local shipping behavior and explicit remaining release gates.

@@ -17,6 +17,7 @@ import type { GameState, Position } from "./types";
 import { getCareerElapsedWeeks } from "./gameDate";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
+import { getEarnedDiscoveryOutcomes } from "@/engine/career/earnedDiscoveryOutcomes";
 
 /**
  * Count countries where the scout has generated real career evidence.
@@ -33,9 +34,9 @@ export function countCountriesScouted(state: GameState): number {
   ).length;
 }
 
-/** Count only discoveries that were actually classified as wonderkids. */
+/** Legacy API name; counts earned retrospective successes, never hidden potential. */
 export function countWonderkidDiscoveries(state: GameState): number {
-  return state.discoveryRecords.filter((record) => record.wasWonderkid).length;
+  return getEarnedDiscoveryOutcomes(state).length;
 }
 
 /** Count durable report cases rather than immutable revisions of one case. */

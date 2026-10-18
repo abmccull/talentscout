@@ -67,7 +67,7 @@ describe("football actions produce coherent evidence", () => {
       const action = FOOTBALL_ACTIONS.find((candidate) => candidate.id === moment.actionId)!;
       expect(action).toBeDefined();
       expect(moment.attributesHinted).toEqual(action.attributes);
-      const band = moment.quality >= 7 ? "high" : moment.quality >= 4 ? "medium" : "low";
+      const band = moment.quality >= 7 ? "high" : moment.quality >= 5 ? "medium" : "low";
       expect(moment.description).toBe(action.outcomes[band].replaceAll("{playerName}", participant.name));
       expect(moment.vagueDescription).not.toMatch(/impressive|clever|good|precise|won|intelligent/);
     }

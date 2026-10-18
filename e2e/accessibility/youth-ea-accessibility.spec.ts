@@ -136,7 +136,7 @@ test.describe("Youth Early Access accessibility", () => {
       lastName: "Scout",
       specialization: "youth",
     });
-    await expect(gamePage.page.getByRole("heading", { name: "Scouting Desk" })).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "The scouting desk" })).toBeVisible();
     await gamePage.page.waitForTimeout(1_000);
     const achievementDismiss = gamePage.page.getByRole("button", {
       name: "Dismiss achievement notification",
@@ -179,7 +179,7 @@ test.describe("Youth Early Access accessibility", () => {
 
   test("the six core workspaces have no blocking axe violations on desktop or mobile", async ({ gamePage }) => {
     const workspaces = [
-      ["dashboard", "Scouting Desk"],
+      ["dashboard", "The scouting desk"],
       ["calendar", "Planner"],
       ["youthScouting", "Prospects"],
       ["reportHistory", "Reports"],
@@ -216,10 +216,10 @@ test.describe("Youth Early Access accessibility", () => {
     ] as const) {
       await gamePage.page.setViewportSize({ width: viewport.width, height: viewport.height });
       await gamePage.setScreen("playerProfile");
-      await expect(gamePage.page.getByRole("heading", { name: "Brief fit and opportunity cost" })).toBeVisible();
+      await expect(gamePage.page.getByRole("heading", { name: "Recruitment fit" })).toBeVisible();
       await expectNoBlockingViolations(gamePage.page, `${viewport.name} academy dossier`);
 
-      await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+      await gamePage.page.getByRole("button", { name: "Write the report", exact: true }).click();
       await gamePage.waitForScreen("reportWriter");
       await expect(gamePage.page.getByRole("heading", { name: "Write Scouting Report" })).toBeVisible();
       await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toBeVisible();

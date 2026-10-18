@@ -1,3 +1,5 @@
+import { getEligibleMatchRoster, wouldBreachCompetitiveOutflowGuard } from "../match/eligibleRoster";
+import { getContractWageBaseline } from "../finance/wages";
 import { expandPlayerMovementHistory, compactPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { archivePlayerSeasonRatings } from "../players/seasonRatingArchive";
 import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
@@ -103,7 +105,7 @@ import {
   scoreRecruitmentMemoryFit,
   type ClubRecruitmentMemory,
 } from "../world/recruitmentMemory";
-import { calculateTransferMotivation } from "../world/transferMotivation";
+import { calculateTransferMotivation, type TransferMotivation } from "../world/transferMotivation";
 import {
   decrementSuspensions,
   clearSeasonCards,
@@ -147,6 +149,7 @@ import {
   assessClubAffordability,
   assessClubAffordabilityFromContext,
   buildClubAffordabilityContext,
+  type ClubAffordabilityContext,
   settleRelegationClubObligations,
   settleTriggeredClubObligations,
   settleWeeklyClubObligations,
@@ -202,7 +205,7 @@ import {
 import { ADJACENT_POSITIONS, calculateSystemFit, getFormationSlots } from "../firstTeam/systemFit";
 import { getCompatibleRoles } from "../players/roles";
 import { simulateAbstractCompetitionWeek } from "../world/abstractCompetition";
-import { proposeTransferAgreement } from "../transfers/transferAgreement";
+import { proposeTransferAgreement, type TransferAgreementProposal } from "../transfers/transferAgreement";
 import { formatTransferNewsBody } from "../transfers";
 import { assessRetirementIntent } from "../transfers/retirementPlanning";
 import {
@@ -323,12 +326,7 @@ export function selectStartingXI(
       : 0;
     return player.currentAbility + player.form * 2 + promisedRoleBonus;
   };
-  const eligible = [...new Set(club.playerIds)]
-    .map((playerId) => players[playerId])
-    .filter((player): player is Player => {
-      if (!player || player.clubId !== club.id || player.injured) return false;
-      return (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0;
-    })
+  const eligible = getEligibleMatchRoster(club, players, disciplinaryRecords)
     .sort((left, right) => {
       const scoreDelta = selectionScore(right) - selectionScore(left);
       return scoreDelta !== 0 ? scoreDelta : left.id.localeCompare(right.id);
@@ -962,6 +960,9 @@ export interface TransferDestinationIndex {
   recruitmentMemoryByClub: ReadonlyMap<string, ClubRecruitmentMemory>;
   /** Same-tick arrivals reserve capacity before authoritative movement commit. */
   reservedIncomingByClub: Map<string, number>;
+  affordabilityByClub: ClubAffordabilityContext;
+  reservedWeeklyCommitmentByClub: Map<string, number>;
+  reservedOutgoingByClub: Map<string, Set<string>>;
 }
 
 /** Immutable club facts reused by every transfer candidate in one tick. */
@@ -997,6 +998,9 @@ export function createTransferDestinationIndex(state: GameState): TransferDestin
     doctrineByClub,
     recruitmentMemoryByClub,
     reservedIncomingByClub: new Map(),
+    affordabilityByClub: buildClubAffordabilityContext(state.clubs, state.players),
+    reservedWeeklyCommitmentByClub: new Map(),
+    reservedOutgoingByClub: new Map(),
   };
 }
 
@@ -1006,6 +1010,7 @@ export function findTransferDestination(
   state: GameState,
   rng: RNG,
   index?: TransferDestinationIndex,
+  isEligibleDestination?: (club: Club) => boolean,
 ): Club | null {
   // Target market value tier: reputation roughly proportional to player quality
   const targetReputation = Math.round((player.currentAbility / 200) * 100);
@@ -1017,7 +1022,7 @@ export function findTransferDestination(
     const reservedIncoming = index?.reservedIncomingByClub.get(club.id) ?? 0;
     if (club.playerIds.length + reservedIncoming >= 30) return false;
     const repDiff = Math.abs(club.reputation - targetReputation);
-    return repDiff <= 20; // Only clubs within 20 reputation points
+    return repDiff <= 20 && (!isEligibleDestination || isEligibleDestination(club));
   });
 
   if (candidates.length === 0) return null;
@@ -1082,6 +1087,37 @@ export function findTransferDestination(
   });
 
   return rng.pickWeighted(weighted);
+}
+
+/** Select once among real viable packages; no reroll after an impossible destination. */
+export function selectViableAITransferDestination(
+  player: Player,
+  fromClub: Club,
+  state: GameState,
+  rng: RNG,
+  options: {
+    index?: TransferDestinationIndex;
+    spentBudget?: ReadonlyMap<string, number>;
+    motivation?: TransferMotivation;
+  } = {},
+): { destination: Club; agreement: TransferAgreementProposal } | null {
+  const index = options.index ?? createTransferDestinationIndex(state);
+  const motivation = options.motivation ?? calculateTransferMotivation(player, state);
+  if (!motivation.willingToMove) return null;
+  const agreements = new Map<string, TransferAgreementProposal>();
+  const destination = findTransferDestination(player, fromClub, state, rng, index, (club) => {
+    const agreement = proposeTransferAgreement({
+      player, sellingClub: fromClub, buyingClub: club, state, motivation,
+      affordabilityContext: index.affordabilityByClub[club.id],
+    });
+    if (!agreement.viable) return false;
+    const affordability = agreement.affordability.result;
+    if (affordability.remainingBudgetAfterReserve < (options.spentBudget?.get(club.id) ?? 0)
+      || affordability.remainingWeeklyHeadroom < (index.reservedWeeklyCommitmentByClub.get(club.id) ?? 0)) return false;
+    agreements.set(club.id, agreement);
+    return true;
+  });
+  return destination ? { destination, agreement: agreements.get(destination.id)! } : null;
 }
 
 function isOpportunityDrivenTransferEligible(player: Player): boolean {
@@ -1167,7 +1203,7 @@ export function selectOpportunityDrivenTransfers(
   const index = options.index ?? createTransferDestinationIndex(state);
   const spentBudget = options.spentBudget ?? new Map<string, number>();
   const candidateKeys = new Set<string>();
-  const candidates: Array<{ transfer: Transfer; score: number }> = [];
+  const candidates: Array<{ transfer: Transfer; score: number; weeklyCommitment: number }> = [];
 
   for (const opportunity of deriveRecruitmentOpportunities(state)) {
     if (!ACTIONABLE_RECRUITMENT_OUTCOMES.has(opportunity.outcome)) continue;
@@ -1180,6 +1216,7 @@ export function selectOpportunityDrivenTransfers(
     const fromClub = state.clubs[ownerClubId];
     const destination = state.clubs[opportunity.targetClubId];
     if (!fromClub || !destination || fromClub.id === destination.id) continue;
+    if (wouldBreachCompetitiveOutflowGuard(fromClub, state.players, player.id, index.reservedOutgoingByClub.get(fromClub.id))) continue;
     const reservedIncoming = index.reservedIncomingByClub.get(destination.id) ?? 0;
     if (destination.playerIds.length + reservedIncoming >= 30) continue;
     const candidateKey = `${player.id}:${destination.id}`;
@@ -1190,6 +1227,7 @@ export function selectOpportunityDrivenTransfers(
       sellingClub: fromClub,
       buyingClub: destination,
       state,
+      affordabilityContext: index.affordabilityByClub[destination.id],
     });
     if (!agreement.viable) continue;
     const fee = agreement.fee;
@@ -1235,6 +1273,7 @@ export function selectOpportunityDrivenTransfers(
         season: state.currentSeason,
       },
       score,
+      weeklyCommitment: agreement.affordability.result.weeklyCommitmentDelta,
     });
   }
 
@@ -1249,15 +1288,24 @@ export function selectOpportunityDrivenTransfers(
   const usedDestinations = new Set<string>();
   const maxTransfers = options.maxTransfers ?? MAX_RECRUITMENT_DRIVEN_TRANSFERS_PER_WEEK;
 
-  for (const { transfer } of candidates) {
+  for (const { transfer, weeklyCommitment } of candidates) {
     if (selected.length >= maxTransfers) break;
     if (usedPlayers.has(transfer.playerId) || usedDestinations.has(transfer.toClubId)) continue;
     const destination = state.clubs[transfer.toClubId];
+    const fromClub = state.clubs[transfer.fromClubId];
+    if (!fromClub || wouldBreachCompetitiveOutflowGuard(fromClub, state.players, transfer.playerId,
+      index.reservedOutgoingByClub.get(fromClub.id))) continue;
     const alreadySpent = spentBudget.get(transfer.toClubId) ?? 0;
     const committedCost = transfer.fee
       + (transfer.signingBonus ?? 0)
       + (transfer.contingentReserve ?? 0);
     if (!destination || destination.budget - alreadySpent < committedCost) continue;
+    const reservedWages = index.reservedWeeklyCommitmentByClub.get(destination.id) ?? 0;
+    if (!assessClubAffordabilityFromContext(index.affordabilityByClub[destination.id], {
+      upfrontCost: alreadySpent + committedCost,
+      weeklyWageCommitment: reservedWages + weeklyCommitment,
+    }).affordable) continue;
+    index.reservedWeeklyCommitmentByClub.set(destination.id, reservedWages + weeklyCommitment);
     spentBudget.set(transfer.toClubId, alreadySpent + committedCost);
     index.reservedIncomingByClub.set(
       transfer.toClubId,
@@ -1265,6 +1313,9 @@ export function selectOpportunityDrivenTransfers(
     );
     usedPlayers.add(transfer.playerId);
     usedDestinations.add(transfer.toClubId);
+    const departures = index.reservedOutgoingByClub.get(transfer.fromClubId) ?? new Set<string>();
+    departures.add(transfer.playerId);
+    index.reservedOutgoingByClub.set(transfer.fromClubId, departures);
     selected.push(transfer);
   }
 
@@ -1299,23 +1350,13 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     const ownerClubId = player.contractClubId ?? player.clubId;
     const fromClub = state.clubs[ownerClubId];
     if (!fromClub) continue;
+    if (wouldBreachCompetitiveOutflowGuard(fromClub, state.players, player.id, destinationIndex.reservedOutgoingByClub.get(fromClub.id))) continue;
 
-    const destination = findTransferDestination(
-      player,
-      fromClub,
-      state,
-      rng,
-      destinationIndex,
-    );
-    if (!destination) continue;
-
-    const agreement = proposeTransferAgreement({
-      player,
-      sellingClub: fromClub,
-      buyingClub: destination,
-      state,
+    const selected = selectViableAITransferDestination(player, fromClub, state, rng, {
+      index: destinationIndex, spentBudget, motivation,
     });
-    if (!agreement.viable) continue;
+    if (!selected) continue;
+    const { destination, agreement } = selected;
     const fee = agreement.fee;
     const committedCost = fee
       + agreement.signingBonus
@@ -1326,11 +1367,17 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     if (destination.budget - alreadySpent < committedCost) continue;
 
     spentBudget.set(destination.id, alreadySpent + committedCost);
+    destinationIndex.reservedWeeklyCommitmentByClub.set(destination.id,
+      (destinationIndex.reservedWeeklyCommitmentByClub.get(destination.id) ?? 0)
+      + agreement.affordability.result.weeklyCommitmentDelta);
     destinationIndex.reservedIncomingByClub.set(
       destination.id,
       (destinationIndex.reservedIncomingByClub.get(destination.id) ?? 0) + 1,
     );
 
+    const departures = destinationIndex.reservedOutgoingByClub.get(fromClub.id) ?? new Set<string>();
+    departures.add(player.id);
+    destinationIndex.reservedOutgoingByClub.set(fromClub.id, departures);
     transfers.push({
       playerId: player.id,
       fromClubId: fromClub.id,
@@ -2885,11 +2932,8 @@ export function advanceWeek(
       deal,
       getSeasonLength(state.fixtures, deal.startSeason),
     );
-    const projectedBuyWage = Math.max(
-      100,
-      updatedPlayers[deal.playerId]?.wage
-        ?? Math.round((updatedPlayers[deal.playerId]?.currentAbility ?? 0) * 60),
-    );
+    const loanee = updatedPlayers[deal.playerId];
+    const projectedBuyWage = loanee && loanClub ? getContractWageBaseline(loanee, loanClub.reputation) : 100;
     const buyOptionAffordability = loanClub
       ? assessClubAffordability({
           club: loanClub,

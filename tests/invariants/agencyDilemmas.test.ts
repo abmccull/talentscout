@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createConsequenceEngineState, expireDueDecisions, selectDecisionOption } from "@/engine/consequences";
-import type { ClientRelationship, FinancialRecord, GameState, Scout } from "@/engine/core/types";
+import type { ClientRelationship, Club, FinancialRecord, GameState, Player, Scout, ScoutReport } from "@/engine/core/types";
 import {
   applyPreparedAgencyDilemma,
   prepareWeeklyAgencyDilemmaCandidate,
   reconcileAgencyDilemmaDecisions,
 } from "@/engine/finance";
+import { recordRetainerDelivery } from "@/engine/finance/retainers";
+import { isValidYouthRetainerBrief } from "@/engine/finance/retainerBriefs";
+import { migrateSaveState } from "@/lib/db";
 import {
   applyDirectedWeeklyScoutingEcology,
   type PreparedWeeklyScoutingEcology,
@@ -132,9 +137,9 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
       },
     },
     clubs: {
-      alpha: { id: "alpha", name: "Alpha FC" },
-      beta: { id: "beta", name: "Beta United" },
-      gamma: { id: "gamma", name: "Gamma Athletic" },
+      alpha: { id: "alpha", name: "Alpha FC", playerIds: [] },
+      beta: { id: "beta", name: "Beta United", playerIds: [] },
+      gamma: { id: "gamma", name: "Gamma Athletic", playerIds: [] },
     },
     regionalKnowledge: {
       england: { familiarity: 62 },
@@ -175,6 +180,71 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("agency dilemmas", () => {
+  it.each([
+    { choice: "exclusiveAnchor", context: "clientConcentration", balance: 6_500, secondStatus: "active" as const },
+    { choice: "signatureRetainer", context: "capitalCrossroads", balance: 900, secondStatus: "prospect" as const },
+  ])("creates a deliverable $choice contract with the same terms before and after reload", ({ choice, context, balance, secondStatus }) => {
+    const fixture = JSON.parse(readFileSync(fileURLToPath(new URL("../fixtures/saves/v0-save-record.json", import.meta.url)), "utf8"));
+    const initial = migrateSaveState({
+      ...fixture.state,
+      ...baseState({
+        currentWeek: 45,
+        countries: ["england"],
+        regionalKnowledge: {},
+        contacts: {},
+        scout: scout({ reputation: 62, independentTier: 3, careerTier: 3 }),
+        finances: finances({ balance, clientRelationships: [
+          clientRelationship("alpha", 18_000, 74),
+          clientRelationship("beta", 6_000, 61, secondStatus),
+        ] }),
+      }),
+      fixtures: { final: { id: "final", week: 46, season: 1, homeClubId: "alpha", awayClubId: "beta", played: false } },
+      clubs: Object.fromEntries(["alpha", "beta"].map((id) => [id, {
+        id, name: `${id} FC`, shortName: id, managerId: `manager-${id}`, leagueId: "league-1",
+        reputation: 50, budget: 1_000_000, scoutingPhilosophy: "academyFirst",
+        playerIds: [], academyPlayerIds: [], youthAcademyRating: 12,
+      } satisfies Club])),
+    });
+    const prepared = prepareWeeklyAgencyDilemmaCandidate({ state: initial, forceTrigger: true }).prepared;
+    expect(prepared?.context.id).toBe(context);
+    const offered = applyPreparedAgencyDilemma(initial, prepared!).state;
+    const decision = Object.values(offered.consequenceState.decisions).find((entry) => entry.source.kind === "agencyDilemma")!;
+    const now = { season: initial.currentSeason, week: initial.currentWeek };
+    const selected = selectDecisionOption(offered.consequenceState, decision.id, choice, now);
+    expect(selected.changed).toBe(true);
+    const selectedState = { ...offered, consequenceState: selected.state };
+    const staleClubState = { ...selectedState, clubs: {} };
+    expect(reconcileAgencyDilemmaDecisions(staleClubState, now)).toBe(staleClubState);
+    const created = reconcileAgencyDilemmaDecisions(selectedState, now);
+    const contract = created.finances!.retainerContracts[0];
+    expect(isValidYouthRetainerBrief(contract.brief)).toBe(true);
+    expect(contract).toMatchObject({
+      startWeek: 45, startSeason: 1, nextSettlementWeek: 3, nextSettlementSeason: 2,
+      termEndsWeek: 15, termEndsSeason: 2, averageDeliveredQuality: 0,
+      consecutivePeriodsMet: 0, consecutivePeriodsMissed: 0,
+    });
+
+    // A later roster change must not redefine work that was already promised.
+    const player = { id: "delivery-player", age: 17, position: contract.brief!.targetPositions[0] } as Player;
+    const changedRoster = {
+      ...created,
+      players: { ...created.players, [player.id]: player },
+      clubs: { ...created.clubs, alpha: { ...created.clubs.alpha, playerIds: [player.id] } },
+    };
+    const reloaded = migrateSaveState(JSON.parse(JSON.stringify(changedRoster)));
+    expect(reloaded.finances!.retainerContracts).toEqual(created.finances!.retainerContracts);
+    const report = { id: "retainer-report", qualityScore: 90 } as ScoutReport;
+    const direct = recordRetainerDelivery(created.finances!, "alpha", report, player);
+    const afterReload = recordRetainerDelivery(reloaded.finances!, "alpha", report, player);
+    expect(direct.retainerContracts[0]).toMatchObject({
+      reportsDeliveredThisMonth: 1, deliveredReportIds: [report.id], averageDeliveredQuality: 90,
+    });
+    expect(afterReload.retainerContracts).toEqual(direct.retainerContracts);
+    expect(recordRetainerDelivery(direct, "alpha", report, player).retainerContracts).toEqual(direct.retainerContracts);
+    expect(reconcileAgencyDilemmaDecisions(created, now).finances).toEqual(created.finances);
+    expect(reconcileAgencyDilemmaDecisions(reloaded, now).finances!.retainerContracts).toEqual(created.finances!.retainerContracts);
+  });
+
   it("surfaces through the shared scouting ecology gate", () => {
     const state = baseState({
       finances: finances({

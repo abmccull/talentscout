@@ -1,11 +1,11 @@
-import { queueGameplayAutosave, snapshotPersistedGameState } from "./persistGameplayAutosave";
-import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 /**
  * Navigation & UI state actions extracted from gameStore.
  *
  * Handles screen navigation, selection state, comparison panel,
  * dismiss actions, and other lightweight UI-only actions.
  */
+import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
+import { queueGameplayAutosave, snapshotPersistedGameState } from "./persistGameplayAutosave";
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
 import type { InboxMessage, Contact, HiddenIntel } from "@/engine/core/types";
@@ -54,7 +54,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
 
     if (gs) {
       const tut = useTutorialStore.getState();
-      tut.recordScreenVisit(resolvedScreen);
+      tut.recordScreenVisit(resolvedScreen, gs.guidedSessionRequested !== false);
       if (resolvedScreen === "dashboard") tut.completeMilestone("viewedDashboard");
       if (resolvedScreen === "calendar") tut.completeMilestone("openedCalendar");
     }
@@ -201,7 +201,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
         : current.gameState;
       set({ selectedPlayerId: playerId, gameState: nextState });
       if (nextState && nextState !== current.gameState) {
-        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession, current.weekSimulation), set);
       }
     },
     selectFixture: (fixtureId: string | null) => set({ selectedFixtureId: fixtureId }),
@@ -325,7 +325,13 @@ export function createNavigationActions(get: GetState, set: SetState) {
         idx >= 0
           ? gameState.watchlist.filter((id) => id !== canonicalPlayerId)
           : [...gameState.watchlist, canonicalPlayerId];
-      set({ gameState: { ...gameState, watchlist: next } });
+      const nextState = revealGamePortraits(
+        { ...gameState, watchlist: next },
+        idx < 0 ? [canonicalPlayerId] : [],
+        "tracked",
+      );
+      set({ gameState: nextState });
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
     },
   };
 }

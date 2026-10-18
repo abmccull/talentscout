@@ -1,9 +1,9 @@
 /**
  * Lifestyle system — replaces fixed TIER_RENT with player-chosen lifestyle tiers.
  *
- * Each lifestyle level provides a monthly cost (replacing rent), networking bonuses,
- * and salary offer bonuses. Living below your station at high tiers incurs a
- * reputation penalty.
+ * Each lifestyle level provides a monthly cost (replacing rent) and networking
+ * bonuses. Living below your station at high tiers incurs a reputation penalty.
+ * salaryOfferBonus remains serialized for old saves but has no gameplay effect.
  */
 
 import type {

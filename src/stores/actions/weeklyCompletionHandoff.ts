@@ -43,6 +43,8 @@ export function completeWeeklyHandoff(
 ): GameState {
   input.pipeline.enter("finalize");
   let state = input.pipeline.complete(input.state);
+  // Only the live commit allocates scarce photographs; a headless worker cannot
+  // compete with selections made in the live store while it was calculating.
   if (input.persistenceEnabled) state = revealKnownGamePortraits(state);
   const beforeWeek = input.beforeWeek;
   const newInboxCount = state.inbox.length - beforeWeek.inbox.length;

@@ -88,6 +88,7 @@ export const SAVE_RETENTION_COLLECTION_KEYS = [
   "retiredPlayers",
   "retiredPlayerIds",
   "unsignedYouth",
+  "playerPortraits",
 ] as const;
 
 export type SaveRetentionCollectionKey =

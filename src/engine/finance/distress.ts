@@ -13,6 +13,7 @@ import {
   DEFAULT_LOADOUT,
   DEFAULT_OWNED_ITEMS,
   getEquipmentItem,
+  type EquipmentItemId,
 } from "./equipmentCatalog";
 
 // ---------------------------------------------------------------------------
@@ -392,8 +393,53 @@ function applyOngoingDistress(
 // Recovery Mechanics
 // ---------------------------------------------------------------------------
 
+export interface EquipmentLiquidationQuote {
+  itemIds: EquipmentItemId[];
+  portfolioValue: number;
+  cashReceived: number;
+  referenceId: string;
+}
+
 /**
- * Sell equipment for emergency cash (40% of original value).
+ * Price the owned inventory once for both the recovery screen and execution.
+ * Legacy equipment levels are not saleable assets: save migration must first
+ * resolve them to actual inventory. A repeated item ID never creates value.
+ */
+export function getEquipmentLiquidationQuote(
+  finances: FinancialRecord,
+  week: number,
+  season: number,
+): EquipmentLiquidationQuote {
+  const referenceId = `equipment-liquidation:s${season}w${week}`;
+  const emptyQuote: EquipmentLiquidationQuote = {
+    itemIds: [], portfolioValue: 0, cashReceived: 0, referenceId,
+  };
+  if (finances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+    return emptyQuote;
+  }
+
+  const inventory = finances.equipment;
+  if (!inventory) return emptyQuote;
+
+  const itemIds = [...new Set(inventory.ownedItems)].filter((itemId) => {
+    const item = getEquipmentItem(itemId);
+    return item && item.tier > 1 && item.purchaseCost > 0;
+  });
+  const portfolioValue = itemIds.reduce((sum, itemId) => {
+    const item = getEquipmentItem(itemId);
+    return sum + (item?.purchaseCost ?? 0);
+  }, 0);
+  return {
+    itemIds,
+    portfolioValue,
+    cashReceived: Math.round(portfolioValue * 0.4),
+    referenceId,
+  };
+}
+
+/**
+ * Sell equipment for emergency cash using the current authoritative inventory.
+ * @param _itemValue Deprecated caller quote; ignored in favor of owned assets.
  */
 export function sellEquipmentForCash(
   finances: FinancialRecord,
@@ -401,35 +447,11 @@ export function sellEquipmentForCash(
   week: number,
   season: number,
 ): FinancialRecord {
-  const referenceId = `equipment-liquidation:s${season}w${week}`;
-  if (finances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
-    return finances;
-  }
+  // Retain the old argument for callers without trusting a UI quote.
+  const quote = getEquipmentLiquidationQuote(finances, week, season);
+  if (quote.cashReceived <= 0) return finances;
 
-  const inventory = finances.equipment;
-  if (!inventory) return finances;
-
-  const liquidatableItems = inventory.ownedItems.filter((itemId) => {
-    const item = getEquipmentItem(itemId);
-    return item && item.tier > 1 && item.purchaseCost > 0;
-  });
-  if (liquidatableItems.length === 0 && finances.equipmentLevel <= 1) {
-    return finances;
-  }
-
-  const actualPortfolioValue = liquidatableItems.reduce((sum, itemId) => {
-    const item = getEquipmentItem(itemId);
-    return sum + (item?.purchaseCost ?? 0);
-  }, 0);
-  const legacyPortfolioValue = actualPortfolioValue === 0 && finances.equipmentLevel > 1
-    ? finances.equipmentLevel * 750
-    : 0;
-  const liquidationBase = Math.max(actualPortfolioValue, legacyPortfolioValue, 0);
-  if (liquidationBase <= 0) {
-    return finances;
-  }
-
-  const cashReceived = Math.round(liquidationBase * 0.4);
+  const { cashReceived, referenceId } = quote;
   return {
     ...finances,
     balance: finances.balance + cashReceived,
@@ -475,10 +497,6 @@ export function getRecoverySuggestions(
 
   if (level === "critical" || level === "bankruptcy") {
     suggestions.push("Take on emergency consulting work to generate income");
-  }
-
-  if (finances.careerPath === "club") {
-    suggestions.push("Request a salary advance from your employer");
   }
 
   return suggestions;

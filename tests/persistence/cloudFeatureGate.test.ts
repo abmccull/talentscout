@@ -12,8 +12,12 @@ const authBoundary = vi.hoisted(() => ({
   signOut: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase", () => ({
+vi.mock("@/lib/supabaseConfiguration", () => ({
   clearSupabaseAuthSessionStorage: authBoundary.clearStorage,
+  SUPABASE_CONFIGURED: false,
+}));
+
+vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: {
       getSession: authBoundary.getSession,

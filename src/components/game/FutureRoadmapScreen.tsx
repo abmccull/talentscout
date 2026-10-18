@@ -5,7 +5,6 @@ import {
   ArrowRight,
   CheckCircle2,
   CircleDashed,
-  Compass,
   Gamepad2,
   ListChecks,
   Map,
@@ -35,20 +34,20 @@ const STATUS_STYLES: Readonly<
   Record<ProductRoadmapStatus, { badge: string; dot: string }>
 > = {
   available: {
-    badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-    dot: "bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.45)]",
+    badge: "border-[var(--primary)]/30 bg-[var(--primary)]/5 text-[var(--primary)]",
+    dot: "bg-[var(--primary)]",
   },
   validating: {
-    badge: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-    dot: "bg-sky-400 shadow-[0_0_16px_rgba(56,189,248,0.35)]",
+    badge: "border-[var(--signal-focus)]/30 bg-[var(--signal-focus)]/5 text-[var(--signal-focus)]",
+    dot: "bg-[var(--signal-focus)]",
   },
   planned: {
     badge: "border-amber-400/30 bg-amber-400/10 text-amber-300",
     dot: "bg-amber-400",
   },
   exploring: {
-    badge: "border-violet-400/30 bg-violet-400/10 text-violet-300",
-    dot: "bg-violet-400",
+    badge: "border-[var(--border)] text-[var(--muted-foreground)]",
+    dot: "bg-[var(--muted-foreground)]",
   },
 };
 
@@ -70,7 +69,7 @@ function RoadmapOverview() {
         {PRODUCT_ROADMAP_PHASES.map((phase, index) => (
           <li
             key={phase.id}
-            className="relative overflow-hidden rounded-xl border border-white/10 bg-zinc-950/55 p-4"
+            className="relative overflow-hidden border-b border-[var(--border)] py-4"
           >
             <div className="mb-4 flex items-center gap-3">
               <span
@@ -91,15 +90,15 @@ function RoadmapOverview() {
         {PRODUCT_ROADMAP_PHASES.map((phase, index) => (
           <Card
             key={phase.id}
-            className="border-white/10 bg-[#11161c]/95"
+            className="border-[var(--border)] bg-[var(--surface)]"
           >
             <CardHeader className="p-5 pb-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
                     {index + 1}. {phase.eyebrow}
                   </p>
-                  <CardTitle className="mt-2 text-lg text-white">{phase.title}</CardTitle>
+                  <CardTitle as="h2" className="mt-2 text-lg text-white">{phase.title}</CardTitle>
                 </div>
                 <StatusBadge status={phase.status} />
               </div>
@@ -120,7 +119,7 @@ function RoadmapOverview() {
                     ) : (
                       <CircleDashed
                         size={16}
-                        className="mt-0.5 shrink-0 text-zinc-500"
+                        className="mt-0.5 shrink-0 text-[var(--muted-foreground)]"
                         aria-hidden="true"
                       />
                     )}
@@ -142,14 +141,14 @@ function RoadmapModes() {
       {PRODUCT_ROADMAP_MODES.map((mode) => (
         <Card
           key={mode.id}
-          className={`border-white/10 bg-[#11161c]/95 ${
+          className={`border-[var(--border)] bg-[var(--surface)] ${
             mode.status === "available" ? "ring-1 ring-emerald-400/20" : ""
           }`}
         >
           <CardHeader className="p-5 pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <CardTitle className="text-lg text-white">{mode.name}</CardTitle>
+                <CardTitle as="h2" className="text-lg text-white">{mode.name}</CardTitle>
                 <p className="mt-1 text-xs font-medium text-emerald-300">{mode.role}</p>
               </div>
               <StatusBadge status={mode.status} />
@@ -158,7 +157,7 @@ function RoadmapModes() {
           <CardContent className="space-y-4 p-5 pt-0">
             <p className="text-sm leading-relaxed text-zinc-300">{mode.fantasy}</p>
             <div>
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
                 What makes it play differently
               </p>
               <ul className="space-y-2">
@@ -185,10 +184,10 @@ function RoadmapSystems() {
   return (
     <div className="grid gap-4 lg:grid-cols-2" data-testid="roadmap-systems">
       {PRODUCT_ROADMAP_SYSTEMS.map((system) => (
-        <Card key={system.id} className="border-white/10 bg-[#11161c]/95">
+        <Card key={system.id} className="border-[var(--border)] bg-[var(--surface)]">
           <CardHeader className="p-5 pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <CardTitle className="max-w-lg text-base leading-snug text-white">
+              <CardTitle as="h2" className="max-w-lg text-base leading-snug text-white">
                 {system.title}
               </CardTitle>
               <StatusBadge status={system.status} />
@@ -236,7 +235,7 @@ function RoadmapQualityBar() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {PRODUCT_QUALITY_BARS.map((bar, index) => (
-          <Card key={bar.title} className="border-white/10 bg-[#11161c]/95">
+          <Card key={bar.title} className="border-[var(--border)] bg-[var(--surface)]">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-900 text-xs font-semibold text-emerald-300">
@@ -290,7 +289,7 @@ function RoadmapContent({ hasActiveCareer }: { hasActiveCareer: boolean }) {
 
   return (
     <div
-      className="relative mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10"
+      className="game-workspace relative"
       data-testid="future-roadmap-screen"
     >
       <button
@@ -302,7 +301,7 @@ function RoadmapContent({ hasActiveCareer }: { hasActiveCareer: boolean }) {
         {hasActiveCareer ? "Back to Desk" : "Back to main menu"}
       </button>
 
-      <header className="overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.15),transparent_40%),linear-gradient(135deg,rgba(17,24,31,0.98),rgba(10,13,17,0.98))] p-5 shadow-2xl shadow-black/20 sm:p-7 lg:p-9">
+      <header className="border-b border-[var(--border)] pb-5">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-2">
@@ -316,18 +315,17 @@ function RoadmapContent({ hasActiveCareer }: { hasActiveCareer: boolean }) {
                 No fixed dates
               </Badge>
             </div>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+            <p className="hidden">
               From one great scouting career to a scouting universe
             </p>
             <h1
               id="future-roadmap-title"
-              className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl"
+              className="font-editorial mt-3 text-3xl text-[var(--foreground)] sm:text-4xl"
             >
               Product roadmap
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-relaxed text-zinc-300 sm:text-lg">
-              TalentScout will grow by making judgement, uncertainty, access, persuasion,
-              and long-term accountability deeper, without turning the player into a football manager.
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">
+              Deeper scouting careers, stronger relationships, and more ways to test your judgment.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -357,15 +355,10 @@ function RoadmapContent({ hasActiveCareer }: { hasActiveCareer: boolean }) {
 
       <div
         id="roadmap-notice"
-        className="mt-4 flex items-start gap-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.07] p-4"
+        className="mt-4 border-l-2 border-[var(--signal-warn)]/40 pl-3"
         role="note"
       >
-        <Compass
-          size={19}
-          className="mt-0.5 shrink-0 text-amber-300"
-          aria-hidden="true"
-        />
-        <p className="text-sm leading-relaxed text-zinc-300">{PRODUCT_ROADMAP_NOTICE}</p>
+        <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">{PRODUCT_ROADMAP_NOTICE}</p>
       </div>
 
       <Tabs defaultValue="overview" className="mt-6">

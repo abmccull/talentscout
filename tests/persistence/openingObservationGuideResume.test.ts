@@ -97,14 +97,23 @@ describe("opening observation guide resume", () => {
     expect(useTutorialStore.getState().currentGuidedTask).toBe("flaggedBreakthrough");
   });
 
-  it.each([flaggedMoment("other-player"), flaggedMoment("lead-1", false)])(
-    "requires the opening prospect's standout flag", (flag) => {
+  it.each([flaggedMoment("other-player"), { ...flaggedMoment(), phaseIndex: 2 }])(
+    "requires already observed evidence from the opening prospect", (flag) => {
       useTutorialStore.getState().reconcileOpeningObservationProgress(checkpoint({
         state: "active", currentPhaseIndex: 1, players: [focusedPlayer()], flaggedMoments: [flag],
       }));
       expect(useTutorialStore.getState().currentGuidedTask).toBe("flaggedBreakthrough");
     },
   );
+
+  it.each(["promising", "concerning", "interesting"] as const)("resumes an ordinary lead flag (%s) without demanding a standout", (reaction) => {
+    useTutorialStore.getState().reconcileOpeningObservationProgress(checkpoint({
+      state: "active", currentPhaseIndex: 1, players: [focusedPlayer()],
+      flaggedMoments: [{ ...flaggedMoment("lead-1", false), reaction }],
+    }));
+    expect(useTutorialStore.getState().currentGuidedTask).toBe("completedMatch");
+    expect(useTutorialStore.getState().guidedMilestones.flaggedBreakthrough).toBe(true);
+  });
 
   it.each(["active", "reflection"] as const)("keeps Complete Reflection pending in %s", (state) => {
     useTutorialStore.getState().reconcileOpeningObservationProgress(checkpoint({

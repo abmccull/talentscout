@@ -1,3 +1,4 @@
+import { buildRecommendationReviewTimelineDescription } from "./recommendationReviewDisplay";
 import type {
   ClubDecision,
   GameState,
@@ -121,7 +122,10 @@ function latestReviewForCase(
   const reviewIds = new Set(scoutingCase.reviewIds ?? []);
   return Object.values(state.recommendationReviews ?? {})
     .filter((review) => review.caseId === scoutingCase.id || reviewIds.has(review.id))
-    .sort(compareReviewDate)[0];
+    .sort((left, right) =>
+      (left.status === "complete" ? 0 : 1) - (right.status === "complete" ? 0 : 1)
+      || compareReviewDate(left, right),
+    )[0];
 }
 
 function didOpinionChange(reports: ScoutReport[]): boolean {
@@ -399,6 +403,15 @@ export function deriveProfessionalCaseAccountability(
   const reports = reportsForCase(state, scoutingCase);
   const latestReport = reports[0];
   const review = latestReviewForCase(state, scoutingCase);
+  if (review?.origin === "decision" && review.status === "complete") {
+    const summary = review.findings?.slice(-2).join(" ") ?? "The checkpoint remains unresolved.";
+    return {
+      caseId: scoutingCase.id, playerId: scoutingCase.playerId, reportId: review.reportId,
+      reviewId: review.id, checkpoint: review.checkpoint, completedReview: true,
+      headline: buildRecommendationReviewTimelineDescription(review), summary,
+      categories: [{ key: "timingPathway", label: "Observed career", status: review.decisionOutcome === "unresolved" ? "pending" : "mixed", summary }],
+    };
+  }
   const completedReviewRecord = review?.status === "complete" ? review : undefined;
   const decision = latestDecisionForCase(state, scoutingCase);
   const completedReview = review?.status === "complete";

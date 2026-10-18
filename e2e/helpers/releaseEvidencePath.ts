@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
 const FULL_GIT_SHA = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
@@ -17,6 +18,7 @@ function git(args: string[]): string | null {
     return execFileSync("git", args, {
       cwd: process.cwd(),
       encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
     });
   } catch {
     return null;
@@ -58,6 +60,17 @@ export function buildVisualEvidenceProvenance(
   };
 }
 
+export function fingerprintDirtyVisualEvidence(
+  status: string,
+  trackedDiff: string,
+  untracked: Array<{ path: string; sha256: string }>,
+): string {
+  return createHash("sha256").update(JSON.stringify({
+    status, trackedDiff,
+    untracked: [...untracked].sort((left, right) => left.path.localeCompare(right.path)),
+  })).digest("hex").slice(0, 12);
+}
+
 function detectVisualEvidenceProvenance(): VisualEvidenceProvenance {
   const commitSha = normalizeGitSha(
     git(["rev-parse", "HEAD"]) ?? process.env.GITHUB_SHA ?? null,
@@ -66,10 +79,12 @@ function detectVisualEvidenceProvenance(): VisualEvidenceProvenance {
   const statusOutput = git(["status", "--porcelain", "--untracked-files=all"]) ?? "";
   const dirty = statusOutput.trim().length > 0;
   const dirtyFingerprint = dirty
-    ? createHash("sha256")
-        .update(statusOutput)
-        .digest("hex")
-        .slice(0, 12)
+    ? fingerprintDirtyVisualEvidence(statusOutput, git(["diff", "--binary", "HEAD"]) ?? "unavailable", (
+        git(["ls-files", "--others", "--exclude-standard", "-z"]) ?? ""
+      ).split("\0").filter(Boolean).map((file) => ({
+        path: file,
+        sha256: createHash("sha256").update(readFileSync(path.resolve(file))).digest("hex"),
+      })))
     : null;
 
   return buildVisualEvidenceProvenance({
@@ -88,7 +103,13 @@ export function getVisualEvidenceDirectory(suiteName: string): string {
     process.env.VISUAL_EVIDENCE_OUTPUT_ROOT
       ?? "artifacts/release/generated/visual-evidence",
   );
-  return path.join(root, visualEvidenceProvenance.slug, suiteName);
+  const marker = path.resolve("out-e2e", ".e2e-bridge.json");
+  const compiledHash = existsSync(marker)
+    ? (JSON.parse(readFileSync(marker, "utf8")) as { compiledRuntimeSha256?: string }).compiledRuntimeSha256
+    : undefined;
+  const build = compiledHash && /^[a-f0-9]{64}$/.test(compiledHash)
+    ? `build-${compiledHash.slice(0, 12)}` : "unbound-build";
+  return path.join(root, visualEvidenceProvenance.slug, build, suiteName);
 }
 
 export function getVisualEvidenceProvenance(): VisualEvidenceProvenance {

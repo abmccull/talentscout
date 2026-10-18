@@ -1,14 +1,14 @@
 import { computeFormFromRatings } from "../../match/ratings";
 import { expandPlayerInjuryHistory } from "../../players/playerStateArchive";
 import {
-  applyDevelopmentAbilityChange,
+  applySemanticPlayerDevelopment,
   hasSemanticImprovement,
 } from "../../players/development";
 import {
   appendPlayerDevelopmentHistory,
   createPlayerDevelopmentHistoryEntry,
 } from "../../world/developmentEnvironment";
-import type { GameState, Player, PlayerAttribute } from "../types";
+import type { GameState, Player } from "../types";
 import type { TickResult } from "./types";
 
 type Clamp = (value: number, min: number, max: number) => number;
@@ -20,7 +20,7 @@ type AddToInjuryHistory = (
 export function applyWeeklyPlayerProgression(
   state: GameState,
   tickResult: Pick<TickResult, "playerDevelopment" | "breakthroughs" | "injurySetbacks">,
-  clamp: Clamp,
+  _clamp: Clamp,
 ): Record<string, Player> {
   const updatedPlayers = { ...state.players };
 
@@ -28,22 +28,11 @@ export function applyWeeklyPlayerProgression(
     const player = updatedPlayers[dev.playerId];
     if (!player) continue;
 
-    const updatedAttributes = { ...player.attributes };
-    for (const [attr, delta] of Object.entries(dev.changes) as Array<
-      [PlayerAttribute, number | undefined]
-    >) {
-      if (delta === undefined) continue;
-      updatedAttributes[attr] = clamp(updatedAttributes[attr] + delta, 1, 20);
-    }
+    const realized = applySemanticPlayerDevelopment(player, dev);
+    if (Object.keys(realized.result.changes).length === 0) continue;
 
     updatedPlayers[dev.playerId] = {
-      ...player,
-      attributes: updatedAttributes,
-      currentAbility: applyDevelopmentAbilityChange(
-        player.currentAbility,
-        player.potentialAbility,
-        dev.abilityChange,
-      ),
+      ...realized.player,
       developmentHistory: dev.environment
         ? appendPlayerDevelopmentHistory(
             player.developmentHistory,
@@ -51,7 +40,7 @@ export function applyWeeklyPlayerProgression(
               player.id,
               state.currentSeason,
               state.currentWeek,
-              dev.abilityChange > 0 || hasSemanticImprovement(dev.changes)
+              realized.result.abilityChange > 0 || hasSemanticImprovement(realized.result.changes)
                 ? "routine-growth"
                 : "decline",
               dev.environment,
@@ -66,22 +55,11 @@ export function applyWeeklyPlayerProgression(
     const player = updatedPlayers[bt.playerId];
     if (!player) continue;
 
-    const updatedAttributes = { ...player.attributes };
-    for (const [attr, delta] of Object.entries(bt.changes) as Array<
-      [PlayerAttribute, number | undefined]
-    >) {
-      if (delta === undefined) continue;
-      updatedAttributes[attr] = clamp(updatedAttributes[attr] + delta, 1, 20);
-    }
+    const realized = applySemanticPlayerDevelopment(player, bt);
+    if (Object.keys(realized.result.changes).length === 0) continue;
 
     updatedPlayers[bt.playerId] = {
-      ...player,
-      attributes: updatedAttributes,
-      currentAbility: applyDevelopmentAbilityChange(
-        player.currentAbility,
-        player.potentialAbility,
-        bt.abilityChange,
-      ),
+      ...realized.player,
       developmentHistory: bt.environment
         ? appendPlayerDevelopmentHistory(
             player.developmentHistory,
@@ -102,17 +80,15 @@ export function applyWeeklyPlayerProgression(
     const player = updatedPlayers[setback.playerId];
     if (!player) continue;
 
-    const updatedAttributes = { ...player.attributes };
-    for (const [attr, delta] of Object.entries(setback.changes) as Array<
-      [PlayerAttribute, number | undefined]
-    >) {
-      if (delta === undefined) continue;
-      updatedAttributes[attr] = clamp(updatedAttributes[attr] + delta, 1, 20);
-    }
+    // A lasting setback uses the same CA scale as a routine decline event.
+    const realized = applySemanticPlayerDevelopment(player, {
+      changes: setback.changes,
+      abilityChange: -1,
+    });
+    if (Object.keys(realized.result.changes).length === 0) continue;
 
     updatedPlayers[setback.playerId] = {
-      ...player,
-      attributes: updatedAttributes,
+      ...realized.player,
       developmentHistory: setback.environment
         ? appendPlayerDevelopmentHistory(
             player.developmentHistory,

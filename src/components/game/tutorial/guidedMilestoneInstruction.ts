@@ -18,18 +18,15 @@ export function getGuidedMilestoneInstruction(
 ): string {
   switch (input.milestoneId) {
     case "flaggedBreakthrough":
-      if ((input.observationPhaseIndex ?? 0) < 1) {
-        return "Select Next phase to keep watching for the key moment.";
-      }
-      return "Select Flag moment on the Standout card, then choose Promising.";
+      return "Flag a moment from your lead, then choose the reaction the evidence deserves.";
     case "completedMatch":
       if (input.currentScreen === "observation" && input.observationState === "reflection") {
         return "Select Complete Reflection to lock the read and the remaining doubt.";
       }
       if (input.currentScreen === "observation" && input.observationIsHalfTime) {
         return input.observationHalftimeApproach
-          ? "Select Next phase to apply your second-half plan."
-          : "Choose how to watch the second half: confirm, challenge, or broaden the first read.";
+          ? "Focus resets at halftime. Reapply a lens to the player you want to watch, then select Next phase."
+          : "Choose how to watch the second half: confirm, challenge, or broaden. Focus resets at halftime, so reapply a lens before the next phase.";
       }
       return "Select Next phase until Reflection is available.";
     case "resolvedOpeningDiscovery":
@@ -54,7 +51,7 @@ export function getGuidedMilestoneInstruction(
       return "Start the live session and begin watching.";
     case "focusedPlayer":
       return input.isYouthDiscoveryHook
-        ? "Select Focus on your prospect, then choose a lens."
+        ? "Choose your prospect in Players in view, then choose a lens under Your attention."
         : "Choose a player and apply a focus lens.";
     case "viewedDashboard":
       return "Take a quick read of the dashboard, then move on.";

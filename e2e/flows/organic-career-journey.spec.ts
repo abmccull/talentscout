@@ -278,6 +278,10 @@ async function advanceCanonicalEmptyWeek(page: Page) {
         name: `Season ${result.before.season} Complete`,
       }),
     ).toBeVisible({ timeout: 20_000 });
+    // A queued consequence can mount while the season workspace loads.
+    // Acknowledge its actual Continue control before using the review beneath it.
+    await dismissCareerMomentOverlays(page);
+    await expect(page.getByTestId("career-moment-overlay")).toBeHidden();
     await page.getByRole("button", { name: "Continue to Next Season" }).click();
   }
 
@@ -498,7 +502,7 @@ test.describe("Organic career journey", () => {
   test("fresh Youth work earns a path choice, leadership, retirement, and inherited legacy", async ({ gamePage }) => {
     // This story advances a full season with canonical world processing and
     // closes every player-facing summary/milestone through the rendered UI.
-    // Keep a release-machine budget that covers the complete 38-week journey;
+    // Keep a release-machine budget that covers the complete season journey;
     // the assertions and per-action timeouts remain strict.
     test.setTimeout(600_000);
 

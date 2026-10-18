@@ -75,3 +75,11 @@ Supabase credentials are optional for cloud features. Keep online feedback disab
 - [Crash, rollback, and installer runbooks](docs/release/operations/README.md)
 
 Passing source tests does not certify a signed installer, Steam integration, physical hardware, or human usability/accessibility. Release evidence must refer to the exact source candidate and package bytes being distributed.
+
+### Current release evidence and supporting diagnostics
+
+Release acceptance requires the complete current policy in `docs/release/release-evidence-status.json`, including the canonical fresh 20-seed, 30-season, concurrency-three campaign plus fresh seed-one replay, exact package evidence, Sentry provider receipt, and human/platform gates. Historical reports are not acceptance for a newly reconciled candidate.
+
+`node scripts/run-game-systems-diagnostics.mjs --profile=smoke --out=<new directory>` and `node scripts/run-career-balance-diagnostics.mjs --mode=smoke --out=<new directory>` produce supporting diagnostics only. Use `--profile=long --seasons=30 --seeds=1 --concurrency=1` for separate retained S1/S10/S30 inputs; actual browser-provider durability remains a separate test. These commands never add files to the canonical 45-member artifact.
+
+`npm run release:validate-candidate -- --candidate-root=<prepared checkout>` runs only the explicit full-release checker locally against a clean, source-bound accepted bundle. It does not tag, upload, publish, or manufacture missing evidence. See `docs/release/release-certification.md` and `docs/release/quality-diagnostics.md`.

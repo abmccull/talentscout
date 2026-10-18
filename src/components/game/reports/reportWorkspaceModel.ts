@@ -1,3 +1,4 @@
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 "use client";
 
 import { hasReportBuyerEvidence, shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
@@ -198,6 +199,9 @@ function getFollowUpLabel(
   input: BuildReportWorkspaceViewModelInput,
   report: ScoutReport,
 ): string {
+  if (isPrivateScoutingDecision(report)) {
+    return "Passed for now. New evidence can reopen the judgment; its later outcome stays on record.";
+  }
   if (isPrivateMonitoringNote(input, report)) return "Keep this assessment private. Return to the player dossier and plan the next test before escalating the case.";
   if (!hasReportBuyerEvidence(report)) return "Keep this note on file and gather a supported finding before offering it for sale.";
   if (input.pendingListingReportId === report.id && shouldPromptReportListing(report)) {
@@ -254,7 +258,7 @@ function buildFeaturedArtifact(
   const privateMonitoring = isPrivateMonitoringNote(input, priorityReport);
   const action = privateMonitoring
     ? { kind: "openPlayer", label: "Plan the next look", playerId: priorityReport.playerId } as const
-    : isPendingListing && input.gameState.scout.careerPath === "independent"
+    : !isPrivateScoutingDecision(priorityReport) && isPendingListing && input.gameState.scout.careerPath === "independent"
     ? { kind: "listReport", label: "Price the report", reportId: priorityReport.id } as const
     : { kind: "openReport", label: "Open full artifact", reportId: priorityReport.id } as const;
 
@@ -262,19 +266,19 @@ function buildFeaturedArtifact(
     reportId: priorityReport.id,
     playerId: priorityReport.playerId,
     playerName,
-    artifactLabel: privateMonitoring ? "Private monitoring assessment"
+    artifactLabel: isPrivateScoutingDecision(priorityReport) ? "Private scouting decision" : privateMonitoring ? "Private monitoring assessment"
       : priorityReport.evidenceAssessment ? "Professional report artifact" : "Legacy report artifact",
     summary: priorityReport.summary,
-    audience: priorityReport.intendedAudience
+    audience: isPrivateScoutingDecision(priorityReport) ? "Private scouting record" : priorityReport.intendedAudience
       ? formatLabel(priorityReport.intendedAudience)
       : privateMonitoring ? "Private scouting record" : "Decision-maker not specified",
     need: priorityReport.recruitmentNeed ?? "No explicit club need was recorded for this case.",
     risk: primaryRiskLabel(priorityReport),
     confidence: confidenceSummary(priorityReport),
     followUp: getFollowUpLabel(input, priorityReport),
-    targetClub: getTargetClubName(input.gameState, priorityReport),
+    targetClub: isPrivateScoutingDecision(priorityReport) ? "Not sent to a club" : getTargetClubName(input.gameState, priorityReport),
     conviction: formatLabel(priorityReport.conviction),
-    recommendedAction: priorityReport.recommendedAction
+    recommendedAction: priorityReport.recommendedAction === "pass" ? "Pass for now" : priorityReport.recommendedAction
       ? formatLabel(priorityReport.recommendedAction)
       : "No recommended action recorded",
     evidenceCount: countEvidence(priorityReport),
@@ -289,7 +293,7 @@ function buildActionRequiredItems(input: BuildReportWorkspaceViewModelInput): Re
 
   if (input.pendingListingReportId) {
     const report = input.gameState.reports[input.pendingListingReportId];
-    if (report && shouldPromptReportListing(report)) {
+    if (report && !isPrivateScoutingDecision(report) && shouldPromptReportListing(report)) {
       items.push({
         id: `pending-listing-${report.id}`,
         eyebrow: "Pricing decision",
@@ -304,7 +308,7 @@ function buildActionRequiredItems(input: BuildReportWorkspaceViewModelInput): Re
 
   for (const scoutingCase of input.casesNeedingDelivery.slice(0, 2)) {
     const report = getCaseReport(input.gameState, scoutingCase);
-    if (!report) continue;
+    if (!report || isPrivateScoutingDecision(report)) continue;
     const privateMonitoring = isPrivateMonitoringNote(input, report);
     items.push({
       id: `delivery-${scoutingCase.id}`,

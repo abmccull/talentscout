@@ -26,6 +26,7 @@ function migratedState() {
 describe("GameState ownership partitions", () => {
   it("classifies every persisted field in the canonical legacy migration", () => {
     const state = migratedState();
+    state.guidedSessionRequested = false;
     expect(findUnpartitionedGameStateKeys(state)).toEqual([]);
   });
 
@@ -41,6 +42,8 @@ describe("GameState ownership partitions", () => {
     expect(getActiveRunKind(state)).toBe("career");
     expect(partitions.sharedWorld.players).toBe(state.players);
     expect(partitions.sharedCareer.reports).toBe(state.reports);
+    expect(partitions.sharedCareer.playerPortraits).toBe(state.playerPortraits);
+    expect(partitions.sharedCareer).toHaveProperty("guidedSessionRequested", state.guidedSessionRequested);
     expect(partitions.sharedCareer.dashboardState).toBe(state.dashboardState);
     expect(partitions.mode.unsignedYouth).toBe(state.unsignedYouth);
     expect(partitions.sharedCareer.systemFitCache).toBe(state.systemFitCache);

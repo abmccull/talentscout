@@ -136,6 +136,8 @@ export type DashboardActionTarget =
 
 export interface DashboardPriorityItem {
   id: string;
+  /** Presentation identity only; never inferred from the destination screen. */
+  objectiveKey?: string;
   category: DashboardPriorityCategory;
   severity: DashboardPrioritySeverity;
   title: string;

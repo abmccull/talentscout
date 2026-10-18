@@ -242,6 +242,13 @@ export function tickFreeAgentPool(
 
   for (const agent of pool.agents) {
     if (isTerminalStatus(agent.status)) {
+      // Recover a legacy accepted offer whose ownership settlement never ran.
+      // Active ownership/loans and genuinely retired careers are not revived.
+      const player = state.players[agent.playerId];
+      if (agent.status === "signed" && player && !player.clubId && !player.contractClubId
+        && !player.loanParentClubId && !player.onLoan) {
+        updatedAgents.push({ ...agent, status: "available", npcInterest: [] });
+      }
       continue;
     }
 

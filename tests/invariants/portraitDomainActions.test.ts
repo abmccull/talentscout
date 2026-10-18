@@ -13,6 +13,7 @@ vi.mock("@/stores/tutorialStore", () => ({
 
 import { createMatchActions } from "@/stores/actions/matchActions";
 import { createFinanceActions } from "@/stores/actions/financeActions";
+import { createDurableGameplaySetter } from "@/stores/actions/durableGameplayCommit";
 import { queueGameplayAutosave } from "@/stores/actions/persistGameplayAutosave";
 import { createVisualIdentity } from "@/engine/players/portraits/identity";
 
@@ -80,7 +81,7 @@ describe("live portrait ownership in domain actions", () => {
     expect(queueGameplayAutosave).not.toHaveBeenCalled();
   });
 
-  it("staff approval saves the same newly bound ledger as the live watchlist and is replay-safe", () => {
+  it.each([false, true])("staff approval saves the live portrait ledger and is replay-safe (durable setter: %s)", (durable) => {
     const product: StaffScoutingWorkProduct = {
       id: "staff-a", playerId: "a", employeeId: "employee", employeeName: "Taylor Analyst",
       createdWeek: 2, createdSeason: 1, status: "awaitingReview", qualityScore: 70,
@@ -93,7 +94,8 @@ describe("live portrait ownership in domain actions", () => {
       office: { tier: "home", monthlyCost: 0, qualityBonus: 0, maxEmployees: 0 },
     } as unknown as FinancialRecord;
     const store = harness(state);
-    const actions = createFinanceActions(store.get, store.set);
+    const setter = durable ? createDurableGameplaySetter(store.get, store.set) : store.set;
+    const actions = createFinanceActions(store.get, setter);
     actions.approveStaffWorkProduct(product.id);
 
     const live = store.get().gameState!;
@@ -101,14 +103,17 @@ describe("live portrait ownership in domain actions", () => {
     expect(live.finances!.staffWorkProducts[0]!.status).toBe("approved");
     expect(live.scout.fatigue).toBe(22);
     expect(live.playerPortraits!.reservations["person:v1:a"]!.binding).toBeDefined();
-    expect(queueGameplayAutosave).toHaveBeenCalledTimes(1);
-    const queued = vi.mocked(queueGameplayAutosave).mock.calls[0]![0];
-    expect(queued.playerPortraits).toBe(live.playerPortraits);
-    expect(queued.watchlist).toBe(live.watchlist);
-    expect(queued.finances).toBe(live.finances);
+    expect(queueGameplayAutosave).toHaveBeenCalled();
+    const queuedCalls = vi.mocked(queueGameplayAutosave).mock.calls;
+    const submissionCount = queuedCalls.length;
+    for (const [queued] of queuedCalls) {
+      expect(queued.playerPortraits).toBe(live.playerPortraits);
+      expect(queued.watchlist).toBe(live.watchlist);
+      expect(queued.finances).toBe(live.finances);
+    }
     actions.approveStaffWorkProduct(product.id);
     expect(store.get().gameState).toBe(live);
-    expect(queueGameplayAutosave).toHaveBeenCalledTimes(1);
+    expect(queueGameplayAutosave).toHaveBeenCalledTimes(submissionCount);
     expect(live.inbox.filter((entry) => entry.id === "staff-review-approved:staff-a")).toHaveLength(1);
   });
 });

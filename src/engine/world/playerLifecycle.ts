@@ -1,3 +1,6 @@
+import { wouldBreachCompetitiveOutflowGuard } from "@/engine/match/eligibleRoster";
+import { getContractWageBaseline } from "@/engine/finance/wages";
+import { evaluateLoanOutcome } from "./loans";
 import { expandPlayerMovementHistory, compactPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type {
   Club,
@@ -15,6 +18,7 @@ import { loanFitsOwnershipContract } from "./loanContract";
 import { compactClubFinancialObligation, compactLoanDeal, expandClubFinancialObligation } from "../finance/terminalRecordArchive";
 import {
   gameWeeksBetweenWithSeasonLength,
+  isGameDateAtOrAfter,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
 import { buildPlayingSquadQuoteIndex, canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed, getPlayingSquadWeeklyReserve, type PlayingSquadQuoteIndex } from "@/engine/freeAgents/squadPlanning";
@@ -307,8 +311,8 @@ function defaultContractLength(player: Player): number {
   return 3;
 }
 
-function defaultWage(player: Player): number {
-  return Math.max(100, player.wage, Math.round(player.currentAbility * 60));
+function defaultWage(player: Player, club: Club): number {
+  return getContractWageBaseline(player, club.reputation);
 }
 
 function loanDurationWeeks(
@@ -587,7 +591,7 @@ function applyPlayerMovements(
         reject(rejected, intent, "contract renewal must be issued by the owning club");
         continue;
       }
-      const renewedWage = Math.max(100, intent.wage ?? defaultWage(player));
+      const renewedWage = Math.max(100, intent.wage ?? defaultWage(player, state.clubs[owner]));
       const affordability = assessClubAffordability({
         club: state.clubs[owner],
         players: state.players,
@@ -655,7 +659,7 @@ function applyPlayerMovements(
         continue;
       }
       const signingBonus = intent.type === "freeAgentSigning" ? (intent.signingBonus ?? 0) : 0;
-      const signedWage = Math.max(100, intent.wage ?? defaultWage(player));
+      const signedWage = Math.max(100, intent.wage ?? defaultWage(player, target));
       const affordability = assessClubAffordability({
         club: target,
         players: state.players,
@@ -717,8 +721,12 @@ function applyPlayerMovements(
         reject(rejected, intent, "permanent transfer requires the owning club and a non-loaned player");
         continue;
       }
+      if (intent.preserveSquadWageReserve && wouldBreachCompetitiveOutflowGuard(fromClub, state.players, player.id)) {
+        reject(rejected, intent, "NPC transfer would remove competitive squad cover");
+        continue;
+      }
       const signingBonus = Math.max(0, intent.signingBonus ?? 0);
-      const transferWage = Math.max(100, intent.wage ?? defaultWage(player));
+      const transferWage = Math.max(100, intent.wage ?? defaultWage(player, toClub));
       const addOnObligations = buildTransferAddOnObligations({
         playerId: player.id,
         creditorClubId: intent.fromClubId,
@@ -909,10 +917,10 @@ function applyPlayerMovements(
         player.id,
         "loanWageContribution",
       );
-      let declineNPCBuyOption = false;
+      let declineBuyOption = false;
       if (intent.resolution === "buyOption") {
         const fee = deal.buyOptionFee ?? 0;
-        const buyingWage = defaultWage(player);
+        const buyingWage = defaultWage(player, loanClub);
         const affordability = assessClubAffordability({
           club: loanClub,
           players: state.players,
@@ -920,15 +928,24 @@ function applyPlayerMovements(
           weeklyWageCommitment: buyingWage,
           releasedWeeklyCommitment: releasedLoanContribution,
         });
-        declineNPCBuyOption = Boolean(intent.preserveSquadWageReserve && (
+        declineBuyOption = Boolean(intent.preserveSquadWageReserve && (
           !deal.buyOptionFee || !affordability.affordable || !canFundSquadCompletion(
             affordability.remainingWeeklyHeadroom, new Set(loanClub.playerIds).size, buyingWage,
             getGoalkeeperRecruitmentNeed(player, loanClub, state.players), getEmergencySquadVacancies(player, loanClub, state.players), player.age, playingReserve(loanClub, player),
           )
         ));
-        if ((!deal.buyOptionFee || !affordability.affordable) && !declineNPCBuyOption) {
-          reject(rejected, intent, "buy option is unavailable or unaffordable");
-          continue;
+        const unavailable = !deal.buyOptionFee || !affordability.affordable || declineBuyOption;
+        if (unavailable) {
+          // A rejected early purchase leaves the spell active. At its deadline,
+          // unavailable purchase terms must not prevent the actual return.
+          if (!isGameDateAtOrAfter(
+            { week: currentWeek, season: currentSeason },
+            { week: deal.endWeek, season: deal.endSeason },
+          )) {
+            reject(rejected, intent, "buy option is unavailable or unaffordable");
+            continue;
+          }
+          declineBuyOption = true;
         }
       }
       state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
@@ -940,9 +957,9 @@ function applyPlayerMovements(
         "loanWageContribution",
       ) ?? state.clubs[deal.loanClubId];
 
-      if (intent.resolution === "buyOption" && !declineNPCBuyOption) {
+      if (intent.resolution === "buyOption" && !declineBuyOption) {
         const fee = deal.buyOptionFee ?? 0;
-        const boughtWage = defaultWage(player);
+        const boughtWage = defaultWage(player, loanClub);
         state.clubs[deal.parentClubId] = {
           ...state.clubs[deal.parentClubId],
           budget: state.clubs[deal.parentClubId].budget + fee,
@@ -991,10 +1008,10 @@ function applyPlayerMovements(
         state.loanHistory.push(compactLoanDeal({
           ...deal,
           status: recalled ? "recalled" : "completed",
-          outcome: recalled ? "recalled-early" : declineNPCBuyOption ? "neutral" : (intent.outcome ?? "neutral"),
+          outcome: recalled ? "recalled-early" : declineBuyOption || intent.outcome === "buy-option-exercised" ? evaluateLoanOutcome({ ...deal, buyOptionFee: undefined }, seasonLength) : (intent.outcome ?? "neutral"),
         }));
         movement = eventFor(recalled ? "loanRecall" : "loanReturn",
-          declineNPCBuyOption ? { ...intent, reason: "Loan completed; NPC declined buy option to preserve squad funds" } : intent,
+          declineBuyOption ? { ...intent, reason: "Loan completed; buy option declined because purchase terms could not be funded" } : intent,
           currentWeek, currentSeason, state.playerMovementHistory.length + applied.length, {
             fromClubId: deal.loanClubId,
             toClubId: deal.parentClubId,

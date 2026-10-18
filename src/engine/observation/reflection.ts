@@ -11,6 +11,7 @@
 
 import type { RNG } from "@/engine/rng";
 import type { AttributeDomain, Player } from "@/engine/core/types";
+import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import type {
   ObservationSession,
   Hypothesis,
@@ -21,38 +22,51 @@ import type {
 import { MODE_FLAGGED_NOUN } from "@/engine/observation/types";
 import { getInvestigationSpeakers } from "./investigationParticipants";
 
+export type FlaggedMomentView = Pick<ObservationSession, "mode" | "cueReadings">
+  & Partial<Pick<ObservationSession, "players" | "phases" | "currentPhaseIndex" | "evidenceDecisions">>;
+
+/** A retained read must belong to an actually watched, focused passage. */
+function retainedFlaggedCue(session: FlaggedMomentView, flagged: SessionFlaggedMoment) {
+  if (session.currentPhaseIndex === undefined || flagged.phaseIndex > session.currentPhaseIndex) return undefined;
+  const phase = session.phases?.find((entry) => entry.index === flagged.phaseIndex);
+  const watched = phase?.moments.some((moment) =>
+    moment.id === flagged.moment.id && moment.playerId === flagged.moment.playerId);
+  const focused = session.players?.some((player) => player.playerId === flagged.moment.playerId
+    && player.focusedPhases.includes(flagged.phaseIndex));
+  if (!watched || !focused) return undefined;
+  return session.cueReadings?.find((cue) => cue.phaseIndex === flagged.phaseIndex
+    && cue.momentId === flagged.moment.id && cue.playerId === flagged.moment.playerId
+    && cue.clarity !== "missed");
+}
+
 /** Flagging preserves a scout's read; it never reveals an unseen event. */
 export function getRetainedFlaggedMomentReaction(
-  session: Pick<ObservationSession, "mode" | "cueReadings" | "evidenceDecisions">,
+  session: FlaggedMomentView,
   flagged: SessionFlaggedMoment,
 ): SessionFlaggedMoment["reaction"] {
   if (session.mode !== "fullObservation") return flagged.reaction;
-  const cue = session.cueReadings?.find((reading) =>
-    reading.momentId === flagged.moment.id && reading.playerId === flagged.moment.playerId);
-  if (!cue || cue.clarity === "missed" || cue.clarity === "glimpse"
+  const cue = retainedFlaggedCue(session, flagged);
+  if (!cue || cue.clarity === "glimpse"
     || session.evidenceDecisions?.[cue.id]?.classification === "noConclusion") return "needs_more_data";
   return flagged.reaction;
 }
 
 export function getPerceivedFlaggedMomentDescription(
-  session: Pick<ObservationSession, "cueReadings">,
+  session: FlaggedMomentView,
   flagged: SessionFlaggedMoment,
 ): string {
-  const cue = session.cueReadings?.find((reading) =>
-    reading.momentId === flagged.moment.id && reading.playerId === flagged.moment.playerId,
-  );
-  return cue?.detail ?? flagged.moment.vagueDescription;
+  if (session.mode !== "fullObservation") return flagged.moment.description;
+  return retainedFlaggedCue(session, flagged)?.detail ?? flagged.moment.vagueDescription;
 }
 
 /** Persist the perceived attribute scope, never the simulator's hidden hints. */
 export function getRetainedFlaggedMomentAttributes(
-  session: Pick<ObservationSession, "mode" | "cueReadings" | "evidenceDecisions">,
+  session: FlaggedMomentView,
   flagged: SessionFlaggedMoment,
 ): SessionFlaggedMoment["moment"]["attributesHinted"] {
   if (session.mode !== "fullObservation") return [...flagged.moment.attributesHinted];
-  const cue = session.cueReadings?.find((reading) =>
-    reading.momentId === flagged.moment.id && reading.playerId === flagged.moment.playerId);
-  if (!cue || cue.clarity === "missed" || cue.clarity === "glimpse"
+  const cue = retainedFlaggedCue(session, flagged);
+  if (!cue || cue.clarity === "glimpse"
     || session.evidenceDecisions?.[cue.id]?.classification === "noConclusion") return [];
   return [...cue.attributesHinted];
 }
@@ -179,6 +193,7 @@ function momentTypeToDomain(
  * flagged moments. Falls back to "technical" when there are no moments.
  */
 function dominantDomainFromFlagged(
+  session: ObservationSession,
   flagged: SessionFlaggedMoment[],
 ): AttributeDomain {
   if (flagged.length === 0) return "technical";
@@ -192,7 +207,13 @@ function dominantDomainFromFlagged(
   };
 
   for (const fm of flagged) {
-    counts[momentTypeToDomain(fm.moment.momentType)] += 1;
+    const domains = [...new Set(getRetainedFlaggedMomentAttributes(session, fm)
+      .map((attribute) => ATTRIBUTE_DOMAINS[attribute]))];
+    if (domains.length > 0) {
+      for (const domain of domains) counts[domain] += 1 / domains.length;
+    } else {
+      counts[momentTypeToDomain(fm.moment.momentType)] += 1;
+    }
   }
 
   let best: AttributeDomain = "technical";
@@ -230,6 +251,45 @@ function mostFocusedPlayer(
     if (!best) return p.focusedPhases.length > 0 ? p : undefined;
     return p.focusedPhases.length > best.focusedPhases.length ? p : best;
   }, undefined);
+}
+
+/** Use the scout's recorded read and visible cue; never hidden execution quality. */
+function describeFlaggedEvidence(session: ObservationSession, flagged: SessionFlaggedMoment[]) {
+  let positive = false;
+  let negative = false;
+  const reactions = { promising: 0, concerning: 0, inconclusive: 0 };
+  for (const flag of flagged) {
+    const reaction = getRetainedFlaggedMomentReaction(session, flag);
+    if (reaction === "promising") reactions.promising += 1;
+    else if (reaction === "concerning") reactions.concerning += 1;
+    else reactions.inconclusive += 1;
+    const cue = retainedFlaggedCue(session, flag);
+    const usableDirection = cue && cue.clarity !== "glimpse"
+      && session.evidenceDecisions?.[cue.id]?.classification !== "noConclusion"
+      ? cue.direction : undefined;
+    positive ||= reaction === "promising" || usableDirection === "positive";
+    negative ||= reaction === "concerning" || usableDirection === "negative";
+  }
+  const stance = positive && negative ? "mixed"
+    : negative ? "concern"
+    : positive ? "promising"
+    : "unresolved";
+  return { stance, ...reactions };
+}
+
+function evidenceQuestion(session: ObservationSession, player: SessionPlayer): string {
+  const flagged = session.flaggedMoments.filter((flag) => flag.moment.playerId === player.playerId);
+  const { stance } = describeFlaggedEvidence(session, flagged);
+  if (stance === "concern") {
+    return `Your notes raise concerns about ${player.name}. What would a different context need to show before you reconsidered?`;
+  }
+  if (stance === "mixed") {
+    return `Your notes and cue readings for ${player.name} contain conflicting signals. Which uncertainty would another watch resolve?`;
+  }
+  if (stance === "promising") {
+    return `There are encouraging signals in your notes on ${player.name}. Would they hold up in another context?`;
+  }
+  return `Your read of ${player.name} remains open. Choose a specific question before spending another session on the player.`;
 }
 
 /**
@@ -609,7 +669,7 @@ export function checkGutFeelingTrigger(
   // Determine domain: majority vote over flagged moments; fall back to active lens.
   let domain: AttributeDomain;
   if (targetMoments.length > 0) {
-    domain = dominantDomainFromFlagged(targetMoments);
+    domain = dominantDomainFromFlagged(session, targetMoments);
   } else if (targetPlayer.currentLens) {
     domain = lensToDomain(targetPlayer.currentLens);
   } else {
@@ -622,14 +682,12 @@ export function checkGutFeelingTrigger(
   // Select a narrative template for this domain.
   const templates = GUT_FEELING_NARRATIVES[domain];
   const rawNarrative = rng.pick(templates);
-  const reactions = targetMoments.map((moment) => getRetainedFlaggedMomentReaction(session, moment));
-  const concerns = reactions.filter((reaction) => reaction === "concerning").length;
-  const promising = reactions.filter((reaction) => reaction === "promising").length;
-  const interpretation = concerns > 0 && promising > 0
-    ? "Your saved reactions pull in both directions. Look for a context that could separate them."
-    : concerns > 0
+  const evidence = describeFlaggedEvidence(session, targetMoments);
+  const interpretation = evidence.stance === "mixed"
+    ? "Your saved reactions and visible cues contain conflicting signals. Look for a context that could separate them."
+    : evidence.stance === "concern"
     ? "The concern you flagged deserves another test before you treat it as a recurring weakness."
-    : promising > 0
+    : evidence.stance === "promising"
     ? "The promising cue deserves another test before you treat it as a recurring strength."
     : "The saved read remains open. Attention alone does not establish a strength or weakness.";
   const anchor = targetMoments.find((moment) =>
@@ -645,7 +703,7 @@ export function checkGutFeelingTrigger(
   const triggerReasonParts: string[] = [];
   if (targetMoments.length > 0) {
     triggerReasonParts.push(
-      `${targetMoments.length} flagged moment${targetMoments.length > 1 ? "s" : ""}`,
+      `${targetMoments.length} flagged moment${targetMoments.length > 1 ? "s" : ""}: ${evidence.promising} promising, ${evidence.concerning} concerning, ${evidence.inconclusive} inconclusive`,
     );
   }
   if (targetPlayer.focusedPhases.length > 0) {
@@ -662,6 +720,10 @@ export function checkGutFeelingTrigger(
   let paEstimate: { low: number; high: number } | undefined;
   const visibleCues = (session.cueReadings ?? []).filter(
     (cue) => cue.playerId === targetPlayer.playerId
+      && cue.phaseIndex <= session.currentPhaseIndex
+      && targetPlayer.focusedPhases.includes(cue.phaseIndex)
+      && session.phases.some((phase) => phase.index === cue.phaseIndex
+        && phase.moments.some((moment) => moment.id === cue.momentId && moment.playerId === cue.playerId))
       && cue.clarity !== "missed" && cue.clarity !== "glimpse"
       && session.evidenceDecisions?.[cue.id]?.classification !== "noConclusion",
   );
@@ -729,9 +791,19 @@ export function generateReflectionPrompts(
       prompts.push("You did not retain a passage. Choose a player and a question for the next observation before making a claim.");
     }
     const focused = mostFocusedPlayer(session.players);
-    prompts.push(focused
-      ? `Your attention stayed longest on ${focused.name}. Which unanswered question deserves a different context next time?`
-      : "You did not allocate focused attention to a player. A narrower watch may make the next passage easier to read.");
+    const primary = focused ?? session.players.find((player) =>
+      session.flaggedMoments.some((flag) => flag.moment.playerId === player.playerId));
+    if (primary) prompts.push(evidenceQuestion(session, primary));
+    const focusedCount = session.players.filter((player) => player.focusedPhases.length > 0).length;
+    if (focusedCount === 0) {
+      prompts.push("You did not allocate focused attention to a player. A narrower watch may make the next passage easier to read.");
+    }
+    if (focusedCount > 3) {
+      prompts.push(`You spread direct focus across ${focusedCount} players. Consider narrowing the next watch to two or three if you need deeper evidence.`);
+    }
+    if (session.flaggedMoments.some((flag) => retainedFlaggedCue(session, flag)?.pressureContext)) {
+      prompts.push("Some of your recorded evidence came under pressure. Seek a comparable situation before deciding whether it represents a pattern.");
+    }
   }
   if ((session.venueAtmosphere?.chaosLevel ?? 0) > 0.5) {
     prompts.push("The viewing conditions were unsettled. Which parts of your read need checking in calmer conditions?");

@@ -1,3 +1,4 @@
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type {
   Contact,
   GameState,
@@ -262,7 +263,8 @@ export function synchronizeInternationalAssignmentProgress(state: GameState): Ga
 
   const reports = Object.values(state.reports)
     .filter((report) =>
-      report.submittedWeek === state.currentWeek
+      !isPrivateScoutingDecision(report)
+      && report.submittedWeek === state.currentWeek
       && report.submittedSeason === state.currentSeason
       && reportMatchesDestination(state, assignment, report),
     )

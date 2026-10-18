@@ -83,7 +83,33 @@ function addDiscoveries(
       id: playerId,
       nationality: nationalities[index % nationalities.length],
     } as GameState["players"][string];
-    state.discoveryRecords.push({ playerId, wasWonderkid: wonderkid } as GameState["discoveryRecords"][number]);
+    state.discoveryRecords.push({
+      playerId, wasWonderkid: wonderkid, discoveredSeason: 1, discoveredWeek: 1,
+    } as GameState["discoveryRecords"][number]);
+    if (wonderkid) {
+      // A scenario success is retrospective performance after a documented
+      // recommendation, not the hidden classification above.
+      state.currentWeek = 12;
+      state.reports[`backing-${index}`] = {
+        id: `backing-${index}`, playerId, conviction: "recommend",
+        submittedSeason: 1, submittedWeek: 1,
+      } as ScoutReport;
+      state.fixtures ??= {};
+      state.matchRatings ??= {};
+      for (let match = 0; match < 10; match++) {
+        const fixtureId = `outcome-${index}-${match}`;
+        state.fixtures[fixtureId] = {
+          id: fixtureId, season: 1, week: match + 2, played: true,
+          homeClubId: "home", awayClubId: "away", leagueId: "league",
+        };
+        state.matchRatings[fixtureId] = {
+          [playerId]: {
+            playerId, fixtureId, started: true, minutesPlayed: 90,
+            rating: 7, eventCount: 1, stats: {}, source: "simulated",
+          },
+        };
+      }
+    }
   }
 }
 

@@ -507,7 +507,7 @@ export function getMaxWeeksInPool(ca: number): number {
   return POOL_DURATION_JOURNEYMAN;
 }
 
-function createFreeAgentFromPlayer(
+export function createFreeAgentFromPlayer(
   player: Player,
   club: Club,
   currentSeason: number,

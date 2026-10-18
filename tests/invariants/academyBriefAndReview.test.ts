@@ -1,8 +1,15 @@
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { expandPlayerInjuryHistory } from "@/engine/players/playerStateArchive";
+import "fake-indexeddb/auto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { RNG } from "@/engine/rng";
+import { generatePlayer } from "@/engine/players/generation";
+import { migrateSaveState } from "@/lib/db";
 import type {
   Club,
   ClubDecision,
+  GameState,
   Injury,
   PlacementReport,
   Player,
@@ -431,6 +438,44 @@ describe("academy recruitment briefs", () => {
 });
 
 describe("academy recommendation reviews", () => {
+  const goldenSave = JSON.parse(readFileSync(
+    new URL("../fixtures/saves/v0-save-record.json", import.meta.url),
+    "utf8",
+  )) as { state: unknown };
+
+  function injuryHistoryFacts(target: Player) {
+    const history = expandPlayerInjuryHistory(target.injuryHistory, target.id);
+    return history ? { ...history,
+      injuries: history.injuries.map(entry => expandHistoricalInjury(entry, target.id)),
+    } : history;
+  }
+
+  function careerWithProspect(prospect: Player, storage: "registered" | "unsigned"): GameState {
+    // Normalize the full fixture first, then inject the deliberately unmigrated
+    // prospect so this test exercises its first reload rather than fixture gaps.
+    const state = migrateSaveState(goldenSave.state);
+    state.currentSeason = 3;
+    state.currentWeek = 5;
+    state.clubs["club-academy"] = club({
+      playerIds: storage === "registered" ? [prospect.id] : [],
+    });
+    if (storage === "registered") {
+      state.players[prospect.id] = structuredClone(prospect);
+    } else {
+      delete state.players[prospect.id];
+      state.unsignedYouth["reload-youth"] = {
+        id: "reload-youth", player: structuredClone(prospect), visibility: 20,
+        buzzLevel: 10, discoveredBy: [], regionId: "england", country: "england",
+        venueAppearances: [], generatedSeason: 1, placed: false, retired: false,
+      };
+    }
+    return state;
+  }
+
+  function storedProspect(state: GameState, id: string, storage: "registered" | "unsigned"): Player {
+    return storage === "registered" ? state.players[id] : state.unsignedYouth["reload-youth"].player;
+  }
+
   function reviewPlayer(overrides: Partial<Player> = {}): Player {
     const injuries: Injury[] = [
       {
@@ -521,6 +566,82 @@ describe("academy recommendation reviews", () => {
       },
     ];
   }
+
+  function completedReviewFor(prospect: Player) {
+    const causal = causalPlacement();
+    const movements = movementHistory(causal.placementMovement);
+    const scheduled = scheduleAcademyRecommendationReviews({ ...causal, movementHistory: movements });
+    return completeAcademyRecommendationReview({
+      review: scheduled.reviews[1], ...causal, player: prospect,
+      movementHistory: movements, currentWeek: 5, currentSeason: 3,
+      brief: brief({ status: "fulfilled", fulfilledPlayerAge: 16 }),
+    });
+  }
+
+  it.each(["registered", "unsigned"] as const)(
+    "preserves unknown legacy injury history and the complete review across a %s player reload",
+    (storage) => {
+      const prospect = reviewPlayer();
+      delete prospect.injuryHistory;
+      const state = careerWithProspect(prospect, storage);
+      const before = completedReviewFor(storedProspect(state, prospect.id, storage));
+      expect(before.status).toBe("completed");
+      const loaded = storedProspect(migrateSaveState(state), prospect.id, storage);
+
+      expect.soft(loaded.injuryHistory).toBeUndefined();
+      expect.soft(Object.hasOwn(loaded, "injuryHistory")).toBe(false);
+      expect(completedReviewFor(loaded)).toEqual(before);
+    },
+  );
+
+  it.each(["registered", "unsigned"] as const)(
+    "preserves real injury history and the complete review across a %s player reload",
+    (storage) => {
+      const prospect = reviewPlayer();
+      const state = careerWithProspect(prospect, storage);
+      const before = completedReviewFor(storedProspect(state, prospect.id, storage));
+      const loaded = storedProspect(migrateSaveState(state), prospect.id, storage);
+
+      expect(before.status).toBe("completed");
+      expect(injuryHistoryFacts(loaded))
+        .toEqual(injuryHistoryFacts(prospect));
+      expect(completedReviewFor(loaded)).toEqual(before);
+    },
+  );
+
+  it.each(["registered", "unsigned"] as const)(
+    "initializes known empty injury history when generating a %s player and preserves it on reload",
+    (storage) => {
+      const prospect = generatePlayer(new RNG(`injury-history-creation-${storage}`), {
+        position: "CM", ageRange: [16, 19], abilityRange: [60, 90],
+        nationality: "English", clubId: storage === "registered" ? "club-academy" : "",
+        currentSeason: 3,
+      });
+      const expected = {
+        playerId: prospect.id, injuries: [], totalWeeksMissed: 0,
+        injuryProneness: 0, reinjuryWindowWeeksLeft: 0,
+      };
+      expect.soft(prospect.injuryHistory).toEqual(expected);
+      const state = careerWithProspect(prospect, storage);
+      const loaded = storedProspect(migrateSaveState(state), prospect.id, storage);
+      expect(injuryHistoryFacts(loaded)).toEqual(expected);
+      expect(injuryHistoryFacts(loaded))
+        .toEqual(injuryHistoryFacts(prospect));
+    },
+  );
+
+  it("keeps the pre-repair generator RNG continuation when initializing injury history", () => {
+    const rng = new RNG("injury-history-static-rng-baseline");
+    generatePlayer(rng, {
+      position: "CM", ageRange: [16, 19], abilityRange: [60, 90],
+      nationality: "English", clubId: "club-academy", currentSeason: 3,
+    });
+    // Captured from the unchanged generator in the failing regression run.
+    expect(Array.from({ length: 5 }, () => rng.next())).toEqual([
+      0.944175970274955, 0.3661405553575605, 0.33110850281082094,
+      0.8980231857858598, 0.7677394386846572,
+    ]);
+  });
 
   it("schedules stable one- and two-season checkpoints only from a canonical placement", () => {
     const causal = causalPlacement();

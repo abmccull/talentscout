@@ -52,10 +52,10 @@ export function ChoiceCard({
 }: ChoiceCardProps) {
   const locked = disabled || pending;
   const surface = cn(
-    "relative flex min-h-16 w-full cursor-pointer flex-col rounded-xl border p-4 text-left transition",
+    "relative flex min-h-14 w-full cursor-pointer flex-col rounded border px-4 py-3 text-left transition-colors",
     selected
-      ? "border-[color:var(--primary)] bg-[color:var(--primary)]/12"
-      : "border-[color:var(--border)] bg-[color:var(--card)] hover:border-[color:var(--muted-foreground)]/40",
+      ? "border-[color:var(--primary)]/70 bg-[color:var(--surface-selected)]"
+      : "border-[color:var(--border)] bg-transparent hover:bg-[color:var(--surface-interactive)]",
     pending && "cursor-wait",
     disabled && !pending && "cursor-not-allowed opacity-55",
     className,

@@ -3,6 +3,7 @@
  */
 
 import type { RNG } from "../rng/index";
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type {
   FinancialRecord,
   ClientRelationship,
@@ -161,6 +162,7 @@ export function getClientPitchEligibility(
   if (pitchType === "showcase") {
     const report = Object.values(state.reports).filter(candidate =>
       candidate.scoutId === state.scout.id && candidate.qualityScore >= 65
+      && !isPrivateScoutingDecision(candidate)
       && candidate.submittedWeek >= 1 && candidate.submittedSeason >= 1
       && gameWeeksBetween(state.fixtures, { week: candidate.submittedWeek, season: candidate.submittedSeason }, now) >= 0
     ).sort((a, b) => b.qualityScore - a.qualityScore || a.id.localeCompare(b.id))[0];

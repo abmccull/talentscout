@@ -1,0 +1,852 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "bounded-project-output-reproduction",
+  "status": "pass",
+  "scope": "All 138 achievement PNGs: 110 original geometry-only outputs unchanged and 28 explicitly reviewed original vector-label replacements",
+  "reviewedAt": "2026-10-18",
+  "sourceParents": [
+    "2364cbfbdf694784a31aae193f867b84df33d3a9",
+    "70cc6232ce4b8492053f85eea4862ea3f27b9a91"
+  ],
+  "priorInventorySha256": "050569d17b4ef3ec7b04f22c8d4d7bc7081bee42010ce2f4e571f4b963aad7f1",
+  "generator": {
+    "path": "scripts/generate-achievement-icons.mjs",
+    "sha256": "332d4c43c1773d7a02c706d2e5ca71ff813f2a9bf5ec5c6bf3c54a6934892601"
+  },
+  "verificationRecordSha256": "a123828919cb48066698021fd6861f2329e024fb19f632436ec217a37625c612",
+  "replacementRecord": {
+    "path": "docs/release/achievement-vector-replacements-20261018.json",
+    "sha256": "d754cb254e7d07855043a8d93a67815ab84558d7a9df8019fa7707230d983e61"
+  },
+  "method": "Execute the existing geometric achievement generator with eight newly authored SVG-path label glyphs and the unchanged pinned PNG encoder. A fresh Git clone with an explicit empty Fontconfig configuration reproduces all 138 PNG hashes. The unchanged 110 retain their exact previous bytes; all pixels changed in the 28 replacements lie within the previous label area.",
+  "assets": [
+    {
+      "path": "build/achievements/ACADEMY_GOLD_locked.png",
+      "sha256": "c1cf7bf393a0567f2bf16f85b2a12568eff3880e8b427ab66000501154c2031c",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ACADEMY_GOLD.png",
+      "sha256": "5bf65835b8ee92a5a42df0ae8038f88adddb87e66d1a532e9ff8f2de91ef63bf",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/AGAINST_ALL_ODDS_locked.png",
+      "sha256": "fee618b708d52486ce74e62fec122a554e614b6c16fc9966f35eda65d9374563",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/AGAINST_ALL_ODDS.png",
+      "sha256": "e61d3f883d42739c5ab03e8f17d516dd1c7552f1985947e55351f96106423bd1",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/AGENCY_EMPIRE_locked.png",
+      "sha256": "7370b50efd5de741130ca842890d59008d29aca7d7d55565d439089a9ef3cc62",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/AGENCY_EMPIRE.png",
+      "sha256": "ac463e50bd9b327df1a157de38f800ee8237e9451d50c1ea894bd5d2c3db6053",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALL_ACTIVITIES_locked.png",
+      "sha256": "a5b5234b26f6448c5c6438c884f0951e0c2ea6f929d8df2c92c5e6c8e120ecff",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALL_ACTIVITIES.png",
+      "sha256": "4ad759c1f9dbb7d98ec7581fa798196e2d1bf3f2a24841e235928ce18ea390f2",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALL_CONTINENTS_locked.png",
+      "sha256": "890074f8d80c84c8e240da8e03fa3dd2dea6b6b4e9470003d7ceb711e83726e6",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALL_CONTINENTS.png",
+      "sha256": "274416b6bb01906cf0efc0c9821a5d02b663f0194bb4023957cc78c20816c201",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALL_PERKS_TREE_locked.png",
+      "sha256": "e44511c9674b10a3d50fcf943963f9b50a5923289b64670889bad058b0f67ed8",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALL_PERKS_TREE.png",
+      "sha256": "705bbbd322587ced7eae00b0a34c644fcebfbfdb034b234a1e4caa15db598100",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALUMNI_15_locked.png",
+      "sha256": "2035326571e16648e0cb56ebe822fe75d9fb9e3c3f33c132ec8ad7c68e1599af",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALUMNI_15.png",
+      "sha256": "de7098db492be6c32cfbbf19052fa688ad02628b41b64e3a279db030e187b17f",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALUMNI_5_locked.png",
+      "sha256": "40071c2756f7e6d740c112b08ca2ded8a5699858fc70d70b8908b3458953e7c2",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALUMNI_5.png",
+      "sha256": "ba09c80b9d420875328917bcf4ca09a506935c0c519746f002b6db8f95e8e363",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALUMNI_INTERNATIONAL_locked.png",
+      "sha256": "06ed9bcf6e114454bb17c39dc62f4ca4e79ab2ffa742fae799aeae901982e64d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/ALUMNI_INTERNATIONAL.png",
+      "sha256": "dc63cb527abfba11ec234cb1313744ccc63bce9236f7d7fbb7b3039b48519d74",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/BIG_SPENDER_locked.png",
+      "sha256": "b4dacc95a18f5cd610b2939c5affb9332a9dac4cce8aca497fc0884b7527755b",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/BIG_SPENDER.png",
+      "sha256": "b314a53ad63a3ca441aabdf0b7cb1225588bed9cdf3e0a748329381a6c5c2847",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/BLIND_FAITH_locked.png",
+      "sha256": "fbe6fab730d1507da3be2b9f3aa4d74d4e922b1424fb676507d4d4751f54e420",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/BLIND_FAITH.png",
+      "sha256": "987c81b53057be6e15b0066e42eca684c3d3cf658bb9153b0c5f4478284cde46",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/CONTACTS_15_locked.png",
+      "sha256": "251bfacb84d4c068cdf3154153f0c07df8232a0f0ed444e817491253eb40c493",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/CONTACTS_15.png",
+      "sha256": "725f1211864d7bae15de076ec4646f05cc14f4ca0f1b05782644cdb6d45eceec",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/CONTACTS_5_locked.png",
+      "sha256": "766ecc7c6c7638270e4500f8847067cddb2f58ad31a31e9133c8efad75ed827e",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/CONTACTS_5.png",
+      "sha256": "c0f16ef21c6e9b9860dc13049dd5b1c7add0fd89b014814295314c91a058f85f",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_10_locked.png",
+      "sha256": "95d02848c9121a713f913ba4d9868ab8420ee6d0072e29f43f8b2faf8c0192e4",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_10.png",
+      "sha256": "6bf4f76b5225e469899c7c5a074b4c6648f8171dd75709be5e8ad22e210928ae",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_15_locked.png",
+      "sha256": "5b47dd71554d1d274a40f707d78298e9fc8ec83f564f45fdb1c505f71fb12408",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_15.png",
+      "sha256": "1062fdbff284043fd442d1a18d82d7d20fe4699c83cf192fb118af16de230c77",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_3_locked.png",
+      "sha256": "fbcab85cff88b337bb85f9f457c92f9cd5e9efb7ad6498af7011e6ebdf975655",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_3.png",
+      "sha256": "b6eeae9d525096b6a6b646914560d767dca7ecdf2a801e597756361eef298ad4",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_6_locked.png",
+      "sha256": "e2b59f01220ed56928432d906b1a40378c2552f47975aad38958fc8be1330b37",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/COUNTRIES_6.png",
+      "sha256": "c9b8977f22a155a4140f3b2805248ed44787cba0412357c44588bdd2b7944243",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/DISCOVERIES_15_locked.png",
+      "sha256": "6cef68ce7c38a90729b23d855a193d80bd07aa494a1af9f7ec86ad3f61ad0ade",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/DISCOVERIES_15.png",
+      "sha256": "9a7b19f82e51aa87e602a9ab68f3a414447cca5accf489de3eaec103bc3bf842",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/DISCOVERIES_5_locked.png",
+      "sha256": "fdd873821e498693d1516af97e0163e165b9f988d2b4b2efb9a81def28f8f1f5",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/DISCOVERIES_5.png",
+      "sha256": "fb80cd1dc11e41bbf83f92c9fa14a717c41261cd0a68590a1667cec4a29b3a0f",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/DUAL_MASTERY_locked.png",
+      "sha256": "acfd95ca114fe9927acd10a90789c29bd3117c12c1705076bbc78b202596c1ad",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/DUAL_MASTERY.png",
+      "sha256": "0801cd966f8cc60a5b558c18c2c9d74e601fe52d7ce27b17997f1fa40a59b5e3",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/EQUIPMENT_MAXED_locked.png",
+      "sha256": "67d0ac9c2798a368c607dbb560b7db106c07e0c70eb903f7e2c512ab45757bc5",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/EQUIPMENT_MAXED.png",
+      "sha256": "37f86ca6eeca09daf2a19175d59936491131251a70a02c64520aa45c03e832b3",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_CONTACT_locked.png",
+      "sha256": "7a75fd1127fce0e1d522f83fc94de077476ab31d1053c5f33c03da146899034d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_CONTACT.png",
+      "sha256": "7af0d0902eae81a41f1d5d78a93a9408931bd4e8c574ae531a2a5a8e23ca4e98",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_EMPLOYEE_locked.png",
+      "sha256": "1485fbf34ae3ff913565227e82175e0f7baba6d337085242783efa4a8c23ab53",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_EMPLOYEE.png",
+      "sha256": "86dd8358c4625cdd96f51decbef85c0d2390e382878958989db2a9add4815394",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_EQUIPMENT_locked.png",
+      "sha256": "69b5eb9dc980780f05c0aaec869b04ecddcc97789ab89ff2b4b20cfad29e04e2",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_EQUIPMENT.png",
+      "sha256": "4e191a282ce659d189f537c440bf1de72bcabe80fb530fab8ef086e5d2684ea9",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_MATCH_locked.png",
+      "sha256": "2e4cb026952410272b00b81c9fc1a4a9b3b2b4be4be53a2437b9f89fbf96f293",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_MATCH.png",
+      "sha256": "280239d63cdd4eb5adf5c5cb5b20766a11d67b177896a1315e05ad601c85d649",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_OBSERVATION_locked.png",
+      "sha256": "09811e7397416dbdd39ab9420ece6a3dbc6301c27b6c916c73eeb016853b47f9",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_OBSERVATION.png",
+      "sha256": "994d9f82228cb67b85f50f5c418d70b4daf2edd34d252502aa3100df9958a8c4",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_PERK_locked.png",
+      "sha256": "68eaace0d611123bfb3a2721349c739b14a4ccc193d2bc066edfd89c8a3942b8",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_PERK.png",
+      "sha256": "1493bba3c516259fa1f05a919d50b3178025693e885f529297fdd4f5b993b6a2",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_REPORT_locked.png",
+      "sha256": "40b8d5516dd4faa6cfc51c89339e6df9391744d687cab7a306e1e9dbb62e7594",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_REPORT.png",
+      "sha256": "9922a6dee9af744e5c2f3537f17b9a013e399a2379efabdf7d32d26a023400ce",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_WEEK_locked.png",
+      "sha256": "fd00c0239f524d86cbea985c7bf623f3500b598f8d62bfe7cf8800327b7e09b8",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_WEEK.png",
+      "sha256": "edc45ace5a652fb70308c91d2943fa0430db7dad6852da2fe50d99a4f96795d4",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_YOUTH_locked.png",
+      "sha256": "4f9bca06f4174856d2c187c7be961900a7fca95c2942219485d48190e7f7056f",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FIRST_YOUTH.png",
+      "sha256": "6ae241561af4bcb6b921ac8c63ac1eb5f55cfdb2c08c4a9526daba68adabb6ce",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FULL_HOUSE_locked.png",
+      "sha256": "a5e0ae4f59182ddfbd377f07f44ae06a6970912a8c4adad6b090beaa8e79625d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/FULL_HOUSE.png",
+      "sha256": "e8647a814cd9f6d39f94aed3d3f9cd694d162392c728176c729eaa9132e3259f",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/GENERATIONAL_TALENT_locked.png",
+      "sha256": "41cb256c87d8431051b9c76840613a1c7be485d7fa61ae3eb61a6bc1b8bcf9fd",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/GENERATIONAL_TALENT.png",
+      "sha256": "82acf475e6c79f57c5c862a37f1d489b861fdb583b265544eb2104bd112c68f6",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/HIGH_ACCURACY_locked.png",
+      "sha256": "61eeac43d781e3aea6d1dfc560bf5c6d70bcc238fcb548f340b9b9176cf83dca",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/HIGH_ACCURACY.png",
+      "sha256": "cab386402b59b96c9726dd9cb2132c3a74834c3123c2cfac5854d4963b5bcbcf",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/HOME_MASTERY_locked.png",
+      "sha256": "ad315faa1c3a44aee34a0e1b192a3b8d95b9f3e3526eff55db7d35b06c301709",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/HOME_MASTERY.png",
+      "sha256": "4ff4b34d3f5862fe5573876ff97b765b15814e04751e567c22cf9bed30887dbf",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MARATHON_locked.png",
+      "sha256": "f9a564b3fd2f82174a782932911491f42a0e9a3a10e018f6bf88bc24207d832d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MARATHON.png",
+      "sha256": "cdd534f64604c35b1d573c284c55275fac224f126c573ae01efcbab61a602e8d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MASTERY_PERK_locked.png",
+      "sha256": "eccc507e8ac9f9b27fda29e31f4357b9e15aff1a3f6ce7572044ae4e2fa31c7a",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MASTERY_PERK.png",
+      "sha256": "b38b261b41e094619eb0a81761c76f56e2de2f64ec9f944f8516de5bc781cc13",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MATCHES_100_locked.png",
+      "sha256": "290b64bbbbf9826a81c04703119aa988102857a391834b7ffc9f1b3b3e5aa7db",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MATCHES_100.png",
+      "sha256": "c3f504f03ce374258ad5fccd73f96470f804f8efff98c3fb99a3553b68e25e15",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MATCHES_25_locked.png",
+      "sha256": "70962290142e35d2d9d35f61abb5b2e41cc6065d9627b66a05fd18dfbfb621bf",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MATCHES_25.png",
+      "sha256": "eaec04a091b817abb39353bb32332372319c9a63f835d5233b01d168e79c3b28",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MATCHES_50_locked.png",
+      "sha256": "75a3b9738d54ba412d5062aaa1b423b1da25578500576bf806c7f1f1f7aa4327",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MATCHES_50.png",
+      "sha256": "57b50dae100ad526ecc678f9123461012dbdce631baafd6bf3f42ca8845fd576",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MAX_SPEC_locked.png",
+      "sha256": "d54087de1f20b32dd85fec100521f763223369f4971caa5fd27e4355a0daabfc",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/MAX_SPEC.png",
+      "sha256": "15f172bfaf166e5689ef67beff752feae70e8517c57205abc419bb4898ce142b",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/OBSERVATIONS_200_locked.png",
+      "sha256": "5b5de5c9eb7a34da107527d6f15b419a43b402a93ec34c566096d0106cbf11e1",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/OBSERVATIONS_200.png",
+      "sha256": "0a5b6ee02ff51c767e59520e4fd91ed4e6bc1a68e1b91a7b346d8dbc92d93c3f",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/OBSERVATIONS_50_locked.png",
+      "sha256": "3ab743f71b8e665996c4f81aacd89936d539c6431799e1a1cb6113f8ef484e71",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/OBSERVATIONS_50.png",
+      "sha256": "2182d62d3c76ec15cd833ec25f68cfafa95d374a58582a621a5500a70b9e6034",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/OBSERVATIONS_500_locked.png",
+      "sha256": "c766a106793b6c253f12865bbf29cb1d27fb1544215fd0fb05326d9fb56e7cd1",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/OBSERVATIONS_500.png",
+      "sha256": "b6e81525946c603d8a03bb0f9aafc84bc1539e848fd53e1dd136e1083286af49",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/PERFECT_RECORD_locked.png",
+      "sha256": "5e00e16ef85f4f1f83bff1af73fd4b096df544f63daefe8284c868acca2407c1",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/PERFECT_RECORD.png",
+      "sha256": "7704427daa331fe28f0c4db7045e4861711e8bceff0c4d0e3cb45ebbd98612c3",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_2_locked.png",
+      "sha256": "8df0873eb65b7b40920bd1c148e83dc99e649c13fc7709b8236e426346f5e86f",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_2.png",
+      "sha256": "2b5ebe8132a01dfd1325c00266a96728a5844b22599a491517aef5f4255c747e",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_3_locked.png",
+      "sha256": "f44bee801a2f0aec4853eb02f7dddaa699113d5465df60325b6fad9ef126cd16",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_3.png",
+      "sha256": "e168f22f1ec127a003936a344dc5508d3aa8cb651f582c9acb83bf20eda18409",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_4_locked.png",
+      "sha256": "e9af60c282c63c63b52b60cc0c4f65e2ba0263ad814e4bf3f19bf86bc2488337",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_4.png",
+      "sha256": "51cef645a5aeecec3c1120b0b0e575a90edabc91992e1ce7aa9488e2cb4a1364",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_5_locked.png",
+      "sha256": "0d24f3f51e91e354573e6f811ec5f26b92351c47112285a135b5bd7061cf42aa",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REACH_TIER_5.png",
+      "sha256": "85fdb4641955bfbd17fde351f55a5ac1b44bd4972951f44a58fd1fa48d510a4d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REP_100_locked.png",
+      "sha256": "1e7d59bb84ecb1a8f05a5bb0f27af40858a123e385b95d70e5260ef2dca24cd2",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REP_100.png",
+      "sha256": "9ab71f04b1094fb5c85ff8f2a4d4d44753ef08ddf9bf5c8949a24c8e33cc7cef",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REP_50_locked.png",
+      "sha256": "f8e0d3c7f57218aa6f5082b55224e768c06445fa0fcfc1486cf193b8645ba77e",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REP_50.png",
+      "sha256": "cd1d737846bd1afbb435ed3de06e5f086e3a13810b37d420053aee929d95bf34",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REP_75_locked.png",
+      "sha256": "1ea700dbdfbce3184ffdb85fba240b7a0747d3571ed3734e3df9e0e9f438ac8a",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REP_75.png",
+      "sha256": "fb825b878f9c4bb8b34cc13e8a93edd73fece5b3e300eee224001aacba0891b4",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_10_locked.png",
+      "sha256": "be4bde317c58db910d40228ef280962d9be89dcacb1b2407987965dd94593898",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_10.png",
+      "sha256": "2498dabbc07d6ba9b466d06b7636e9418a7cd0edb61d656705fe340b010e05f2",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_100_locked.png",
+      "sha256": "3df6a653c07431296e676f5f630570601456a00c0a5698cb1d980396ecc1c3b0",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_100.png",
+      "sha256": "fd4d094114cb8cd5698624af3a0269e52c2b79af97fa5890bc454942a60d6598",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_25_locked.png",
+      "sha256": "d861c8966571082b747d58d06a2f44d4eed8b981c246cb45d263da0dbc8942b9",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_25.png",
+      "sha256": "6bc140c77db577ff10ab83a1f9c09d425ed0c73132daa75b3c337284c6937d2d",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_50_locked.png",
+      "sha256": "5b82a3f2dcc24bfd96b73d76b63f6297b73a31121958a91aa057942d9f629873",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/REPORTS_50.png",
+      "sha256": "4ad5bd42221a9591616cd3d89e5aad3e369ae8067b08878af7e8beb9919a90bb",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SAVINGS_100K_locked.png",
+      "sha256": "a7b47377c8bfbe2eaeabb907fa50136b87ccd022d69eedc08b7e729fc34ccda1",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SAVINGS_100K.png",
+      "sha256": "6075de396afd2fc34d8f67ced3f097dae9f35f6d364f93a952aafaf40cccd6a9",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SAVINGS_500K_locked.png",
+      "sha256": "756fd273c72fe6e2ce9bdc5191067790432ad5c05d1feb8638e5576018c9f855",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SAVINGS_500K.png",
+      "sha256": "071bbdb8707b348049b6aab72259f7135ab44ea2684ca1ad1dfd697c38e6b07d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_1_locked.png",
+      "sha256": "7668e2725b509b6b27085dc3164dccfd30caff0173a623c1f805b0f5e31df881",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_1.png",
+      "sha256": "852511f32eaf2ea7b3c8801e9a9d96988a31a3bea0a5e3643ffe2dcc3c1ee6b8",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_10_locked.png",
+      "sha256": "60faf0b397e56a06084b7bb61e45be127cb6533c91b1748421396cbfb5b12654",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_10.png",
+      "sha256": "0b385fc0be6e358574cc257a3c210046c71e761236cbd2e1b187f06fc2697e43",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_3_locked.png",
+      "sha256": "4b8b157e6502606095f68a416efba9c87a35038f59a6c2b85d0d71b3a45e4161",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_3.png",
+      "sha256": "b802d3d836661e446ce3b3c1f36bd9c1a4253fdefccaca8500c420d7143e956d",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_5_locked.png",
+      "sha256": "626dacec32118a8b30d0a4c2001809644a2f0b6ed501f8ead9531f106c3078a4",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SEASON_5.png",
+      "sha256": "77cb792c7c0cdc335f02f37f9562149e5641639b89b596d82fccb49bc070b173",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SECONDARY_SPEC_locked.png",
+      "sha256": "df0598daae2c877607a320309c7557f452833fc73eea33a8e4f958fab49c37db",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SECONDARY_SPEC.png",
+      "sha256": "d7305d7c60743d7e8be7ab273c357e2a14c39d8bae1f91796d1db4e22c29e632",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SPEEDRUN_locked.png",
+      "sha256": "17aa591a0880a4170b8588eb1f82424f7a0fd3a141746ca944b265f6a76c5781",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SPEEDRUN.png",
+      "sha256": "c7b5f6be62d30dd5e852237242b64d8d131c53a39d131c859b181ca1d877eae9",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/STREAK_5_locked.png",
+      "sha256": "9da5ce9ec9c916e29782dcebbd782566df888fa2fc9cb9861e3b209cc29bf20c",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/STREAK_5.png",
+      "sha256": "89d880e072f333fc64c711f5c49e6afd8a602be28d39d0b527a5ac353ed26acc",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SURVIVED_FIRING_locked.png",
+      "sha256": "ef797ab041cd2c1acf42eeae8a49f84901deb703ba280299a36a2c29f498e102",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/SURVIVED_FIRING.png",
+      "sha256": "e2638d689ba3f6a5fb395556a844a57806ec8894f5b932212d72ce719fd114ca",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/TABLE_POUND_locked.png",
+      "sha256": "5cf060659682ff80f15e718f2768eb5a79c5a891f7128250b1f309a77f665251",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/TABLE_POUND.png",
+      "sha256": "8fc15c0ae63033b745cc7bc1e7815623e2fdb1266a947ef39f2db66929647fa3",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/TRIPLE_STORYLINE_locked.png",
+      "sha256": "9a7a14657714f3ed423d5da37040eedb61976180363a0c58506feca93a19c4f3",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/TRIPLE_STORYLINE.png",
+      "sha256": "91c2b817f7a6937d7ff3d5187ff376ee16fab764d1ffbab2e1da5e345050fbf8",
+      "groupId": "project-steam-achievement-text-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/WATCHLIST_10_locked.png",
+      "sha256": "871eb01323591b61650813e0966eca97e7457846449ce6d043e79a9252ccadcb",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/WATCHLIST_10.png",
+      "sha256": "19432e3fbca28ecdc566a31a3323255641207e29013387eea46ae24e0f21890c",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/WONDERKID_FOUND_locked.png",
+      "sha256": "f6427bac301eb6adf8b3907b4b23c3802af3df965b53cd8baebb0770a39d8c04",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    },
+    {
+      "path": "build/achievements/WONDERKID_FOUND.png",
+      "sha256": "321f39651db5e63352f432b3ccfe4896748ad16920b242f00b706182a8d6160c",
+      "groupId": "project-steam-achievement-inputs",
+      "rightsStatus": "projectSource"
+    }
+  ]
+}

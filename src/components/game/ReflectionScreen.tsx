@@ -9,6 +9,7 @@ import {
   MessageSquarePlus,
   ChevronRight,
   Crosshair,
+  Check,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,8 @@ import { MODE_FLAGGED_LABEL } from "@/engine/observation/types";
 import { formatObservationActivityLabel, getPerceivedFlaggedMomentDescription, type ReflectionResult } from "@/engine/observation/reflection";
 import type { EvidenceClassificationId, ScoutCueReading } from "@/engine/core/types";
 import { resolveObservationSignalAssessment } from "@/engine/observation/questions";
+import { describeFlaggedMoment } from "@/engine/observation/momentReading";
+import { buildSessionEvidenceCards } from "@/engine/scout/evidenceModel";
 
 // =============================================================================
 // PROP TYPES
@@ -74,11 +77,13 @@ const REACTION_COLORS: Record<SessionFlaggedMoment["reaction"], string> = {
 
 const CLASSIFICATION_COPY: Record<EvidenceClassificationId, { label: string; description: string }> = {
   technicalExecution: { label: "Technical execution", description: "Body shape, touch, pass, strike, or control." },
+  decisionMaking: { label: "Decision-making", description: "The player selected an option; timing before reception has not been established." },
   preReceiveDecision: { label: "Decision before receiving", description: "Scanning and option selection happened before the ball arrived." },
   defensiveReading: { label: "Reading defensive danger", description: "Tracking runners, covering space, or choosing a pressing angle shaped the defensive action." },
-  offBallMovement: { label: "Off-ball movement", description: "Timing or positioning created value away from the ball." },
-  pressureResponse: { label: "Response to pressure", description: "The action changed when contact, risk, or a setback arrived." },
-  physicalRepeatability: { label: "Physical repeatability", description: "Balance, recovery, movement quality, or repeated output mattered." },
+  offBallMovement: { label: "Off-ball movement", description: "Timing, movement, or positioning away from the ball." },
+  pressureResponse: { label: "Response to pressure", description: "A response to actual opponent pressure, contact, or a setback." },
+  physicalExecution: { label: "Physical execution", description: "A physical action tested pace, strength, balance, agility, or jumping; repeatability remains open." },
+  physicalRepeatability: { label: "Physical repeatability", description: "The passage explicitly showed repeated effort or output." },
   anomaly: { label: "Unusual signal", description: "Worth keeping because it did not fit the surrounding level or pattern." },
   noConclusion: { label: "No reliable conclusion", description: "Keep the passage, but do not turn it into a trait claim yet." },
 };
@@ -104,19 +109,15 @@ function EvidenceSynthesisPanel({
   session: ObservationSession;
   onClassify: ReflectionScreenProps["onClassifyEvidence"];
 }) {
-  const flaggedMomentIds = useMemo(
-    () => new Set(session.flaggedMoments.map((flagged) => flagged.moment.id)),
-    [session.flaggedMoments],
-  );
-  const cues = (session.cueReadings ?? []).filter((cue) => flaggedMomentIds.has(cue.momentId));
+  const cues = useMemo(() => buildSessionEvidenceCards(session), [session]);
   if (cues.length === 0) return null;
 
   return (
     <section aria-labelledby="evidence-synthesis-heading">
       <div className="mb-3 flex items-center gap-2">
-        <Crosshair size={14} className="text-cyan-300" aria-hidden="true" />
+        <Crosshair size={14} className="text-[var(--primary)]" aria-hidden="true" />
         <div>
-          <h2 id="evidence-synthesis-heading" className="text-eyebrow font-semibold uppercase tracking-widest text-cyan-200">
+          <h2 id="evidence-synthesis-heading" className="text-xs font-semibold uppercase tracking-widest text-[var(--primary)]">
             Interpret what you kept
           </h2>
           <p className="text-meta mt-1 leading-5 text-zinc-300">
@@ -126,9 +127,10 @@ function EvidenceSynthesisPanel({
       </div>
       <div className="space-y-3">
         {cues.map((cue) => {
-          const selected = session.evidenceDecisions?.[cue.id]?.classification;
+          const decision = session.evidenceDecisions?.[cue.id]?.classification;
+          const selected = decision && cue.suggestedClassifications.includes(decision) ? decision : undefined;
           return (
-            <article key={cue.id} className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.05] p-4">
+            <article key={cue.id} className="border-t border-[var(--border)] py-5">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-white">{cue.minute}&apos; · {cue.summary}</p>
@@ -147,11 +149,8 @@ function EvidenceSynthesisPanel({
                     return (
                       <label
                         key={classification}
-                        className={`relative min-h-16 cursor-pointer rounded-lg border p-3 transition focus-within:ring-2 focus-within:ring-cyan-300 ${
-                          selected === classification
-                            ? "border-cyan-300/60 bg-cyan-300/12"
-                            : "border-white/10 bg-black/20 hover:border-white/25"
-                        }`}
+                        data-selected={selected === classification}
+                        className="dossier-choice relative min-h-16 cursor-pointer p-3 transition"
                       >
                         <input
                           type="radio"
@@ -160,8 +159,8 @@ function EvidenceSynthesisPanel({
                           onChange={() => onClassify(cue.id, classification)}
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         />
-                        <span className="text-meta block font-semibold text-white">{copy.label}</span>
-                        <span className="text-meta mt-1 block leading-5 text-zinc-300">{copy.description}</span>
+                        <span className="flex items-center justify-between gap-2 text-sm font-semibold">{copy.label}{selected === classification && <Check size={16} className="shrink-0" aria-hidden="true" />}</span>
+                        <span className="mt-1 block text-meta leading-5 text-zinc-300">{copy.description}</span>
                       </label>
                     );
                   })}
@@ -208,6 +207,7 @@ function MomentTimeline({ session }: { session: ObservationSession }) {
             {/* Moment content */}
             <div className="mb-2 min-w-0 space-y-1.5 pb-1">
               <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-quiet">Your reaction</span>
                 <span
                   className={`inline-flex items-center rounded-md border px-2 py-0.5 text-eyebrow font-semibold uppercase tracking-wide ${reactionColor}`}
                 >
@@ -282,7 +282,7 @@ export function ReflectionScreen({
   }
 
   return (
-    <div className="flex flex-col gap-6 pb-10">
+    <div className="dossier-panel flex flex-col gap-6 px-4 py-6 sm:px-6">
 
       {/* ── Header ── */}
       <header className="flex items-center gap-3">
@@ -293,7 +293,7 @@ export function ReflectionScreen({
           <BookOpen size={18} className="text-zinc-300" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">Post-Observation Reflection</h1>
+          <h1 className="dossier-title">Post-Observation Reflection</h1>
           <p className="text-sm text-zinc-400">
             W{session.startedAtWeek} &middot; S{session.startedAtSeason} &middot;{" "}
             <span>{formatObservationActivityLabel(session.activityType)}</span>
@@ -306,8 +306,8 @@ export function ReflectionScreen({
         <h2 id="summary-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-quiet">
           Session Summary
         </h2>
-        <Card className="border-[#27272a] bg-[#141414] shadow-md">
-          <CardContent className="p-5 space-y-3">
+        <Card className="rounded-none bg-transparent shadow-none">
+          <CardContent className="p-0 space-y-3">
             <p className="text-sm leading-relaxed text-zinc-300">{sessionSummary}</p>
             {signalAssessment && (
               <div className={`rounded-xl border p-3 ${signalAssessment.outcome === "clear"
@@ -337,7 +337,7 @@ export function ReflectionScreen({
                 </div>
                 <p className="mt-1 text-xs leading-5 text-zinc-300">{signalAssessment.summary}</p>
                 {signalAssessment.reasons.length > 0 && (
-                  <p className="mt-1 text-[11px] leading-4 text-quiet">
+                  <p className="mt-1 text-xs leading-4 text-quiet">
                     {signalAssessment.reasons[0]}
                   </p>
                 )}
@@ -398,7 +398,7 @@ export function ReflectionScreen({
             {/* Reliability bar */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-amber-200">Reliability</span>
+                <span className="text-[var(--signal-warn)]">Reliability</span>
                 <span className="font-semibold text-amber-300">
                   {Math.round(gutFeelingCandidate.reliability * 100)}%
                 </span>
@@ -409,7 +409,7 @@ export function ReflectionScreen({
                 indicatorClassName="bg-amber-400"
                 aria-label="Gut feeling reliability"
               />
-              <p className="text-eyebrow text-amber-200">{gutFeelingCandidate.triggerReason}</p>
+              <p className="text-xs text-quiet">{gutFeelingCandidate.triggerReason}</p>
             </div>
 
             {/* PA Estimate — only when perk is active */}
@@ -437,11 +437,11 @@ export function ReflectionScreen({
                     aria-hidden="true"
                   />
                 </div>
-                <div className="flex justify-between text-eyebrow text-quiet">
+                <div className="flex justify-between text-xs text-quiet">
                   <span>1</span>
                   <span>200</span>
                 </div>
-                <p className="text-eyebrow text-amber-200 italic">
+                <p className="text-xs text-quiet italic">
                   Built from the cues you noticed. It is deliberately broad and can be wrong.
                 </p>
               </div>
@@ -549,11 +549,11 @@ export function ReflectionScreen({
             onKeyDown={handleNoteKeyDown}
             placeholder="Optional private note — this is not scored or parsed (Ctrl+Enter to save)"
             rows={3}
-            className="w-full resize-none rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 text-sm text-zinc-200 placeholder:text-[var(--muted-foreground)] outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-600"
+            className="w-full resize-none rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 text-sm text-zinc-200 placeholder:text-[var(--muted-foreground)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
             aria-describedby="reflection-note-hint"
           />
           <div className="flex items-center justify-between gap-2">
-            <p id="reflection-note-hint" className="text-eyebrow text-quiet">
+            <p id="reflection-note-hint" className="text-xs text-quiet">
               Private notes are archival only · Ctrl+Enter to save
             </p>
             <Button
@@ -584,7 +584,7 @@ export function ReflectionScreen({
           {requiresEvidenceInterpretation ? "Classify one saved passage" : "Complete Reflection"}
           <ChevronRight size={16} className="ml-2" aria-hidden="true" />
         </Button>
-        <p className="mt-2 text-center text-[11px] text-quiet">
+        <p className="mt-2 text-center text-xs text-quiet">
           Your classified evidence carries into the next assessment. Private notes remain in your notebook and never affect scoring.
         </p>
       </div>

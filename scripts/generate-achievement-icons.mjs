@@ -43,6 +43,34 @@ const LOCKED = { bg: "#1f2937", accent: "#4b5563", ring: "#6b7280", symbol: "#9c
 // Symbol SVG paths for each achievement
 // ---------------------------------------------------------------------------
 
+
+// Original geometric labels drawn for TalentScout. These basic numerals and
+// multiplication strokes are authored here, not traced from a font. The SVG
+// renderer needs no font file or platform fallback to reproduce the icons.
+// Units: 10-wide glyph body, 11.2 advance, cap from -14 to baseline 0.
+const ACHIEVEMENT_GLYPH_PATHS = Object.freeze({
+  "0": "M5,-12.6 C2.2,-12.6 1.4,-10.6 1.4,-7 C1.4,-3.4 2.2,-1.4 5,-1.4 C7.8,-1.4 8.6,-3.4 8.6,-7 C8.6,-10.6 7.8,-12.6 5,-12.6 Z",
+  "1": "M2,-10.2 L5,-12.6 L5,-1.4 M2,-1.4 H8",
+  "2": "M1.4,-10.5 C2,-13.3 8.5,-13.5 8.6,-10 C8.6,-7.4 4,-5.7 1.4,-1.4 H8.6",
+  "3": "M1.7,-11.5 C4,-13.4 8.4,-13 8.4,-10 C8.4,-8 6.6,-7 4.5,-7 M4.5,-7 C6.8,-7 8.6,-6 8.6,-3.8 C8.6,-.6 4,-.4 1.4,-2.3",
+  "4": "M7,-1.4 V-12.6 L1.4,-4.6 H8.6",
+  "5": "M8.5,-12.6 H2 L1.5,-7.2 C3.4,-8 8.6,-7.6 8.6,-4.4 C8.6,-.5 4,-.4 1.4,-2.1",
+  "7": "M1.4,-12.6 H8.6 L3.4,-1.4",
+  "×": "M2,-10.4 L8,-3.6 M8,-10.4 L2,-3.6",
+});
+
+function drawAchievementLabel(value, x, baseline, size, color) {
+  const glyphs = [...value];
+  const scale = size / 20;
+  const width = (glyphs.length - 1) * 11.2 + 10;
+  const shapes = glyphs.map((glyph, index) => {
+    const d = ACHIEVEMENT_GLYPH_PATHS[glyph];
+    if (!d) throw new Error('Unsupported achievement glyph: ' + glyph);
+    return '<path transform="translate(' + index * 11.2 + ' 0)" d="' + d + '"/>';
+  }).join('');
+  return '<g transform="translate(' + (x - width * scale / 2) + ' ' + baseline + ') scale(' + scale + ')" fill="none" stroke="' + color + '" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">' + shapes + '</g>';
+}
+
 // Each symbol is an SVG snippet centered at (128, 128) in a 256x256 viewBox
 const SYMBOLS = {
   // Getting Started
@@ -91,15 +119,15 @@ const SYMBOLS = {
   // Career Milestones
   REACH_TIER_2: /* arrow up with 2 */
     `<polygon points="128,72 160,112 144,112 144,172 112,172 112,112 96,112" fill="white"/>
-     <text x="128" y="156" text-anchor="middle" font-size="32" font-weight="bold" font-family="sans-serif" fill="${COLORS.careerMilestones.bg}">2</text>`,
+     ${drawAchievementLabel("2",128,156,32,COLORS.careerMilestones.bg)}`,
 
   REACH_TIER_3: /* arrow up with 3 */
     `<polygon points="128,72 160,112 144,112 144,172 112,172 112,112 96,112" fill="white"/>
-     <text x="128" y="156" text-anchor="middle" font-size="32" font-weight="bold" font-family="sans-serif" fill="${COLORS.careerMilestones.bg}">3</text>`,
+     ${drawAchievementLabel("3",128,156,32,COLORS.careerMilestones.bg)}`,
 
   REACH_TIER_4: /* arrow up with 4 */
     `<polygon points="128,72 160,112 144,112 144,172 112,172 112,112 96,112" fill="white"/>
-     <text x="128" y="156" text-anchor="middle" font-size="32" font-weight="bold" font-family="sans-serif" fill="${COLORS.careerMilestones.bg}">4</text>`,
+     ${drawAchievementLabel("4",128,156,32,COLORS.careerMilestones.bg)}`,
 
   REACH_TIER_5: /* crown */
     `<polygon points="80,160 84,100 108,130 128,80 148,130 172,100 176,160" fill="white"/>
@@ -117,11 +145,11 @@ const SYMBOLS = {
   SEASON_5: /* fist/strength */
     `<circle cx="128" cy="120" r="44" fill="none" stroke="white" stroke-width="7"/>
      <polyline points="108,120 120,132 148,100" fill="none" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-     <text x="128" y="190" text-anchor="middle" font-size="28" font-weight="bold" font-family="sans-serif" fill="white">5</text>`,
+     ${drawAchievementLabel("5",128,190,28,"white")}`,
 
   SEASON_10: /* medal */
     `<circle cx="128" cy="140" r="36" fill="none" stroke="white" stroke-width="7"/>
-     <text x="128" y="150" text-anchor="middle" font-size="28" font-weight="bold" font-family="sans-serif" fill="white">10</text>
+     ${drawAchievementLabel("10",128,150,28,"white")}
      <line x1="108" y1="72" x2="128" y2="104" stroke="white" stroke-width="6" stroke-linecap="round"/>
      <line x1="148" y1="72" x2="128" y2="104" stroke="white" stroke-width="6" stroke-linecap="round"/>`,
 
@@ -137,19 +165,19 @@ const SYMBOLS = {
     `<rect x="88" y="80" width="72" height="88" rx="5" fill="none" stroke="white" stroke-width="6"/>
      <rect x="96" y="72" width="72" height="88" rx="5" fill="none" stroke="white" stroke-width="6" opacity="0.6"/>
      <rect x="104" y="64" width="72" height="88" rx="5" fill="none" stroke="white" stroke-width="6" opacity="0.3"/>
-     <text x="128" y="140" text-anchor="middle" font-size="28" font-weight="bold" font-family="sans-serif" fill="white">25</text>`,
+     ${drawAchievementLabel("25",128,140,28,"white")}`,
 
   REPORTS_50: /* printer */
     `<rect x="84" y="88" width="88" height="72" rx="6" fill="none" stroke="white" stroke-width="6"/>
      <rect x="100" y="68" width="56" height="28" rx="4" fill="none" stroke="white" stroke-width="6"/>
      <rect x="100" y="152" width="56" height="24" rx="3" fill="white" opacity="0.8"/>
-     <text x="128" y="132" text-anchor="middle" font-size="24" font-weight="bold" font-family="sans-serif" fill="white">50</text>`,
+     ${drawAchievementLabel("50",128,132,24,"white")}`,
 
   REPORTS_100: /* library/book stack */
     `<rect x="80" y="76" width="24" height="96" rx="3" fill="white"/>
      <rect x="112" y="76" width="24" height="96" rx="3" fill="white" opacity="0.8"/>
      <rect x="144" y="76" width="24" height="96" rx="3" fill="white" opacity="0.6"/>
-     <text x="128" y="196" text-anchor="middle" font-size="24" font-weight="bold" font-family="sans-serif" fill="white">100</text>`,
+     ${drawAchievementLabel("100",128,196,24,"white")}`,
 
   TABLE_POUND: /* fist on table */
     `<rect x="72" y="148" width="112" height="12" rx="3" fill="white"/>
@@ -285,7 +313,7 @@ const SYMBOLS = {
      <circle cx="148" cy="116" r="28" fill="none" stroke="white" stroke-width="6"/>
      <path d="M96,124 Q108,140 120,124" fill="none" stroke="white" stroke-width="4"/>
      <path d="M136,124 Q148,108 160,124" fill="none" stroke="white" stroke-width="4"/>
-     <text x="128" y="184" text-anchor="middle" font-size="24" font-weight="bold" font-family="sans-serif" fill="white">×3</text>`,
+     ${drawAchievementLabel("×3",128,184,24,"white")}`,
 
   SURVIVED_FIRING: /* phoenix/flame rising */
     `<path d="M128,180 Q108,140 120,120 Q108,100 128,72 Q148,100 136,120 Q148,140 128,180Z" fill="white"/>`,
@@ -358,21 +386,21 @@ const SYMBOLS = {
      <line x1="72" y1="148" x2="184" y2="148" stroke="white" stroke-width="7"/>
      <line x1="80" y1="148" x2="80" y2="168" stroke="white" stroke-width="5"/>
      <line x1="176" y1="148" x2="176" y2="168" stroke="white" stroke-width="5"/>
-     <text x="128" y="140" text-anchor="middle" font-size="36" font-weight="bold" font-family="sans-serif" fill="white">25</text>`,
+     ${drawAchievementLabel("25",128,140,36,"white")}`,
 
   MATCHES_50: /* stadium outline with "50" */
     `<path d="M72,148 Q72,88 128,80 Q184,88 184,148" fill="none" stroke="white" stroke-width="7" stroke-linecap="round"/>
      <line x1="72" y1="148" x2="184" y2="148" stroke="white" stroke-width="7"/>
      <line x1="80" y1="148" x2="80" y2="168" stroke="white" stroke-width="5"/>
      <line x1="176" y1="148" x2="176" y2="168" stroke="white" stroke-width="5"/>
-     <text x="128" y="140" text-anchor="middle" font-size="36" font-weight="bold" font-family="sans-serif" fill="white">50</text>`,
+     ${drawAchievementLabel("50",128,140,36,"white")}`,
 
   MATCHES_100: /* stadium outline with "100" */
     `<path d="M72,148 Q72,88 128,80 Q184,88 184,148" fill="none" stroke="white" stroke-width="7" stroke-linecap="round"/>
      <line x1="72" y1="148" x2="184" y2="148" stroke="white" stroke-width="7"/>
      <line x1="80" y1="148" x2="80" y2="168" stroke="white" stroke-width="5"/>
      <line x1="176" y1="148" x2="176" y2="168" stroke="white" stroke-width="5"/>
-     <text x="128" y="138" text-anchor="middle" font-size="32" font-weight="bold" font-family="sans-serif" fill="white">100</text>`,
+     ${drawAchievementLabel("100",128,138,32,"white")}`,
 
   OBSERVATIONS_50: /* binoculars */
     `<circle cx="104" cy="128" r="28" fill="none" stroke="white" stroke-width="7"/>
@@ -420,12 +448,12 @@ const SYMBOLS = {
   REP_75: /* rising graph with "75" */
     `<polyline points="80,168 112,140 140,152 180,88" fill="none" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
      <polygon points="168,84 184,84 184,100" fill="white"/>
-     <text x="128" y="196" text-anchor="middle" font-size="28" font-weight="bold" font-family="sans-serif" fill="white">75</text>`,
+     ${drawAchievementLabel("75",128,196,28,"white")}`,
 
   REP_100: /* crown over "100" */
     `<polygon points="88,120 92,80 112,104 128,64 144,104 164,80 168,120" fill="white"/>
      <rect x="88" y="120" width="80" height="12" rx="3" fill="white"/>
-     <text x="128" y="168" text-anchor="middle" font-size="32" font-weight="bold" font-family="sans-serif" fill="white">100</text>`,
+     ${drawAchievementLabel("100",128,168,32,"white")}`,
 
   // Financial
   SAVINGS_100K: /* piggy bank */

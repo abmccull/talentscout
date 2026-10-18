@@ -74,7 +74,7 @@ async function prepareSupportedYouthReportFixture(gamePage: GamePage, testInfo: 
     body: JSON.stringify({ testControl: { maxLiveSessions: 1 }, sessionOutcome, precondition }, null, 2),
     contentType: "application/json",
   });
-  const writeReport = gamePage.page.getByRole("button", { name: /^Write Report$/ });
+  const writeReport = gamePage.page.getByRole("button", { name: "Write the report", exact: true });
   await expect(writeReport).toBeVisible();
   await expect(writeReport).toBeEnabled();
   await writeReport.click();
@@ -265,6 +265,8 @@ test.describe("Report Writing", () => {
     });
 
     await gamePage.waitForScreen("playerProfile");
+    await expect(gamePage.page.getByRole("button", { name: "Plan next observation", exact: true })).toBeEnabled();
+    await gamePage.page.getByText("Player actions & contacts", { exact: true }).click();
     await expect(
       gamePage.page.getByRole("button", { name: "Build report evidence first" }),
     ).toBeDisabled();

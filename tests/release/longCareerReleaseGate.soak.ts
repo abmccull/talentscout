@@ -1,3 +1,8 @@
+import { CANONICAL_RETENTION_COLLECTION_KEYS, CANONICAL_COLLECTION_BYTE_BUDGETS, projectCanonicalCollectionBytes,
+  type CanonicalRetentionCollectionKey } from "./canonicalRetentionEvidence";
+import type { SaveGameCommit } from "@/lib/db";
+import { createSaveEnvelope } from "@/lib/saveEnvelope";
+import { assertNoSupportingDiagnostics } from "../../scripts/supporting-diagnostic-isolation.mjs";
 import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
@@ -27,10 +32,8 @@ import {
   measureSaveRetentionFootprint,
   observeSaveRetentionCompaction,
   resolvePlacementPlayerId,
-  SAVE_RETENTION_COLLECTION_KEYS,
 } from "@/engine/world/saveRetention";
 import type {
-  SaveRetentionCollectionKey,
   SaveRetentionCompactionSample,
   SaveRetentionFootprint,
 } from "@/engine/world/saveRetention";
@@ -50,6 +53,25 @@ import type {
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({
     save: async () => undefined,
+    // Match the current structured provider boundary without claiming durable writes.
+    saveState: async (_slotName: string, rawState: unknown, displayName?: string): Promise<SaveGameCommit> => {
+      const state = rawState as GameState;
+      return {
+        record: {
+          ...createSaveEnvelope(state, state.lastSaved),
+          slot: 0,
+          name: displayName ?? "Autosave",
+          season: state.currentSeason,
+          week: state.currentWeek,
+          scoutName: `${state.scout.firstName} ${state.scout.lastName}`,
+          specialization: state.scout.primarySpecialization,
+          reputation: state.scout.reputation,
+        },
+        wrote: false,
+        payloadBytes: null,
+        archivedBytes: 0,
+      };
+    },
   }),
   isSupabaseCloudSaveActive: async () => false,
 }));
@@ -98,6 +120,7 @@ const MAX_SINGLE_BATCH_WALL_MS = Number.parseInt(
 );
 const DIAGNOSTIC_ONLY = process.env.SOAK_DIAGNOSTIC_ONLY === "true";
 const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
+if (WORKER_MODE) assertNoSupportingDiagnostics();
 
 interface WorkerProgressContext {
   workerRunId: string;
@@ -299,24 +322,7 @@ const artifactAdmission: {
   return Object.freeze({ context, artifactIo });
 })();
 const artifactContext = artifactAdmission.context;
-const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
-  players: 32 * 1024 * 1024,
-  // Historical evidence keeps numeric truth and narrative while completed
-  // calculation inputs are compacted after the five-season working window.
-  observations: 12 * 1024 * 1024,
-  // Every transaction remains for audit/idempotency; only old routine labels
-  // are normalized, so this guard is intentionally broader than observations.
-  finances: 20 * 1024 * 1024,
-  // Five recent seasons keep broad 400-player comparison detail; older
-  // seasons keep an elite public archive plus every scout-causal career.
-  worldHistory: 24 * 1024 * 1024,
-  fixtures: 8 * 1024 * 1024,
-  matchRatings: 8 * 1024 * 1024,
-  playerMovementHistory: 8 * 1024 * 1024,
-  retiredPlayers: 6 * 1024 * 1024,
-  retiredPlayerIds: 512 * 1024,
-  unsignedYouth: 12 * 1024 * 1024,
-};
+const COLLECTION_BYTE_BUDGETS = CANONICAL_COLLECTION_BYTE_BUDGETS;
 
 interface MemorySample {
   season: number;
@@ -346,14 +352,14 @@ interface RunEvidence {
     growthBytes: number;
     compactionRemovedBytes: number;
     compactionEvents: number;
-    collectionBytes: Record<SaveRetentionCollectionKey, number>;
-    collectionCompactionDeltas: Record<SaveRetentionCollectionKey, number>;
+    collectionBytes: Record<CanonicalRetentionCollectionKey, number>;
+    collectionCompactionDeltas: Record<CanonicalRetentionCollectionKey, number>;
   }>;
   compaction: {
     events: number;
     seasonsWithReduction: number;
     totalRemovedBytes: number;
-    collectionDeltas: Record<SaveRetentionCollectionKey, number>;
+    collectionDeltas: Record<CanonicalRetentionCollectionKey, number>;
   };
   memory: {
     initial: MemorySample;
@@ -502,18 +508,18 @@ function largestCollections(state: GameState): Array<{ key: string; bytes: numbe
     .slice(0, 12);
 }
 
-function emptyCollectionBytes(): Record<SaveRetentionCollectionKey, number> {
+function emptyCollectionBytes(): Record<CanonicalRetentionCollectionKey, number> {
   return Object.fromEntries(
-    SAVE_RETENTION_COLLECTION_KEYS.map((key) => [key, 0]),
-  ) as Record<SaveRetentionCollectionKey, number>;
+    CANONICAL_RETENTION_COLLECTION_KEYS.map((key) => [key, 0]),
+  ) as Record<CanonicalRetentionCollectionKey, number>;
 }
 
 function sumCompactionDeltas(
   samples: readonly SaveRetentionCompactionSample[],
-): Record<SaveRetentionCollectionKey, number> {
+): Record<CanonicalRetentionCollectionKey, number> {
   const totals = emptyCollectionBytes();
   for (const sample of samples) {
-    for (const key of SAVE_RETENTION_COLLECTION_KEYS) {
+    for (const key of CANONICAL_RETENTION_COLLECTION_KEYS) {
       totals[key] += sample.collectionDeltas[key];
     }
   }
@@ -807,14 +813,14 @@ function assertReleaseInvariants(
   expect(references, "invalid entity references").toEqual([]);
   expect(retentionReferences, "invalid retained archive references").toEqual([]);
   expect(economy, "invalid economy state").toEqual([]);
-  if (bytes > MAX_SERIALIZED_BYTES || SAVE_RETENTION_COLLECTION_KEYS.some(
+  if (bytes > MAX_SERIALIZED_BYTES || CANONICAL_RETENTION_COLLECTION_KEYS.some(
     (key) => retentionFootprint.collections[key] > COLLECTION_BYTE_BUDGETS[key],
   )) {
     // Emit attribution before the first size assertion; an absolute-size failure
     // must not hide the failing season or collections behind it.
     console.info("LONG_CAREER_SAVE_RETENTION_FAILURE", JSON.stringify({
       season: state.currentSeason, week: state.currentWeek, totalBytes: bytes,
-      collectionBytes: retentionFootprint.collections,
+      collectionBytes: projectCanonicalCollectionBytes(retentionFootprint.collections),
       largestCollections: largestCollections(state),
       playerDiagnostic: playerRetentionDiagnostic(state),
     }));
@@ -831,7 +837,7 @@ function assertReleaseInvariants(
       JSON.stringify(playerRetentionDiagnostic(state)),
     );
   }
-  for (const key of SAVE_RETENTION_COLLECTION_KEYS) {
+  for (const key of CANONICAL_RETENTION_COLLECTION_KEYS) {
     expect(
       retentionFootprint.collections[key],
       `${key} exceeds its long-save collection budget`,
@@ -920,11 +926,19 @@ function assertAutonomousCareerHealth(
   expect(final.completedCourses, `seed ${seed} never completed a course`).toBeGreaterThan(0);
 }
 
-async function simulateCareer(
+export type SupportingCareerObserver = (
+  state: GameState, telemetry: AutonomousCareerTelemetry, ticks: number, phase: "initial" | "week" | "boundary" | "final",
+) => void | Promise<void>;
+
+export async function simulateCareer(
   seed: string,
   seasonCount: number,
   chooserProfile: AutonomousCareerChooserProfileId = "commercial",
+  supportingObserver?: SupportingCareerObserver,
 ): Promise<RunEvidence> {
+  if (supportingObserver && (process.env.SOAK_SUPPORTING_DIAGNOSTICS_ONLY !== "true" || WORKER_MODE)) {
+    throw new Error("Supporting observers cannot run inside a canonical campaign worker");
+  }
   artifactContext.assertHealthy();
   const { useGameStore } = await import("@/stores/gameStore");
   await useGameStore.getState().startNewGame({
@@ -992,6 +1006,7 @@ async function simulateCareer(
   });
 
   try {
+    await supportingObserver?.(initial, careerTelemetry, 0, "initial");
     for (let attempt = 0; attempt < calendar.admission.maxCanonicalTicks; attempt += 1) {
       const before = useGameStore.getState().gameState;
       if (!before) throw new Error(`Seed ${seed} lost game state`);
@@ -1068,6 +1083,7 @@ async function simulateCareer(
         `seed ${seed} batch CPU latency indicates excessive work at S${before.currentSeason} W${before.currentWeek}; wall=${elapsed.toFixed(1)}ms; driver: ${driverBreakdown}; phases=${phaseElapsed?.toFixed(1) ?? "unavailable"}ms (${phaseBreakdown}); diagnostics: ${diagnosticBreakdown}`,
       ).toBeLessThan(MAX_SINGLE_BATCH_CPU_MS);
 
+      await supportingObserver?.(after, careerTelemetry, canonicalTicks, "week");
       if (after.currentSeason !== lastCheckedSeason) {
         stabilizeAutonomousCareerState(careerTelemetry);
         const stabilized = useGameStore.getState().gameState;
@@ -1075,6 +1091,7 @@ async function simulateCareer(
         const footprint = assertReleaseInvariants(stabilized, initialBytes);
         const boundaryHealth = collectAutonomousWorldHealth(stabilized, careerTelemetry);
         worldHealth.push(boundaryHealth);
+        await supportingObserver?.(stabilized, careerTelemetry, canonicalTicks, "boundary");
         if (DIAGNOSTIC_CHECKPOINT_PATH) {
           // Persist before final assertions: a later healthy season must not erase
           // the club, registrations and finances behind an earlier roster gap.
@@ -1130,7 +1147,7 @@ async function simulateCareer(
             0,
           ),
           compactionEvents: boundaryCompactions.length,
-          collectionBytes: footprint.collections,
+          collectionBytes: projectCanonicalCollectionBytes(footprint.collections),
           collectionCompactionDeltas: sumCompactionDeltas(boundaryCompactions),
         });
         lastBoundaryBytes = bytes;
@@ -1158,6 +1175,7 @@ async function simulateCareer(
   const stabilizedFinalState = useGameStore.getState().gameState;
   if (!stabilizedFinalState) throw new Error(`Seed ${seed} lost its stabilized final state`);
   calendar.assertComplete(stabilizedFinalState, canonicalTicks);
+  await supportingObserver?.(stabilizedFinalState, careerTelemetry, canonicalTicks, "final");
   const finalBytes = assertReleaseInvariants(stabilizedFinalState, initialBytes).totalBytes;
   peakBytes = Math.max(peakBytes, finalBytes);
   const history = stabilizedFinalState.worldHistory;
@@ -1277,11 +1295,13 @@ async function simulateChooserProfileMatrix(): Promise<Array<{
   return chooserProfileMatrix;
 }
 
-const canonicalReleaseSoak = PROFILE_MATRIX_ONLY ? it.skip : it;
-const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY ? it : it.skip;
+const SUPPORTING_DIAGNOSTICS_ONLY = process.env.SOAK_SUPPORTING_DIAGNOSTICS_ONLY === "true";
+const canonicalReleaseSoak = PROFILE_MATRIX_ONLY || SUPPORTING_DIAGNOSTICS_ONLY ? it.skip : it;
+const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY && !SUPPORTING_DIAGNOSTICS_ONLY ? it : it.skip;
 
 describe("full canonical-week release soak", () => {
   canonicalReleaseSoak("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
+    assertNoSupportingDiagnostics();
     assertSupportedArtifactMode();
     expect(RELEASE_SEED_COUNT).toBeGreaterThan(0);
     expect(RELEASE_SEASON_COUNT).toBeGreaterThan(0);
@@ -1368,7 +1388,7 @@ describe("full canonical-week release soak", () => {
           (run) => (run.worldHealth.at(-1)?.completedCourses ?? 0) > 0,
         ).length,
         compactionCollectionDeltas: Object.fromEntries(
-          SAVE_RETENTION_COLLECTION_KEYS.map((key) => [
+          CANONICAL_RETENTION_COLLECTION_KEYS.map((key) => [
             key,
             runs.reduce((sum, run) => sum + run.compaction.collectionDeltas[key], 0),
           ]),

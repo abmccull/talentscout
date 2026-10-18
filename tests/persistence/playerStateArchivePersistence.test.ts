@@ -188,7 +188,7 @@ describe.sequential("player archive canonical save and refusal contracts", () =>
     expect(semanticFacts(migrated.players.live)).toEqual(expected);
   });
 
-  it("leaves historical nil-default behavior in the old normalizers", () => {
+  it("preserves unknown injury ownership while retaining historical personality defaults", () => {
     const absent = state();
     const explicitNull = state();
     for (const value of [absent.players.live, absent.unsignedYouth.unsigned.player]) {
@@ -202,11 +202,18 @@ describe.sequential("player archive canonical save and refusal contracts", () =>
     const before = JSON.stringify(explicitNull);
     const expected = migrateSaveState(absent);
     const actual = migrateSaveState(explicitNull);
-    expect(semanticFacts(actual.players.live)).toEqual(semanticFacts(expected.players.live));
-    expect(semanticFacts(actual.unsignedYouth.unsigned.player)).toEqual(semanticFacts(expected.unsignedYouth.unsigned.player));
-    expect(semanticFacts(actual.players.live).injuryHistory).toEqual({
-      playerId: "live", injuries: [], totalWeeksMissed: 0, injuryProneness: 0, reinjuryWindowWeeksLeft: 0,
-    });
+    for (const [missing, explicit] of [
+      [expected.players.live, actual.players.live],
+      [expected.unsignedYouth.unsigned.player, actual.unsignedYouth.unsigned.player],
+    ]) {
+      // Unknown medical evidence must not become a recorded healthy career.
+      // Preserve missing ownership and explicit legacy null independently.
+      expect(missing.injuryHistory).toBeUndefined();
+      expect(Object.hasOwn(missing, "injuryHistory")).toBe(false);
+      expect(explicit.injuryHistory).toBeNull();
+      expect(Object.hasOwn(explicit, "injuryHistory")).toBe(true);
+      expect(semanticFacts(explicit).personalityProfile).toEqual(semanticFacts(missing).personalityProfile);
+    }
     expect(JSON.stringify(explicitNull)).toBe(before);
   });
 

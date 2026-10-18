@@ -497,8 +497,14 @@ export function GameLayout({
     setScreen(screen);
     setSidebarOpen(false);
 
+    // Complete guided milestone when navigating to the expected screen
+    if (guidedSessionActive && currentGuidedTask === "openedCalendar" && screen === "calendar") {
+      useTutorialStore.getState().completeMilestone("openedCalendar");
+    }
+
     // Auto-open screen guide on first click of a newly-visible nav item.
-    if (isFirstVisit) {
+    if (isFirstVisit && (useGameStore.getState().gameState?.guidedSessionRequested !== false
+      || useTutorialStore.getState().guidedSessionForcedReplay)) {
       setTimeout(() => {
         useTutorialStore.getState().recordScreenVisit(screen);
       }, 300);
@@ -626,8 +632,8 @@ export function GameLayout({
       `}>
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold tracking-tight">
-              Talent<span className="text-amber-400">Scout</span>
+            <h1 className="font-editorial text-2xl tracking-tight">
+              Talent<span className="text-[var(--primary)]">Scout</span>
             </h1>
             {!guidedSessionActive && <ScreenHelpButton placement="sidebar" />}
             {/* Close button visible only on mobile */}
@@ -828,7 +834,7 @@ export function GameLayout({
         id="game-main"
         ref={mainRef}
         tabIndex={-1}
-        className={`relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(212,168,67,0.08),transparent_34%),linear-gradient(180deg,#0b1220_0%,#0a1628_100%)] focus:outline-none ${
+        className={`relative min-w-0 flex-1 overflow-auto bg-[var(--background)] focus:outline-none ${
           watchChrome
             ? "pt-12"
             : `game-mobile-safe-scroll pt-14 md:pt-0 ${useYouthEarlyAccessNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`

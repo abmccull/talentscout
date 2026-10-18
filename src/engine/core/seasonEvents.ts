@@ -102,7 +102,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     name: "Pre-season Tournament",
     startWeek: 1,
     endWeek: 2,
-    description: "Pre-season preparations and friendly tournaments",
+    description: "Pre-season planning period. Use the planner to see available fixtures and scouting activities",
     relevantSpecializations: ["firstTeam", "regional", "data"],
     effects: [
       { type: "scoutingCostModifier", value: -0.4, targetScope: "global" },
@@ -110,9 +110,9 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     ],
     choices: [
       {
-        label: "Focus on Youth Prospects",
+        label: "Intensive Prospect Preparation",
         description:
-          "Concentrate scouting on youth tournaments for better reveals on young players.",
+          "An intensive preparation schedule adds 2 scout fatigue each active week.",
         effects: [
           { type: "scoutingCostModifier", value: -0.4, targetScope: "global" },
           { type: "attributeRevealBonus", value: 0.5, targetScope: "global" },
@@ -120,9 +120,9 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
         ],
       },
       {
-        label: "Network with Agents",
+        label: "Represent Your Scouting Work",
         description:
-          "Use the tournament to build contacts rather than observe matches.",
+          "Represent your scouting work in pre-season discussions: +3 reputation each active week.",
         effects: [
           { type: "reputationBonus", value: 3, targetScope: "global" },
           { type: "scoutingCostModifier", value: -0.2, targetScope: "global" },
@@ -135,25 +135,25 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     name: "Summer Transfer Window",
     startWeek: 1,
     endWeek: 8,
-    description: "Summer transfer window is open — panic pricing in final weeks",
+    description: "Summer transfer registration period. Actual opportunities and terms depend on the clubs and players involved",
     relevantSpecializations: ["firstTeam", "regional", "data"],
     effects: [
       { type: "transferPriceModifier", value: 0.0, targetScope: "global" },
     ],
     choices: [
       {
-        label: "Aggressive Scouting Push",
+        label: "Intensive Research Schedule",
         description:
-          "Double down on scouting to find bargains before the window closes.",
+          "Choose a heavier research workload: +2 scout fatigue each active week.",
         effects: [
           { type: "scoutingCostModifier", value: -0.2, targetScope: "global" },
           { type: "fatigueModifier", value: 0.2, targetScope: "global" },
         ],
       },
       {
-        label: "Wait for Deadline Deals",
+        label: "Keep the Usual Workload",
         description:
-          "Hold resources until panic pricing kicks in late in the window.",
+          "Maintain the usual workload with no additional season-event fatigue.",
         effects: [
           { type: "transferPriceModifier", value: -0.15, targetScope: "global" },
         ],
@@ -166,7 +166,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 5,
     endWeek: 5,
     description:
-      "Last-minute deals create inflated prices as clubs scramble to complete signings before the window shuts",
+      "A reminder to review live transfer deadlines and the actual terms of any open negotiations",
   },
   {
     type: "earlySeasonAssessment",
@@ -174,7 +174,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 9,
     endWeek: 9,
     description:
-      "Clubs assess early results — reputation rewards for accurate predictions on player form",
+      "Early-season scouting review: +2 reputation this week",
     effects: [
       { type: "reputationBonus", value: 2, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.15, targetScope: "global" },
@@ -186,7 +186,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 10,
     endWeek: 10,
     description:
-      "First international break — players called up are unavailable for club matches",
+      "International calendar period: 1 less scout fatigue this week. Listed club fixtures remain scheduled",
     effects: [
       { type: "playerAvailability", value: -0.15, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
@@ -199,7 +199,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 12,
     endWeek: 12,
     description:
-      "Clubs assess scouting department performance at the halfway mark of the first half",
+      "A mid-season reminder to review your scouting evidence and outstanding reports",
   },
   {
     type: "domesticCupRounds",
@@ -207,25 +207,25 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 13,
     endWeek: 14,
     description:
-      "Cup matches offer lower-pressure observation opportunities with increased youth squad rotation",
+      "Cup-calendar period. Check available events in the planner before making scouting plans",
     effects: [
       { type: "youthIntake", value: 0.3, targetScope: "global" },
       { type: "scoutingCostModifier", value: -0.15, targetScope: "global" },
     ],
     choices: [
       {
-        label: "Focus on Cup Upsets",
+        label: "Keep Current Priorities",
         description:
-          "Scout cup underdogs for hidden gems performing above their level.",
+          "Keep your current priorities with no additional reputation or fatigue effect.",
         effects: [
           { type: "attributeRevealBonus", value: 0.3, targetScope: "global" },
           { type: "youthIntake", value: 0.4, targetScope: "global" },
         ],
       },
       {
-        label: "Maintain League Focus",
+        label: "Share League Observations",
         description:
-          "Ignore the cup distraction and stay focused on league talent.",
+          "Share your league scouting perspective: +2 reputation each active week.",
         effects: [
           { type: "reputationBonus", value: 2, targetScope: "global" },
           { type: "scoutingCostModifier", value: -0.1, targetScope: "global" },
@@ -239,7 +239,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 15,
     endWeek: 15,
     description:
-      "Fixture congestion leads to higher injury rates across all leagues, affecting player availability",
+      "A reminder to check recorded injuries before planning which players to watch",
   },
   {
     type: "fixtureCongestion",
@@ -247,25 +247,25 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 16,
     endWeek: 17,
     description:
-      "Heavy schedule means more matches to scout but higher fatigue risk for your team",
+      "A demanding period adds 2 scout fatigue each active week; the planner shows available activities",
     effects: [
       { type: "fatigueModifier", value: 0.15, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
     ],
     choices: [
       {
-        label: "Double Down on Scouting",
+        label: "Accept the Heavier Workload",
         description:
-          "Take advantage of the packed schedule to observe more players.",
+          "Accept a heavier workload: +3 scout fatigue each active week.",
         effects: [
           { type: "attributeRevealBonus", value: 0.35, targetScope: "global" },
           { type: "fatigueModifier", value: 0.3, targetScope: "global" },
         ],
       },
       {
-        label: "Rotate and Rest",
+        label: "Protect Recovery Time",
         description:
-          "Manage fatigue by attending fewer matches this period.",
+          "Protect recovery time: 1 less scout fatigue each active week.",
         effects: [
           { type: "fatigueModifier", value: -0.1, targetScope: "global" },
         ],
@@ -278,7 +278,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 18,
     endWeek: 18,
     description:
-      "Second international break — opportunity to scout international talent",
+      "International calendar period: 1 less scout fatigue this week. Listed club fixtures remain scheduled",
     effects: [
       { type: "playerAvailability", value: -0.15, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
@@ -286,9 +286,9 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     ],
     choices: [
       {
-        label: "Scout International Matches",
+        label: "Intensive Preparation",
         description:
-          "Travel to international venues for higher-quality observations.",
+          "Use an intensive preparation schedule: +1 scout fatigue this week.",
         effects: [
           { type: "attributeRevealBonus", value: 0.4, targetScope: "global" },
           { type: "scoutingCostModifier", value: 0.3, targetScope: "global" },
@@ -298,7 +298,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       {
         label: "Rest and Prepare",
         description:
-          "Use the break to recover fatigue and prepare for the second half.",
+          "Prioritize recovery: 3 less scout fatigue this week.",
         effects: [
           { type: "fatigueModifier", value: -0.3, targetScope: "global" },
         ],
@@ -311,7 +311,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 19,
     endWeek: 19,
     description:
-      "Board evaluates the scouting department at the halfway point of the season",
+      "Mid-season scouting review: +3 reputation this week",
     effects: [
       { type: "reputationBonus", value: 3, targetScope: "global" },
     ],
@@ -322,7 +322,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 20,
     endWeek: 23,
     description:
-      "January transfer window — mid-season transfers, loan recalls, desperation deals",
+      "Winter transfer registration period. Review actual offers and loan opportunities in their own records",
     relevantSpecializations: ["firstTeam", "regional", "data"],
     effects: [
       { type: "transferPriceModifier", value: -0.15, targetScope: "global" },
@@ -331,7 +331,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       {
         label: "Target Relegation Clubs",
         description:
-          "Focus on players from struggling clubs willing to sell cheap.",
+          "A calendar planning option with no additional reputation or fatigue effect.",
         effects: [
           { type: "transferPriceModifier", value: -0.25, targetScope: "global" },
           { type: "scoutingCostModifier", value: 0.1, targetScope: "global" },
@@ -340,7 +340,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       {
         label: "Loan Market Sweep",
         description:
-          "Identify loan opportunities from top-flight clubs with surplus talent.",
+          "A calendar planning option with no additional reputation or fatigue effect.",
         effects: [
           { type: "transferPriceModifier", value: -0.1, targetScope: "global" },
           { type: "attributeRevealBonus", value: 0.15, targetScope: "global" },
@@ -354,7 +354,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 25,
     endWeek: 25,
     description:
-      "Clubs desperate after a poor first half look to sell, creating opportunities for shrewd scouts",
+      "Review current recruitment needs and the real transfer terms offered by clubs",
   },
   {
     type: "relegationBattle",
@@ -362,7 +362,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 26,
     endWeek: 27,
     description:
-      "Bottom clubs grow desperate and are willing to sell at a discount, creating bargain opportunities",
+      "Late-season recruitment planning. Club needs and actual offers determine transfer opportunities",
     effects: [
       { type: "transferPriceModifier", value: -0.2, targetScope: "global" },
       { type: "scoutingCostModifier", value: 0.1, targetScope: "global" },
@@ -371,7 +371,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       {
         label: "Target Distressed Clubs",
         description:
-          "Focus scouting on relegation-threatened clubs for bargain signings.",
+          "A calendar planning option with no additional reputation or fatigue effect.",
         effects: [
           { type: "transferPriceModifier", value: -0.35, targetScope: "global" },
           { type: "scoutingCostModifier", value: 0.15, targetScope: "global" },
@@ -380,7 +380,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       {
         label: "Focus on Emerging Talent",
         description:
-          "Look for young players breaking through in the relegation fight.",
+          "A calendar planning option with no additional reputation or fatigue effect.",
         effects: [
           { type: "youthIntake", value: 0.3, targetScope: "global" },
           { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
@@ -393,7 +393,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     name: "International Break 3",
     startWeek: 28,
     endWeek: 28,
-    description: "Third international break of the season",
+    description: "International calendar period: 1 less scout fatigue this week. Listed club fixtures remain scheduled",
     effects: [
       { type: "playerAvailability", value: -0.15, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
@@ -406,25 +406,25 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 29,
     endWeek: 29,
     description:
-      "Continental competition creates high-profile scouting opportunities against elite opposition",
+      "Continental calendar period. Check the planner for available scouting activities",
     effects: [
       { type: "attributeRevealBonus", value: 0.3, targetScope: "global" },
       { type: "scoutingCostModifier", value: 0.2, targetScope: "global" },
     ],
     choices: [
       {
-        label: "Attend European Matches",
+        label: "Keep the Current Brief",
         description:
-          "Scout elite European fixtures for top-tier talent assessment.",
+          "Keep your current brief with no additional reputation or fatigue effect.",
         effects: [
           { type: "attributeRevealBonus", value: 0.5, targetScope: "global" },
           { type: "scoutingCostModifier", value: 0.35, targetScope: "global" },
         ],
       },
       {
-        label: "Scout Domestic Underdogs",
+        label: "Share Domestic Observations",
         description:
-          "While rivals focus on Europe, find domestic talent with less competition.",
+          "Share your domestic scouting perspective: +2 reputation this week.",
         effects: [
           { type: "scoutingCostModifier", value: -0.15, targetScope: "global" },
           { type: "reputationBonus", value: 2, targetScope: "global" },
@@ -438,16 +438,16 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 30,
     endWeek: 33,
     description:
-      "Youth cup tournament in progress — increased youth prospect visibility",
+      "Youth-calendar period. Use available youth events to build evidence on your prospects",
     effects: [
       { type: "youthIntake", value: 0.5, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.3, targetScope: "global" },
     ],
     choices: [
       {
-        label: "Dedicate to Youth Scouting",
+        label: "Intensive Youth Preparation",
         description:
-          "Send all resources to the youth cup for maximum prospect evaluation.",
+          "Choose an intensive preparation workload: +2 scout fatigue each active week.",
         effects: [
           { type: "youthIntake", value: 0.75, targetScope: "global" },
           { type: "attributeRevealBonus", value: 0.5, targetScope: "global" },
@@ -457,7 +457,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       {
         label: "Balanced Approach",
         description:
-          "Attend some youth cup matches while maintaining regular scouting duties.",
+          "Maintain the usual workload with no additional season-event fatigue.",
         effects: [
           { type: "youthIntake", value: 0.3, targetScope: "global" },
           { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
@@ -471,7 +471,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 31,
     endWeek: 31,
     description:
-      "Promotion and relegation battles intensify as players give everything, boosting scouting accuracy",
+      "Review recent player performances as the season enters its later stages",
   },
   {
     type: "titleRacePressure",
@@ -479,7 +479,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 35,
     endWeek: 35,
     description:
-      "Top clubs ramp up recruitment planning for the summer, increasing urgency and reputation rewards",
+      "A reminder to review club recruitment priorities before the next season",
   },
   {
     type: "seasonAwardsBuildUp",
@@ -487,7 +487,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 37,
     endWeek: 37,
     description:
-      "Awards season creates media attention, boosting the profile of discovered wonderkids and scout visibility",
+      "An opportunity to look back at the players and scouting decisions recorded this season",
   },
   {
     type: "endOfSeasonReview",
@@ -495,7 +495,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 38,
     endWeek: 38,
     description:
-      "Season review and contract renewals — board evaluation affects reputation",
+      "End-of-season scouting review: +5 reputation this week",
     effects: [
       { type: "reputationBonus", value: 5, targetScope: "global" },
     ],
@@ -503,15 +503,15 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       {
         label: "Highlight Discoveries",
         description:
-          "Present your best finds to the board for a reputation boost.",
+          "Present your discoveries: +10 reputation at the weekly advance.",
         effects: [
           { type: "reputationBonus", value: 10, targetScope: "global" },
         ],
       },
       {
-        label: "Negotiate Better Resources",
+        label: "Discuss Next Season",
         description:
-          "Use your track record to secure reduced scouting costs next season.",
+          "Discuss your scouting priorities: +3 reputation at the weekly advance.",
         effects: [
           { type: "reputationBonus", value: 3, targetScope: "global" },
           { type: "scoutingCostModifier", value: -0.2, targetScope: "global" },

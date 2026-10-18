@@ -84,13 +84,13 @@ describe("youth day-to-day guided loop", () => {
       milestoneId: "focusedPlayer",
       currentScreen: "observation",
       isYouthDiscoveryHook: true,
-    })).toBe("Select Focus on your prospect, then choose a lens.");
+    })).toBe("Choose your prospect in Players in view, then choose a lens under Your attention.");
     expect(getGuidedMilestoneInstruction({
       milestoneId: "flaggedBreakthrough",
       currentScreen: "observation",
       observationPhaseIndex: 1,
       isYouthDiscoveryHook: true,
-    })).toBe("Select Flag moment on the Standout card, then choose Promising.");
+    })).toBe("Flag a moment from your lead, then choose the reaction the evidence deserves.");
     expect(getGuidedMilestoneInstruction({
       milestoneId: "completedMatch",
       currentScreen: "observation",

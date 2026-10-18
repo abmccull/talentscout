@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "asset-rights-review",
+  "decision": "approved",
+  "reviewer": "Codex exact-byte generation-record and visual review; root integration pending",
+  "reviewedAt": "2026-10-18T20:27:30.058Z",
+  "reconciledFrom": [
+    "2364cbfbdf694784a31aae193f867b84df33d3a9",
+    "70cc6232ce4b8492053f85eea4862ea3f27b9a91"
+  ],
+  "sourceReviewOnly": true,
+  "packageAcceptance": false,
+  "commercialReleaseApproved": false,
+  "basis": [
+    "The added incoming touchline WebP matches the exact output SHA-256 in the retained September4 OpenAI generation record. The retained source PNG also matches the recorded original master hash.",
+    "The current decoded output was inspected: fictional football match, no obvious real club/sponsor marks or intended identifiable real-person likeness. Prior documented original-art review covers this exact unchanged output.",
+    "This is a separate explicit scope addition; existing portrait hashes and allocation holds are unchanged."
+  ],
+  "generator": "OpenAI built-in image generation and offline WebP encoding",
+  "generationRecord": {
+    "path": "docs/portraits/asset-generation-evidence.json",
+    "sha256": "0f5bd5b6d5c6d8576b519209e0d92c9eadaa4b04781ee30204bd9b7fbe38733e"
+  },
+  "sourceMaster": {
+    "sha256": "03d28dd4f1e3d905dcabc37bd8e2a63b3da8dd98a31e9769dc83e626405ddd9c",
+    "width": 1716,
+    "height": 916
+  },
+  "terms": [
+    {
+      "url": "https://openai.com/policies/row-terms-of-use/",
+      "checkedAt": "2026-10-18",
+      "scope": "User output ownership, input rights, non-unique output and review responsibilities"
+    }
+  ],
+  "reviewedOutputs": [
+    {
+      "path": "public/images/backgrounds/activities/touchline-documentary.webp",
+      "sha256": "61a7d520e79edfaecfada9133fd5fc343374e7204c6e59c49b91030c9de9bb1f"
+    }
+  ]
+}

@@ -211,21 +211,21 @@ export const OBSERVATION_ATMOSPHERE_EVENT_TEMPLATES =
 // =============================================================================
 
 const SCHOOL_MATCH_DESCRIPTIONS = [
-  "A mid-week fixture on a compact school pitch — compact space and limited tactical structure expose natural instincts.",
-  "School match on a bumpy grass pitch. Controlled environment but inconsistent surface keeps technique honest.",
-  "The school ground is quiet, teachers occasionally watching from the edge. Tactics are loose but individual quality stands out.",
+  "A school fixture on a compact pitch. Limited space and loose structure provide a different setting for observation.",
+  "School match on a bumpy grass pitch. Keep the surface in mind when interpreting a touch or pass.",
+  "The school ground is quiet, with teachers occasionally watching from the edge. Choose an action to follow through the loose tactical shape.",
 ];
 
 const GRASSROOTS_TOURNAMENT_DESCRIPTIONS = [
-  "A multi-team grassroots day with back-to-back fixtures. Stamina and attitude reveal themselves across games.",
+  "A multi-team grassroots event with back-to-back fixtures. Repeated games offer different views of effort and recovery.",
   "Local tournament at the park, flags and cones marking the pitch. Intensity builds as the day progresses.",
-  "High energy grassroots event — the mix of abilities creates natural pressure tests for the better players.",
+  "A grassroots event with varied opposition. The level of the challenge matters when interpreting each action.",
 ];
 
 const STREET_FOOTBALL_DESCRIPTIONS = [
   "Raw pick-up football on a concrete surface. Rules are loose and creativity is rewarded immediately.",
   "Street game between neighbourhood kids — no coaches, no system, pure instinct and improvisation.",
-  "Evening kickabout under the floodlights of a car park. Chaos is the only constant here.",
+  "A kickabout on a makeshift car-park pitch. The informal setting leaves plenty of room for improvisation.",
 ];
 
 const ACADEMY_TRIAL_DESCRIPTIONS = [
@@ -237,7 +237,7 @@ const ACADEMY_TRIAL_DESCRIPTIONS = [
 const YOUTH_FESTIVAL_DESCRIPTIONS = [
   "A high-profile youth festival drawing clubs from across the region. Every player knows what is at stake.",
   "Festival atmosphere with multiple pitches running simultaneously — scouts everywhere, pressure everywhere.",
-  "Youth tournament final stages. The noise and competition reveal which players raise their game.",
+  "Youth tournament fixtures with noise around the pitches. The setting may affect both performance and the view from the touchline.",
 ];
 
 const RESERVE_MATCH_DESCRIPTIONS = [
@@ -247,9 +247,9 @@ const RESERVE_MATCH_DESCRIPTIONS = [
 ];
 
 const TRAINING_VISIT_DESCRIPTIONS = [
-  "Training session behind closed gates. No match pressure reveals technical habits unfiltered.",
-  "Pre-season training open to scouts. Players work through structured drills with focused coaching.",
-  "Quiet training visit — the absence of an audience strips away performance and exposes the real player.",
+  "Training behind closed gates. Repeated drills offer another view of technical habits to compare with match evidence.",
+  "Training open to scouts. Players work through structured drills with focused coaching.",
+  "A quiet training visit. The setting can add context, but a player still needs to be evaluated across different demands.",
 ];
 
 const TRIAL_MATCH_DESCRIPTIONS = [
@@ -343,8 +343,8 @@ export function createVenueAtmosphere(venueType: string, rng: RNG): VenueAtmosph
           weather === "heavy_rain"
             ? "A professional fixture played in heavy rain — conditions create an unplanned stress test."
             : weather === "light_rain"
-            ? "A senior match under drizzle — the surface keeps every touch and movement honest."
-            : "A professional fixture. High intensity and packed stands create the best observable conditions.",
+            ? "A senior match under drizzle. Keep the surface in mind when comparing touches and movement."
+            : "A professional fixture with a busy crowd. Choose a passage to follow amid the noise.",
       };
     }
 

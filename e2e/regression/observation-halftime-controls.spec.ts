@@ -1,4 +1,5 @@
 import { expect, test } from "../fixtures";
+import { observationRail } from "../helpers/observation-rail";
 
 test.describe("half-time watch controls", () => {
   test.use({ hasTouch: true });
@@ -27,18 +28,18 @@ test.describe("half-time watch controls", () => {
           (window as any).__GAME_STORE__.getState().activeSession.currentPhaseIndex === expected, phase + 1);
       }
       await expect(page.getByRole("region", { name: "How will you watch the second half?" })).toBeVisible();
-      await page.getByRole("group", { name: /^Interactive observation pitch at / })
-        .locator("button[data-observation-pitch-marker]").first().tap();
-      const focusToggle = page.getByRole("button", { name: /^Focus targets and lenses/ });
-      // Bound the original stationary hit interception without forcing the pointer.
-      await focusToggle.click({ timeout: 5_000 });
-      const sheet = page.getByRole("dialog", { name: "Choose your focus" });
-      await expect(sheet).toBeVisible();
+      const rail = observationRail(page);
+      await expect(rail).toHaveCount(1);
+      await rail.locator("button[data-observation-pitch-marker]").first().tap();
+      const lensGroup = page.getByRole("group", { name: `Observation lens for ${setup.target.name}`, exact: true });
+      await expect(lensGroup).toHaveCount(1);
+      const technical = lensGroup.getByRole("button", { name: `Use technical lens for ${setup.target.name}`, exact: true });
       const available = await page.evaluate(() =>
         (window as any).__GAME_STORE__.getState().activeSession.focusTokens.available);
-      await sheet.getByRole("button", { name: `Use technical lens for ${setup.target.name}`, exact: true }).click();
-      await expect(sheet.getByLabel(`technical observation lens locked for ${setup.target.name}`, { exact: true })).toBeVisible();
-      await sheet.getByRole("button", { name: "Close focus controls", exact: true }).click();
+      await technical.click({ timeout: 5_000 });
+      const release = page.getByRole("button", { name: `Remove focus from ${setup.target.name}`, exact: true });
+      await expect(release).toHaveCount(1);
+      await expect(release).toBeVisible();
       await page.getByRole("button", { name: /^Confirm the first read\b/ }).click();
       const actual = await page.evaluate((id) => {
         const session = (window as any).__GAME_STORE__.getState().activeSession;
@@ -52,16 +53,23 @@ test.describe("half-time watch controls", () => {
       expect(actual).toMatchObject({ id: setup.id, phase: setup.midpoint, playerIds: setup.playerIds,
         available: available - 1, target: { focused: true, lens: "technical", phaseFocused: true } });
       expect(actual.approach).toBeTruthy();
-      // The locked choice retains its panel: the drawer must still receive a
-      // normal pointer and expose the same actual allocation afterwards.
-      await focusToggle.click({ timeout: 5_000 });
-      await expect(sheet.getByLabel(`technical observation lens locked for ${setup.target.name}`, { exact: true })).toBeVisible();
-      await sheet.getByRole("button", { name: "Close focus controls", exact: true }).click();
+      // The chosen allocation stays readable and actionable in the same inline
+      // panel after the real approach choice. Trial hit-testing never releases it.
+      await expect(lensGroup).toHaveCount(0);
+      await release.click({ trial: true, timeout: 5_000 });
+      const releaseBounds = await release.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return { width: rect.width, height: rect.height, unobscured: hit === element || Boolean(hit && element.contains(hit)) };
+      });
+      expect(releaseBounds.width).toBeGreaterThanOrEqual(44);
+      expect(releaseBounds.height).toBeGreaterThanOrEqual(44);
+      expect(releaseBounds.unobscured).toBe(true);
       await expect(page.getByRole("region", { name: "What you noticed" })).toBeVisible();
       await expect(controls.getByRole("button", { name: "Next phase", exact: true })).toBeEnabled();
       gamePage.expectNoConsoleErrors();
       await testInfo.attach("actual-halftime-control-state.json", {
-        body: JSON.stringify({ viewport, setup, actual }, null, 2), contentType: "application/json",
+        body: JSON.stringify({ viewport, setup, actual, releaseBounds }, null, 2), contentType: "application/json",
       });
       await page.screenshot({ path: testInfo.outputPath(`halftime-controls-${viewport.width}.png`), fullPage: true });
     });

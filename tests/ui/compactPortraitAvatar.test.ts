@@ -5,6 +5,7 @@ import type { GameState, Player } from "@/engine/core/types";
 import { createVisualIdentity } from "@/engine/players/portraits/identity";
 import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { YouthPortrait } from "@/components/game/YouthPortrait";
 
 const runtime = vi.hoisted(() => ({ gameState: null as GameState | null }));
 vi.mock("@/stores/gameStore", () => ({
@@ -63,5 +64,26 @@ describe("saved compact portrait identity in the actual avatar", () => {
     expect(markup).toContain('data-portrait-status="available"');
     expect(markup).toContain('data-portrait-identity="person:v1:' + player.id + '"');
     expect(JSON.stringify(runtime.gameState)).toBe(before);
+  });
+});
+
+
+describe("shared youth portrait identity presentation", () => {
+  it("uses the canonical adult age and exact requested size when callers omit age", () => {
+    const player = { id: "grown-academy-player", firstName: "Ari", lastName: "Reed", age: 35,
+      visualIdentity: { version: 1 } } as Player;
+    const seen = revealGamePortraits({ currentSeason: 20, currentWeek: 1, players: { [player.id]: player },
+      retiredPlayers: {}, unsignedYouth: {} } as unknown as GameState, [player.id], "selected");
+    runtime.gameState = seen;
+    const before = JSON.stringify(seen);
+    const markup = renderToStaticMarkup(createElement(YouthPortrait, { playerId: player.id, size: 32 }));
+    expect(markup).toContain('data-portrait-age="35"');
+    expect(markup).toContain('--portrait-size:32px');
+    expect(markup).toContain('width="32"');
+    expect(markup).toContain('data-portrait-status="available"');
+    const historical = renderToStaticMarkup(createElement(YouthPortrait, { playerId: player.id, age: 35, atAge: 18, size: 32 }));
+    expect(historical).toContain('data-portrait-age="18"');
+    expect(JSON.stringify(seen)).toBe(before);
+    expect(player.visualIdentity).toEqual({ version: 1 });
   });
 });

@@ -4,6 +4,15 @@ import { checkGutFeelingTrigger, generateReflection, generateReflectionPrompts, 
 import type { ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import { RNG } from "@/engine/rng";
 
+
+function retainWitnessedFlag(session: ObservationSession, flagged: SessionFlaggedMoment): void {
+  flagged.phaseIndex = 0;
+  session.currentPhaseIndex = 0;
+  session.players = [{ playerId: flagged.moment.playerId, name: "Ari Prospect", position: "CM", isFocused: true, focusedPhases: [0], focusHistory: [{ phaseIndex: 0, lens: "general" }] }];
+  session.phases = [{ ...session.phases?.[0], index: 0, moments: [flagged.moment] }] as ObservationSession["phases"];
+  for (const cue of session.cueReadings ?? []) cue.phaseIndex = 0;
+}
+
 describe("reflection evidence authority", () => {
   it("anchors instinct to the saved reaction and visible cue instead of inventing praise", () => {
     const session = createSession({
@@ -20,6 +29,7 @@ describe("reflection evidence authority", () => {
       clarity: "clear", score: 0.4, attributesHinted: ["marking"],
       detail: "Ari Prospect lost track of the runner.",
     }] as unknown as ObservationSession["cueReadings"];
+    retainWitnessedFlag(session, session.flaggedMoments[0]);
     const read = (input: ObservationSession) => {
       const rng = new RNG("forced-instinct");
       vi.spyOn(rng, "chance").mockReturnValue(true);
@@ -30,6 +40,10 @@ describe("reflection evidence authority", () => {
     expect(concern.narrative).toContain("Ari Prospect lost track of the runner.");
     expect(concern.narrative).not.toMatch(/instinctive|right place|SECRET|thirty years|highest level/);
     expect(concern.paEstimate).toBeDefined();
+    const unfocused = structuredClone(session);
+    unfocused.players[0].focusedPhases = [];
+    expect(read(unfocused)?.paEstimate).toBeUndefined();
+    expect(read(unfocused)?.narrative).not.toContain("Ari Prospect lost track of the runner.");
     const restored = JSON.parse(JSON.stringify(session));
     restored.flaggedMoments[0].moment.quality = 10;
     expect(read(restored)).toEqual(concern);
@@ -50,7 +64,11 @@ describe("reflection evidence authority", () => {
     const session = { mode: "fullObservation", cueReadings: [{
       id: "cue", momentId: "moment", playerId: "player", clarity: "clear", attributesHinted: ["dribbling"],
     }], evidenceDecisions: {} } as unknown as ObservationSession;
+    retainWitnessedFlag(session, flagged);
     expect(getRetainedFlaggedMomentAttributes(JSON.parse(JSON.stringify(session)), flagged)).toEqual(["dribbling"]);
+    const unfocused = { ...session, players: [{ ...session.players[0], focusedPhases: [] }] };
+    expect(getRetainedFlaggedMomentAttributes(unfocused, flagged)).toEqual([]);
+    expect(getRetainedFlaggedMomentReaction(unfocused, flagged)).toBe("needs_more_data");
     session.evidenceDecisions = { cue: { cueId: "cue", classification: "noConclusion" } };
     expect(getRetainedFlaggedMomentAttributes(session, flagged)).toEqual([]);
     session.evidenceDecisions = {};
@@ -68,6 +86,7 @@ describe("reflection evidence authority", () => {
     const session = { mode: "fullObservation", cueReadings: [{
       id: "cue", momentId: "moment", playerId: "player", clarity: "clear",
     }], evidenceDecisions: {} } as unknown as ObservationSession;
+    retainWitnessedFlag(session, flagged);
     expect(getRetainedFlaggedMomentReaction(session, flagged)).toBe("promising");
     session.evidenceDecisions = { cue: { cueId: "cue", classification: "noConclusion" } };
     expect(getRetainedFlaggedMomentReaction(JSON.parse(JSON.stringify(session)), flagged)).toBe("needs_more_data");

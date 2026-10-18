@@ -54,6 +54,26 @@ function club(
 }
 
 describe("club economics", () => {
+  it("reapproves actual replacement commitments without ratcheting the prior payroll cap", () => {
+    const approved = club("a", { reputation: 13, budget: 100_000, weeklyWageBudget: 15_400 });
+    const thin = { p: player("p", "a", 1_000) };
+    const first = reapproveAnnualClubEconomics({ a: approved }, thin).a;
+    // At this club's level the ordinary 22-player plan is 11,000. Prior cap
+    // inflation cannot create extra approval or cash when real inputs agree.
+    expect(first.weeklyWageBudget).toBe(11_000);
+    expect(reapproveAnnualClubEconomics({ a: first }, {}).a.weeklyWageBudget).toBe(11_000);
+    expect(reapproveAnnualClubEconomics({ a: { ...first, weeklyWageBudget: 1_000_000 } }, thin).a.weeklyWageBudget).toBe(11_000);
+    const expensive = { p: player("p", "a", 15_400) };
+    const funded = reapproveAnnualClubEconomics({ a: first }, expensive).a;
+    // Actual 15,400 commitments plus the 6,000 unfilled XI quote must remain
+    // fundable. Repeating unchanged inputs cannot compound that allowance.
+    expect(funded.weeklyWageBudget).toBe(21_400);
+    expect(reapproveAnnualClubEconomics({ a: funded }, expensive).a.weeklyWageBudget).toBe(21_400);
+    expect(first.budget).toBe(approved.budget);
+    expect(funded.budget).toBe(approved.budget);
+    expect(assessClubAffordability({ club: first, players: thin, weeklyWageCommitment: 1_000 }).affordable).toBe(true);
+  });
+
   it("keeps single-club payroll equal to the world index through loans and ownership changes", () => {
     const clubs = { a: club("a"), b: club("b"), empty: club("empty") };
     const players = { owned: player("owned", "a", 1200.6), other: player("other", "b", 900) };

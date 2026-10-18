@@ -37,11 +37,28 @@ export function projectAppliedLoanClosures(input: LoanClosureFeedbackInput, rng:
   let xpAward = 0;
 
   for (const movement of input.movements) {
-    if (!["loanBuyOption", "loanReturn", "loanRecall"].includes(movement.type)) continue;
+    if (!["loanBuyOption", "loanReturn", "loanRecall", "retirement", "footballExit"].includes(movement.type)) continue;
     const dealId = movement.loanDealId;
     if (!dealId || previousIds.has(dealId) || processedIds.has(dealId)) continue;
     const deal = deals.get(dealId);
     if (!deal || deal.status === "active" || deal.playerId !== movement.playerId) continue;
+    if (movement.type === "retirement" || movement.type === "footballExit") {
+      if (deal.status !== "terminated" || deal.outcome !== "terminated") continue;
+      processedIds.add(dealId);
+      for (let index = 0; index < updatedRecommendations.length; index++) {
+        const recommendation = updatedRecommendations[index];
+        if (recommendation.loanDealId !== dealId) continue;
+        updatedRecommendations[index] = { ...recommendation, status: "completed", outcome: "terminated",
+          reputationApplied: recommendation.scoutId === input.scout.id ? true : recommendation.reputationApplied };
+      }
+      continue;
+    }
+    const consistentClosure = movement.type === "loanBuyOption"
+      ? deal.status === "completed" && deal.outcome === "buy-option-exercised"
+      : movement.type === "loanRecall"
+        ? deal.status === "recalled" && deal.outcome === "recalled-early"
+        : deal.status === "completed" && ["successful", "neutral", "unsuccessful"].includes(deal.outcome ?? "");
+    if (!consistentClosure) continue;
     processedIds.add(dealId);
     const outcome: LoanOutcome = movement.type === "loanBuyOption"
       ? "buy-option-exercised"
