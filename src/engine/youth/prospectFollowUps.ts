@@ -2,6 +2,7 @@ import type {
   ClubDecision,
   GameState,
   InboxMessage,
+  ProspectFollowUpStage,
   ScoutReport,
   ScoutingCase,
 } from "@/engine/core/types";
@@ -17,7 +18,13 @@ import {
   type ScoutingCaseDepthIndex,
 } from "@/engine/reports/scoutingCases";
 
-export type ProspectFollowUpStage = "early-check" | "decision-point" | "accountability";
+import {
+  prospectFollowUpMessageId,
+  reconcileProspectFollowUpDeliveries,
+  recordProspectFollowUpDelivery,
+} from "./prospectFollowUpDelivery";
+
+export type { ProspectFollowUpStage } from "@/engine/core/types";
 export type ProspectFollowUpPathway = "placed" | "shortlisted";
 
 export interface ProspectFollowUpBeat {
@@ -69,17 +76,17 @@ const FOLLOW_UP_WINDOW_WEEKS = 24;
 
 const PLACED_EARLY_TEMPLATES: readonly BeatTemplate[] = [
   {
-    update: "The academy staff report that the first training block has exposed a gap between the football plan and the support the player needs away from the pitch.",
+    update: "Check whether the football plan and the support available away from the pitch still fit the player.",
     unresolvedQuestion: "Is this normal settling-in friction, or does the family and education plan need to change before it affects development?",
     suggestedActivity: "parentCoachMeeting",
   },
   {
-    update: "The player has entered the academy group, but the coach is still deciding which role and training level will produce useful minutes rather than safe peripheral work.",
+    update: "Ask which role and training level the academy intends to use, and what would count as useful progress.",
     unresolvedQuestion: "Should you verify the role in training now, or let the staff complete the first adaptation block?",
     suggestedActivity: "trainingVisit",
   },
   {
-    update: "Early feedback is encouraging, though the family describes the weekly routine as more demanding than the placement conversation suggested.",
+    update: "Ask the family how the weekly routine compares with the plan discussed before placement.",
     unresolvedQuestion: "Does the support network match the pathway you recommended, and what evidence would change your view?",
     suggestedActivity: "parentCoachMeeting",
   },
@@ -87,17 +94,17 @@ const PLACED_EARLY_TEMPLATES: readonly BeatTemplate[] = [
 
 const PLACED_LATE_TEMPLATES: readonly BeatTemplate[] = [
   {
-    update: "The novelty of the move has worn off. Selection, education and recovery demands are now competing for the same week.",
+    update: "Review how selection, education and recovery fit together now that the player has spent longer at the club.",
     unresolvedQuestion: "Is the pathway still developing the player, or should you challenge the role and support plan before the pattern hardens?",
     suggestedActivity: "followUpSession",
   },
   {
-    update: "The club can now point to a real training trend, but the player has not yet received the match exposure implied by the original pathway.",
+    update: "Check the training and appearance records against the intended pathway before judging the timetable.",
     unresolvedQuestion: "Do you stand behind the timetable, seek a clearer milestone, or reopen the fit question with new evidence?",
     suggestedActivity: "trainingVisit",
   },
   {
-    update: "A second academy group has begun monitoring the situation while the current club weighs how quickly to increase the player's responsibility.",
+    update: "Check for recorded outside interest before deciding whether another academy changes your advice.",
     unresolvedQuestion: "Should outside interest create urgency, or is protecting a stable adaptation block still the better judgment?",
     suggestedActivity: "followUpSession",
   },
@@ -105,17 +112,17 @@ const PLACED_LATE_TEMPLATES: readonly BeatTemplate[] = [
 
 const SHORTLIST_EARLY_TEMPLATES: readonly BeatTemplate[] = [
   {
-    update: "The club has kept the player live in its process, but the staff want one clearer answer before committing scarce academy time.",
+    update: "Ask whether the club still wants to pursue the player, and what evidence it would need next.",
     unresolvedQuestion: "Which context would most efficiently test the remaining doubt without repeating the evidence already filed?",
     suggestedActivity: "followUpSession",
   },
   {
-    update: "The initial recommendation created interest. A coach has now raised a role-specific concern that the first report could not settle.",
+    update: "Test whether a role-specific concern remains unresolved by the evidence in your first report.",
     unresolvedQuestion: "Do you test the concern in training, or preserve your current recommendation until a competitive sample appears?",
     suggestedActivity: "trainingVisit",
   },
   {
-    update: "The player's family understands that the club is interested, but the timetable and practical support remain vague.",
+    update: "Ask the family and club to clarify the timetable and practical support before treating either as settled.",
     unresolvedQuestion: "Should welfare and education readiness become part of the next recommendation revision?",
     suggestedActivity: "parentCoachMeeting",
   },
@@ -123,17 +130,17 @@ const SHORTLIST_EARLY_TEMPLATES: readonly BeatTemplate[] = [
 
 const SHORTLIST_LATE_TEMPLATES: readonly BeatTemplate[] = [
   {
-    update: "The club has not closed the file, but another recruitment cycle is beginning to compete for the same place and staff attention.",
+    update: "Check whether the opportunity is still open and whether another week of evidence would be worth the delay.",
     unresolvedQuestion: "Is the missing evidence worth another week, or has the opportunity cost changed the recommendation itself?",
     suggestedActivity: "followUpSession",
   },
   {
-    update: "The trial conversation has moved from ability to pathway: minutes, coaching ownership and the level of the first competitive assignment.",
+    update: "Ask about minutes, coaching ownership and the intended first competitive assignment.",
     unresolvedQuestion: "Can you defend a specific development plan, or should the player remain available to a different environment?",
     suggestedActivity: "trainingVisit",
   },
   {
-    update: "Interest remains genuine, although the family and club now describe different versions of what the next season would demand.",
+    update: "Compare the family and club accounts of the proposed pathway; agreement has not yet been established.",
     unresolvedQuestion: "Which promise needs to be made explicit before your recommendation can stay credible?",
     suggestedActivity: "parentCoachMeeting",
   },
@@ -141,17 +148,17 @@ const SHORTLIST_LATE_TEMPLATES: readonly BeatTemplate[] = [
 
 const PLACED_ACCOUNTABILITY_TEMPLATES: readonly BeatTemplate[] = [
   {
-    update: "Enough time has passed for the original recommendation to be compared with the player's actual pathway rather than the excitement of the move.",
+    update: "Compare the original recommendation with recorded pathway evidence; elapsed time alone does not validate your judgment.",
     unresolvedQuestion: "Which part of the original judgment has held, which part needs revision, and what should you learn before staking the same conviction again?",
     suggestedActivity: "trainingVisit",
   },
   {
-    update: "The placement now has a real body of training, selection, and support evidence behind it.",
+    update: "Review the available training, selection and support evidence, identifying gaps before drawing a conclusion.",
     unresolvedQuestion: "Does the current pathway still justify the opportunity you recommended, or has the evidence moved the case somewhere else?",
     suggestedActivity: "followUpSession",
   },
   {
-    update: "The club and family can now describe consequences that were impossible to know on placement day.",
+    update: "Ask the club and family what has changed since placement and cross-check their accounts.",
     unresolvedQuestion: "What would you defend in a review meeting, and what would you explicitly revise?",
     suggestedActivity: "parentCoachMeeting",
   },
@@ -159,17 +166,17 @@ const PLACED_ACCOUNTABILITY_TEMPLATES: readonly BeatTemplate[] = [
 
 const SHORTLIST_ACCOUNTABILITY_TEMPLATES: readonly BeatTemplate[] = [
   {
-    update: "The recommendation has remained open long enough for delay itself to become part of the decision.",
+    update: "Review whether delay has changed the recommendation, using new evidence where it exists.",
     unresolvedQuestion: "Has new evidence strengthened the case, or is the continued uncertainty now a reason to withdraw the original urgency?",
     suggestedActivity: "followUpSession",
   },
   {
-    update: "A later recruitment cycle is now judging the player against a different set of needs and alternatives.",
+    update: "Check whether the club's needs and alternatives have changed before revising the original fit judgment.",
     unresolvedQuestion: "Should you revise the fit, defend the original football read, or close the case without forcing a conclusion?",
     suggestedActivity: "trainingVisit",
   },
   {
-    update: "The family and club have both lived with the uncertainty created by the original shortlist.",
+    update: "Ask which practical conditions remain unresolved before advising the family to keep waiting.",
     unresolvedQuestion: "What promise or condition must become concrete before keeping your recommendation active?",
     suggestedActivity: "parentCoachMeeting",
   },
@@ -318,7 +325,7 @@ function makeBeat(
     )?.player;
   if (!player) return undefined;
 
-  const id = `prospect-follow-up:${scoutingCase.id}:${anchor.sourceId}:${stage}`;
+  const id = prospectFollowUpMessageId(scoutingCase.id, anchor.sourceId, stage);
   const templates = templatesFor(anchor.pathway, stage);
   const rng = createNamedRNG(
     state.runManifest.rootSeed,
@@ -346,11 +353,11 @@ function makeBeat(
       ? `${playerName}: The next pathway decision`
       : `${playerName}: Review the original call`;
   const context = anchor.pathway === "placed"
-    ? `${clubName ?? "The academy"} has supplied its first real post-placement update.`
-    : `${clubName ?? "The interested club"} has kept the recommendation active.`;
+    ? `${stage === "early-check" ? "First pathway check" : "Pathway review"} for ${clubName ?? "the academy"}: a placement was recorded in season ${anchor.season}, week ${anchor.week}.`
+    : `${clubName ?? "The interested club"}: a shortlist or follow-up decision was recorded in season ${anchor.season}, week ${anchor.week}; current interest still needs checking.`;
   const body = [
     context,
-    template.update,
+    `INVESTIGATION PROMPT: ${template.update} This is a question to investigate, not a confirmed update from the club or family.`,
     `CASE QUESTION: ${depth.centralQuestion.text}`,
     ...(comparisonSummary ? [`FOLLOW-UP COMPARISON: ${comparisonSummary}`] : []),
     ...(contextChange ? [`CONTEXT CHANGE: ${contextChange}`] : []),
@@ -389,19 +396,23 @@ function makeBeat(
   };
 }
 
-/**
- * Project the next deterministic, save-safe follow-up for every live youth
- * recommendation. Existing inbox ids are the persistence authority, so a
- * reload or repeated weekly projection cannot duplicate a beat.
- */
-export function projectWeeklyProspectFollowUps(state: GameState): ProspectFollowUpBeat[] {
-  if (state.scout.primarySpecialization !== "youth") return [];
+interface FollowUpPlan {
+  beats: ProspectFollowUpBeat[];
+  scoutingCases: GameState["scoutingCases"];
+}
+
+/** Build one pure plan; committing publishes both its messages and delivery proof. */
+function buildWeeklyProspectFollowUpPlan(state: GameState): FollowUpPlan {
+  if (state.scout.primarySpecialization !== "youth") {
+    return { beats: [], scoutingCases: state.scoutingCases };
+  }
   const existingIds = new Set((state.inbox ?? []).map((message) => message.id));
   const beats: ProspectFollowUpBeat[] = [];
   const index = buildFollowUpProjectionIndex(state);
+  let scoutingCases = reconcileProspectFollowUpDeliveries(state, index.caseDepth);
 
-  for (const scoutingCase of Object.values(state.scoutingCases ?? {})
-    .sort((left, right) => left.id.localeCompare(right.id))) {
+  for (const [caseKey, scoutingCase] of Object.entries(scoutingCases)
+    .sort(([, left], [, right]) => left.id.localeCompare(right.id))) {
     const anchor = resolveAnchor(state, scoutingCase, index);
     if (!anchor) continue;
     const elapsed = gameWeeksBetweenWithCalendar(
@@ -415,12 +426,41 @@ export function projectWeeklyProspectFollowUps(state: GameState): ProspectFollow
     // resumes after a gap. Normal weekly play receives weeks 2, 6, and 18.
     for (const schedule of FOLLOW_UP_STAGES) {
       if (elapsed < schedule.dueAfterWeeks) continue;
-      const id = `prospect-follow-up:${scoutingCase.id}:${anchor.sourceId}:${schedule.stage}`;
-      if (existingIds.has(id)) continue;
+      const id = prospectFollowUpMessageId(scoutingCase.id, anchor.sourceId, schedule.stage);
+      if (existingIds.has(id) || scoutingCase.prospectFollowUpDeliveries?.some(delivery =>
+        delivery.sourceId === anchor.sourceId && delivery.stage === schedule.stage,
+      )) continue;
       const beat = makeBeat(state, scoutingCase, anchor, schedule.stage, index);
-      if (beat) beats.push(beat);
+      if (beat) {
+        beats.push(beat);
+        if (scoutingCases === state.scoutingCases) scoutingCases = { ...scoutingCases };
+        scoutingCases[caseKey] = recordProspectFollowUpDelivery(scoutingCase, {
+          sourceId: anchor.sourceId,
+          stage: schedule.stage,
+          deliveredWeek: state.currentWeek,
+          deliveredSeason: state.currentSeason,
+        });
+      }
       break;
     }
   }
-  return beats;
+  return { beats, scoutingCases };
+}
+
+/** Preview authored communications without changing messages, proof, or RNG. */
+export function projectWeeklyProspectFollowUps(state: GameState): ProspectFollowUpBeat[] {
+  return buildWeeklyProspectFollowUpPlan(state).beats;
+}
+
+/** Publish actual messages and their durable proof together before inbox pruning. */
+export function applyWeeklyProspectFollowUps(state: GameState): GameState {
+  const plan = buildWeeklyProspectFollowUpPlan(state);
+  if (plan.beats.length === 0 && plan.scoutingCases === state.scoutingCases) return state;
+  return {
+    ...state,
+    scoutingCases: plan.scoutingCases,
+    inbox: plan.beats.length === 0
+      ? state.inbox
+      : [...state.inbox, ...plan.beats.map(beat => beat.message)],
+  };
 }

@@ -11,7 +11,7 @@ function exactKeys(value: Record<string, unknown>, allowed: string[], label: str
 export function validatePortraitPack(raw: unknown): PortraitPack {
   if (!object(raw)) throw new Error("Portrait pack must be an object");
   exactKeys(raw, ["schemaVersion", "packId", "artDirectionVersion", "reviewed", "lineages"], "pack");
-  if (raw.schemaVersion !== 1 || raw.artDirectionVersion !== "documentary-v1" || raw.reviewed !== true
+  if (raw.schemaVersion !== 1 || !["documentary-v1", "humgen-studio-v1"].includes(raw.artDirectionVersion as string) || raw.reviewed !== true
     || typeof raw.packId !== "string" || !ID.test(raw.packId)
     || !Array.isArray(raw.lineages) || raw.lineages.length < 1 || raw.lineages.length > 2048) {
     throw new Error("Unsupported or unreviewed portrait pack");

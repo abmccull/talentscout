@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EvidenceClassificationId, Scout, ScoutingEvidenceCard, StructuredReportInput } from "@/engine/core/types";
-import { MOMENT_ACTIONS } from "@/engine/observation/momentActions";
+import { FOOTBALL_ACTIONS } from "@/engine/observation/footballActions";
 import { classifySessionEvidence, createSession } from "@/engine/observation/session";
 import type { ObservationSession, PlayerMoment } from "@/engine/observation/types";
 import { createRNG } from "@/engine/rng";
@@ -19,27 +19,93 @@ const skilledScout: Pick<Scout, "skills" | "attributes" | "fatigue"> = {
 
 // Independent expectations: changing a question must never create a new event.
 const expectedSemantics: Record<string, EvidenceClassificationId[]> = {
-  "short-pass": ["technicalExecution"],
-  "pressured-reception": ["technicalExecution", "pressureResponse"],
-  "dribble-duel": ["technicalExecution"], "cross": ["technicalExecution"],
-  "finish": ["technicalExecution"], "contested-header": ["technicalExecution"], "tackle": ["technicalExecution"],
-  "recovery-sprint": ["physicalExecution"], "aerial-contest": ["physicalExecution"],
-  "balance-challenge": ["physicalExecution"], "repeat-run": ["physicalRepeatability", "physicalExecution"],
-  "change-direction": ["physicalExecution"], "decision-under-pressure": ["decisionMaking", "pressureResponse"],
-  "unhurried-decision": ["decisionMaking"], "teammate-direction": [], "support-run": ["offBallMovement"],
-  "press-trigger": ["offBallMovement"], "runner-marking": ["offBallMovement"], "cover-position": ["offBallMovement"],
-  "shape-communication": [], "response-to-mistake": ["pressureResponse"], "response-to-instruction": [],
+  "receive": [
+    "technicalExecution"
+  ],
+  "pass": [
+    "technicalExecution"
+  ],
+  "dribble": [
+    "technicalExecution"
+  ],
+  "cross": [
+    "technicalExecution"
+  ],
+  "distance-shot": [
+    "technicalExecution"
+  ],
+  "finish": [
+    "technicalExecution"
+  ],
+  "header": [
+    "technicalExecution"
+  ],
+  "tackle": [
+    "technicalExecution"
+  ],
+  "chase": [
+    "physicalExecution"
+  ],
+  "shield": [
+    "physicalExecution"
+  ],
+  "turn": [
+    "physicalExecution"
+  ],
+  "leap": [
+    "physicalExecution"
+  ],
+  "recover-balance": [
+    "physicalExecution"
+  ],
+  "repeat-run": [
+    "physicalRepeatability",
+    "physicalExecution"
+  ],
+  "composed-release": [
+    "pressureResponse"
+  ],
+  "choose-outlet": [
+    "decisionMaking"
+  ],
+  "read-bounce": [
+    "offBallMovement"
+  ],
+  "cover-angle": [
+    "defensiveReading"
+  ],
+  "recover-effort": [],
+  "organise": [],
+  "support-run": [
+    "offBallMovement"
+  ],
+  "press-angle": [
+    "defensiveReading",
+    "offBallMovement"
+  ],
+  "cover-runner": [
+    "defensiveReading"
+  ],
+  "spot-route": [],
+  "track-mark": [
+    "defensiveReading"
+  ],
+  "coordinate-cover": [
+    "offBallMovement"
+  ],
+  "reset-after-error": [],
+  "respond-to-feedback": []
 };
 
 function retained(actionId: string, question = SCOUTING_QUESTIONS[0], quality = 3) {
-  const action = MOMENT_ACTIONS.find((candidate) => candidate.id === actionId)!;
+  const action = FOOTBALL_ACTIONS.find((candidate) => candidate.id === actionId)!;
   const base = createSession({ activityType: "schoolMatch", specialization: "youth",
     playerPool: [{ playerId: "ryan", name: "Ryan Ashley", position: "CM" }], targetPlayerId: "ryan",
     countryId: "england", seed: "semantic-session", week: 2, season: 1 }, createRNG("semantic-session"));
   const moment: PlayerMoment = { id: `moment:${actionId}`, actionId, playerId: "ryan", momentType: action.momentType,
-    attributesHinted: [...action.attributes], quality, pressureContext: action.pressure, isStandout: false,
-    description: action.descriptions[quality <= 4 ? "low" : "high"].replace("{playerName}", "Ryan Ashley"),
-    vagueDescription: action.vague };
+    attributesHinted: [...action.attributes], quality, pressureContext: action.requiresPressure, isStandout: false,
+    description: action.outcomes[quality <= 4 ? "low" : "high"].replace("{playerName}", "Ryan Ashley"),
+    vagueDescription: "The action unfolded away from the ball." };
   const session: ObservationSession = { ...base, state: "reflection", venueAtmosphere: undefined,
     phases: [{ ...base.phases[0], index: 0, minute: 24, moments: [moment] }],
     players: [{ playerId: "ryan", name: "Ryan Ashley", position: "CM", isFocused: true, focusedPhases: [0],
@@ -68,8 +134,8 @@ function formalInput(card: ScoutingEvidenceCard): StructuredReportInput {
 }
 
 describe("action-grounded cue classifications", () => {
-  it.each(MOMENT_ACTIONS.map((action) => action.id))("keeps %s semantics fixed across all six questions and both outcome directions", (actionId) => {
-    expect(Object.keys(expectedSemantics)).toHaveLength(22);
+  it.each(FOOTBALL_ACTIONS.map((action) => action.id))("keeps %s semantics fixed across all six questions and both outcome directions", (actionId) => {
+    expect(Object.keys(expectedSemantics)).toHaveLength(28);
     for (const quality of [3, 8]) for (const question of SCOUTING_QUESTIONS) {
       const session = retained(actionId, question, quality);
       const cue = session.cueReadings![0];
@@ -90,21 +156,21 @@ describe("action-grounded cue classifications", () => {
     const [card] = buildSessionEvidenceCards(session);
     expect(card.summary).toContain("off-ball movement");
     expect(card.summary).not.toMatch(/pre-receive|pressure/);
-    expect(card.detail).toContain("left the ball carrier isolated");
+    expect(card.detail).toContain("no passing lane");
     expect(card.pressureContext).toBe(false);
-    expect(getEvidenceClaimOptions(card)[0].statement).toContain("ineffective");
+    expect(getEvidenceClaimOptions(card)[0].statement).toContain("raised a concern");
     expect(getEvidenceClaimOptions(card).map((claim) => claim.statement).join(" ")).not.toMatch(/scann|receiv|pressure/i);
   });
 
   it("retains an unhurried poor decision even when the scout asks about pressure", () => {
-    const session = retained("unhurried-decision", SCOUTING_QUESTIONS.find((question) => question.id === "pressure")!);
+    const session = retained("choose-outlet", SCOUTING_QUESTIONS.find((question) => question.id === "pressure")!);
     const [card] = buildSessionEvidenceCards(session);
     expect(card.questionId).toBe("pressure");
     expect(card.pressureContext).toBe(false);
     expect(card.summary).toContain("decision-making");
-    expect(card.detail).toContain("had time to survey the options");
+    expect(card.detail).toContain("overlooked the open teammate");
     expect(card.suggestedClassifications).not.toContain("pressureResponse");
-    expect(getEvidenceClaimOptions(card)[0].statement).toContain("ineffective option");
+    expect(getEvidenceClaimOptions(card)[0].statement).toContain("raised a concern");
     expect(getEvidenceClaimOptions(card).map((claim) => claim.statement).join(" ")).not.toMatch(/scann|receiv|pressure/i);
   });
 
@@ -119,7 +185,7 @@ describe("action-grounded cue classifications", () => {
   });
 
   it("does not infer repeatability from a single physical action", () => {
-    const [single] = buildSessionEvidenceCards(retained("recovery-sprint", SCOUTING_QUESTIONS[4], 8));
+    const [single] = buildSessionEvidenceCards(retained("chase", SCOUTING_QUESTIONS[4], 8));
     const [repeated] = buildSessionEvidenceCards(retained("repeat-run", SCOUTING_QUESTIONS[4], 8));
     expect(single.classification).toBe("physicalExecution");
     expect(single.suggestedClassifications).not.toContain("physicalRepeatability");
@@ -140,7 +206,7 @@ describe("action-grounded cue classifications", () => {
   });
 
   it.each(["glimpse", "missed"] as const)("%s cannot grant trait interpretations even with a known action", (clarity) => {
-    const session = retained("pressured-reception");
+    const session = retained("composed-release");
     session.cueReadings![0] = { ...session.cueReadings![0], clarity, attributesHinted: [] };
     const cue = session.cueReadings![0];
     expect(getSupportedCueClassifications(cue)).toEqual(["noConclusion"]);
@@ -152,7 +218,7 @@ describe("action-grounded cue classifications", () => {
   });
 
   it("refuses unsupported legacy advertised options and stale persisted decisions", () => {
-    const session = retained("unhurried-decision");
+    const session = retained("choose-outlet");
     delete session.phases[0].moments[0].actionId;
     delete session.flaggedMoments[0].moment.actionId;
     const cue = { ...session.cueReadings![0], actionId: undefined, attributesHinted: ["decisionMaking"] as const,
@@ -180,7 +246,7 @@ describe("action-grounded cue classifications", () => {
   it("does not trust an unknown or inconsistent catalog identity", () => {
     const cue = retained("support-run").cueReadings![0];
     expect(getSupportedCueClassifications({ ...cue, actionId: "future-unrecognized-action" })).toEqual(["noConclusion"]);
-    expect(getSupportedCueClassifications({ ...cue, actionId: "pressured-reception" })).toEqual(["noConclusion"]);
+    expect(getSupportedCueClassifications({ ...cue, actionId: "composed-release" })).toEqual(["noConclusion"]);
     expect(getSupportedCueClassifications({ ...cue, attributesHinted: ["finishing"] })).toEqual(["noConclusion"]);
     expect(getSupportedCueClassifications({ ...cue, attributesHinted: [] })).toEqual(["noConclusion"]);
     expect(getSupportedCueClassifications({ ...cue, attributesHinted: undefined as never })).toEqual(["noConclusion"]);

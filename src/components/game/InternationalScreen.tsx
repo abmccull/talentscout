@@ -111,6 +111,7 @@ function LegendHUD() {
   return (
     <details
       className="group absolute bottom-3 left-3 z-20 max-h-[65%] max-w-[18rem] overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface)] px-3"
+      data-testid="world-map-legend"
       aria-label="World map legend"
       title={worldTermSummary()}
     >
@@ -124,7 +125,7 @@ function LegendHUD() {
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {LEGEND_ITEMS.map(({ color, label }) => (
-          <span key={label} className="flex items-center gap-1.5 text-xs text-zinc-300">
+          <span key={label} className="flex items-center gap-1.5 text-meta text-zinc-300">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: color }}
@@ -133,7 +134,7 @@ function LegendHUD() {
             {label}
           </span>
         ))}
-        <span className="flex items-center gap-1.5 text-xs text-zinc-300">
+        <span className="flex items-center gap-1.5 text-meta text-zinc-300">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full border-2 border-amber-500 bg-zinc-800"
             aria-hidden="true"
@@ -141,7 +142,7 @@ function LegendHUD() {
           Current
         </span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-300">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-zinc-300">
         <span className="flex items-center gap-1.5">
           <span className="inline-flex h-3 w-3 items-center justify-center rounded-[3px] bg-violet-500 text-[8px] font-semibold text-white" aria-hidden="true">
             2
@@ -631,7 +632,7 @@ export function InternationalScreen() {
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<"map" | "browser" | null>(null);
   const [justBooked, setJustBooked] = useState(false);
-  const [travelPosture, setTravelPosture] = useState<TravelPosture>("assignmentFirst");
+  const [travelPosture, setTravelPosture] = useState<TravelPosture>("deepDive");
   const [worldOutlookOpen, setWorldOutlookOpen] = useState(false);
 
   const closeWorldOutlook = useCallback(() => {
@@ -917,9 +918,7 @@ export function InternationalScreen() {
   const selectedContinent = selectedCountry ? getContinentId(selectedCountry) : "unknown";
   const effectiveTravelQuoteFor = (
     country: string,
-    posture: TravelPosture = country === selectedCountry
-      ? travelPosture
-      : "assignmentFirst",
+    posture: TravelPosture = travelPosture,
   ) => {
     const travelEquipmentBonuses = gameState.finances?.equipment
       ? getContextualEquipmentBonuses(
@@ -1098,6 +1097,7 @@ export function InternationalScreen() {
             const position = getCountryMapPosition(country);
             if (!position) return;
             rememberPopupTrigger(document.activeElement);
+            setTravelPosture("assignmentFirst");
             openCountryPopup(country, position.x, position.y);
           }}
           onReviewAssignment={handleReviewAssignment}

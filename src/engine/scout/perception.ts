@@ -1,3 +1,4 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
 /**
  * Perception Model — three-layer scouting accuracy system.
  *
@@ -437,6 +438,8 @@ export interface LightObservationEvidenceOptions {
   observedCues?: readonly ObservedCueEvidence[];
   /** Attributes made visible by concrete moments in an interactive session. */
   evidenceAttributes?: PlayerAttribute[];
+  /** Live observations may assess only attributes actually perceived in their saved cues. */
+  evidenceOnly?: boolean;
   /** Dominant direct-focus lens used by the scout. */
   focusLens?: Observation["focusLens"];
   /** Small confidence lift earned through sustained direct focus. */
@@ -595,6 +598,12 @@ export function observePlayerLight(
   for (const attribute of evidenceOptions?.evidenceAttributes ?? []) {
     if (!HIDDEN_SET.has(attribute)) baseVisible.add(attribute);
   }
+  if (evidenceOptions?.evidenceOnly) {
+    const supported = new Set(evidenceOptions.evidenceAttributes ?? []);
+    for (const attribute of baseVisible) {
+      if (!supported.has(attribute)) baseVisible.delete(attribute);
+    }
+  }
 
   const visibleArray = Array.from(baseVisible);
 
@@ -681,7 +690,8 @@ export function observePlayerLight(
         attr,
         player.attributes[attr],
         scout,
-        (priorCounts.get(attr) ?? 0) + pass,
+        // Repeated looks share this session's history; they are not extra visits.
+        priorCounts.get(attr) ?? 0,
         contextDiversity,
         player.form,
         context,
@@ -741,7 +751,7 @@ export function observePlayerLight(
   const contextLabel = CONTEXT_LABELS[context] ?? "observation";
   const notes = [`Observed ${player.firstName} ${player.lastName} during ${contextLabel} — ${attributeReadings.length} attributes assessed.`];
 
-  if (evidenceOptions?.focusLens) {
+  if (evidenceOptions?.focusLens && attributeReadings.length > 0) {
     notes.push(`Direct ${evidenceOptions.focusLens} focus deepened the session evidence.`);
   }
   notes.push(...contextResolution.notes);
@@ -752,7 +762,11 @@ export function observePlayerLight(
     );
   }
 
-  const abilityReading = generateAbilityReading(
+  const liveEvidence = evidenceOptions?.evidenceOnly === true;
+  const observedDomains = new Set(attributeReadings.map((reading) => ATTRIBUTE_DOMAINS[reading.attribute]));
+  // A narrow incident supports its attribute, not an overall player verdict.
+  const canAssessAbility = !liveEvidence || (attributeReadings.length >= 4 && observedDomains.size >= 3);
+  const abilityReading = canAssessAbility ? generateAbilityReading(
     rng,
     player,
     scout,
@@ -760,10 +774,12 @@ export function observePlayerLight(
     context,
     playerObservations,
     attributeReadings,
-  );
+  ) : undefined;
 
   // Personality reveal check — uses scout skills as raw numbers (Record<ScoutSkill, number>)
-  const revealedPersonalityTrait = checkPersonalityReveal(
+  // Live character cues belong to the journal. They must not unlock an
+  // unrelated hidden trait or archetype through the autonomous reveal roll.
+  const revealedPersonalityTrait = !liveEvidence ? checkPersonalityReveal(
     rng,
     {
       skills: scout.skills as unknown as Record<string, number>,
@@ -771,7 +787,7 @@ export function observePlayerLight(
     },
     player,
     { activityType: context },
-  ) ?? undefined;
+  ) ?? undefined : undefined;
 
   if (revealedPersonalityTrait !== undefined) {
     notes.push(`Personality insight: "${revealedPersonalityTrait}" — noted in the scout's journal.`);
@@ -781,11 +797,12 @@ export function observePlayerLight(
   const playerObsCount = history.observationCount + 1;
   const psychoSkill = scout.skills.psychologicalRead;
   let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
-  if (player.personalityProfile) {
-    const updated = progressivePersonalityReveal(rng, player.personalityProfile, playerObsCount, psychoSkill, revealedPersonalityTrait ? [revealedPersonalityTrait] : []);
-    if (updated !== player.personalityProfile) {
+  if (!liveEvidence && player.personalityProfile) {
+    const personalityProfile = expandPlayerPersonalityProfile(player.personalityProfile);
+    const updated = progressivePersonalityReveal(rng, personalityProfile, playerObsCount, psychoSkill);
+    if (updated !== personalityProfile) {
       updatedPersonalityProfile = updated;
-      if (!updated.hiddenUntilRevealed && player.personalityProfile.hiddenUntilRevealed) {
+      if (!updated.hiddenUntilRevealed && personalityProfile.hiddenUntilRevealed) {
         notes.push(`Character profile emerging: this player appears to be a "${updated.archetype}" personality type.`);
       }
     }
@@ -945,10 +962,11 @@ export function observePlayer(
   const matchPsychoSkill = scout.skills.psychologicalRead;
   let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
   if (player.personalityProfile) {
-    const updated = progressivePersonalityReveal(rng, player.personalityProfile, matchObsCount, matchPsychoSkill, revealedPersonalityTrait ? [revealedPersonalityTrait] : []);
-    if (updated !== player.personalityProfile) {
+    const personalityProfile = expandPlayerPersonalityProfile(player.personalityProfile);
+    const updated = progressivePersonalityReveal(rng, personalityProfile, matchObsCount, matchPsychoSkill);
+    if (updated !== personalityProfile) {
       updatedPersonalityProfile = updated;
-      if (!updated.hiddenUntilRevealed && player.personalityProfile.hiddenUntilRevealed) {
+      if (!updated.hiddenUntilRevealed && personalityProfile.hiddenUntilRevealed) {
         notes.push(`Character profile emerging: this player appears to be a "${updated.archetype}" personality type.`);
       }
     }

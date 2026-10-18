@@ -962,7 +962,7 @@ All mode screens load on demand and use narrow Zustand selectors. The first `/pl
 
 ## 11. Persistence and migration
 
-The current save envelope schema is version 4 in `src/lib/saveEnvelope.ts:21`. Use the next unclaimed schema at implementation time; if no parallel migration lands first, this plan expects schema 5.
+The current save envelope schema is version 5 in `src/lib/saveEnvelope.ts:21`. Use the next unclaimed schema at implementation time; if no parallel migration lands first, this plan expects schema 6.
 
 ### 11.1 Migration rules
 

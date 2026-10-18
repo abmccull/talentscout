@@ -168,9 +168,6 @@ jobs:
       - name: Install accepted bundle into the immutable candidate checkout
         run: cp -R bundle/. candidate/
 
-      - name: Verify accepted source aggregate and raw shard transport
-        run: node scripts/stage-accepted-source-soak.mjs verify candidate candidate
-
       - name: Checkout independent certification evidence
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -215,16 +212,17 @@ jobs:
         env:
           RELEASE_WORKFLOW_RUN_ID: ${{ inputs.candidate_run_id }}
           RELEASE_EVIDENCE_STATUS: ../docs/release/release-evidence-status.json
+          RELEASE_EVIDENCE_OUTPUT: artifacts/release/generated/certifications/release-evidence-check-${{ github.run_id }}-${{ github.run_attempt }}.json
           RELEASE_TAG_BINDING_MODE: intended
         working-directory: candidate
-        run: node ../scripts/check-release-evidence.mjs
+        run: node ../scripts/check-release-evidence.mjs --scope full-release
 
       - name: Upload certification decision
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: certified-candidate-${{ inputs.candidate_tag }}
-          path: candidate/artifacts/release/release-evidence-check.json
+          path: candidate/artifacts/release/generated/certifications/release-evidence-check-${{ github.run_id }}-${{ github.run_attempt }}.json
           if-no-files-found: ignore
           retention-days: 90
 

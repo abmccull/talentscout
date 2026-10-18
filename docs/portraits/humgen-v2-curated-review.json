@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "packId": "humgen-v2-curated",
+  "sourceManifestSha256": "0881a5e0c42137c64484c493277a171bf04f10bbca67de1c270142e0aa6073ab",
+  "reviewedAt": "2026-09-13",
+  "reviewScope": "Assistant visual review of all eight ages and comparison with all eight bundled HumGen v1 faces. Identity continuity and head proportions acceptable for incremental integration; not a 10/10 aging assessment or proof of lifetime inventory sufficiency. Anchors are coarse visual categories, not demographic claims.",
+  "reviewedAges": [15,18,22,27,31,35,39,45],
+  "approved": [
+    {"candidate":1,"anchors":{"skinTone":"light","faceShape":"round","eyeShape":"almond","eyeColor":"green","noseStructure":"softBridge","mouthStructure":"balanced","jawStructure":"soft","hairColor":"darkBrown","hairTexture":"straight","baselineHairline":"even","facialHairTendency":"light","build":"average","distinctiveFeature":"none","cameraAngle":"front"}},
+    {"candidate":6,"anchors":{"skinTone":"brown","faceShape":"oval","eyeShape":"round","eyeColor":"darkBrown","noseStructure":"broad","mouthStructure":"full","jawStructure":"tapered","hairColor":"darkBrown","hairTexture":"coily","baselineHairline":"even","facialHairTendency":"light","build":"average","distinctiveFeature":"none","cameraAngle":"front"}},
+    {"candidate":11,"anchors":{"skinTone":"light","faceShape":"square","eyeShape":"hooded","eyeColor":"blue","noseStructure":"straight","mouthStructure":"narrow","jawStructure":"angular","hairColor":"auburn","hairTexture":"straight","baselineHairline":"even","facialHairTendency":"light","build":"average","distinctiveFeature":"none","cameraAngle":"front"}},
+    {"candidate":15,"anchors":{"skinTone":"light","faceShape":"oval","eyeShape":"deepSet","eyeColor":"hazel","noseStructure":"straight","mouthStructure":"balanced","jawStructure":"angular","hairColor":"brown","hairTexture":"straight","baselineHairline":"even","facialHairTendency":"medium","build":"average","distinctiveFeature":"none","cameraAngle":"front"}}
+  ],
+  "held": [
+    {"candidates":[0,2,3,4,16],"reason":"All ages reviewed; require closer comparison with similar existing presets before assigning another player."},
+    {"candidates":[7,9],"reason":"Hair silhouette dominates the face; revisit volume and shape before integration."},
+    {"candidates":[12,14],"reason":"Head and face proportions need closer art review."},
+    {"candidates":[8],"reason":"Visible near-repeat of humgen-v1-00005; hairstyle alone is not a distinct identity."}
+  ]
+}

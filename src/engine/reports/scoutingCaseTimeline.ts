@@ -1,3 +1,6 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import { describeAlumniHistory, isSourcedAlumniEvent } from "../youth/alumniEvidence";
+import { expandLoanDeal } from "../finance/terminalRecordArchive";
 import type {
   AlumniCareerUpdateType,
   GameState,
@@ -348,7 +351,7 @@ export function buildScoutingCaseTimeline(
     });
   }
 
-  const movements = (state.playerMovementHistory ?? []).filter((movement) =>
+  const movements = expandPlayerMovementHistory(state.playerMovementHistory ?? []).filter((movement) =>
     movement.playerId === scoutingCase.playerId
     && isOnOrAfter(
       movement.season,
@@ -364,7 +367,8 @@ export function buildScoutingCaseTimeline(
     const presentation = buildPlayerMovementPresentation({
       movement,
       loanDeal: movement.loanDealId
-        ? [...(state.activeLoans ?? []), ...(state.loanHistory ?? [])].find((deal) => deal.id === movement.loanDealId)
+        ? [...(state.activeLoans ?? []), ...(state.loanHistory ?? [])]
+          .map((deal) => expandLoanDeal(deal)).find((deal) => deal.id === movement.loanDealId)
         : undefined,
       resolveClubName: (clubId) => clubId ? clubName(state, clubId) : undefined,
     });
@@ -416,8 +420,8 @@ export function buildScoutingCaseTimeline(
         kind: "milestone",
         week: milestone.week,
         season: milestone.season,
-        title: humanize(milestone.type),
-        description: milestone.description,
+        title: `${humanize(milestone.type)}${isSourcedAlumniEvent(milestone) ? "" : " (legacy)"}`,
+        description: describeAlumniHistory(milestone),
         alumniRecordId: alumni.id,
       });
     }
@@ -431,8 +435,8 @@ export function buildScoutingCaseTimeline(
         kind: "alumni",
         week: update.week,
         season: update.season,
-        title: alumniUpdateTitle(update.type),
-        description: update.description,
+        title: `${alumniUpdateTitle(update.type)}${isSourcedAlumniEvent(update) ? "" : " (legacy)"}`,
+        description: describeAlumniHistory(update),
         alumniRecordId: alumni.id,
       });
     }

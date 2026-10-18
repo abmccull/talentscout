@@ -1,3 +1,4 @@
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
 import {
   ATTRIBUTE_DOMAINS,
   type AnomalyFlag,
@@ -231,7 +232,7 @@ export function hasObservableRecurringInjuryConcern(
   history: Pick<InjuryHistory, "injuries" | "totalWeeksMissed"> | undefined,
 ): boolean {
   if (!history) return false;
-  const seriousInjuries = history.injuries.filter(
+  const seriousInjuries = history.injuries.map(entry => expandHistoricalInjury(entry, "")).filter(
     (injury) => injury.severity === "serious" || injury.severity === "career-threatening",
   ).length;
   return history.injuries.length >= 3 || seriousInjuries >= 2 || history.totalWeeksMissed >= 24;

@@ -32,15 +32,13 @@ export function OpeningDiscoveryScreen() {
   const youth = gameState?.openingCase
     ? gameState.unsignedYouth[gameState.openingCase.youthId]
     : undefined;
-  const latestJournal = gameState && projection
-    ? Object.values(gameState.reflectionJournal ?? {})
-        .filter((entry) => entry.playerIds.includes(projection.playerId))
-        .sort((left, right) => right.createdAt - left.createdAt)[0]
-    : undefined;
-  const breakthrough = latestJournal?.flaggedMoments
-    ?.find((moment) => moment.playerId === projection?.playerId);
-  const hypothesis = latestJournal?.hypotheses
-    ?.find((entry) => entry.playerId === projection?.playerId);
+
+  useEffect(() => {
+    if (!gameState?.openingCase) return;
+    if (gameState.openingCase.stage === "report") {
+      useGameStore.getState().setScreen("reportWriter");
+    }
+  }, [gameState?.openingCase]);
 
   useEffect(() => {
     if (!gameState?.openingCase) return;
@@ -99,7 +97,6 @@ export function OpeningDiscoveryScreen() {
                 : "Back to Desk"}
           </button>
         </header>
-
         <section className="grid items-start gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-12">
           <div className="min-w-0">
             <div className="flex items-center gap-5">
@@ -127,17 +124,13 @@ export function OpeningDiscoveryScreen() {
               <div>
                 <h2 className="dossier-eyebrow">{projection.signalLabel}</h2>
                 <p className="mt-2 text-sm leading-6">
-                  {breakthrough?.description
-                    ?? veteranPrologue?.evidenceBeats[1].focused
-                    ?? "No clear passage was retained. Keep the uncertainty in your report instead of inventing a strength."}
+                  {projection.signal}
                 </p>
               </div>
               <div>
                 <h2 className="dossier-eyebrow">The open question</h2>
                 <p className="mt-2 text-sm leading-6">
-                  {hypothesis?.text
-                    ?? veteranPrologue?.contradiction
-                    ?? "Would another context support this first impression, or overturn it?"}
+                  {projection.openQuestion}
                 </p>
               </div>
             </div>

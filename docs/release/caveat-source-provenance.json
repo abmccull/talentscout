@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "font-source-license-reconciliation",
+  "reviewDate": "2026-10-18",
+  "scope": "Pinned original upstream source font and existing accompanying license only; not installed package acceptance or human approval",
+  "sourceRepository": "https://github.com/google/fonts",
+  "sourceCommit": "5571d84c0d8c70ec1af4f64072d8c5cf1e4e9643",
+  "upstreamAuthorSourceCommit": "59745e818ef7973e11e70cb1358d0e902b56c5fc",
+  "sourceUrl": "https://raw.githubusercontent.com/google/fonts/5571d84c0d8c70ec1af4f64072d8c5cf1e4e9643/ofl/caveat/Caveat%5Bwght%5D.ttf",
+  "licenseUrl": "https://raw.githubusercontent.com/google/fonts/5571d84c0d8c70ec1af4f64072d8c5cf1e4e9643/ofl/caveat/OFL.txt",
+  "license": "SIL Open Font License 1.1",
+  "font": {
+    "path": "src/app/fonts/Caveat-Variable.ttf",
+    "bytes": 403648,
+    "sha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988",
+    "names": {
+      "0": [
+        "Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)"
+      ],
+      "1": [
+        "Caveat"
+      ],
+      "2": [
+        "Regular"
+      ],
+      "3": [
+        "2.000;CYRE;Caveat-Regular"
+      ],
+      "4": [
+        "Caveat Regular"
+      ],
+      "5": [
+        "Version 2.000"
+      ],
+      "6": [
+        "Caveat-Regular"
+      ],
+      "8": [
+        "Pablo Impallari"
+      ],
+      "9": [
+        "Pablo Impallari"
+      ],
+      "11": [
+        "http://www.impallari.com"
+      ],
+      "13": [
+        "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+      ],
+      "14": [
+        "http://scripts.sil.org/OFL"
+      ]
+    },
+    "axes": [
+      {
+        "tag": "wght",
+        "minimum": 400.0,
+        "default": 400.0,
+        "maximum": 700.0
+      }
+    ]
+  },
+  "notice": {
+    "path": "public/licenses/Caveat-OFL.txt",
+    "sha256": "1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b",
+    "matchesPinnedUpstream": true
+  },
+  "remainingAcceptance": "Build candidate, verify emitted font bytes match this source, and verify notices and fonts in accepted platform packages using existing accepted-package-font-handoff."
+}

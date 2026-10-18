@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Club, GameState, MarketplaceBid, NewGameConfig, ScoutReport } from "@/engine/core/types";
+import type { Club, GameState, MarketplaceBid, NewGameConfig, Scout, ScoutReport } from "@/engine/core/types";
 import { createScout } from "@/engine/scout/creation";
 import { RNG } from "@/engine/rng";
 import { initializeFinances } from "@/engine/finance/expenses";
@@ -57,6 +57,45 @@ function bid(
 }
 
 describe("marketplace and placement commercial integrity", () => {
+  it("prices restored ambiguous accuracy neutrally while rewarding verified assessments", () => {
+    const scout = createScout(CONFIG, new RNG("accuracy-market"));
+    const finances = listReport(initializeFinances(scout, "independent", "normal"), "accuracy-report", 1000, false, "buyer", 1, 1);
+    const club = { id: "buyer", name: "Buyer", budget: 1000000, scoutingBudget: 10000, reputation: 60, playerIds: [], scoutingPhilosophy: "academyFirst" } as unknown as Club;
+    const report = { id: "accuracy-report", playerId: "player", qualityScore: 100, conviction: "tablePound" } as ScoutReport;
+    const bidsFor = (accuracyHistory: Scout["accuracyHistory"]) => {
+      const rng = new RNG("accuracy-bids"); rng.chance = () => true;
+      const restored = JSON.parse(JSON.stringify({ ...scout, accuracyHistory })) as Scout;
+      return processMarketplaceBids(rng, finances, { buyer: club }, { "accuracy-report": report }, {}, restored, 2, 1).finances.reportListings[0].bids;
+    };
+    const legacy = { week: 1, season: 1, predictedCA: 80, actualCA: 110 };
+    const neutral = bidsFor([]);
+    expect(neutral).not.toHaveLength(0);
+    expect(bidsFor([legacy])).toEqual(neutral);
+    const verified = { ...legacy, actualCA: 80, assessmentBasis: "submission" as const };
+    expect(bidsFor([verified])[0].amount).toBeGreaterThan(neutral[0].amount);
+    expect(bidsFor([verified, ...Array.from({ length: 25 }, () => legacy)])).toEqual(bidsFor([verified]));
+  });
+
+  it("rejects unsupported structured reports at the listing action after save restoration", () => {
+    const scout = createScout(CONFIG, new RNG("unsupported-listing"));
+    const finances = initializeFinances(scout, "independent", "normal");
+    for (const claims of [[], [{ support: "withheld" }], [{ support: "stretch" }]]) {
+      const state = JSON.parse(JSON.stringify({ scout, finances, currentWeek: 3, currentSeason: 1,
+        reports: { report: { id: "report", scoutId: scout.id, playerId: "player",
+          evidenceAssessment: { claims } } }, scoutingCases: {},
+      }));
+      let store = { gameState: state } as GameStoreState;
+      const get: GetState = () => store;
+      const set: SetState = (partial) => {
+        store = { ...store, ...(typeof partial === "function" ? partial(store) : partial) };
+      };
+      createFinanceActions(get, set).listReportForSale("report", 500, false);
+      expect(store.gameState).toBe(state);
+      expect(store.gameState?.finances?.reportListings).toEqual([]);
+      expect(store.gameState?.scoutingCases).toEqual({});
+    }
+  });
+
   it.each([0, 1, 125, 749])("uses the actual remaining procurement balance of %i", (budget) => {
     expect(getClubScoutingBudget({ budget: 1_000_000, scoutingBudget: budget } as Club)).toBe(budget);
   });
@@ -122,6 +161,17 @@ describe("marketplace and placement commercial integrity", () => {
     const newBids = generated.finances.reportListings[1].bids;
     expect(newBids.some((candidate) => candidate.clubId === "club-1")).toBe(false);
     expect(newBids.some((candidate) => candidate.clubId === "club-2")).toBe(true);
+
+    for (const support of ["withheld", "stretch"] as const) {
+      const inconclusive = { ...report, evidenceAssessment: { claims: [{ support }] } } as ScoutReport;
+      const noBids = processMarketplaceBids(eagerRng, JSON.parse(JSON.stringify(relisted)), clubs,
+        { "report-1": inconclusive }, {}, scout, 3, 1);
+      expect(noBids.finances.reportListings[1].bids).toHaveLength(0);
+    }
+    const evidenced = { ...report, evidenceAssessment: { claims: [{ support: "supported" }] } } as ScoutReport;
+    const supportedBids = processMarketplaceBids(eagerRng, relisted, clubs,
+      { "report-1": evidenced }, {}, scout, 3, 1);
+    expect(supportedBids.finances.reportListings[1].bids.length).toBeGreaterThan(0);
 
     const staleBuyerBid = { ...bid(newId, "repeat-buyer", "club-1", 800), isExclusiveUpgrade: true };
     const withStaleBid = {
@@ -218,4 +268,34 @@ describe("marketplace and placement commercial integrity", () => {
       "placement:player-1:club-1",
     )).toBe(paid);
   });
+});
+
+
+it("keeps new marketplace identities short and unique after reload and counter recovery", () => {
+  const scout = createScout(CONFIG, new RNG("compact-listing-identities"));
+  const original = initializeFinances(scout, "independent", "normal");
+  const longReportId = "report_" + "long-scout-and-player-identity_".repeat(20);
+  const listed = listReport(original, longReportId, 500, false, undefined, 3, 2);
+  expect(listed.reportListings[0].reportId).toBe(longReportId);
+  expect(listed.reportListings[0].id.length).toBeLessThan(40);
+  expect(original.reportListings).toHaveLength(0);
+  const reloaded = JSON.parse(JSON.stringify(listed)); reloaded.actionSequence = 0;
+  const second = listReport(reloaded, "different-report", 500, false, undefined, 3, 2);
+  expect(new Set(second.reportListings.map(listing => listing.id)).size).toBe(2);
+  expect(second.reportListings[0]).toEqual(listed.reportListings[0]);
+  expect(second.actionSequence).toBeGreaterThan(listed.actionSequence!);
+  expect(listReport(reloaded, "different-report", 500, false, undefined, 3, 2)).toEqual(second);
+});
+
+it("preserves existing long marketplace identities and rejects invalid counter states", () => {
+  const scout = createScout(CONFIG, new RNG("legacy-listing-identities"));
+  const original = initializeFinances(scout, "independent", "normal");
+  const first = listReport(original, "legacy-report", 500, false, undefined, 3, 2);
+  first.reportListings[0].id = "listing_legacy-report_s2w3_a1";
+  const second = listReport(first, "new-report", 500, false, undefined, 3, 2);
+  expect(second.reportListings[0]).toEqual(first.reportListings[0]);
+  for (const actionSequence of [NaN, Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER]) {
+    const invalid = { ...first, actionSequence };
+    expect(listReport(invalid, "new-report", 500, false, undefined, 3, 2)).toBe(invalid);
+  }
 });

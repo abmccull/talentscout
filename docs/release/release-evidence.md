@@ -59,6 +59,34 @@ $env:SOAK_CONCURRENCY = "3"
 npm run test:release-soak
 ```
 
+The runner uses a shared 64 MiB relay-output allowance per invocation. Set
+`SOAK_MAX_OUTPUT_BYTES` to a canonical positive safe integer to choose another
+allowance. Invalid text fails before Git/setup; the exact numeric value is
+recorded in the execution identity and changes its hash. Exceeding the allowance
+fails the run without admitting a partial output buffer. Evidence without a
+valid allowance is rejected. Matrix aggregation requires the same allowance for
+each originating invocation and propagates that value unchanged.
+
+The allowance covers relay markers and worker stdout/stderr. It does not reserve
+disk space or bound direct checkpoint/save writes or Node's uncaught-error
+output. Full career and capacity evidence remain required.
+
+Run the real-process output regression without starting game workers:
+
+```powershell
+$grantRoot = Join-Path 'C:\' ('ts-og-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $grantRoot | Out-Null
+$env:TALENTSCOUT_OUTPUT_GRANT_FIXTURE_ROOT = (Resolve-Path -LiteralPath $grantRoot).Path
+$env:TALENTSCOUT_OUTPUT_GRANT_EVIDENCE = Join-Path $grantRoot 'evidence'
+$env:TALENTSCOUT_OUTPUT_GRANT_MODE = 'candidate'
+npm.cmd run test:production-output-grant
+```
+
+The test retains raw evidence and disposable Git fixtures outside the checkout.
+Its evidence path must be absent with an existing parent; its fixture root must
+exist and be short on Windows. CI supplies both paths under `runner.temp` and
+uploads the actual success/failure artifacts.
+
 Each seed runs every canonical calendar week in its own process. The bounded
 worker pool only overlaps independent careers and writes results back in seed
 order. The generated summary is accepted only when it names the exact commit,
@@ -67,6 +95,41 @@ every final season boundary without skipping ordinary weeks, and reproduces
 seed one deterministically. The tracked gate remains
 `Unverified`; the checker computes an effective `Passed` status from this
 generated evidence, avoiding any post-commit policy edit.
+
+The release worker admits the fresh built-in England world before publishing
+progress. It verifies the original 20-league, 282-club topology and England's
+20/24/24/24 league sizes, then fixes the release calendar at 46 weeks per season.
+Every actual driver return must match the expected date, tick count, current
+fixtures and membership. A 30-season career must make exactly 1,380 canonical
+ticks and finish at season 31, week 1. The run records `reachedWeek` and the
+immutable `calendarAdmission` receipt alongside its existing evidence. These
+checks belong to the release worker; ordinary gameplay keeps its existing
+calendar authority for other season lengths.
+
+The runner, shard aggregator and release checker require the exact completion
+receipt on every successful run and actual replay. Each input shard must contain
+exactly one primary run. Successful source shards used by a timing exception
+receive the same calendar validation. A timing exception cannot waive calendar
+failures in a present ordinary artifact; the report remains failed.
+
+Run the bounded actual-worker fault regression with fresh external paths:
+
+```powershell
+$calendarRoot = Join-Path 'C:\' ('ts-cg-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $calendarRoot | Out-Null
+$env:TALENTSCOUT_CALENDAR_GUARD_FIXTURE_ROOT = (Resolve-Path -LiteralPath $calendarRoot).Path
+$env:TALENTSCOUT_CALENDAR_GUARD_EVIDENCE = Join-Path $calendarRoot 'evidence'
+$env:TALENTSCOUT_CALENDAR_GUARD_MODE = 'candidate'
+npm.cmd run test:calendar-worker-guard
+```
+
+The five cases exercise the real game start and weekly driver with test-only
+fault injection. They verify a healthy control and reject invalid dates,
+fixtures and membership before invalid progress can be published. Raw output,
+progress, test reports and error witnesses remain outside the checkout. CI
+uploads available evidence after success or failure. This regression verifies
+the publication guard; the full fresh 20-career campaign and seed-one replay
+remain required.
 
 Run the optional, non-gating chooser-profile matrix separately:
 

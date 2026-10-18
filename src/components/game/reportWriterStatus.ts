@@ -104,8 +104,8 @@ export function buildReportWriterStatus(
       addBlocker(blockers, {
         id: "opening-assessment-required",
         stepId: "assessment",
-        message: "Complete the five assessment decisions to file this first read.",
-        count: Math.max(1, input.openingDecisionCount ?? 5),
+        message: "Complete the six assessment decisions to file this first read.",
+        count: Math.max(1, input.openingDecisionCount ?? 6),
       });
     }
   } else if (input.mode === "youth") {

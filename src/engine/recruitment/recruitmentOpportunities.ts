@@ -1,3 +1,5 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import type { StoredPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type {
   ClubDecision,
   FinancialRecord,
@@ -76,7 +78,7 @@ export interface RecruitmentOpportunityState {
   scoutingCases?: Record<string, ScoutingCase>;
   reportDeliveries: Record<string, ReportDelivery>;
   clubDecisions?: Record<string, ClubDecision>;
-  playerMovementHistory?: PlayerMovementEvent[];
+  playerMovementHistory?: StoredPlayerMovementHistory;
   finances?: Pick<FinancialRecord, "reportListings">;
 }
 
@@ -294,7 +296,7 @@ export function deriveRecruitmentOpportunities(
 ): RecruitmentOpportunity[] {
   const listings = state.finances?.reportListings ?? [];
   const decisions = state.clubDecisions ?? {};
-  const movements = state.playerMovementHistory ?? [];
+  const movements = expandPlayerMovementHistory(state.playerMovementHistory ?? []);
   const fixtures = state.fixtures ?? {};
   const index = buildRecruitmentProjectionIndex(
     fixtures,

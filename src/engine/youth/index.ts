@@ -27,6 +27,7 @@ export {
   createAlumniRecord,
   processAlumniWeek,
   calculateLegacyScore,
+  calculateAlumniReputationBonus,
 } from "./alumni";
 
 // Tournament system — named, scheduled, discoverable youth events

@@ -16,6 +16,7 @@ const coreFiles = [
   "e2e/flows/world-history-comparison.spec.ts",
   "e2e/flows/future-roadmap.spec.ts",
   "e2e/flows/academy-placement-case.spec.ts",
+  "e2e/flows/placed-alumni-follow-up.spec.ts",
   "e2e/flows/observation-interactivity.spec.ts",
   "e2e/screens/rivals.spec.ts",
   "e2e/regression/achievement-toast-clickthrough.spec.ts",
@@ -24,6 +25,18 @@ const coreFiles = [
   "e2e/regression/weekly-worker-resilience.spec.ts",
   "e2e/regression/week-simulation-interactivity.spec.ts",
   "e2e/regression/quick-interaction-integrity.spec.ts",
+  "e2e/regression/weekly-worker-lifecycle.spec.ts",
+  "e2e/regression/ironman-terminal-lifecycle.spec.ts",
+  "e2e/regression/skipped-focus-recovery.spec.ts",
+  "e2e/flows/unfocused-opening-recovery.spec.ts",
+  "e2e/regression/watch-save-status.spec.ts",
+  "e2e/regression/canonical-career-facts.spec.ts",
+  "e2e/regression/loan-outcome-truth.spec.ts",
+  "e2e/regression/season-awards-truth.spec.ts",
+  "e2e/regression/screen-error-recovery.spec.ts",
+  "e2e/regression/observation-pitch-hit-targets.spec.ts",
+  "e2e/regression/observation-pitch-keyboard-reveal.spec.ts",
+  "e2e/regression/observation-halftime-controls.spec.ts",
 ];
 
 const groups = [

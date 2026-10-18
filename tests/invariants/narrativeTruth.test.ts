@@ -86,6 +86,20 @@ function gameState(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("narrative truth contracts", () => {
+  it.each([undefined, 0, -1, Number.NaN, 2])("does not present an unverified pulse as recorded accuracy (sample %s)", sampleSize => {
+    const state = gameState();
+    state.scout.performancePulses = [{ period: 5, season: 1, reportsSubmitted: 2,
+      reportQualityAvg: 70, accuracyRate: 50, accuracySampleSize: sampleSize,
+      signingSuccess: 0, fatigueAvg: 0, grade: "C", trend: "stable" }];
+    const signal = getNarrativeCallbackSignals(state).find(candidate => candidate.evidence.source === "performance-pulse");
+    expect(signal).toBeDefined();
+    if (sampleSize === 2) expect(signal!.summary).toContain("50% recorded accuracy");
+    else {
+      expect(signal!.summary).toContain("awaiting verified assessments");
+      expect(signal!.summary).not.toContain("50% recorded accuracy");
+    }
+  });
+
   it("requires an authoritative contract for every material factual story type", () => {
     expect(Object.keys(FACTUAL_NARRATIVE_TRUTH_CONTRACTS).sort()).toEqual(
       [...MATERIAL_FACTUAL_NARRATIVE_TYPES].sort(),
@@ -244,6 +258,7 @@ describe("narrative truth contracts", () => {
         playerId: "player-1",
         milestones: [{
           type: "firstTeamDebut",
+          sourceId: "fixture-s1-w19-player-1-debut",
           week: 19,
           season: 1,
           description: "Senior debut",
@@ -449,6 +464,39 @@ describe("narrative truth contracts", () => {
     expect(direct?.choices).toBeUndefined();
     expect(weekly.event).toEqual(direct);
     expect(direct?.description).toContain("formal review is complete");
+  });
+
+  it("keeps the sixteen-week callback boundary correct in an aged variable-season career", () => {
+    const base = gameState();
+    const state = gameState({
+      currentSeason: 20,
+      currentWeek: 10,
+      fixtures: {
+        final: { id: "final", season: 19, week: 46 } as GameState["fixtures"][string],
+      },
+      scout: {
+        ...base.scout,
+        performancePulses: Array.from({ length: 20 * 12 }, (_, index) => ({
+          season: Math.floor(index / 12) + 1, period: index % 12 + 1,
+          reportsSubmitted: 1, reportQualityAvg: 70, accuracyRate: 70,
+          signingSuccess: 0, fatigueAvg: 10, grade: "B", trend: "stable",
+        })),
+      },
+    });
+    const recentIds = (candidate: GameState) => getNarrativeCallbackSignals(candidate)
+      .filter(signal => signal.domain === "career")
+      .map(signal => signal.evidence.sourceId).sort();
+    expect(recentIds(state)).toEqual([
+      "scout-1:s19:p10", "scout-1:s19:p11", "scout-1:s19:p12",
+      "scout-1:s20:p1", "scout-1:s20:p2",
+    ]);
+    // A changed fixture calendar must be used on the next invocation. Earlier
+    // history and future reviews stay excluded; the stored records stay intact.
+    expect(recentIds({ ...state, fixtures: {
+      final: { ...state.fixtures.final, week: 52 },
+    } })).toEqual(["scout-1:s19:p12", "scout-1:s20:p1", "scout-1:s20:p2"]);
+    expect(state.scout.performancePulses).toHaveLength(240);
+    expect(state.fixtures.final.week).toBe(46);
   });
 
   it("does not fabricate, repeat, or flood quiet callbacks", () => {

@@ -37,7 +37,7 @@ export const ObservationPitch = memo(function ObservationPitch({
   const focusActive = markers.some((marker) => marker.isFocused);
   const venue = session.venueAtmosphere?.venueType === "schoolMatch"
     ? "School ground"
-    : session.venueAtmosphere?.venueType?.replace(/([A-Z])/g, " $1").trim() || "Touchline";
+    : session.venueAtmosphere?.venueType === "trainingVisit" ? "Training ground" : session.venueAtmosphere?.venueType?.replace(/([A-Z])/g, " $1").trim() || "Touchline";
 
   const handleMarkerKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -48,7 +48,7 @@ export const ObservationPitch = memo(function ObservationPitch({
     onSelectPlayer(markers[nextIndex].playerId);
     const nextControl = controlsRef.current?.querySelectorAll<HTMLButtonElement>("[data-observation-pitch-marker]")[nextIndex];
     nextControl?.focus({ preventScroll: true });
-    nextControl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    nextControl?.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
   };
 
   return (
@@ -83,18 +83,23 @@ export const ObservationPitch = memo(function ObservationPitch({
           <h3 className="dossier-eyebrow text-zinc-300">Players in view</h3>
           <span className="hidden text-xs text-zinc-400 sm:block">Select a player to direct your attention</span>
         </div>
-        <ul className="flex snap-x gap-3 overflow-x-auto pb-2 sm:gap-4" aria-label="Players on the observation pitch">
+        <ul className="flex snap-x scroll-p-2 gap-3 overflow-x-auto p-2 sm:gap-4" aria-label="Players on the observation pitch">
           {markers.map((marker, index) => {
             const isSelected = marker.playerId === selectedPlayerId;
             return (
               <li key={marker.playerId} className="w-[176px] shrink-0 snap-start sm:w-[136px]">
                 <button
-                  type="button" data-observation-pitch-marker onClick={() => onSelectPlayer(marker.playerId)} onKeyDown={(event) => handleMarkerKeyDown(event, index)}
+                  type="button" data-observation-pitch-marker
+                  onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) event.currentTarget.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }); }}
+                  onClick={(event) => {
+                    onSelectPlayer(marker.playerId);
+                    event.currentTarget.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+                  }} onKeyDown={(event) => handleMarkerKeyDown(event, index)}
                   aria-label={`Track ${markerLabel(marker)}`} aria-pressed={isSelected} tabIndex={isSelected || (!selectedMarker && index === 0) ? 0 : -1}
-                  className="group flex w-full items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--surface)] sm:block"
+                  className="group scroll-mx-2 scroll-mt-16 scroll-mb-28 flex w-full items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--surface)] sm:block"
                 >
                   <span className={`relative block h-16 w-16 shrink-0 overflow-hidden border-b-[3px] bg-[var(--background)] transition-opacity duration-200 motion-reduce:transition-none sm:mb-2 sm:aspect-[4/3] sm:h-auto sm:w-full ${isSelected ? "border-[var(--primary)]" : "border-transparent"} ${focusActive && !marker.isFocused && !isSelected ? "opacity-65 group-hover:opacity-100 group-focus-visible:opacity-100" : "opacity-100"}`}>
-                    <YouthPortraitWithFallback playerId={marker.playerId} size={96} alt={marker.name} className="h-full w-full rounded-none object-cover object-top ring-0 ring-offset-0" />
+                    <YouthPortraitWithFallback playerId={marker.playerId} size={96} alt="" className="h-full w-full rounded-none object-cover object-top ring-0 ring-offset-0" />
                     {marker.isFocused && <span className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/80 px-2 py-1 text-xs font-semibold text-white"><Eye size={12} aria-hidden="true" /> Focus</span>}
                     {marker.isStandout && <span className="absolute right-2 top-2 h-2 w-2 bg-[var(--signal-moment)]" aria-hidden="true" />}
                   </span>

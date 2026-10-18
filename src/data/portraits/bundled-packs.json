@@ -1,0 +1,5 @@
+[
+  { "file": "documentary-v1.json", "allocationPriority": 0 },
+  { "file": "humgen-v1.json", "allocationPriority": 100 },
+  { "file": "humgen-v2-curated.json", "allocationPriority": 100 }
+]

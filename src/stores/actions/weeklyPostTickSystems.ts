@@ -1,5 +1,5 @@
 import type { GameState, InboxMessage } from "@/engine/core/types";
-import { getSeasonLength, type TickResult } from "@/engine/core/gameLoop";
+import { getSeasonLength } from "@/engine/core/gameLoop";
 import { isFinancialPeriodClose } from "@/engine/core/annualization";
 import { createRNG } from "@/engine/rng";
 import { processMonthlySnapshot } from "@/engine/career";
@@ -21,12 +21,12 @@ import {
 import { createConsequenceEngineState } from "@/engine/consequences";
 import { processMonthlyCredit } from "@/engine/finance/creditScore";
 import { processDistress } from "@/engine/finance/distress";
-import { projectWeeklyProspectFollowUps } from "@/engine/youth/prospectFollowUps";
+import { applyWeeklyProspectFollowUps } from "@/engine/youth/prospectFollowUps";
+import { applyPlacementSupportCommitments } from "@/engine/youth/placementSupport";
 
 export interface WeeklyPostTickSystemsInput {
   beforeWeek: GameState;
   state: GameState;
-  alumniMilestones: TickResult["alumniMilestones"];
 }
 
 /** Build post-tick feedback and apply weekly career-health consequences. */
@@ -35,19 +35,8 @@ export function processWeeklyPostTickSystems(
 ): GameState {
   let state = input.state;
 
-  const prospectFollowUps = projectWeeklyProspectFollowUps(state);
-  if (prospectFollowUps.length > 0) {
-    state = {
-      ...state,
-      inbox: [
-        ...state.inbox,
-        ...prospectFollowUps.map((beat) => beat.message),
-      ],
-    };
-  }
-
-  // gameLoop already emits and applies the authoritative alumni messages.
-  // Do not reconstruct them here (which duplicated both tick and reload feedback).
+  state = applyPlacementSupportCommitments(state);
+  state = applyWeeklyProspectFollowUps(state);
 
   const decayWarnings: InboxMessage[] = [];
   for (const [contactId, contact] of Object.entries(state.contacts)) {

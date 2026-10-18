@@ -1,3 +1,4 @@
+import { matchFormRating } from "@/engine/players/matchFormArchive";
 /**
  * Achievement definitions and check logic for TalentScout.
  *
@@ -468,7 +469,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
         const ratings = player.recentMatchRatings ?? [];
         if (ratings.length === 0) continue;
         const avg =
-          ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
+          ratings.reduce((sum, r) => sum + matchFormRating(r), 0) / ratings.length;
         if (avg >= 7) highPerformers++;
       }
       return highPerformers >= 5;

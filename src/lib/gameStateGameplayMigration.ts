@@ -1,4 +1,7 @@
 import { canResolveSeasonEvent } from "@/engine/core/seasonEventEffects";
+import { migratePlayerChronology } from "./migrations/playerChronology";
+import { assertStoredHistoryArchives } from "./storedHistoryValidation";
+import { assertStoredFinancialArchives } from "./storedFinancialValidation";
 import { migrateVisualIdentities } from "@/engine/players/portraits/state";
 import type {
   ActionableGossipItem,
@@ -66,6 +69,13 @@ import {
 } from "@/engine/career/chronology";
 import { createCareerMomentState } from "@/engine/career/careerMoments";
 import { migrateStructuredScoutingEvidence } from "@/engine/scout/evidenceMigration";
+import {
+  assertProspectFollowUpDeliveryAuthority,
+  InvalidProspectFollowUpDeliveryError,
+  reconcileProspectFollowUpDeliveries,
+} from "@/engine/youth/prospectFollowUpDelivery";
+import { SaveMigrationError } from "@/lib/saveEnvelope";
+import { assertPlayerStateArchives, InvalidPlayerStateArchiveError } from "@/engine/players/playerStateArchive";
 
 type LegacyContactInteraction = Omit<ContactInteraction, "occurredAt"> & {
   occurredAt?: GameDate;
@@ -794,6 +804,7 @@ function migrateLegacyEmployeeReports(state: GameState): void {
       reportIds.length === 0
       && scoutingCase.deliveryIds.length === 0
       && scoutingCase.placementReportIds.length === 0
+      && (scoutingCase.prospectFollowUpDeliveries?.length ?? 0) === 0
     ) {
       delete state.scoutingCases[caseId];
       continue;
@@ -851,7 +862,25 @@ function migrateScoutEmploymentContract(state: GameState): void {
  * The caller has already cloned and validated the state.
  */
 export function applyGameplaySaveMigrations(state: GameState): GameState {
-  normalizeRequiredStateShape(state);
+  // Validate before employee-report cleanup can delete a legacy case. Preserve
+  // which authorities were already initialized before report reconstruction.
+  const initializedDeliveryCases = new Set<string>();
+  try {
+    assertStoredHistoryArchives(state);
+    assertPlayerStateArchives(state);
+    assertStoredFinancialArchives(state);
+    normalizeRequiredStateShape(state);
+    for (const [key, scoutingCase] of Object.entries(state.scoutingCases ?? {})) {
+      assertProspectFollowUpDeliveryAuthority(scoutingCase);
+      if (scoutingCase.prospectFollowUpDeliveries !== undefined) initializedDeliveryCases.add(key);
+    }
+  } catch (error) {
+    if (error instanceof InvalidProspectFollowUpDeliveryError || error instanceof InvalidPlayerStateArchiveError) {
+      throw new SaveMigrationError("CORRUPT_SAVE", error.message);
+    }
+    throw error;
+  }
+  state = migratePlayerChronology(state);
   migrateScoutEmploymentContract(state);
   if (state.finances && !state.finances.equipment) {
     state.finances.equipment = migrateEquipmentLevel(state.finances.equipmentLevel);
@@ -900,6 +929,9 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
 
   state.disciplinaryRecords ??= {};
   migrateScoutingCases(state);
+  const legacyDeliveryCases = new Set(Object.keys(state.scoutingCases)
+    .filter(key => !initializedDeliveryCases.has(key)));
+  state.scoutingCases = reconcileProspectFollowUpDeliveries(state, undefined, legacyDeliveryCases);
   state.clubPhilosophyTransitionState = migrateClubPhilosophyTransitionState(
     state.clubPhilosophyTransitionState,
     state.currentSeason,
@@ -1023,8 +1055,6 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
     && !(compacted.completedInteractiveSessions ?? []).includes(completionId ?? "")
       ? serializedSession
       : null;
-  // Persistence validates identities and keeps bindings; only live domain
-  // boundaries allocate photographs, so a detached save cannot own new faces.
   return migrateVisualIdentities({
     ...compacted,
     activeObservationSession: resumableSession,

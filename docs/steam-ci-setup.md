@@ -2,14 +2,21 @@
 
 TalentScout uses a two-stage release flow:
 
-1. Push a `v*` tag to create an exact candidate packaging run.
-2. Certify that exact run externally, then manually promote it.
+1. Dispatch `Package Accepted Candidate` manually from the protected
+   `release/youth-ea-rc2` control branch with the exact candidate commit SHA,
+   tree SHA, intended semver label, and accepted source workflow run ID.
+2. Complete independent certification against that exact package run, then
+   dispatch `Certify and Promote Existing Candidate` with the original run ID,
+   certification ref, and explicit publication choices.
 
-Pushing a `v*` tag does not upload Steam depots and does not create a GitHub
-release. The tag only produces candidate artifacts bound to the exact source
-tag, commit SHA, source tree, package manifest, and workflow run ID. Valve
-redistributables are proprietary, so CI provisions verified binaries from
-encrypted GitHub Secrets instead of committing them.
+Do not manually push a `v*` tag to construct an accepted candidate. Candidate
+packaging does not create a tag, publish a GitHub release, or upload Steam
+depots. Only after certification passes does the promotion workflow bind the
+lightweight tag. Keep the candidate SHA, source tree, intended label, original
+source/package run IDs, and package manifest hash together. See
+[release certification](release/release-certification.md) for the authoritative
+sequence. Valve redistributables are proprietary, so CI provisions verified
+binaries through encrypted GitHub Secrets instead of committing them.
 
 ## Required Secrets
 
@@ -29,10 +36,10 @@ encrypted GitHub Secrets instead of committing them.
 | `APPLE_ID` / `APPLE_ID_PASSWORD` / `APPLE_TEAM_ID` | Apple notarization credentials |
 
 Candidate runs intended for signed promotion fail closed if a redistributable,
-its checksum, or required signing credentials are absent. Verification-only
-workflow runs may omit Steam SDK or signing secrets, but those artifacts are
-explicitly non-Steam and non-production. They are useful for testing only and
-must never be treated as promotion-eligible packages.
+its checksum, or required signing credentials are absent. A verification-only
+accepted-candidate dispatch may omit Steam SDK or signing secrets because it
+skips the native package jobs. Its source/test evidence is useful for validation
+but does not create promotion-eligible packages.
 
 Publish each redistributable to access-controlled object storage or a private
 release, then record its checksum:
@@ -92,8 +99,8 @@ control branch:
    migration, production-static Youth EA, smoke, accessibility, and
    candidate-bound checks. It does not rerun the 20 x 30 long-career soak.
 2. For a production package run, three platform jobs provision and verify SDK
-   files, then build packages. If
-   signing secrets are present, the candidate packages are production-signed.
+   files, enforce the required signing/notarization credentials, and build the
+   production package set.
    A verification-only dispatch skips those package jobs and cannot be
    promoted.
 3. Each unpacked build is uploaded as a GitHub Actions artifact

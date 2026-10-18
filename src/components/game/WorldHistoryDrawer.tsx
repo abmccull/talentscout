@@ -17,6 +17,7 @@ import type {
   WorldSeasonHistory,
 } from "@/engine/world/worldHistory";
 import { WorldHistoryComparison } from "@/components/game/WorldHistoryComparison";
+import { expandClubSeasonHistory } from "@/engine/world/clubSeasonArchive";
 
 interface WorldHistoryDrawerProps {
   history?: WorldHistoryState;
@@ -65,8 +66,9 @@ function buildSeasonStory(
   season: WorldSeasonHistory,
   leagues: Record<string, League>,
 ): SeasonStory {
+  const clubs = season.clubs.map(expandClubSeasonHistory);
   const champions = season.leagues.flatMap((league) => {
-    const winner = season.clubs.find((club) =>
+    const winner = clubs.find((club) =>
       club.leagueId === league.leagueId && club.standing?.position === 1,
     );
     return winner
@@ -83,8 +85,8 @@ function buildSeasonStory(
     .slice(0, 5);
   return {
     champions,
-    promoted: season.clubs.filter((club) => club.leagueMovement === "promoted"),
-    relegated: season.clubs.filter((club) => club.leagueMovement === "relegated"),
+    promoted: clubs.filter((club) => club.leagueMovement === "promoted"),
+    relegated: clubs.filter((club) => club.leagueMovement === "relegated"),
     performers,
   };
 }

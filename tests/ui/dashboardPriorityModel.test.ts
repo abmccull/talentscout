@@ -63,10 +63,66 @@ function createBaseState(): GameState {
   } as unknown as GameState;
 }
 
+it("replaces an older private evidence prompt with the latest supported monitoring question", () => {
+  const state = createBaseState();
+  state.scout.careerPath = "independent";
+  for (const [id, week, supported] of [["old", 1, false], ["new", 4, true]] as const) {
+    state.reports[id] = { id, scoutId: "scout-1", playerId: "player-1", recommendedAction: "monitor",
+      submittedWeek: week, submittedSeason: 1, evidenceAssessment: {
+        claims: supported ? [{ support: "supported" }] : [],
+        nextTest: { description: supported ? "Test the marking concern against faster opposition." : "Old question." },
+      } } as ScoutReport;
+    state.scoutingCases[id] = { id, scoutId: "scout-1", playerId: "player-1", status: "reported",
+      activeReportId: id, reportIds: [id], deliveryIds: [], decisionIds: [] } as unknown as ScoutingCase;
+  }
+  const candidates = buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 });
+  expect(candidates.some((item) => item.id === "dashboard-report-evidence-old")).toBe(false);
+  expect(candidates.find((item) => item.id === "dashboard-report-monitor-new")).toMatchObject({
+    title: "Test the next question on Milo Hart",
+    consequence: "Test the marking concern against faster opposition.",
+    actionTarget: { screen: "playerProfile", playerId: "player-1" },
+  });
+  expect(Object.keys(state.scoutingCases)).toEqual(["old", "new"]);
+});
+
 describe("dashboardPriorityModel", () => {
-  it("does not allow a due-now critical planner gap to be snoozed past its deadline", () => {
+  it("respects a private initial read while retaining formal report delivery obligations", () => {
+    const state = createBaseState();
+    state.reports["report-private"] = {
+      id: "report-private", playerId: "player-1", scoutId: "scout-1",
+      evidenceAssessment: { kind: "initial", recommendation: "monitor", claims: [{ support: "supported" }] },
+    } as ScoutReport;
+    state.scoutingCases["case-private"] = {
+      id: "case-private", playerId: "player-1", scoutId: "scout-1",
+      status: "reported", activeReportId: "report-private", reportIds: ["report-private"],
+      deliveryIds: [], listingIds: [], decisionIds: [], placementReportIds: [],
+      openedWeek: 4, openedSeason: 1, lastUpdatedWeek: 4, lastUpdatedSeason: 1,
+    };
+    const delivery = () => buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 })
+      .find((candidate) => candidate.id === "dashboard-report-delivery-case-private");
+    expect(delivery()).toBeUndefined();
+    state.reports["report-private"].evidenceAssessment!.kind = "formal";
+    expect(delivery()).toBeDefined();
+    for (const claims of [[], [{ support: "noConclusion" }], [{ support: "stretch" }]]) {
+      state.reports["report-private"].evidenceAssessment!.claims = claims as NonNullable<ScoutReport["evidenceAssessment"]>["claims"];
+      const candidates = buildDashboardPriorityCandidates({
+        gameState: state, maxItems: 20, pendingListingReportId: "report-private",
+      });
+      expect(candidates.some((candidate) => candidate.id === "dashboard-report-delivery-case-private")).toBe(false);
+      expect(candidates.some((candidate) => candidate.id === "dashboard-pending-listing-report-private")).toBe(false);
+      expect(candidates.find((candidate) => candidate.id === "dashboard-report-evidence-case-private")).toMatchObject({
+        actionTarget: { screen: "playerProfile", playerId: "player-1" },
+        mustResolveBeforeAdvance: false,
+      });
+    }
+  });
+
+  it("allows optional planner space to be snoozed without inventing an advance blocker", () => {
     const state = createBaseState();
     const plannerId = "dashboard-planner-gap-s1w4";
+    const planner = buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 })
+      .find((candidate) => candidate.id === plannerId);
+    expect(planner).toMatchObject({ category: "opportunity", mustResolveBeforeAdvance: false });
     state.dashboardState = {
       version: 1,
       focusedItemId: null,
@@ -90,7 +146,7 @@ describe("dashboardPriorityModel", () => {
     };
 
     expect(buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 })
-      .some((candidate) => candidate.id === plannerId)).toBe(true);
+      .some((candidate) => candidate.id === plannerId)).toBe(false);
 
     state.currentWeek = 5;
     state.schedule = createWeekSchedule(5, 1);
@@ -924,6 +980,30 @@ describe("dashboardPriorityModel", () => {
       candidate.canonicalKey === "rival-market:player-3"
       && candidate.actionTarget.screen === "playerProfile"
     )).toBe(true);
+
+    state.currentWeek = 5;
+    expect(buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 }).some((candidate) =>
+      candidate.canonicalKey === "rival-opportunity:opp-1")).toBe(true);
+    state.currentWeek = 6;
+    expect(buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 }).some((candidate) =>
+      candidate.canonicalKey === "rival-opportunity:opp-1")).toBe(false);
+    expect(state.rivalOrganizationState.opportunities["opp-1"].status).toBe("open");
+  });
+
+  it("does not demand a rival response after its dated window closes in a restored save", () => {
+    const state = createBaseState();
+    state.rivalOrganizationState.campaignState.campaigns = {
+      response: { id: "response", status: "active", phase: "response", target: { label: "Milo" },
+        visibleSignals: [], responseDueAt: { season: 1, week: 4 } },
+    } as never;
+    const hasResponse = () => buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 })
+      .some((candidate) => candidate.canonicalKey === "rival-campaign:response");
+    expect(hasResponse()).toBe(true);
+    state.currentWeek = 5;
+    expect(hasResponse()).toBe(false);
+    state.currentWeek = 1;
+    state.currentSeason = 2;
+    expect(hasResponse()).toBe(false);
   });
 
   it("suppresses rival player-pressure cards for hidden rival targets outside the scout sphere", () => {
@@ -974,6 +1054,27 @@ describe("dashboardPriorityModel", () => {
 
     expect(candidates.some((candidate) => candidate.canonicalKey === "rival-market:player-3")).toBe(true);
     expect(candidates.some((candidate) => candidate.canonicalKey === "rival-market:player-2")).toBe(false);
+  });
+
+  it("uses the authored decision title and stakes while preserving the authoritative action", () => {
+    const state = createBaseState();
+    state.consequenceState.decisions = {
+      choice: { id: "choice", source: { kind: "worldConditionArc", id: "arc-1" },
+        offeredAt: { season: 1, week: 4 }, deadlineAt: { season: 1, week: 5 },
+        status: "offered", visibility: "public", stakeholders: [],
+        options: [{ id: "independent", label: "Stay independent", knownTradeoffs: [], immediateEffects: [], scheduledConsequences: [] }],
+        outcomeRoll: 0.2, consequenceIds: [],
+        metadata: { title: "Choose your route into the academy circuit", premise: "Access is narrowing as agencies consolidate." },
+      },
+    };
+    const read = () => buildDashboardPriorityCandidates({ gameState: state, maxItems: 20 })
+      .find((item) => item.canonicalKey === "decision:choice");
+    expect(read()).toMatchObject({ title: "Choose your route into the academy circuit",
+      explanation: "Access is narrowing as agencies consolidate.", deadlineWeek: 5,
+      actionTarget: { screen: "inbox", decisionId: "choice", relatedId: "arc-1" } });
+    state.consequenceState.decisions.choice.metadata = { title: " ", premise: " " };
+    expect(read()?.title).toBe("Decision waiting: World Condition Arc");
+    expect(read()?.explanation).toContain("Stay independent");
   });
 
   it("links inbox action items to offered decisions by either decision id or source id", () => {

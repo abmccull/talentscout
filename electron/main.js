@@ -927,26 +927,28 @@ handleTrustedIpc("dialog:abortSaveFileTransfer", (event, transferId) => {
 
 handleTrustedIpc("dialog:beginOpenFileTransfer", async (event) => {
   if (!mainWindow) return null;
-
-  const result = await dialog.showOpenDialog(mainWindow, {
-    defaultPath: getDialogBaseDirectory(),
-    properties: ["openFile"],
-    filters: [
-      { name: "JSON Save Files", extensions: ["json"] },
-      { name: "All Files", extensions: ["*"] },
-    ],
-  });
-
-  if (result.canceled || result.filePaths.length === 0) return null;
-
+  const ownerId = event.sender.id;
+  const dialogWindow = mainWindow;
   try {
-    const selectedPath = result.filePaths[0];
-    const payload = await readBoundedUtf8Buffer(selectedPath, MAX_FILE_BYTES);
-    const transfer = dialogSaveDownloads.begin({
-      ownerId: event.sender.id,
+    let selectedPath;
+    const transfer = await dialogSaveDownloads.beginRead({
+      ownerId,
       slot: "dialog-import",
-      payload,
+      readPayload: async (isActive) => {
+        const result = await dialog.showOpenDialog(dialogWindow, {
+          defaultPath: getDialogBaseDirectory(),
+          properties: ["openFile"],
+          filters: [
+            { name: "JSON Save Files", extensions: ["json"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+        });
+        if (!isActive() || result.canceled || result.filePaths.length === 0) return null;
+        selectedPath = result.filePaths[0];
+        return await readBoundedUtf8Buffer(selectedPath, MAX_FILE_BYTES);
+      },
     });
+    if (!transfer) return null;
     rememberDialogDirectory(selectedPath);
     console.log("[IPC] dialog save import opened:", selectedPath);
     return transfer;

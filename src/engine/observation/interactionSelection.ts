@@ -87,10 +87,13 @@ export function resolveDialogueOptionSelection(
     nodeId,
     optionId,
     optionText: option.text,
+    promptText: node.text,
     narrativeText: option.outcome.narrativeText,
     insightPointsAwarded,
     relationshipDeltaApplied,
     sourceContactId: session.sourceContactId,
+    sourceName: session.sourceContactName?.trim() || option.outcome.inquiry?.sourceName,
+    ...(option.outcome.inquiry ? { inquiry: { ...option.outcome.inquiry } } : {}),
   };
   const updatedPhase: SessionPhase = {
     ...phase,

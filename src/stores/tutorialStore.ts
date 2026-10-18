@@ -396,9 +396,23 @@ function nextMilestone(
   kind: GuidedSessionKind,
 ): GuidedMilestoneId | null {
   for (const m of milestoneOrder(kind)) {
+    // Observation is irreversible after reflection commits. A skipped teaching
+    // action remains false (it was not performed), but cannot be the next task.
+    if (isUnavailableOpeningMilestone(m, milestones, kind)) continue;
     if (!milestones[m]) return m;
   }
   return null;
+}
+
+export function isUnavailableOpeningMilestone(
+  id: GuidedMilestoneId,
+  milestones: Record<GuidedMilestoneId, boolean>,
+  kind: GuidedSessionKind,
+): boolean {
+  return kind === "discoveryHook"
+    && milestones.completedMatch
+    && !milestones[id]
+    && (id === "attendedMatch" || id === "focusedPlayer" || id === "flaggedBreakthrough");
 }
 
 /** Persist all tutorial state in one write. */
@@ -688,13 +702,18 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     if (
       gameState.scout.primarySpecialization !== "youth"
       || gameState.veteranPrologue
+      || gameState.guidedSessionRequested === false
       || !opening
-      || opening.stage !== "observation"
-      || !session
+      || tutorial.guidedSessionKind !== "discoveryHook"
+      || (tutorial.guidedSessionCareerId !== null
+        && tutorial.guidedSessionCareerId !== gameState.scout.id)
+    ) return false;
+
+    if (opening.stage === "observation" && (
+      !session
       || !isOpeningDiscoverySession(session)
       || session.activityInstanceId !== opening.id
-      || tutorial.guidedSessionKind !== "discoveryHook"
-    ) return false;
+    )) return false;
 
     // Profile completion and dismissal are monotonic. Replay is permitted only
     // by the existing transient override, never inferred from a saved career.
@@ -703,6 +722,43 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
         && (tutorial.dismissed || tutorial.guidedSessionCompleted))
       || (!tutorial.guidedSessionActive && tutorial.currentGuidedTask === null)
     ) return true;
+
+    if (opening.stage !== "observation") {
+      // The career checkpoint is authoritative when local tutorial storage is
+      // stale or belongs to a later checkpoint. Never manufacture focus or flags.
+      const filedReport = opening.stage === "complete";
+      const advancedWeek = filedReport && (
+        gameState.currentSeason > opening.startedSeason
+        || (gameState.currentSeason === opening.startedSeason
+          && gameState.currentWeek > opening.startedWeek)
+      );
+      const milestones = {
+        ...tutorial.guidedMilestones,
+        attendedMatch: true,
+        completedMatch: true,
+        resolvedOpeningDiscovery: opening.stage !== "decision",
+        wroteReport: filedReport,
+        submittedReport: filedReport,
+        advancedWeek,
+      };
+      const next = nextMilestone(milestones, "discoveryHook");
+      const allDone = next === null;
+      if (tutorial.currentGuidedTask === next
+        && tutorial.guidedSessionActive === !allDone
+        && DISCOVERY_HOOK_MILESTONE_ORDER.every((id) => tutorial.guidedMilestones[id] === milestones[id])) return true;
+      set({
+        guidedMilestones: milestones,
+        currentGuidedTask: next,
+        guidedSessionActive: !allDone,
+        guidedSessionForcedReplay: allDone ? false : tutorial.guidedSessionForcedReplay,
+        guidedSessionCompleted: allDone || tutorial.guidedSessionCompleted,
+      });
+      persistAll(get());
+      return true;
+    }
+
+    // Validated above for the observation stage.
+    if (!session) return false;
 
     // Tutorial localStorage can be newer than the career checkpoint. Rebuild
     // this opening's progress from saved evidence before showing its next task.

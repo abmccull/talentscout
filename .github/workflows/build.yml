@@ -14,7 +14,7 @@ on:
         default: "false"
         type: boolean
       run_release_soak:
-        description: "Run the exact-candidate 20x30 soak without publishing"
+        description: "Run diagnostic 20-seed c1 shards; canonical c3 requires canonical-release-soak.yml"
         required: false
         default: "false"
         type: boolean
@@ -64,6 +64,9 @@ jobs:
             exit 1
           fi
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
 
       - name: Dependency vulnerability audit
@@ -85,6 +88,12 @@ jobs:
 
       - name: Unit and migration tests
         run: npm run test:unit
+
+      - name: Accepted-source soak staging contract
+        run: npm run test:accepted-soak-staging
+
+      - name: Windows installer input contract
+        run: npm run test:windows-installer-inputs
 
       - name: Critical simulation and persistence coverage gate
         run: npm run test:coverage:critical
@@ -155,11 +164,11 @@ jobs:
           retention-days: 14
 
   # ------------------------------------------------------------------
-  # Exact-candidate 20 x 30 long-career gate. Isolated seed processes run
-  # concurrently, but the aggregate remains deterministically seed-ordered.
+  # Diagnostic 20 x 30 long-career shards. These independent c1 jobs do not
+  # certify the required fresh c3 campaign; use canonical-release-soak.yml.
   # ------------------------------------------------------------------
   release-soak:
-    name: Exact candidate seed ${{ matrix.seed }} x 30 seasons
+    name: Diagnostic seed ${{ matrix.seed }} x 30 seasons (c1)
     needs: quality
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.run_release_soak == true)
     runs-on: ubuntu-latest
@@ -176,6 +185,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
 
       - name: Run isolated seed through 30 canonical seasons
@@ -184,6 +196,7 @@ jobs:
           SOAK_SEED_START: ${{ matrix.seed }}
           SOAK_SEASONS: "30"
           SOAK_CONCURRENCY: "1"
+          SOAK_RESUME: "false"
           SOAK_SKIP_DETERMINISM_REPLAY: ${{ matrix.seed != 1 }}
           SOAK_MAX_SINGLE_BATCH_CPU_MS: "45000"
           SOAK_MAX_SINGLE_BATCH_WALL_MS: "60000"
@@ -194,11 +207,11 @@ jobs:
           SOAK_WORKER_DIRECTORY: artifacts/release/generated/long-career-workers-seed-${{ matrix.seed }}
         run: npm run test:release-soak
 
-      - name: Upload exact-candidate seed evidence
+      - name: Upload diagnostic seed evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-soak-shard-${{ matrix.seed }}
+          name: diagnostic-soak-shard-${{ matrix.seed }}
           path: |
             artifacts/release/generated/long-career-shards/long-career-release-summary-seed-${{ matrix.seed }}.json
             artifacts/release/generated/long-career-workers-seed-${{ matrix.seed }}/*-failure.json
@@ -206,7 +219,7 @@ jobs:
           retention-days: 30
 
   release-soak-aggregate:
-    name: Aggregate exact candidate 20x30 soak
+    name: Aggregate diagnostic 20x30 shards (not canonical c3)
     needs: release-soak
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.run_release_soak == true)
     runs-on: ubuntu-latest
@@ -221,21 +234,21 @@ jobs:
       - name: Download every seed shard
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: release-soak-shard-*
+          pattern: diagnostic-soak-shard-*
           path: artifacts/release/generated/long-career-shards
           merge-multiple: true
 
-      - name: Aggregate and verify candidate-bound soak evidence
+      - name: Aggregate diagnostic candidate-bound shards
         env:
           SOAK_SEEDS: "20"
           SOAK_SEASONS: "30"
           SOAK_SHARD_DIRECTORY: artifacts/release/generated/long-career-shards
         run: node scripts/aggregate-release-soak-shards.mjs
 
-      - name: Upload exact-candidate soak evidence
+      - name: Upload diagnostic sharded evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-soak-evidence
+          name: diagnostic-sharded-soak-evidence
           path: artifacts/release/generated/long-career-release-summary.json
           if-no-files-found: error
           retention-days: 30
@@ -255,6 +268,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
 
       - run: npm ci
 
@@ -339,6 +355,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
 
       - run: npm ci
 
@@ -441,6 +460,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
 
       - name: Provision verified Steamworks redistributable
@@ -498,10 +520,10 @@ jobs:
           pattern: "*-build"
           path: release-artifacts
 
-      - name: Download exact-candidate soak evidence
+      - name: Download diagnostic sharded evidence (full release remains blocked)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release-soak-evidence
+          name: diagnostic-sharded-soak-evidence
           path: artifacts/release/generated
 
       - name: Download exact-candidate core-suite evidence

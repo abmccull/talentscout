@@ -51,6 +51,7 @@ beforeEach(() => {
     guidedSessionCompleted: false,
     guidedSessionForcedReplay: false,
     guidedSessionKind: "discoveryHook",
+    guidedSessionCareerId: "scout-1",
     guidedSessionActive: false,
     currentGuidedTask: "completedMatch",
     guidedMilestones: { ...milestones, viewedDashboard: true },
@@ -96,8 +97,8 @@ describe("opening observation guide resume", () => {
     expect(useTutorialStore.getState().currentGuidedTask).toBe("flaggedBreakthrough");
   });
 
-  it.each([flaggedMoment("other-player")])(
-    "requires evidence from the opening prospect", (flag) => {
+  it.each([flaggedMoment("other-player"), { ...flaggedMoment(), phaseIndex: 2 }])(
+    "requires already observed evidence from the opening prospect", (flag) => {
       useTutorialStore.getState().reconcileOpeningObservationProgress(checkpoint({
         state: "active", currentPhaseIndex: 1, players: [focusedPlayer()], flaggedMoments: [flag],
       }));
@@ -105,12 +106,13 @@ describe("opening observation guide resume", () => {
     },
   );
 
-  it("resumes an ordinary lead concern as recorded evidence without requiring a standout", () => {
+  it.each(["promising", "concerning", "interesting"] as const)("resumes an ordinary lead flag (%s) without demanding a standout", (reaction) => {
     useTutorialStore.getState().reconcileOpeningObservationProgress(checkpoint({
       state: "active", currentPhaseIndex: 1, players: [focusedPlayer()],
-      flaggedMoments: [{ ...flaggedMoment("lead-1", false), reaction: "concerning" }],
+      flaggedMoments: [{ ...flaggedMoment("lead-1", false), reaction }],
     }));
     expect(useTutorialStore.getState().currentGuidedTask).toBe("completedMatch");
+    expect(useTutorialStore.getState().guidedMilestones.flaggedBreakthrough).toBe(true);
   });
 
   it.each(["active", "reflection"] as const)("keeps Complete Reflection pending in %s", (state) => {
@@ -150,10 +152,63 @@ describe("opening observation guide resume", () => {
     expect(useTutorialStore.getState()).toBe(original);
   });
 
+  it("moves past skipped observation actions without inventing focus or flag evidence", () => {
+    useTutorialStore.getState().startGuidedSession(false, "discoveryHook", { careerId: "scout-1" });
+    useTutorialStore.getState().completeMilestone("attendedMatch");
+    useTutorialStore.getState().completeMilestone("completedMatch");
+    expect(useTutorialStore.getState()).toMatchObject({
+      currentGuidedTask: "resolvedOpeningDiscovery",
+      guidedMilestones: { focusedPlayer: false, flaggedBreakthrough: false, completedMatch: true },
+    });
+  });
+
+  it.each([
+    ["decision", "resolvedOpeningDiscovery"],
+    ["report", "wroteReport"],
+    ["complete", "advancedWeek"],
+  ] as const)("reconciles a completed opening at %s to the valid %s task", (stage, task) => {
+    const saved = checkpoint();
+    saved.activeObservationSession = null;
+    saved.openingCase = { ...saved.openingCase!, stage, startedWeek: 1, startedSeason: 1 };
+    saved.currentWeek = 1;
+    saved.currentSeason = 1;
+    useTutorialStore.setState({ guidedMilestones: createEmptyGuidedMilestones(), currentGuidedTask: "focusedPlayer" });
+    const original = structuredClone(saved);
+    expect(useTutorialStore.getState().reconcileOpeningObservationProgress(saved)).toBe(true);
+    expect(useTutorialStore.getState().currentGuidedTask).toBe(task);
+    expect(useTutorialStore.getState().guidedMilestones.focusedPlayer).toBe(false);
+    expect(saved).toEqual(original);
+    const reconciled = useTutorialStore.getState();
+    reconciled.reconcileOpeningObservationProgress(saved);
+    expect(useTutorialStore.getState()).toBe(reconciled);
+  });
+
+  it("does not skip an unfinished report because tutorial storage is ahead of the career", () => {
+    const saved = checkpoint();
+    saved.activeObservationSession = null;
+    saved.openingCase = { ...saved.openingCase!, stage: "report" };
+    useTutorialStore.getState().reconcileOpeningObservationProgress(saved);
+    expect(useTutorialStore.getState()).toMatchObject({
+      currentGuidedTask: "wroteReport",
+      guidedMilestones: { wroteReport: false, submittedReport: false, advancedWeek: false },
+    });
+  });
+
+  it("finishes the opening guide after the filed assessment's week has advanced", () => {
+    const saved = checkpoint();
+    saved.activeObservationSession = null;
+    saved.openingCase = { ...saved.openingCase!, stage: "complete", startedWeek: 1, startedSeason: 1 };
+    saved.currentWeek = 2;
+    saved.currentSeason = 1;
+    useTutorialStore.getState().reconcileOpeningObservationProgress(saved);
+    expect(useTutorialStore.getState()).toMatchObject({
+      currentGuidedTask: null, guidedSessionActive: false, guidedSessionCompleted: true,
+    });
+  });
+
   it.each([
     { openingCase: undefined },
-    { openingCase: { ...checkpoint().openingCase, stage: "decision" } },
-    { openingCase: { ...checkpoint().openingCase, stage: "report" } },
+    { guidedSessionRequested: false },
     { veteranPrologue: {} },
     { activeObservationSession: { ...checkpoint().activeObservationSession, activityInstanceId: "scheduled-2" } },
     { scout: { id: "scout-1", primarySpecialization: "firstTeam" } },
@@ -161,6 +216,13 @@ describe("opening observation guide resume", () => {
     const original = useTutorialStore.getState();
     const saved = { ...checkpoint(), ...overrides } as unknown as GameState;
     expect(original.reconcileOpeningObservationProgress(saved)).toBe(false);
+    expect(useTutorialStore.getState()).toBe(original);
+  });
+
+  it("does not borrow tutorial progress from a different career", () => {
+    useTutorialStore.setState({ guidedSessionCareerId: "someone-else" });
+    const original = useTutorialStore.getState();
+    expect(original.reconcileOpeningObservationProgress(checkpoint())).toBe(false);
     expect(useTutorialStore.getState()).toBe(original);
   });
 

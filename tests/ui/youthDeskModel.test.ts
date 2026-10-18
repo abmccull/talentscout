@@ -66,8 +66,11 @@ describe("private pass desk state", () => {
   });
 
   it("invites reconsideration only when unconsumed first-hand evidence exists", () => {
-    const report = { id: "report-pass", scoutId: "scout-1", playerId: "player-1", recommendedAction: "pass",
-      submittedWeek: 2, submittedSeason: 1, evidenceObservationIds: ["old-evidence"] } as ScoutReport;
+    const report: ScoutReport = { attributeAssessments: [], strengths: [], weaknesses: [],
+      conviction: "note", summary: "Pass for now.", estimatedValue: 0, qualityScore: 0, id: "report-pass", scoutId: "scout-1", playerId: "player-1", recommendedAction: "pass",
+      submittedWeek: 2, submittedSeason: 1, evidenceObservationIds: ["old-evidence"],
+      decisionReceipt: { id: "decision-pass", action: "pass", week: 2, season: 1, conviction: "note",
+        evidenceObservationIds: ["old-evidence"], evidenceCardIds: [], summary: "No further look justified." } };
     const old = { id: "old-evidence", scoutId: "scout-1", playerId: "player-1", week: 1, season: 1 } as Observation;
     const otherScout = { ...old, id: "other-scout-evidence", scoutId: "scout-2", week: 3 };
     const initial = buildYouthDeskDecisionIndex([report], [old, otherScout], "scout-1").get("player-1")!;
@@ -83,8 +86,12 @@ describe("private pass desk state", () => {
   });
 
   it("uses the latest revision and does not label a monitoring judgment as a tracked recommendation", () => {
-    const pass = { id: "pass", scoutId: "scout-1", playerId: "player-1", recommendedAction: "pass", submittedWeek: 2, submittedSeason: 1, revision: 1 } as ScoutReport;
-    const reconsidered = { ...pass, id: "monitor", recommendedAction: "monitor" as const, revision: 2 };
+    const pass: ScoutReport = { attributeAssessments: [], strengths: [], weaknesses: [],
+      conviction: "note", summary: "Pass for now.", estimatedValue: 0, qualityScore: 0, id: "pass", scoutId: "scout-1", playerId: "player-1", recommendedAction: "pass", submittedWeek: 2, submittedSeason: 1, revision: 1,
+      decisionReceipt: { id: "decision-pass", action: "pass", week: 2, season: 1, conviction: "note",
+        evidenceObservationIds: [], evidenceCardIds: [], summary: "Pass for now." } };
+    const reconsidered = { ...pass, id: "monitor", recommendedAction: "monitor" as const, revision: 2,
+      decisionReceipt: { ...pass.decisionReceipt!, id: "decision-monitor", action: "monitor" as const } };
     const decision = buildYouthDeskDecisionIndex([reconsidered, pass], [], "scout-1").get("player-1")!;
     expect(decision.passedForNow).toBe(false);
     const model = build({ ...prospect, reported: true, ...decision });

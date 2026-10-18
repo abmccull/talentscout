@@ -3,6 +3,7 @@
  * Runs every 4 weeks during advanceWeek to evaluate scout performance.
  */
 
+import { isSubmissionAccuracy } from "@/engine/scout/accuracyHistory";
 import type {
   Scout,
   PerformancePulse,
@@ -80,7 +81,7 @@ export function generatePerformancePulse(
   // Accuracy rate from recent accuracy history
   const recentAccuracy = (scout.accuracyHistory ?? []).filter(
     (a) =>
-      a.season === state.currentSeason &&
+      isSubmissionAccuracy(a) && a.season === state.currentSeason &&
       a.week > state.currentWeek - PULSE_INTERVAL_WEEKS,
   );
   const accuracyRate =
@@ -133,6 +134,7 @@ export function generatePerformancePulse(
     reportsSubmitted,
     reportQualityAvg: Math.round(reportQualityAvg),
     accuracyRate: Math.round(accuracyRate),
+    accuracySampleSize: recentAccuracy.length,
     signingSuccess,
     fatigueAvg: Math.round(fatigueAvg),
     professionalDevelopment,
@@ -173,7 +175,7 @@ export function applyPulseConsequences(
     season,
     type: "performance" as any,
     title: `Monthly Review: Grade ${pulse.grade}`,
-    body: `${gradeMessages[pulse.grade]}\n\nReports: ${pulse.reportsSubmitted} | Quality: ${pulse.reportQualityAvg}% | Accuracy: ${pulse.accuracyRate}% | Trend: ${pulse.trend}${pulse.professionalDevelopment ? " | Professional development: active" : ""}${repChange !== 0 ? `\nReputation ${repChange > 0 ? "+" : ""}${repChange}` : ""}`,
+    body: `${gradeMessages[pulse.grade]}\n\nReports: ${pulse.reportsSubmitted} | Quality: ${pulse.reportQualityAvg}% | Accuracy: ${Number.isFinite(pulse.accuracySampleSize) && (pulse.accuracySampleSize ?? 0) > 0 ? `${pulse.accuracyRate}%` : "Awaiting verified assessments"} | Trend: ${pulse.trend}${pulse.professionalDevelopment ? " | Professional development: active" : ""}${repChange !== 0 ? `\nReputation ${repChange > 0 ? "+" : ""}${repChange}` : ""}`,
     read: false,
     actionRequired: pulse.grade === "D" || pulse.grade === "F",
     relatedId: "performance",

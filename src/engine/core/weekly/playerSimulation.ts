@@ -1,3 +1,5 @@
+import { matchFormRating } from "@/engine/players/matchFormArchive";
+import { expandPlayerInjuryHistory } from "../../players/playerStateArchive";
 import type { RNG } from "../../rng/index";
 import {
   applySemanticPlayerDevelopment,
@@ -92,7 +94,7 @@ function computeFormMomentum(
 
   const clampedRating = currentRating;
   const recentRatings = [
-    ...(player.recentMatchRatings ?? []).map((entry) => entry.rating),
+    ...(player.recentMatchRatings ?? []).map(matchFormRating),
     currentRating,
   ].slice(-6);
   const countTrailing = (predicate: (rating: number) => boolean): number => {
@@ -278,6 +280,8 @@ export function processPlayerDevelopment(
 
   for (const player of Object.values(state.players)) {
     if (player.injuryWeeksRemaining > 6) continue;
+    // Surviving veterans still age. The profile model handles decline; an age
+    // cutoff here would freeze attributes and ability until retirement.
 
     const environment = evaluatePlayerDevelopmentEnvironment(state, player, {
       index: environmentIndex,
@@ -356,9 +360,10 @@ function computeInjuryProbability(player: Player): number {
 
   const proneness = player.attributes.injuryProneness ?? 10;
   const pronenessMultiplier = 0.5 + (proneness / 20) * 2;
-  const historyProneness = player.injuryHistory?.injuryProneness ?? 0;
+  const injuryHistory = expandPlayerInjuryHistory(player.injuryHistory, player.id);
+  const historyProneness = injuryHistory?.injuryProneness ?? 0;
   const historyMultiplier = 1 + historyProneness;
-  const reinjuryWindow = player.injuryHistory?.reinjuryWindowWeeksLeft ?? 0;
+  const reinjuryWindow = injuryHistory?.reinjuryWindowWeeksLeft ?? 0;
   const reinjuryMultiplier = reinjuryWindow > 0 ? 2.0 : 1.0;
 
   return BASE_INJURY_PROBABILITY * pronenessMultiplier * historyMultiplier * reinjuryMultiplier;
@@ -391,7 +396,7 @@ export function addToInjuryHistory(
   player: Player,
   injury: Injury,
 ): InjuryHistory {
-  const existing: InjuryHistory = player.injuryHistory ?? {
+  const existing: InjuryHistory = expandPlayerInjuryHistory(player.injuryHistory, player.id) ?? {
     playerId: player.id,
     injuries: [],
     totalWeeksMissed: 0,

@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type { GameState, InboxMessage, TransferRecord } from "@/engine/core/types";
 import type { TickResult } from "@/engine/core/gameLoop";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
@@ -29,8 +30,8 @@ export function processWeeklyTransferAccountability(
   input: WeeklyTransferAccountabilityInput,
 ): GameState {
   let state = input.state;
-  const newMovements = state.playerMovementHistory.slice(
-    input.beforeTick.playerMovementHistory.length,
+  const newMovements = expandPlayerMovementHistory(state.playerMovementHistory).slice(
+    expandPlayerMovementHistory(input.beforeTick.playerMovementHistory).length,
   );
   const appliedTransferKeys = new Set(
     newMovements

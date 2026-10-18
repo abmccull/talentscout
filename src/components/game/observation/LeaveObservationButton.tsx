@@ -25,10 +25,10 @@ export function observationLeavePolicy(session: ObservationSession | null): "blo
 export function confirmObservationLeave(
   expected: ObservationSession,
   current: ObservationSession | null,
-  endSession: () => void,
+  endSession: (options?: { discard?: boolean }) => void,
 ): boolean {
   if (current !== expected || observationLeavePolicy(current) === "blocked") return false;
-  endSession();
+  endSession({ discard: true });
   return true;
 }
 
@@ -78,7 +78,7 @@ export function LeaveObservationButton({ session, className = "" }: { session: O
     const current = store.activeSession;
     const policy = observationLeavePolicy(current);
     if (policy === "confirm") setPendingSession(current);
-    else if (policy === "leave") store.endObservationSession();
+    else if (policy === "leave") store.endObservationSession({ discard: true });
   };
   const confirm = () => {
     const store = useGameStore.getState();

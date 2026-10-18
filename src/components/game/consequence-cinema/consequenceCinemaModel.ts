@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory, type StoredPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type {
   Club,
   Contact,
@@ -112,7 +113,7 @@ export interface ConsequenceCinemaSource {
   reports: Record<string, ScoutReport>;
   recommendationReviews: Record<string, RecommendationReview>;
   discoveryRecords: DiscoveryRecord[];
-  playerMovementHistory: PlayerMovementEvent[];
+  playerMovementHistory: StoredPlayerMovementHistory;
   consequenceState: ConsequenceEngineState;
   /** Presented/suppressed moment archive; pending moments stay in the delivery queue. */
   careerMoments?: readonly CareerMoment[];
@@ -572,7 +573,7 @@ function movementSecondaryEvents(
   after: { season: number; week: number },
   excludeMovementId?: string,
 ): CareerStorySecondaryEvent[] {
-  return source.playerMovementHistory
+  return expandPlayerMovementHistory(source.playerMovementHistory)
     .filter((movement) =>
       movement.playerId === playerId
       && movement.id !== excludeMovementId
@@ -633,7 +634,7 @@ function movementStories(source: ConsequenceCinemaSource): CareerStory[] {
   const discoveries = new Map(
     source.discoveryRecords.map((record) => [record.playerId, record]),
   );
-  return source.playerMovementHistory.flatMap((movement) => {
+  return expandPlayerMovementHistory(source.playerMovementHistory).flatMap((movement) => {
     const discovery = discoveries.get(movement.playerId);
     if (!discovery) return [];
     const date = { season: movement.season, week: movement.week };
@@ -947,9 +948,13 @@ function archivedDecisionStories(source: ConsequenceCinemaSource): CareerStory[]
 }
 
 export function buildCareerStoryReel(
-  source: ConsequenceCinemaSource,
+  sourceInput: ConsequenceCinemaSource,
   limit = 24,
 ): CareerStory[] {
+  const source = {
+    ...sourceInput,
+    playerMovementHistory: expandPlayerMovementHistory(sourceInput.playerMovementHistory),
+  };
   return [
     ...recommendationStories(source),
     ...movementStories(source),

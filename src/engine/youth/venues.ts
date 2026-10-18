@@ -500,7 +500,7 @@ export function processVenueObservation(
 export function processParentCoachMeeting(
   rng: RNG,
   scout: Scout,
-  youth: UnsignedYouth,
+  youth: Pick<UnsignedYouth, "player" | "buzzLevel">,
 ): { hiddenIntel: string[]; characterNotes: string[] } {
   // Pick 1-2 hidden attributes to reveal
   const attributeCount = rng.nextInt(1, 2);

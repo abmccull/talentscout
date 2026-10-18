@@ -64,16 +64,20 @@ export function ChoiceCard({
   const body = (
     <>
       <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0 flex-1">
-          {children}
-          {(pending || recommended) && (
-            <span className="mt-2 block text-xs font-semibold text-[color:var(--primary)]">
-              {pending ? "Working…" : "Recommended"}
+        <span className="min-w-0 flex-1">{children}</span>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          {pending ? (
+            <span className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
+              Working…
             </span>
-          )}
+          ) : selected ? selectedMark : idleMark}
         </span>
-        {selected ? selectedMark : idleMark}
       </span>
+      {recommended && !pending && (
+        <span className="mt-2 text-eyebrow font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
+          Recommended
+        </span>
+      )}
       {disabled && disabledReason && (
         <span className="text-meta mt-2 text-quiet">{disabledReason}</span>
       )}

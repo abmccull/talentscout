@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "./situationArchive";
 import type {
   ActivityType,
   Observation,
@@ -241,7 +242,7 @@ export function buildObservationExperienceSnapshot(
   const blendedSkill = (primary: number | undefined) =>
     round(clamp(((primary ?? 1) + judgment) / 2, 1, 20));
   const priorContextKeys = [...new Set(observations.map((observation) =>
-    observation.situation?.repetitionKey ?? `context:${observation.context}`,
+    expandObservationSituationSnapshot(observation.situation)?.repetitionKey ?? `context:${observation.context}`,
   ))];
 
   return {

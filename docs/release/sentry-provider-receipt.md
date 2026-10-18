@@ -78,3 +78,5 @@ descriptions, device identifiers, custom context keys, user data, and request
 data remain rejected. The sent event still permits no contexts at all. This
 allows documented safe provider normalization without accepting arbitrary
 enrichment; a real W14 read-back must confirm the configured project's behavior.
+
+The receipt validator admits every retained JSON through the full-release checker's existing descriptor and cumulative read budgets. It requires raw hashes, ordinary distinct paths, the admitted package-manifest hash, exact candidate/package identity, and an explicit provider presentation allowlist. Documented normalized frame names, empty metadata, server IDs and narrow browser/OS metadata are supported; private tags, custom title/metadata/entry data, source-map content, personal data, attachments or unreviewed populated fields fail. The provider response reference is [Sentry's event API](https://docs.sentry.io/api/events/retrieve-an-event-for-a-project/). Retained fixtures and local validator passes are not live provider acceptance.

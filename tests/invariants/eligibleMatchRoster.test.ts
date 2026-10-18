@@ -21,6 +21,15 @@ function squad(seniorCount: number, academyCount: number) {
 }
 
 describe("registered match cover", () => {
+  it("does not treat spare keepers or underage academy players as outfield cover", () => {
+    const { club, players } = squad(11, 4);
+    players[club.playerIds[1]].position = "GK";
+    players[club.academyPlayerIds![1]].age = 15;
+    const roster = getEligibleMatchRoster(club, players);
+    expect(roster.map(player => player.id)).not.toContain(club.academyPlayerIds![1]);
+    expect(roster.filter(player => player.position !== "GK").length).toBeGreaterThanOrEqual(10);
+    expect(selectStartingXI(club, players)).toHaveLength(11);
+  });
   it("fields eleven from a thin senior squad with healthy academy cover in both simulation paths", () => {
     const { club, players } = squad(9, 6);
     const before = structuredClone({ club, players });

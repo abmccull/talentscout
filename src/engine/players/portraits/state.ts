@@ -45,6 +45,7 @@ export function validatePortraitState(raw: PlayerPortraitState | undefined): Pla
   for (const [identityId, reservation] of Object.entries(ledger.reservations)) {
     if (!record(reservation)) throw new Error("Invalid portrait reservation");
     const identity = validateVisualIdentity(reservation.identity, reservation.playerId);
+    reservation.identity = identity;
     if (identityId !== identity.identityId || !Number.isInteger(reservation.firstSeen?.season)
       || reservation.firstSeen.season < 1 || !Number.isInteger(reservation.firstSeen?.week)
       || reservation.firstSeen.week < 1) throw new Error("Invalid portrait reservation");

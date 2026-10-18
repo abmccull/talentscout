@@ -1,9 +1,14 @@
 "use client";
 
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ConversationRecord } from "./ConversationRecord";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
+import { hasReportBuyerEvidence, shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +39,7 @@ import { getSeasonLength } from "@/engine/core/gameDate";
 import { rankStaffWorkProducts } from "@/engine/finance/staffWorkReview";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { Tooltip } from "@/components/ui/tooltip";
-import { resolvePlayerEntity } from "@/lib/playerResolution";
+import { resolvePlayerEntity, resolvePlayerDisplayName } from "@/lib/playerResolution";
 import { formatObservationActivityLabel } from "@/engine/observation/reflection";
 import {
   buildScoutingCaseTimeline,
@@ -51,6 +56,7 @@ import { PlayerAvatar } from "./PlayerAvatar";
 
 import {
   buildReportWorkspaceViewModel,
+  isPrivateMonitoringNote,
   type ReportWorkspaceAction,
 } from "./reports/reportWorkspaceModel";
 import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
@@ -182,6 +188,8 @@ function ReportDetailModal({
               <span className={`text-sm font-semibold ${qualityColor(report.postTransferRating)}`}>
                 Validated accuracy: {report.postTransferRating}/100
               </span>
+            ) : report.validationStatus === "unverifiable" ? (
+              <span className="text-xs text-zinc-500">Historical accuracy unavailable: original assessment evidence was not preserved</span>
             ) : (
               <span className="text-xs text-zinc-500">Accuracy pending career evidence</span>
             )}
@@ -461,7 +469,7 @@ function ReportDetailModal({
             </div>
           )}
 
-          {report.recommendedAction === "pass" && (
+          {isPrivateScoutingDecision(report) && (
             <p className="rounded-lg border border-zinc-600/50 bg-zinc-900/50 p-3 text-sm leading-6 text-zinc-300">
               Passed for now. This private judgment preserves your evidence without pursuing recruitment. Observe again before changing the call.
             </p>
@@ -879,8 +887,7 @@ export function ReportHistory() {
   const filteredReports = normalizedReportQuery.length === 0
     ? sortedReports
     : sortedReports.filter((report) => {
-        const player = resolvePlayerEntity(gameState, report.playerId)?.player;
-        const playerName = player ? `${player.firstName} ${player.lastName}` : "unknown player";
+        const playerName = resolvePlayerDisplayName(gameState, report.playerId);
         return playerName.toLowerCase().includes(normalizedReportQuery)
           || report.summary.toLowerCase().includes(normalizedReportQuery)
           || CONVICTION_LABELS[report.conviction].toLowerCase().includes(normalizedReportQuery);
@@ -910,7 +917,8 @@ export function ReportHistory() {
   );
 
   // Post-submit listing prompt data
-  const pendingReport = pendingListingReportId ? gameState.reports[pendingListingReportId] : null;
+  const pendingCandidate = pendingListingReportId ? gameState.reports[pendingListingReportId] : null;
+  const pendingReport = pendingCandidate && shouldPromptReportListing(pendingCandidate) ? pendingCandidate : null;
   const pendingReportPlayer = pendingReport
     ? resolvePlayerEntity(gameState, pendingReport.playerId)?.player ?? null
     : null;
@@ -944,10 +952,7 @@ export function ReportHistory() {
   });
 
   const selectedPlayerName = selectedReport
-    ? (() => {
-        const p = resolvePlayerEntity(gameState, selectedReport.playerId)?.player;
-        return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
-      })()
+    ? resolvePlayerDisplayName(gameState, selectedReport.playerId)
     : "";
   const selectedReportDelivery = selectedReport
     ? Object.values(gameState.reportDeliveries).find((delivery) =>
@@ -982,7 +987,7 @@ export function ReportHistory() {
         scoutingCases: gameState.scoutingCases,
         reportDeliveries: gameState.reportDeliveries,
         clubDecisions: gameState.clubDecisions,
-        playerMovementHistory: gameState.playerMovementHistory,
+        playerMovementHistory: expandPlayerMovementHistory(gameState.playerMovementHistory),
         finances: gameState.finances
           ? { reportListings: gameState.finances.reportListings }
           : undefined,
@@ -992,10 +997,7 @@ export function ReportHistory() {
     : undefined;
 
   const listingPlayerName = listingReport
-    ? (() => {
-        const p = resolvePlayerEntity(gameState, listingReport.playerId)?.player;
-        return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
-      })()
+    ? resolvePlayerDisplayName(gameState, listingReport.playerId)
     : "";
 
   function handleConfirmListing(price: number, isExclusive: boolean) {
@@ -1019,7 +1021,7 @@ export function ReportHistory() {
         return;
       case "listReport": {
         const report = currentGameState.reports[action.reportId];
-        if (report && report.recommendedAction !== "pass") setListingReport(report);
+        if (report && !isPrivateScoutingDecision(report)) setListingReport(report);
         return;
       }
       case "openCareer":
@@ -1061,6 +1063,7 @@ export function ReportHistory() {
   };
 
   const renderDeliveryStatus = (report: ScoutReport) => {
+    if (isPrivateScoutingDecision(report)) return <span className="text-xs text-zinc-300">Private pass</span>;
     const deliveries = Object.values(gameState.reportDeliveries ?? {}).filter(
       (delivery) => delivery.reportId === report.id,
     );
@@ -1097,7 +1100,9 @@ export function ReportHistory() {
     if (listing?.status === "active") {
       return <Badge variant="outline" className="text-[10px]">Listed</Badge>;
     }
-    return <span className="text-xs text-zinc-300">Not delivered</span>;
+    return <span className="text-xs text-zinc-300">{isPrivateMonitoringNote({
+      gameState, pendingListingReportId, listingByReportId,
+    }, report) ? "Private monitoring" : "Not delivered"}</span>;
   };
 
   const renderListingBids = (listing: ReportListing) => (
@@ -1224,16 +1229,18 @@ export function ReportHistory() {
               Sold
             </Badge>
           )}
-          {listing == null && report.recommendedAction !== "pass" && (
+          {listing == null && !isPrivateScoutingDecision(report) && (
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setListingReport(report)}
+              disabled={!hasReportBuyerEvidence(report)}
+              title={!hasReportBuyerEvidence(report) ? "Gather a supported finding before listing this report." : undefined}
               className="text-zinc-400 hover:text-emerald-400"
               aria-label={`List report for ${playerName} for sale`}
             >
               <DollarSign size={13} aria-hidden="true" />
-              List
+              {hasReportBuyerEvidence(report) ? "List" : "Needs evidence"}
             </Button>
           )}
           {listing?.status === "active" && (
@@ -1381,9 +1388,7 @@ export function ReportHistory() {
                 <div className="divide-y divide-zinc-800 md:hidden">
                   {visibleReports.map((report) => {
                     const player = resolvePlayerEntity(gameState, report.playerId)?.player;
-                    const playerName = player
-                      ? `${player.firstName} ${player.lastName}`
-                      : "Unknown";
+                    const playerName = resolvePlayerDisplayName(gameState, report.playerId);
                     const listing = listingByReportId[report.id];
                     const isInComparison = comparisonReportIds.includes(report.id);
                     const comparisonFull = comparisonReportIds.length >= 3 && !isInComparison;
@@ -1500,9 +1505,7 @@ export function ReportHistory() {
                   <tbody>
                     {visibleReports.map((report) => {
                       const player = resolvePlayerEntity(gameState, report.playerId)?.player;
-                      const playerName = player
-                        ? `${player.firstName} ${player.lastName}`
-                        : "Unknown";
+                      const playerName = resolvePlayerDisplayName(gameState, report.playerId);
                       const listing = listingByReportId[report.id];
                       const isInComparison = comparisonReportIds.includes(report.id);
                       const comparisonFull = comparisonReportIds.length >= 3 && !isInComparison;
@@ -1540,7 +1543,7 @@ export function ReportHistory() {
                               aria-label={`View profile for ${playerName}`}
                             >
                               <span className="flex items-center gap-3">
-                                <PlayerAvatar playerId={report.playerId} size={36} alt={playerName} />
+                                <PlayerAvatar playerId={report.playerId} size={36} alt="" />
                                 <span>{playerName}</span>
                               </span>
                             </button>
@@ -1629,16 +1632,18 @@ export function ReportHistory() {
                                       Sold
                                     </Badge>
                                   )}
-                                  {listing == null && report.recommendedAction !== "pass" && (
+                                  {listing == null && !isPrivateScoutingDecision(report) && (
                                     <Button
                                       size="sm"
                                       variant="ghost"
                                       onClick={() => setListingReport(report)}
+                                      disabled={!hasReportBuyerEvidence(report)}
+                                      title={!hasReportBuyerEvidence(report) ? "Gather a supported finding before listing this report." : undefined}
                                       className="text-zinc-400 hover:text-emerald-400"
                                       aria-label={`List report for ${playerName} for sale`}
                                     >
                                       <DollarSign size={13} aria-hidden="true" />
-                                      List
+                                      {hasReportBuyerEvidence(report) ? "List" : "Needs evidence"}
                                     </Button>
                                   )}
                                   {listing?.status === "active" && (
@@ -1808,14 +1813,14 @@ export function ReportHistory() {
             </CardHeader>
             <CardContent className="space-y-3 pt-0">
               {staffWorkQueue.slice(0, 4).map(({ product, preview }) => {
-                const player = resolvePlayerEntity(gameState, product.playerId)?.player;
+                const playerName = resolvePlayerDisplayName(gameState, product.playerId);
                 return (
                   <article key={product.id} className="rounded-lg border border-zinc-700 bg-zinc-950/75 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold text-white">
-                            {player ? `${player.firstName} ${player.lastName}` : "Unknown player"}
+                            {playerName}
                           </p>
                           <Badge variant="outline">{product.employeeName}</Badge>
                           <Badge variant="secondary">Work quality {product.qualityScore}</Badge>
@@ -1979,12 +1984,9 @@ export function ReportHistory() {
                   ? gutFeelingById.get(entry.gutFeelingId)
                   : undefined;
                 const playerLabels = entry.playerIds.map((playerId) => {
-                  const player = resolvePlayerEntity(gameState, playerId)?.player;
                   return {
                     id: playerId,
-                    name: player
-                      ? `${player.firstName} ${player.lastName}`
-                      : "Unknown Player",
+                    name: resolvePlayerDisplayName(gameState, playerId),
                   };
                 });
 
@@ -2025,9 +2027,10 @@ export function ReportHistory() {
                         <p className="mt-3 text-sm leading-relaxed text-zinc-300">
                           {entry.summary ?? "No summary recorded for this reflection."}
                         </p>
+                        <ConversationRecord decisions={entry.conversationDecisions} />
                         <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-zinc-500">
                           <span>{entry.notes.length} note{entry.notes.length === 1 ? "" : "s"}</span>
-                          <span>{entry.hypotheses.length} hypothesis{entry.hypotheses.length === 1 ? "" : "es"}</span>
+                          <span>{entry.hypotheses.length} {entry.hypotheses.length === 1 ? "hypothesis" : "hypotheses"}</span>
                           {gutFeeling ? (
                             <span className="text-amber-400/80">
                               Gut feel: {Math.round(gutFeeling.reliability * 100)}% confidence
@@ -2083,11 +2086,7 @@ export function ReportHistory() {
                             </p>
                             <div className="space-y-2">
                               {entry.hypotheses.map((hypothesis) => {
-                                const hypothesisPlayer =
-                                  resolvePlayerEntity(gameState, hypothesis.playerId)?.player;
-                                const hypothesisPlayerName = hypothesisPlayer
-                                  ? `${hypothesisPlayer.firstName} ${hypothesisPlayer.lastName}`
-                                  : "Unknown Player";
+                                const hypothesisPlayerName = resolvePlayerDisplayName(gameState, hypothesis.playerId);
                                 return (
                                   <div
                                     key={hypothesis.id}

@@ -1,3 +1,6 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 /**
  * Non-signing decisions share the existing case/review ledger. A pass is a
  * private judgment, not a recruitment action or a future reward entitlement.
@@ -60,7 +63,7 @@ function decisionKind(
   const receipt = report.decisionReceipt;
   // Legacy reports lack a decision-time snapshot. Do not invent one later.
   if (!receipt) return undefined;
-  if (receipt.action === "pass") return "pass";
+  if (isPrivateScoutingDecision(report)) return "pass";
   if (report.clubResponse === "ignored"
     || decisions.some((decision) => decision.outcome === "rejected")) return "ignored";
   if (movements.some((movement) =>
@@ -75,7 +78,7 @@ function decisionKind(
 /** Reconcile only genuinely authored decisions; IDs are stable across retries. */
 export function reconcileScoutingDecisionReviews(state: GameState): GameState {
   const movementsByPlayer = new Map<string, PlayerMovementEvent[]>();
-  for (const movement of state.playerMovementHistory ?? []) {
+  for (const movement of expandPlayerMovementHistory(state.playerMovementHistory ?? [])) {
     const movements = movementsByPlayer.get(movement.playerId) ?? [];
     movements.push(movement);
     movementsByPlayer.set(movement.playerId, movements);
@@ -158,8 +161,8 @@ export function completeScoutingDecisionReview(input: {
   ).sort((left, right) => left.season - right.season || left.week - right.week || left.id.localeCompare(right.id));
   // Only completed seasons are stable historical evidence. A partial current
   // season can otherwise rewrite a late-loaded checkpoint with future results.
-  const ratingsBySeason = new Map<number, NonNullable<Player["seasonRatings"]>[number]>();
-  for (const rating of player?.seasonRatings ?? []) {
+  const ratingsBySeason = new Map<number, ReturnType<typeof expandSeasonRating>>();
+  for (const rating of (player?.seasonRatings ?? []).map(expandSeasonRating)) {
     // Annual totals cannot separate matches before a mid-season judgment.
     // Do not treat a pre-existing good season as evidence of a later miss.
     if ((rating.season > receipt.season || (receipt.week === 1 && rating.season === receipt.season))
@@ -231,7 +234,7 @@ export function processScoutingDecisionReviews(state: GameState): GameState {
   let reviews = reconciled.recommendationReviews;
   const messages: GameState["inbox"] = [];
   const movementIndex = new Map<string, PlayerMovementEvent[]>();
-  for (const movement of reconciled.playerMovementHistory ?? []) {
+  for (const movement of expandPlayerMovementHistory(reconciled.playerMovementHistory ?? [])) {
     const movements = movementIndex.get(movement.playerId) ?? [];
     movements.push(movement);
     movementIndex.set(movement.playerId, movements);

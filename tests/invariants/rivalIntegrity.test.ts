@@ -14,6 +14,7 @@ import {
 import type { LifecycleWorldState } from "@/engine/world/playerLifecycle";
 import { createScout } from "@/engine/scout/creation";
 import { RNG } from "@/engine/rng";
+import { generatePlayer } from "@/engine/players/generation";
 
 function club(id: string, budget: number): Club {
   return {
@@ -23,6 +24,7 @@ function club(id: string, budget: number): Club {
     leagueId: "league-test",
     reputation: 50,
     budget,
+    weeklyWageBudget: 100_000,
     scoutingPhilosophy: "academyFirst",
     managerId: `manager-${id}`,
     playerIds: [],
@@ -35,10 +37,16 @@ function club(id: string, budget: number): Club {
 
 function player(): Player {
   return {
+    ...generatePlayer(new RNG("rival-integrity-target"), {
+      position: "CM", ageRange: [21, 21], abilityRange: [105, 105],
+      nationality: "English", clubId: "a", clubReputation: 50,
+    }),
     id: "player-1",
     firstName: "Rival",
     lastName: "Target",
     age: 21,
+    position: "CM",
+    secondaryPositions: [],
     clubId: "a",
     contractClubId: "a",
     contractExpiry: 4,
@@ -48,7 +56,7 @@ function player(): Player {
     potentialAbility: 145,
     morale: 6,
     onLoan: undefined,
-  } as Player;
+  };
 }
 
 function emptyPool(): FreeAgentPool {
@@ -64,14 +72,20 @@ function emptyPool(): FreeAgentPool {
 function world(rivalBudget: number, scoutBudget = 400_000): LifecycleWorldState {
   const activePlayer = player();
   const owner = club("a", 100_000);
-  owner.playerIds = [activePlayer.id];
+  const clubs = { a: owner, b: club("b", rivalBudget), c: club("c", scoutBudget) };
+  const players: Record<string, Player> = { [activePlayer.id]: activePlayer };
+  for (const squad of Object.values(clubs)) {
+    for (let index = 0; index < 14; index++) {
+      const id = `${squad.id}-cover-${index}`;
+      players[id] = { ...activePlayer, id, clubId: squad.id, contractClubId: squad.id,
+        position: index === 0 ? "GK" : "CM", wage: 100 };
+      squad.playerIds.push(id);
+    }
+  }
+  owner.playerIds.push(activePlayer.id);
   return {
-    players: { [activePlayer.id]: activePlayer },
-    clubs: {
-      a: owner,
-      b: club("b", rivalBudget),
-      c: club("c", scoutBudget),
-    },
+    players,
+    clubs,
     activeLoans: [],
     loanHistory: [],
     retiredPlayers: {},

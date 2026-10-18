@@ -33,7 +33,7 @@ interface InitialAssessmentBuilderProps {
   value: InitialAssessmentInput | null;
   onChange: (value: InitialAssessmentInput | null) => void;
   onResultChange?: (result: InitialAssessmentBuilderResult) => void;
-  onProgressChange?: (completedSteps: number) => void;
+  onProgressChange?: (completedDecisions: number) => void;
   disabled?: boolean;
 }
 
@@ -352,20 +352,21 @@ export function InitialAssessmentBuilder({
     Boolean(draft.confidence),
   ];
   const completedSteps = stepCompletion.filter(Boolean).length;
-  useEffect(() => {
-    onProgressChange?.(completedSteps);
-  }, [completedSteps, onProgressChange]);
+  const completedDecisions = [selectedCard, selectedClaim, selectedUnknown, selectedNextTest, draft.recommendation, draft.confidence].filter(Boolean).length;
+  useEffect(() => { onProgressChange?.(completedDecisions); }, [completedDecisions, onProgressChange]);
   const firstIncompleteStep = stepCompletion.findIndex((complete) => !complete);
   // An upstream edit must reopen any invalidated decision before later steps.
   const activeStep = Math.min(editorStep, firstIncompleteStep < 0 ? 4 : firstIncompleteStep);
   const progressText = `Initial assessment step ${activeStep + 1} of ${ASSESSMENT_STEPS.length}. ${completedSteps} of ${ASSESSMENT_STEPS.length} steps complete. Current step: ${ASSESSMENT_STEPS[activeStep].label}.`;
-  const previousStep = useRef(activeStep);
+  const focusNextStep = useRef(false);
 
   useEffect(() => {
-    if (previousStep.current !== activeStep) {
-      document.getElementById(`${baseId}-${ASSESSMENT_STEPS[activeStep].id}-heading`)?.focus({ preventScroll: true });
-      previousStep.current = activeStep;
-    }
+    if (!focusNextStep.current) return;
+    focusNextStep.current = false;
+    const panel = document.getElementById(`${baseId}-${ASSESSMENT_STEPS[activeStep].id}-panel`);
+    const nextChoice = panel?.querySelector<HTMLInputElement>('input[type="radio"]:not(:disabled)');
+    nextChoice?.focus({ preventScroll: true });
+    nextChoice?.closest("label")?.scrollIntoView({ block: "center", behavior: "auto" });
   }, [activeStep, baseId]);
 
   const canOpenStep = (index: number): boolean => {
@@ -374,6 +375,13 @@ export function InitialAssessmentBuilder({
   };
 
   const applyDraft = (updater: (current: AssessmentDraft) => AssessmentDraft, nextStep?: number) => {
+    // Only a keyboard choice that replaces its panel hands focus to the next choice.
+    const focused = document.activeElement;
+    if (nextStep !== undefined && activeStep === nextStep - 1
+      && focused instanceof HTMLElement && focused.matches(':focus-visible')
+      && document.getElementById(`${baseId}-${ASSESSMENT_STEPS[activeStep].id}-panel`)?.contains(focused)) {
+      focusNextStep.current = true;
+    }
     setDraft((current) => updater(current));
     if (nextStep !== undefined) {
       setEditorStep((current) => (current === nextStep - 1 ? nextStep : current));
@@ -658,7 +666,7 @@ export function InitialAssessmentBuilder({
       <div className="min-w-0">
         <div className="mb-4 flex items-baseline justify-between gap-4">
           <h2 className="font-editorial text-2xl text-[color:var(--foreground)]">Your judgment</h2>
-          <p className="shrink-0 text-xs text-[color:var(--muted-foreground)]">{completedSteps} / {ASSESSMENT_STEPS.length} decisions</p>
+          <p className="shrink-0 text-xs text-[color:var(--muted-foreground)]">{completedDecisions} / 6 decisions</p>
         </div>
         <p className="sr-only" aria-live="polite">{progressText}</p>
         <div className="border-t border-[color:var(--border)]">

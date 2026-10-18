@@ -27,7 +27,8 @@ import type {
 import { RNG } from "@/engine/rng";
 import {
   addGameWeeks,
-  gameWeeksBetween,
+  createGameCalendarIndex,
+  gameWeeksBetweenWithCalendar,
   isGameDateAtOrAfter,
 } from "@/engine/core/gameDate";
 import { getScoutHomeCountry } from "@/engine/world/travel";
@@ -952,9 +953,10 @@ export function processRelationshipDecay(
   fixtures: Record<string, Fixture>,
 ): Record<string, Contact> {
   const result: Record<string, Contact> = {};
+  const calendar = createGameCalendarIndex(fixtures);
   for (const [id, contact] of Object.entries(contacts)) {
     const weeksSinceInteraction = contact.lastInteractionAt
-      ? Math.max(0, gameWeeksBetween(fixtures, contact.lastInteractionAt, currentDate))
+      ? Math.max(0, gameWeeksBetweenWithCalendar(calendar, contact.lastInteractionAt, currentDate))
       : 0;
     if (weeksSinceInteraction > 8 && contact.relationship > 5) {
       const decay = Math.min(3, contact.relationship - 5);
@@ -1056,6 +1058,7 @@ export function processWeeklyContactDecay(
   const betrayalMessages: InboxMessage[] = [];
   const revokedAccessAgreementIds = new Set<string>();
   const currentDate = getCurrentGameDate(state);
+  const calendar = createGameCalendarIndex(state.fixtures);
 
   for (const [id, contact] of Object.entries(state.contacts)) {
     let updated = { ...contact };
@@ -1066,7 +1069,7 @@ export function processWeeklyContactDecay(
 
     // Trust decay: 1 point per week without interaction, after 4 weeks grace
     const weeksSinceInteraction = contact.lastInteractionAt
-      ? Math.max(0, gameWeeksBetween(state.fixtures, contact.lastInteractionAt, currentDate))
+      ? Math.max(0, gameWeeksBetweenWithCalendar(calendar, contact.lastInteractionAt, currentDate))
       : 0;
     const currentTrust = contact.trustLevel ?? contact.relationship;
 
@@ -1145,7 +1148,7 @@ export function processWeeklyContactDecay(
         title: `Betrayal: ${contact.name}`,
         body: `${betrayalResult.message} Existing tips and exclusive access have been withdrawn. The contact will not provide new intelligence until season ${accessSuspendedUntil.season}, week ${accessSuspendedUntil.week}.`,
         read: false,
-        actionRequired: true,
+        actionRequired: false,
         relatedId: contact.id,
         relatedEntityType: "contact",
       });

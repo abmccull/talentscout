@@ -10,9 +10,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/release/**/*.soak.ts"],
-    // The GitHub job owns the hard six-hour ceiling. Keep Vitest below that
-    // boundary while allowing late-world 30-season careers to finish and emit
-    // their candidate-bound evidence.
+    // Per-career timeout is unchanged. The separate self-hosted canonical
+    // campaign job owns the longer whole-campaign lifetime.
     testTimeout: Number.parseInt(
       process.env.SOAK_TEST_TIMEOUT_MS ?? String(5 * 60 * 60 * 1_000),
       10,

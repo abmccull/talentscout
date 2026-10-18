@@ -25,7 +25,13 @@ export interface PlayerVisualIdentity {
   seed: string;
   /** Pending generation DNA is derived from this pinned-version seed, not duplicated 8,000 times. */
 }
-export interface PortraitPlayer { id: string; age: number; firstName?: string; lastName?: string; visualIdentity?: PlayerVisualIdentity }
+/** Owner-derived v1 strings can be reconstructed; the version must remain saved. */
+export type StoredPlayerVisualIdentity = PlayerVisualIdentity | {
+  version: 1;
+  identityId?: never;
+  seed?: never;
+};
+export interface PortraitPlayer { id: string; age: number; firstName?: string; lastName?: string; visualIdentity?: StoredPlayerVisualIdentity }
 export interface GameDate { season: number; week: number }
 export type VisibilityReason = "opening" | "observed" | "selected" | "tracked" | "report" | "history" | "legacy";
 export interface PortraitImage {
@@ -54,7 +60,7 @@ export interface PortraitLineage {
 export interface PortraitPack {
   schemaVersion: 1;
   packId: string;
-  artDirectionVersion: "documentary-v1";
+  artDirectionVersion: "documentary-v1" | "humgen-studio-v1";
   reviewed: true;
   lineages: PortraitLineage[];
 }
@@ -63,6 +69,8 @@ export interface CatalogEntry extends Omit<PortraitLineage, "assets"> {
   assets: PortraitImage[];
   /** Art review may retire new allocation while preserving existing saved faces. */
   allocationAllowed?: boolean;
+  /** Prefer the current art pack while retaining immutable older bindings. */
+  allocationPriority?: number;
 }
 export type PortraitCatalog = ReadonlyMap<string, CatalogEntry>;
 export interface PortraitBinding {

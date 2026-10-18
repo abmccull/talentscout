@@ -9,16 +9,21 @@ const write = process.argv.length === 3 && process.argv[2] === "--write";
 if (!write && !(process.argv.length === 3 && process.argv[2] === "--check")) {
   throw new Error("Use --check to validate the built-in runtime index, or --write after publishing an offline pack.");
 }
-const fullPath = path.join(repo, "src/data/portraits/documentary-v1.json");
+const dataDirectory = path.join(repo, "src/data/portraits");
 const runtimePath = path.join(repo, "src/data/portraits/documentary-runtime.json");
-const { validatePortraitPack } = loadPortraitSources(repo);
-const pack = validatePortraitPack(JSON.parse(fs.readFileSync(fullPath, "utf8").replace(/^\uFEFF/, "")));
+const { validatePortraitPack, createPortraitCatalog } = loadPortraitSources(repo);
+const sources = JSON.parse(fs.readFileSync(path.join(dataDirectory, "bundled-packs.json"), "utf8"));
+const packs = sources.map((source) => {
+  if (!/^[a-z][a-z0-9-]+\.json$/.test(source.file) || !Number.isInteger(source.allocationPriority)) throw new Error("Invalid bundled pack source");
+  return validatePortraitPack(JSON.parse(fs.readFileSync(path.join(dataDirectory, source.file), "utf8").replace(/^\uFEFF/, "")));
+});
+createPortraitCatalog(packs); // Reject duplicate lineage IDs or canonical faces across packs.
 // Preserve every identity field and checkpoint, omitting only delivery digests.
 // Canonical face hashes still own saved reservations and may never be omitted.
-const entries = pack.lineages.map(({ assets, ...lineage }) => ({
-  ...lineage, packId: pack.packId,
+const entries = packs.flatMap((pack, index) => pack.lineages.map(({ assets, ...lineage }) => ({
+  ...lineage, packId: pack.packId, allocationPriority: sources[index].allocationPriority,
   assets: assets.map(({ sha256, ...image }) => image),
-}));
+})));
 if (write) fs.writeFileSync(runtimePath, JSON.stringify(entries, null, 2) + "\n", "utf8");
 const current = JSON.parse(fs.readFileSync(runtimePath, "utf8").replace(/^\uFEFF/, ""));
 if (JSON.stringify(current) !== JSON.stringify(entries)) {

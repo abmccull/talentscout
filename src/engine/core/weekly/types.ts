@@ -34,7 +34,6 @@ import type {
 } from "../types";
 import type { PlayerDevelopmentEnvironmentProjection } from "../../world/developmentEnvironment";
 import type { RelegationResult } from "../../world/relegation";
-import type { DeferredLoanClosure } from "../../world/loanClosureSettlement";
 
 export interface Transfer {
   playerId: string;
@@ -171,12 +170,11 @@ export interface TickResult {
     wage: number;
     signingBonus: number;
     contractLength: number;
-    relaxWeeklyWageCap?: boolean;
   }>;
   freeAgentRemovedPlayerIds?: string[];
   midSeasonReleases?: FreeAgent[];
-  /** Emergency journeyman bodies staged before freeAgentSigning apply. */
-  emergencySpawnedPlayers?: Player[];
+  /** Prospective discovery feedback, reconciled against settled availability. */
+  freeAgentDiscoveryMessageIds?: string[];
   contractExpiryResult?: {
     renewals: Array<{
       playerId: string;
@@ -185,6 +183,8 @@ export interface TickResult {
       wage: number;
     }>;
     releasedPlayers: FreeAgent[];
+    /** Prospective release feedback, reconciled against the owning club's applied release. */
+    releaseMessages?: InboxMessage[];
   };
   loanDeals?: LoanDeal[];
   loanReturns?: LoanDeal[];
@@ -192,7 +192,6 @@ export interface TickResult {
   updatedActiveLoans?: LoanDeal[];
   updatedLoanRecommendations?: LoanRecommendation[];
   loanOutcomeXp?: number;
-  deferredLoanClosures?: DeferredLoanClosure[];
 }
 
 export type { LoanOutcome };

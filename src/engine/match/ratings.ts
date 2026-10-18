@@ -1,3 +1,5 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
+import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
 /**
  * Player Match Rating Engine
  *
@@ -197,7 +199,7 @@ export function calculatePlayerMatchRating(
   rating += positionBonuses(player.position, stats);
 
   // Step 5: Personality big-match modifier
-  rating = applyPersonalityToMatchRating(player.personalityProfile, rating, isImportantMatch);
+  rating = applyPersonalityToMatchRating(expandPlayerPersonalityProfile(player.personalityProfile), rating, isImportantMatch);
 
   // Step 6: Clamp and round
   rating = round1(clamp(rating, 1.0, 10.0));
@@ -478,7 +480,7 @@ export function computeFormFromRatings(
   if (recentRatings.length === 0) return 0;
 
   // Most recent first (assume already ordered, but be safe)
-  const sorted = [...recentRatings].sort(
+  const sorted = recentRatings.map(expandMatchFormEntry).sort(
     (a, b) => b.season - a.season || b.week - a.week,
   );
   const slice = sorted.slice(0, 6);
@@ -504,7 +506,7 @@ export function computeFormFromRatings(
   else form = -3;
 
   // Apply personality form volatility modifier
-  return applyPersonalityToForm(player?.personalityProfile, form);
+  return applyPersonalityToForm(expandPlayerPersonalityProfile(player?.personalityProfile), form);
 }
 
 // =============================================================================

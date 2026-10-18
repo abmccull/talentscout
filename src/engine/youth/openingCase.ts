@@ -1,3 +1,4 @@
+import { generateMoments, sampleSessionPerformance } from "@/engine/observation/moments";
 import type {
   ActivityType,
   DiscoveryRecord,
@@ -9,6 +10,7 @@ import type {
   YouthVenueType,
 } from "@/engine/core/types";
 import { recordDiscovery } from "@/engine/career/discoveryTracking";
+import { getEvidenceClaimOptions } from "@/engine/scout/evidenceModel";
 import {
   createDecisionRecord,
   processDueConsequences,
@@ -25,7 +27,6 @@ import type {
 import type {
   ObservationSession,
 } from "@/engine/observation/types";
-import { generateMoments, sampleSessionPerformance } from "@/engine/observation/moments";
 import { createRNG } from "@/engine/rng";
 import { composeOpeningCaseDirectorOptions } from "./openingCaseDirector";
 import type {
@@ -191,7 +192,7 @@ export function shapeOpeningObservationSession(
 }
 
 export function buildOpeningCaseProjection(
-  state: Pick<GameState, "openingCase" | "unsignedYouth" | "veteranPrologue">,
+  state: Pick<GameState, "openingCase" | "unsignedYouth" | "veteranPrologue"> & Partial<Pick<GameState, "reflectionJournal">>,
 ): OpeningCaseProjection | null {
   const openingCase = state.openingCase;
   if (!openingCase) return null;
@@ -200,6 +201,23 @@ export function buildOpeningCaseProjection(
   const prologue = state.veteranPrologue?.openingCase.id === openingCase.id
     ? state.veteranPrologue
     : undefined;
+  const journal = Object.values(state.reflectionJournal ?? {})
+    .filter((entry) => entry.playerIds.includes(openingCase.playerId)
+      && entry.week === openingCase.startedWeek && entry.season === openingCase.startedSeason
+      && (prologue ? entry.activityInstanceId === prologue.activityInstanceId : isOpeningDiscoverySession(entry)))
+    .sort((left, right) => right.createdAt - left.createdAt)[0];
+  const cards = journal?.evidenceCards?.filter((card) => card.playerId === openingCase.playerId) ?? [];
+  const supportedCard = cards.find((card) => getEvidenceClaimOptions(card).some((claim) => claim.support === "supported"));
+  const retainedCard = supportedCard ?? cards[0];
+  const inconclusive = journal?.evidenceVersion === 1 && !supportedCard;
+  const retainedMoment = journal?.flaggedMoments?.find((moment) => moment.playerId === openingCase.playerId);
+  const hypothesis = journal?.hypotheses.find((entry) => entry.playerId === openingCase.playerId
+    && entry.state !== "debunked" && entry.state !== "contradicted");
+  const signal = retainedCard
+    ? `${inconclusive ? "No reliable conclusion from this watch. " : ""}${retainedCard.detail || retainedCard.summary}`
+    : retainedMoment
+      ? `Your retained note: ${retainedMoment.description}`
+      : "You have no retained player-specific passage from this session. The original lead still needs checking.";
   return {
     id: openingCase.id,
     playerId: openingCase.playerId,
@@ -212,10 +230,17 @@ export function buildOpeningCaseProjection(
     selectedChoiceId: openingCase.selectedChoiceId,
     eyebrow: prologue?.presentation.eyebrow ?? "Your first live lead",
     venueLabel: prologue?.presentation.venue ?? "School ground",
-    headline: prologue?.presentation.headline ?? "A name worth making a decision about",
-    uncertainty: prologue?.presentation.uncertainty
-      ?? "The watch is evidence, not a verdict. Decide whether this lead deserves more time, an independent view, or recruitment attention.",
-    signalLabel: prologue?.presentation.signalLabel ?? "The signal",
+    headline: inconclusive ? "The name is worth checking. Your read is still open."
+      : prologue?.presentation.headline ?? "Decide what this first look justifies.",
+    uncertainty: inconclusive
+      ? "Your saved evidence does not yet support a finding. You can seek another view, keep the lead private, or tell a club while making that uncertainty clear."
+      : prologue?.presentation.uncertainty
+        ?? "A retained passage is a starting point. What you do next determines who hears the name and how much evidence you can gather first.",
+    signalLabel: "What you retained",
+    signal,
+    openQuestion: inconclusive || !hypothesis
+      ? "What would you need to see or verify before making a claim about this player?"
+      : `Question to test: ${hypothesis.text}`,
     questionLabel: prologue?.presentation.questionLabel ?? "Who hears the name next?",
     premise: prologue?.premise,
     pressure: prologue?.pressure,

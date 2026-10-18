@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
 import {
   HIDDEN_ATTRIBUTES,
   type AttributeReading, type Observation, type PlayerAttribute, type ScoutCueReading,
@@ -48,7 +49,7 @@ export function buildObservedAttributeReadings(
       ? previousValues.filter((value) => Math.abs(value - perceivedValue) > 4).length / previousValues.length : 0;
     const observationCount = relevantHistory.length + 1;
     const contexts = new Set([
-      ...relevantHistory.map((observation) => observation.situation?.repetitionKey ?? observation.context),
+      ...relevantHistory.map((observation) => expandObservationSituationSnapshot(observation.situation)?.repetitionKey ?? observation.context),
       ...evidence.map(({ cue }) => cue.contextKey).filter(Boolean),
     ]);
     const cueConfidence = readings.reduce((sum, reading) => sum + reading.confidence, 0) / readings.length;

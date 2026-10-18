@@ -1,5 +1,6 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Activity, GameState, Observation } from "@/engine/core/types";
+import type { Activity, GameState, Observation, WeekSimulationState } from "@/engine/core/types";
 import type { WeeklySimulationDiagnosticValue } from "@/engine/core/weeklySimulationTelemetry";
 import { addActivity, createWeekSchedule, processCompletedWeek } from "@/engine/core/calendar";
 import { createRNG } from "@/engine/rng";
@@ -14,6 +15,7 @@ import { processWeeklyProfessionalObservationActivities } from "@/stores/actions
 import { resolveScoutEffectiveCountry } from "@/stores/actions/weeklySimulationSupport";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import { buildProfessionalCaseOpportunityLockMetadata } from "@/engine/youth/professionalCaseOpportunities";
+import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -116,7 +118,7 @@ function scheduleVideoAnalysis(state: GameState): GameState {
   };
 }
 
-function resolveObservationWeek(state: GameState) {
+function resolveObservationWeek(state: GameState, completedIds: string[] = [], precomputed: boolean | NonNullable<WeekSimulationState["youthVenueResults"]> = false) {
   const weekResult = processCompletedWeek(
     state.schedule,
     state.scout,
@@ -127,7 +129,7 @@ function resolveObservationWeek(state: GameState) {
     state,
     weekResult,
     qualityByType: new Map(),
-    completedInteractiveIds: new Set(),
+    completedInteractiveIds: new Set(completedIds),
     completedLiveActivityTypes: new Set(),
     discoveryModifiers: new Map(),
     profileModifiers: new Map(),
@@ -136,9 +138,61 @@ function resolveObservationWeek(state: GameState) {
     reportQualityModifiers: new Map(),
     focusDepthByType: new Map(),
     focusedPlayersByType: new Map(),
-    weekSimulation: null,
+    weekSimulation: precomputed ? { currentDay: 7, pendingWorldTick: true, dayResults: [],
+      youthVenueResults: typeof precomputed === "object" ? precomputed : { updatedUnsignedYouth: {}, newObservations: {}, newDiscoveries: [],
+        totalObservations: 0, totalDiscoveries: 0 } } : null,
   });
 }
+
+describe("completed targeted youth appointments", () => {
+  it("carries per-observation effects from a real preview through weekly completion", async () => {
+    const initial = scheduleSchoolMatch(await createObservationState("preview-effects-transaction"));
+    const { useGameStore } = await import("@/stores/gameStore");
+    useGameStore.setState({ gameState: initial });
+    useGameStore.getState().startWeekSimulation();
+    const preview = useGameStore.getState().weekSimulation?.youthVenueResults;
+    expect(preview).toBeDefined();
+    expect(Object.keys(preview!.observationEffects!)).toEqual(Object.keys(preview!.newObservations));
+    const restoredPreview = JSON.parse(JSON.stringify(preview)) as NonNullable<WeekSimulationState["youthVenueResults"]>;
+    const result = resolveObservationWeek(initial, [], restoredPreview);
+    for (const youth of Object.values(initial.unsignedYouth)) {
+      const effects = Object.values(restoredPreview.observationEffects!).filter(effect => effect.youthId === youth.id);
+      expect(result.state.unsignedYouth[youth.id].buzzLevel).toBe(Math.min(100,
+        youth.buzzLevel + effects.reduce((sum, effect) => sum + effect.buzzIncrease, 0)));
+    }
+    const rejected = resolveObservationWeek(initial,
+      Object.values(preview!.newObservations).map(o => o.activityInstanceId!).filter(Boolean), restoredPreview);
+    expect(rejected.state.unsignedYouth).toEqual(initial.unsignedYouth);
+    expect(rejected.observationsGenerated).toBe(0);
+  }, 30_000);
+  it.each([false, true])("does not generate evidence or a second account for live bookings (precomputed %s)", async (precomputed) => {
+    const initial = await createObservationState(`live-booking-${precomputed}`);
+    const youth = Object.values(initial.unsignedYouth).find(y => !y.placed && !y.retired)!;
+    expect(youth).toBeDefined();
+    const state = scheduleFollowUpSession(initial, youth.player.id);
+    state.schedule = addActivity(state.schedule, {
+      type: "parentCoachMeeting", targetId: youth.player.id, slots: 1, description: "Source conversation",
+    }, 1);
+    const completed = [0, 1].map(day => getInteractiveActivityCompletionKey(state.schedule.activities[day]!, day));
+    const result = resolveObservationWeek(state, completed, precomputed);
+    expect(Object.keys(result.state.observations)).toEqual(Object.keys(state.observations));
+    expect(result.state.inbox.some(m => m.id.startsWith("obs-followup-") || m.id.startsWith("obs-parentcoach-"))).toBe(false);
+  }, 30_000);
+
+  it("still processes a second unplayed follow-up on another day", async () => {
+    const initial = await createObservationState("mixed-live-bookings");
+    const youth = Object.values(initial.unsignedYouth).find(y => !y.placed && !y.retired)!;
+    const state = scheduleFollowUpSession(initial, youth.player.id);
+    state.schedule = addActivity(state.schedule, {
+      type: "followUpSession", targetId: youth.player.id, slots: 1, description: "Another look",
+    }, 2);
+    const result = resolveObservationWeek(state, [getInteractiveActivityCompletionKey(state.schedule.activities[0]!, 0)]);
+    const newRecords = Object.values(result.state.observations).filter(o => !state.observations[o.id]);
+    expect(newRecords).toHaveLength(1);
+    expect(newRecords[0].context).toBe("followUpSession");
+    expect(newRecords[0].activityInstanceId).toBe(getInteractiveActivityCompletionKey(state.schedule.activities[2]!, 2));
+  }, 30_000);
+});
 
 function resolveProfessionalVideoWeek(
   state: GameState,
@@ -243,9 +297,9 @@ describe("weekly observation transaction", () => {
     expect(first).toEqual(second);
     expect(generated.length).toBe(first.observationsGenerated);
     expect(generated.every((observation) => Boolean(
-      observation.situation?.id
-      && observation.situation.repetitionKey
-      && observation.situation.activityType === "schoolMatch",
+      expandObservationSituationSnapshot(observation.situation)?.id
+      && expandObservationSituationSnapshot(observation.situation)?.repetitionKey
+      && expandObservationSituationSnapshot(observation.situation)?.activityType === "schoolMatch",
     ))).toBe(true);
     expect(JSON.stringify(state)).toBe(before);
   }, 30_000);

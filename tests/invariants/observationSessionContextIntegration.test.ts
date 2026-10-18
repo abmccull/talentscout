@@ -1,9 +1,14 @@
+import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
 import { describe, expect, it, vi } from "vitest";
 import type { Observation, ReflectionJournalEntry, ScoutCueReading } from "@/engine/core/types";
-import { createSession } from "@/engine/observation/session";
-import type { PlayerMoment } from "@/engine/observation/types";
-import { createRNG } from "@/engine/rng";
 import { useGameStore } from "@/stores/gameStore";
+import { buildReflectionJournalEntry } from "@/stores/actions/observationActions";
+import { createSession, startSession } from "@/engine/observation/session";
+import { createRNG } from "@/engine/rng";
+import type { PlayerMoment } from "@/engine/observation/types";
+import { populateInvestigationPhases } from "@/engine/observation/investigation";
+import { shapeTargetedInquiry } from "@/engine/observation/targetedInquiry";
+import { resolveDialogueOptionSelection } from "@/engine/observation/interactionSelection";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -21,6 +26,26 @@ vi.mock("@/lib/db", () => ({
 }));
 
 describe("observation session context integration", () => {
+  it("archives a question and answer against its player even without observations or a summary", () => {
+    const created = createSession({ activityType: "parentCoachMeeting", specialization: "youth",
+      playerPool: [{ playerId: "lead", name: "Theo", position: "CM" }],
+      sourceContactId: "coach", sourceContactName: "Maya", scoutingQuestionId: "pressure",
+      seed: "journal-inquiry", week: 4, season: 2,
+    }, createRNG("journal-inquiry"));
+    const shaped = shapeTargetedInquiry(populateInvestigationPhases(created, createRNG("journal-inquiry")), []);
+    const active = { ...startSession(shaped), currentPhaseIndex: 1 };
+    const node = active.phases[1].dialogueNodes![0];
+    const selected = resolveDialogueOptionSelection(active, node.id, "recall-account");
+    const entry = buildReflectionJournalEntry(selected.session, null, undefined, [], []);
+    expect(entry?.playerIds).toEqual(["lead"]);
+    expect(entry?.conversationDecisions).toHaveLength(1);
+    expect(entry?.conversationDecisions?.[0].sourceName).toBe("Maya");
+    expect(entry?.conversationDecisions?.[0].inquiry?.status).toBe("unanswered");
+    expect(entry?.conversationDecisions?.[0].inquiry?.questionId).toBe("pressure");
+    expect(entry?.evidenceCards).toEqual([]);
+    expect(JSON.parse(JSON.stringify(entry)).conversationDecisions).toEqual(entry?.conversationDecisions);
+    expect(entry?.conversationDecisions?.[0]).not.toBe(selected.resolution);
+  });
   it("retains focused glimpses without estimates, excludes missed and peripheral passages, and completes only once", async () => {
     await useGameStore.getState().startNewGame({
       scoutFirstName: "Evidence", scoutLastName: "Scout", scoutAge: 24,
@@ -133,6 +158,15 @@ describe("observation session context integration", () => {
       hypotheses: [],
       scoutingQuestionId: "execution",
       evidenceCards: [],
+      conversationDecisions: [{ phaseIndex: 1, nodeId: "inquiry", optionId: "ask",
+        optionText: "Check pressure response", narrativeText: "Still unanswered",
+        insightPointsAwarded: 0, relationshipDeltaApplied: 0,
+        inquiry: { playerId: canonicalPlayerId, questionId: "pressure", sourceName: "Maya", status: "unanswered" },
+      }, { phaseIndex: 2, nodeId: "other-player", optionId: "ask",
+        optionText: "Different player", narrativeText: "Not this case",
+        insightPointsAwarded: 0, relationshipDeltaApplied: 0,
+        inquiry: { playerId: "unrelated-player", questionId: "movement", sourceName: "Maya", status: "unanswered" },
+      }],
       createdAt: 1,
     } satisfies ReflectionJournalEntry;
 
@@ -164,11 +198,13 @@ describe("observation session context integration", () => {
       priorQuestionIds: ["execution"],
       priorEvidenceQuality: 0.65,
     });
+    expect(session?.observerContext?.openQuestionIds).toContain("pressure");
+    expect(session?.observerContext?.openQuestionIds).not.toContain("movement");
     expect(session?.questionOptions?.[0]).toMatchObject({ recommended: true });
     expect(session?.scoutingQuestionId).toBe(session?.questionOptions?.[0]?.id);
   }, 30_000);
 
-  it("propagates case guidance onto scheduled activities and into the session focus", async () => {
+  it.each(["full", "early"])("persists case guidance and %s session completion without duplicate rewards", async (completionMode) => {
     await useGameStore.getState().startNewGame({
       scoutFirstName: "Case",
       scoutLastName: "Planner",
@@ -239,6 +275,9 @@ describe("observation session context integration", () => {
     expect(scheduled?.scoutingQuestionId).toBeTruthy();
     expect((scheduled?.scoutingQuestionIds?.length ?? 0)).toBeGreaterThan(0);
 
+    useGameStore.getState().startWeekSimulation();
+    expect(useGameStore.getState().weekSimulation?.currentDay).toBe(0);
+
     useGameStore.getState().startObservationSession(
       "followUpSession",
       [{
@@ -247,11 +286,67 @@ describe("observation session context integration", () => {
         position: youth.player.position,
       }],
       playerId,
-      { activityInstanceId: scheduled?.instanceId },
+      { activityInstanceId: getInteractiveActivityCompletionKey(scheduled!, 0) },
     );
 
     const session = useGameStore.getState().activeSession;
+    expect(session?.mode).toBe("fullObservation");
+    expect(session?.venueAtmosphere?.venueType).toBe("trainingVisit");
+    expect(session?.phases.some((phase) => phase.moments.length > 0)).toBe(true);
     expect(session?.scoutingQuestionId).toBe(scheduled?.scoutingQuestionId);
     expect(session?.observerContext?.openQuestionIds).toEqual(scheduled?.scoutingQuestionIds);
+
+    useGameStore.getState().beginSession();
+    useGameStore.getState().allocateSessionFocus(playerId, "technical");
+    for (let phase = 0; phase < session!.phases.length; phase++) {
+      const active = useGameStore.getState().activeSession!;
+      if (active.phases[active.currentPhaseIndex].isHalfTime) {
+        useGameStore.getState().setSessionHalftimeApproach("challenge");
+      }
+      const moment = active.phases[active.currentPhaseIndex].moments.find((entry) => entry.playerId === playerId);
+      if (moment) useGameStore.getState().flagSessionMoment(moment.id, "needs_more_data");
+      if (completionMode === "early" && phase === 1) {
+        useGameStore.getState().endObservationSession();
+        break;
+      }
+      useGameStore.getState().advanceSessionPhase();
+    }
+    expect(useGameStore.getState().activeSession?.state).toBe("reflection");
+    if (completionMode === "early") {
+      expect(useGameStore.getState().activeSession?.phases).toHaveLength(2);
+      expect(useGameStore.getState().activeSession?.plannedPhaseCount).toBe(session!.phases.length);
+    }
+    const reflected = useGameStore.getState().activeSession!;
+    for (const cue of reflected.cueReadings ?? []) {
+      if (reflected.flaggedMoments.some((flag) => flag.moment.id === cue.momentId)) {
+        useGameStore.getState().classifySessionEvidence(cue.id, "noConclusion");
+      }
+    }
+    const saved = JSON.parse(JSON.stringify(useGameStore.getState().saveGame()));
+    const retainedWeek = saved.pendingWeekRecovery.simulation;
+    useGameStore.getState().loadGame(saved);
+    expect(useGameStore.getState().currentScreen).toBe("observation");
+    expect(useGameStore.getState().weekSimulation).toEqual(retainedWeek);
+    useGameStore.getState().endObservationSession();
+    expect(useGameStore.getState().currentScreen).toBe("weekSimulation");
+    expect(useGameStore.getState().weekSimulation?.currentDay).toBe(0);
+    const completed = useGameStore.getState().gameState!;
+    expect(completed.completedInteractiveSessions).toContain(session!.activityInstanceId);
+    expect(completed.reflectionJournal[session!.id]?.activityInstanceId).toBe(session!.activityInstanceId);
+    expect(completed.reflectionJournal[session!.id]?.sessionMode).toBe("fullObservation");
+    expect(completed.reflectionJournal[session!.id]?.evidenceCards?.length).toBeGreaterThan(0);
+    expect(completed.reflectionJournal[session!.id]?.evidenceCards?.every((card) =>
+      card.playerId === playerId && card.questionId === scheduled?.scoutingQuestionId
+      && card.classification === "noConclusion")).toBe(true);
+    useGameStore.getState().endObservationSession();
+    expect(useGameStore.getState().gameState).toBe(completed);
+
+    const afterCompletion = JSON.parse(JSON.stringify(useGameStore.getState().saveGame()));
+    useGameStore.getState().loadGame(afterCompletion);
+    expect(useGameStore.getState().currentScreen).toBe("weekSimulation");
+    expect(useGameStore.getState().activeSession).toBeNull();
+    // A checkpoint from the old week cannot replay after a committed world tick.
+    useGameStore.getState().loadGame({ ...afterCompletion, currentWeek: afterCompletion.currentWeek + 1 });
+    expect(useGameStore.getState().weekSimulation).toBeNull();
   }, 30_000);
 });

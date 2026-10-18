@@ -45,6 +45,7 @@ export function collectYouthCasePlayerIds(
 }
 
 const CAREER_LOOP_INBOX_PREFIXES = [
+  "msg_betrayal_", // Personal loss of access, not ambient football news.
   "review-s",
   "development-pressure-review",
   "perf-bonus-s",

@@ -49,7 +49,7 @@ function setup(unknownKind: "pressure" | "level" = "level", corroborate = false)
       retiredPlayers: {}, observations: { [observation.id]: observation },
       reports: {}, scoutingCases: {}, recommendationReviews: {}, playerMovementHistory: [], clubDecisions: {},
       discoveryRecords: [], clubResponses: [], systemFitCache: {}, predictions: [], inbox: [], clubs: {},
-      fixtures: {}, contacts: {}, subRegions: {}, youthTournaments: {}, youthRecruitmentBriefs: {},
+      fixtures: {}, contacts: {}, contactIntel: {}, subRegions: {}, youthTournaments: {}, youthRecruitmentBriefs: {},
       regionalKnowledge: {}, leagues: {}, countries: {},
       reflectionJournal: { "session-1": { sessionId: "session-1", scoutId: scout.id, playerIds: [player.id], week: 1, season: 1, hypotheses: [], evidenceCards: [card] } },
       openingCase: { id: "opening-1", playerId: player.id, youthId: "youth-1", stage: "report" },

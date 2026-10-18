@@ -17,6 +17,7 @@ import type {
 import type { Club, GameState, League, Player } from "@/engine/core/types";
 import { generatePlayer } from "@/engine/players/generation";
 import { RNG } from "@/engine/rng";
+import { applyWeeklyPlayerProgression } from "@/engine/core/weekly/stateApplication";
 import { createDevelopmentEnvironmentIndex } from "@/engine/world/developmentEnvironment";
 import {
   createWeeklyPlayerRatingIndex,
@@ -79,6 +80,44 @@ function makeState(player: Player): GameState {
 }
 
 describe("weekly player simulation extraction", () => {
+  it.each([36, 39])("continues veteran decline at age %i through the weekly pipeline", (age) => {
+    const player = {
+      ...generatePlayer(new RNG(`veteran-${age}`), {
+        position: "CM", ageRange: [age, age], abilityRange: [140, 140],
+        nationality: "English", clubId: "club",
+      }),
+      developmentProfile: "steadyGrower" as const,
+      injured: false, injuryWeeksRemaining: 0, form: 1,
+    };
+    let changes = 0;
+    let declinedPlayers = 0;
+    // A veteran can legitimately hold form for one season. Exercise a seeded
+    // cohort rather than requiring a random decline for every individual.
+    for (let sample = 0; sample < 12; sample++) {
+      let state = makeState(player);
+      const rng = new RNG(`veteran-weekly-${age}-${sample}`);
+      for (let week = 1; week <= 46; week++) {
+        state = { ...state, currentWeek: week };
+        const result = processPlayerDevelopment(state, rng, createDevelopmentEnvironmentIndex(state));
+        expect(result.breakthroughs).toHaveLength(0);
+        changes += result.development.length;
+        state = { ...state, players: applyWeeklyPlayerProgression(state, {
+          playerDevelopment: result.development, breakthroughs: result.breakthroughs, injurySetbacks: [],
+        }, (value, min, max) => Math.max(min, Math.min(max, value))) };
+      }
+      expect(state.players[player.id].currentAbility).toBeLessThanOrEqual(player.currentAbility);
+      if (state.players[player.id].currentAbility < player.currentAbility) {
+        declinedPlayers++;
+        expect(state.players[player.id].attributes).not.toEqual(player.attributes);
+      }
+    }
+    expect(changes).toBeGreaterThan(0);
+    expect(declinedPlayers).toBeGreaterThan(0);
+    const injuredState = makeState({ ...player, injured: true, injuryWeeksRemaining: 10 });
+    expect(processPlayerDevelopment(injuredState, new RNG("injured-veteran"),
+      createDevelopmentEnvironmentIndex(injuredState)).development).toHaveLength(0);
+  });
+
   it("keeps gameLoop type exports identical to weekly type authority", () => {
     expectTypeOf<GameLoopTransfer>().toEqualTypeOf<WeeklyTransfer>();
     expectTypeOf<GameLoopPlayerDevelopmentResult>().toEqualTypeOf<WeeklyPlayerDevelopmentResult>();

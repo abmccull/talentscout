@@ -316,7 +316,7 @@ function findMatchingRivalOpportunity(
   decision: DecisionRecord,
   playerId: string | undefined,
 ) {
-  const openOpportunities = getOpenRivalOrganizationOpportunities(state.rivalOrganizationState);
+  const openOpportunities = getOpenRivalOrganizationOpportunities(state.rivalOrganizationState, { season: state.currentSeason, week: state.currentWeek });
   if (openOpportunities.length === 0) return undefined;
 
   const rivalIds = new Set(rivalStakeholderIds(decision));

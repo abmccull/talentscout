@@ -20,6 +20,6 @@ export function createDurableGameplaySetter(get: GetState, set: SetState): SetSt
     if (areEquivalentSaveStates({ ...before.gameState, inbox: next.inbox }, next)) return;
     // A synchronous subscriber may replace the career during set(); the exact
     // committed reference above prevents this action from saving over it.
-    queueGameplayAutosave(snapshotPersistedGameState(next, after.activeSession), set);
+    queueGameplayAutosave(snapshotPersistedGameState(next, after.activeSession, after.weekSimulation), set);
   };
 }

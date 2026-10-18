@@ -1,3 +1,5 @@
+import { getWeeklySimulationGeneration } from "@/lib/weeklySimulationLifecycle";
+import { getWeeklyWorkCounts } from "@/lib/weeklyWorkCounts";
 /**
  * Fast-forward, delegation, and leadership actions that sit beside the
  * canonical weekly simulation. These actions deliberately delegate their
@@ -17,7 +19,6 @@ import {
   buildDefaultPriorities,
   delegateScoutingTask,
 } from "@/engine/core/quickScout";
-import { getScheduledActivityInstances } from "@/engine/core/calendar";
 import {
   chooseLeadershipResponsibility,
   type LeadershipResponsibilityChoice,
@@ -71,6 +72,7 @@ export function createWeeklyQuickScoutActions(
     batchAdvance: async (weeks: number, priorities?: QuickScoutPriorities) => {
       const initialState = get().gameState;
       if (!initialState) return;
+      const generation = getWeeklySimulationGeneration();
 
       // This is deliberately an input policy over the authoritative
       // day-by-day/week transaction. It must never own a second world
@@ -95,11 +97,11 @@ export function createWeeklyQuickScoutActions(
           get().autoSchedule(policy);
           const scheduled = get().gameState;
           if (!scheduled) break;
-          const scheduledInstances = getScheduledActivityInstances(scheduled.schedule);
 
           get().startWeekSimulation();
           if (!get().weekSimulation) break;
           await get().fastForwardWeek();
+          if (generation !== getWeeklySimulationGeneration()) return;
 
           const after = get().gameState;
           if (!after) break;
@@ -129,9 +131,7 @@ export function createWeeklyQuickScoutActions(
             week: before.currentWeek,
             season: before.currentSeason,
             fatigueChange: after.scout.fatigue - before.scout.fatigue,
-            matchesAttended: scheduledInstances.filter(({ activity }) => activity.type === "attendMatch").length,
-            reportsWritten: scheduledInstances.filter(({ activity }) => activity.type === "writeReport").length,
-            meetingsHeld: scheduledInstances.filter(({ activity }) => activity.type === "networkMeeting").length,
+            ...getWeeklyWorkCounts(scheduled, after),
             newMessages,
             playersDiscovered: newDiscoveries,
             observationsGenerated: newObservations,
@@ -157,7 +157,7 @@ export function createWeeklyQuickScoutActions(
       }
 
       const finalState = get().gameState;
-      if (!finalState) return;
+      if (!finalState || generation !== getWeeklySimulationGeneration()) return;
       const result: BatchAdvanceResult = {
         weekSummaries,
         weeksAdvanced: weekSummaries.length,

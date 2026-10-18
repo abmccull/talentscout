@@ -1,3 +1,5 @@
+import type { StoredPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
+import { collectCanonicalAppearances, summarizeCanonicalAppearances, type CanonicalAppearance } from "@/engine/match/canonicalPerformance";
 /**
  * Compact, authoritative multi-season world history.
  *
@@ -16,7 +18,6 @@ import type {
   PlayerMatchRating,
   PlayerMovementEvent,
   RunManifest,
-  ScoutingPhilosophy,
   StandingEntry,
   TacticalStyle,
 } from "@/engine/core/types";
@@ -29,7 +30,7 @@ import {
 } from "@/engine/world/saveRetention";
 import type {
   PlayerCareerStatus,
-  PlayerMovementArchiveSummary,
+  StoredPlayerMovementSummary,
   PlayerSeasonHistory,
   PlayerSeasonPerformance,
 } from "@/engine/world/worldHistoryTypes";
@@ -39,11 +40,11 @@ import {
 } from "@/engine/world/worldHistoryTypes";
 import {
   deriveClubRecruitmentDoctrine,
-  type ClubRecruitmentDoctrine,
 } from "@/engine/world/recruitmentIdentity";
 export type {
-  PlayerCareerStatus,
   PlayerMovementArchiveSummary,
+  PlayerCareerStatus,
+  StoredPlayerMovementSummary,
   PlayerSeasonHistory,
   PlayerSeasonPerformance,
 } from "@/engine/world/worldHistoryTypes";
@@ -51,60 +52,13 @@ export type {
 export const WORLD_HISTORY_VERSION = 1 as const;
 export const WORLD_HISTORY_MAX_SEASONS = 30;
 
-export type ClubLeagueMovement = "promoted" | "relegated" | "stayed";
-
-export interface ClubSeasonStanding {
-  position: number;
-  tableSize: number;
-  played: number;
-  won: number;
-  drawn: number;
-  lost: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference: number;
-  points: number;
-}
-
-export interface ManagerSeasonIdentity {
-  managerId: string;
-  managerName: string;
-  scoutingPreference: ManagerProfile["preference"];
-  reportInfluence: number;
-  preferredFormation: string;
-}
-
-export interface ClubSeasonHistory {
-  clubId: string;
-  leagueId: string;
-  /** Present only when this league produced supported played results. */
-  standing?: ClubSeasonStanding;
-  /** Present only when the authoritative movement resolver ran this season. */
-  leagueMovement?: ClubLeagueMovement;
-  nextLeagueId?: string;
-  reputation: number;
-  budget: number;
-  scoutingPhilosophy: ScoutingPhilosophy;
-  /** Player-safe doctrine snapshot explains why this season's club acted differently. */
-  recruitmentDoctrine?: Pick<
-    ClubRecruitmentDoctrine,
-    | "version"
-    | "archetype"
-    | "preferredSeniorAgeRange"
-    | "evidencePreference"
-    | "riskTolerance"
-    | "geographicReach"
-    | "adaptationTolerance"
-    | "pathwayPatience"
-    | "tacticalRoleRigidity"
-    | "sellingPressure"
-    | "managerInfluence"
-    | "directorInfluence"
-    | "seasonalObjective"
-  >;
-  tacticalStyle?: TacticalStyle;
-  manager?: ManagerSeasonIdentity;
-}
+import type { ClubSeasonHistory } from "./clubSeasonHistoryTypes";
+export type {
+  ClubLeagueMovement,
+  ClubSeasonStanding,
+  ManagerSeasonIdentity,
+  ClubSeasonHistory,
+} from "./clubSeasonHistoryTypes";
 
 export interface LeagueSeasonHistory {
   leagueId: string;
@@ -119,7 +73,7 @@ export interface WorldSeasonHistory {
   /** Deterministic simulation clock, not wall-clock time. */
   recordedAfterTotalWeeks: number;
   leagues: LeagueSeasonHistory[];
-  clubs: ClubSeasonHistory[];
+  clubs: import("./clubSeasonArchive").ClubSeasonHistoryEntry[];
   players: PlayerSeasonHistory[];
   /**
    * Compact projection of every material player movement resolved this season.
@@ -131,7 +85,7 @@ export interface WorldSeasonHistory {
    * Optional for legacy saves; migration fills it from the raw ledger when
    * that source is still available.
    */
-  playerMovementSummaries?: PlayerMovementArchiveSummary[];
+  playerMovementSummaries?: StoredPlayerMovementSummaries;
 }
 
 export interface WorldHistoryState {
@@ -181,72 +135,14 @@ function sortStandings(entries: StandingEntry[]): StandingEntry[] {
 function collectPlayerRatings(
   snapshot: WorldHistorySnapshot,
   completedSeason: number,
-): Map<string, PlayerMatchRating[]> {
-  const ratings = new Map<string, PlayerMatchRating[]>();
-
-  for (const fixtureId of Object.keys(snapshot.matchRatings).sort()) {
-    const fixture = snapshot.fixtures[fixtureId];
-    if (
-      !fixture ||
-      !fixture.played ||
-      !isFixtureInSeason(fixture, completedSeason)
-    ) {
-      continue;
-    }
-
-    for (const [playerId, rating] of Object.entries(
-      snapshot.matchRatings[fixtureId] ?? {},
-    ).sort(([a], [b]) => a.localeCompare(b))) {
-      // Participation is explicit by contract. A rating without either fact is
-      // not enough evidence to invent an appearance.
-      if (rating.started !== true && !(rating.minutesPlayed && rating.minutesPlayed > 0)) {
-        continue;
-      }
-      const playerRatings = ratings.get(playerId) ?? [];
-      playerRatings.push(rating);
-      ratings.set(playerId, playerRatings);
-    }
-  }
-
-  return ratings;
+): ReadonlyMap<string, readonly CanonicalAppearance[]> {
+  return collectCanonicalAppearances(snapshot.fixtures, snapshot.matchRatings, completedSeason);
 }
 
 function summarizePerformance(
-  ratings: PlayerMatchRating[] | undefined,
+  appearances: readonly CanonicalAppearance[] | undefined,
 ): PlayerSeasonPerformance | undefined {
-  if (!ratings || ratings.length === 0) return undefined;
-
-  let starts = 0;
-  let minutesPlayed = 0;
-  let appearancesWithoutMinutes = 0;
-  let ratingTotal = 0;
-  let goals = 0;
-  let assists = 0;
-  let cleanSheets = 0;
-
-  for (const rating of ratings) {
-    if (rating.started === true) starts += 1;
-    if (typeof rating.minutesPlayed === "number") {
-      minutesPlayed += rating.minutesPlayed;
-    } else {
-      appearancesWithoutMinutes += 1;
-    }
-    ratingTotal += rating.rating;
-    goals += rating.stats.goals ?? 0;
-    assists += rating.stats.assists ?? 0;
-    if (rating.stats.cleanSheet === true) cleanSheets += 1;
-  }
-
-  return {
-    appearances: ratings.length,
-    starts,
-    ...(appearancesWithoutMinutes === 0 ? { minutesPlayed } : {}),
-    appearancesWithoutMinutes,
-    averageRating: Math.round((ratingTotal / ratings.length) * 10) / 10,
-    goals,
-    assists,
-    cleanSheets,
-  };
+  return summarizeCanonicalAppearances(appearances);
 }
 
 function resolveCareerStatus(
@@ -407,7 +303,8 @@ function buildSeasonRecord(
     });
 
   const newlyRetiredPlayers = Object.values(snapshot.retiredPlayers).filter((player) =>
-    (movementsByPlayer.get(player.id) ?? []).some(
+    playerRatings.has(player.id)
+    || (movementsByPlayer.get(player.id) ?? []).some(
       (movement) => movement.type === "retirement" || movement.type === "footballExit",
     ),
   );
@@ -455,21 +352,29 @@ function buildSeasonRecord(
     historicallyRelevantPlayerIds,
   );
 
+  const leagueCounts = new Map<string, { clubCount: number; playedFixtures: number }>();
+  for (const league of Object.values(snapshot.leagues)) {
+    leagueCounts.set(league.id, { clubCount: 0, playedFixtures: 0 });
+  }
+  for (const club of Object.values(snapshot.clubs)) {
+    const counts = leagueCounts.get(club.leagueId);
+    if (counts) counts.clubCount += 1;
+  }
+  for (const fixture of Object.values(snapshot.fixtures)) {
+    const counts = leagueCounts.get(fixture.leagueId);
+    if (counts && fixture.played && isFixtureInSeason(fixture, completedSeason)) {
+      counts.playedFixtures += 1;
+    }
+  }
+
   const leagues: LeagueSeasonHistory[] = Object.values(snapshot.leagues)
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((league) => ({
       leagueId: league.id,
       country: league.country,
       tier: league.tier,
-      clubCount: Object.values(snapshot.clubs).filter(
-        (club) => club.leagueId === league.id,
-      ).length,
-      playedFixtures: Object.values(snapshot.fixtures).filter(
-        (fixture) =>
-          fixture.leagueId === league.id &&
-          fixture.played &&
-          isFixtureInSeason(fixture, completedSeason),
-      ).length,
+      clubCount: leagueCounts.get(league.id)?.clubCount ?? 0,
+      playedFixtures: leagueCounts.get(league.id)?.playedFixtures ?? 0,
     }));
 
   return {

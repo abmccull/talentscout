@@ -92,10 +92,10 @@ export function ReportWorkspaceBridge({
         </article>
       ) : (
         <article className="border-y border-zinc-800 py-6">
-          <h2 id="reports-command-deck-title" className="text-xl font-semibold text-zinc-100">Your first report starts with a player.</h2>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Book a scouting visit, gather evidence, then put your judgment on record.</p>
-          <Button type="button" className="mt-4 min-h-11" onClick={onPlanScouting}>
-            Plan a scouting visit <ArrowRight size={16} className="ml-2" aria-hidden="true" />
+          <h2 id="reports-command-deck-title" className="text-xl font-semibold text-zinc-100">{viewModel.evidenceReview ? `You have a first look on ${viewModel.evidenceReview.playerName}.` : "Your first report starts with a player."}</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">{viewModel.evidenceReview ? "Review the saved evidence, then decide whether to file a report or take another look." : "Book a scouting visit, gather evidence, then put your judgment on record."}</p>
+          <Button type="button" className="mt-4 min-h-11" onClick={() => viewModel.evidenceReview ? onAction(viewModel.evidenceReview.action) : onPlanScouting()}>
+            {viewModel.evidenceReview ? "Review the evidence" : "Plan a scouting visit"} <ArrowRight size={16} className="ml-2" aria-hidden="true" />
           </Button>
         </article>
       )}

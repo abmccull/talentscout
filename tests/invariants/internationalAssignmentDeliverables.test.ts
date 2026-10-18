@@ -1,3 +1,4 @@
+import { createScoutingDecisionReceipt } from "@/engine/youth/decisionReviews";
 import { describe, expect, it } from "vitest";
 import type {
   GameState,
@@ -128,6 +129,16 @@ function progress(state: GameState, kind: string): number {
 }
 
 describe("international assignment deliverables", () => {
+  it("credits historical reports but excludes a private receipt even when the report action changed", () => {
+    const historical = { ...report("historical-pass", "brazilPlayer"), recommendedAction: "pass" as const };
+    const original = stateFor();
+    original.reports = { [historical.id]: historical };
+    expect(progress(synchronizeInternationalAssignmentProgress(original), "submittedReport")).toBe(1);
+    const privateReport = { ...historical, recommendedAction: "offerAcademyPlace" as const,
+      decisionReceipt: createScoutingDecisionReceipt(historical) };
+    original.reports = { [historical.id]: privateReport };
+    expect(progress(synchronizeInternationalAssignmentProgress(original), "submittedReport")).toBe(0);
+  });
   it("declares distinct visible objectives and resets them at acceptance", () => {
     const youth = migrateInternationalAssignment(assignment("youthTournament"));
     const senior = migrateInternationalAssignment(assignment("seniorFriendly"));

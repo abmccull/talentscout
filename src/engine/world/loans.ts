@@ -12,6 +12,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
+import { loanContractWeeksRemaining } from "./loanContract";
 import type {
   GameState,
   Player,
@@ -26,13 +27,14 @@ import type {
 import { normalizeCountryKey } from "@/lib/country";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
 import { getWorldConditionModifiers } from "@/engine/world/worldConditions";
+import { buildClubAffordabilityContext, assessClubAffordabilityFromContext } from "@/engine/finance/clubEconomics";
+import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "@/engine/freeAgents/squadPlanning";
 import {
   addGameWeeksWithSeasonLength,
   gameWeeksBetweenWithSeasonLength,
   isGameDateAtOrAfter,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
-import { wouldBreachCompetitiveOutflowGuard } from "@/engine/match/eligibleRoster";
 
 // =============================================================================
 // CONSTANTS
@@ -46,7 +48,7 @@ const MAX_LOAN_DURATION = 40;
 const AI_LOAN_PROBABILITY = 0.035;
 /** Maximum reputation gap (parent - loan club) for a loan to make sense. */
 const MAX_REP_GAP = 40;
-/** Minimum reputation gap — loans go downhill. */
+/** Standard loans go downhill; domestic peers need a clear playing opportunity. */
 const MIN_REP_GAP = 5;
 
 const PLAYING_TIME_SELECTION_BONUS: Record<
@@ -107,21 +109,36 @@ function generateId(prefix: string, rng: RNG): string {
 
 /**
  * Check if a player is eligible to be loaned out.
- * - Age < 26 (loan deals rare for older players)
+ * - Development players under 26, or surplus experienced goalkeeper cover
  * - Not already on loan
  * - Not a key player (CA not in top 5 at club)
- * - Contract > 1 season remaining
+ * - Contract covers at least the minimum loan duration
  */
 export function isLoanEligible(
   player: Player,
   club: Club,
   allPlayers: Record<string, Player>,
   currentSeason: number,
+  reservedDepartures: ReadonlySet<string> = new Set(),
+  currentWeek = 1,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): boolean {
-  if (player.age < 16 || player.age >= 26) return false;
-  if (player.onLoan) return false;
+  const experiencedKeeper = player.position === "GK" && player.age >= 26;
+  if (player.age < 16 || (player.age >= 26 && !experiencedKeeper)) return false;
+  if (player.onLoan || player.injured) return false;
   if ((player.contractClubId ?? player.clubId) !== club.id) return false;
-  if (player.contractExpiry <= currentSeason + 1) return false;
+  if (loanContractWeeksRemaining(player, currentWeek, currentSeason, seasonLength) < MIN_LOAN_DURATION) return false;
+  if (player.position === "GK") {
+    const remainingKeepers = [...new Set(club.playerIds)].filter((id) => {
+      if (id === player.id || reservedDepartures.has(id)) return false;
+      const teammate = allPlayers[id];
+      return teammate?.clubId === club.id && teammate.position === "GK"
+        && teammate.age >= 18 && !teammate.injured;
+    });
+    // Lending experienced cover must leave both a starter and a backup.
+    // Earlier agreements in this batch cannot spend the same cover twice.
+    if (remainingKeepers.length < (experiencedKeeper ? 2 : 1)) return false;
+  }
 
   // Check if player is a key player (top 5 CA at the club)
   const squadCAs = club.playerIds
@@ -130,10 +147,28 @@ export function isLoanEligible(
   const top5Threshold = squadCAs[4] ?? 0;
   if (player.currentAbility >= top5Threshold && squadCAs.length >= 5) return false;
 
-  // Do not loan out the last competitive buffer body or the last registered GK.
-  if (wouldBreachCompetitiveOutflowGuard(club, allPlayers, player.id)) return false;
-
   return true;
+}
+
+/** Automatic development loans must not strip the parent's first-team cover.
+ * Academy loans do not remove a registered adult place. Count earlier agreed
+ * departures so a batch cannot repeatedly spend the same spare squad place.
+ */
+export function retainsFirstTeamAfterLoan(
+  player: Player, club: Club, players: Record<string, Player>,
+  reservedDepartures: ReadonlySet<string> = new Set(),
+): boolean {
+  if (!club.playerIds.includes(player.id)) return true;
+  const remaining = [...new Set(club.playerIds)].filter(id =>
+    id !== player.id && !reservedDepartures.has(id),
+  ).map(id => players[id]).filter(member => member?.clubId === club.id && member.age >= 16);
+  // Promoted teenagers may be essential first-team cover. Do not treat them
+  // as disposable academy depth after they have entered the senior roster.
+  const retainsPlayingPlace = player.position === "GK"
+    ? remaining.some(member => member.position === "GK")
+    : remaining.filter(member => member.position !== "GK").length >= 10;
+  if (!retainsPlayingPlace) return false;
+  return player.age < 18 || remaining.filter(member => member.age >= 18).length >= 18;
 }
 
 /**
@@ -147,6 +182,7 @@ export function findLoanDestination(
   allPlayers: Record<string, Player>,
   rng: RNG,
   leagues?: GameState["leagues"],
+  acceptsTerms?: (club: Club) => boolean,
 ): Club | null {
   const candidates: Array<{ item: Club; weight: number }> = [];
   const parentCountry = normalizeCountryKey(leagues?.[parentClub.leagueId]?.country);
@@ -154,10 +190,11 @@ export function findLoanDestination(
   for (const club of Object.values(clubs)) {
     if (club.id === parentClub.id) continue;
     const repGap = parentClub.reputation - club.reputation;
-    if (repGap < MIN_REP_GAP || repGap > MAX_REP_GAP) continue;
+    if (repGap < -5 || repGap > MAX_REP_GAP) continue;
 
-    // Check budget — club must be able to afford at least 30% wage contribution
-    if (club.budget < player.wage * 0.3 * 20) continue; // ~20 weeks of partial wages
+    // A caller with concrete terms checks the actual upfront fee and payroll.
+    // Retain the rough cash screen only for route-only callers.
+    if (!acceptsTerms && club.budget < player.wage * 0.3 * 20) continue;
 
     const destinationCountry = normalizeCountryKey(leagues?.[club.leagueId]?.country);
     const isForeign = !!parentCountry && !!destinationCountry && parentCountry !== destinationCountry;
@@ -172,9 +209,23 @@ export function findLoanDestination(
     const squadAtPosition = club.playerIds
       .map((id) => allPlayers[id])
       .filter((p): p is Player => !!p && p.position === player.position);
+    // An experienced keeper loan serves a real coverage need, not another
+    // reserve slot at a club that already has two registered keepers.
+    if (player.position === "GK" && player.age >= 26 && squadAtPosition.length >= 2) continue;
+
+    // A domestic peer can offer a blocked prospect useful first-team minutes.
+    // Reputation alone must not prevent the move, but a crowded position or
+    // stronger incumbent makes this a poor development destination.
+    if (repGap < MIN_REP_GAP) {
+      const knownDomestic = !!parentCountry && parentCountry === destinationCountry;
+      const clearOpportunity = squadAtPosition.length < 2
+        && squadAtPosition.every((incumbent) => player.currentAbility >= incumbent.currentAbility);
+      if (!knownDomestic || !clearOpportunity) continue;
+    }
 
     // Fewer than 2 players in that position = strong need
     if (squadAtPosition.length < 3) {
+      if (acceptsTerms && !acceptsTerms(club)) continue;
       const geographyWeight = isForeign ? 0.5 + transferFlow * 2 : 4;
       const needWeight = squadAtPosition.length === 0 ? 2 : squadAtPosition.length === 1 ? 1.5 : 1;
       candidates.push({ item: club, weight: geographyWeight * needWeight });
@@ -197,12 +248,14 @@ export function calculateLoanTerms(
   rng: RNG,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): Omit<LoanDeal, "id" | "status" | "scoutId" | "performanceRecord"> {
-  const maximumDuration = Math.max(MAX_LOAN_DURATION, seasonLength);
+  const maximumDuration = Math.min(Math.max(MAX_LOAN_DURATION, seasonLength),
+    loanContractWeeksRemaining(player, currentWeek, currentSeason, seasonLength));
+  if (maximumDuration < MIN_LOAN_DURATION) throw new RangeError("Ownership contract cannot cover the minimum loan duration");
   // Duration: 4 weeks through the active full-season range.
   const durationOptions = [
-    { item: rng.nextInt(MIN_LOAN_DURATION, 15), weight: 30 },  // short loan
-    { item: rng.nextInt(16, 25), weight: 40 },                  // half-season
-    { item: rng.nextInt(26, maximumDuration), weight: 30 },     // full season
+    { item: rng.nextInt(MIN_LOAN_DURATION, Math.min(15, maximumDuration)), weight: 30 },
+    ...(maximumDuration >= 16 ? [{ item: rng.nextInt(16, Math.min(25, maximumDuration)), weight: 40 }] : []),
+    ...(maximumDuration >= 26 ? [{ item: rng.nextInt(26, maximumDuration), weight: 30 }] : []),
   ];
   const duration = rng.pickWeighted(durationOptions);
 
@@ -425,7 +478,7 @@ export function processAILoanDeals(
     }
     if (
       reservedPlayerIds.has(player.id) ||
-      !isLoanEligible(player, parentClub, state.players, season) ||
+      !isLoanEligible(player, parentClub, state.players, season, reservedPlayerIds, week, seasonLength) ||
       targetClub.id === parentClub.id
     ) {
       return rejectRecommendation("The player is not currently eligible for this loan.");
@@ -474,10 +527,14 @@ export function processAILoanDeals(
       return rejectRecommendation("The club could not guarantee a suitable role or financial package.");
     }
 
+    if (!Number.isFinite(recommendation.suggestedDuration)) {
+      return rejectRecommendation("The proposed loan duration is invalid.");
+    }
     const duration = Math.max(
       MIN_LOAN_DURATION,
       Math.min(
         Math.max(MAX_LOAN_DURATION, seasonLength),
+        loanContractWeeksRemaining(player, week, season, seasonLength),
         Math.round(recommendation.suggestedDuration),
       ),
     );
@@ -558,48 +615,66 @@ export function processAILoanDeals(
   const scoutedPlayerIds = new Set(
     Object.values(state.reports).map((report) => report.playerId),
   );
+  const loanFinances = buildClubAffordabilityContext(state.clubs, state.players, {
+    currentWeek: week, currentSeason: season,
+  });
+  const loanClubs = Object.fromEntries(Object.entries(loanFinances).map(([id, entry]) => [id, entry.club]));
+  const reserveLoan = (deal: Pick<LoanDeal, "playerId" | "loanClubId" | "loanFee" | "wageContribution">) => {
+    const player = state.players[deal.playerId];
+    const entry = loanFinances[deal.loanClubId];
+    if (!player || !entry) return;
+    const financial = assessClubAffordabilityFromContext(entry, {
+      upfrontCost: deal.loanFee,
+      weeklyObligationCommitment: Math.round(player.wage * deal.wageContribution / 100),
+    });
+    const club = { ...entry.club, budget: financial.remainingBudget,
+      playerIds: player.age >= 18 ? [...new Set([...entry.club.playerIds, player.id])] : entry.club.playerIds };
+    loanFinances[club.id] = { club, currentWeeklyCommitment: financial.projectedWeeklyCommitment };
+    loanClubs[club.id] = club;
+  };
+  // Accepted recommendations precede automatic deals and reserve the same
+  // borrower funds. Final movement settlement remains authoritative.
+  for (const deal of deals) reserveLoan(deal);
   for (const player of Object.values(state.players)) {
     if (reservedPlayerIds.has(player.id)) continue;
     const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
     const club = state.clubs[ownerClubId];
-    if (!club || !isLoanEligible(player, club, state.players, season)) continue;
+    if (!club || !isLoanEligible(player, club, state.players, season, reservedPlayerIds, week, seasonLength)) continue;
+    if (!retainsFirstTeamAfterLoan(player, club, state.players, reservedPlayerIds)) continue;
     if (!rng.chance(AI_LOAN_PROBABILITY)) continue;
     if ((club.loanedOutPlayerIds ?? []).includes(player.id)) continue;
 
+    const offeredTerms = new Map<string, ReturnType<typeof calculateLoanTerms>>();
     const destination = findLoanDestination(
       player,
       club,
-      state.clubs,
+      loanClubs,
       state.players,
       rng,
       state.leagues,
+      (candidate) => {
+        const terms = calculateLoanTerms(player, club, candidate, week, season, rng, seasonLength);
+        const contribution = Math.round(player.wage * terms.wageContribution / 100);
+        const financial = assessClubAffordabilityFromContext(loanFinances[candidate.id], {
+          upfrontCost: terms.loanFee, weeklyObligationCommitment: contribution,
+        });
+        const places = new Set([...candidate.playerIds, ...(player.age >= 18 ? [player.id] : [])]).size;
+        if (!financial.affordable || !canFundSquadCompletion(financial.remainingWeeklyHeadroom, places, contribution,
+          getGoalkeeperRecruitmentNeed(player, candidate, state.players), getEmergencySquadVacancies(player, candidate, state.players), player.age)) return false;
+        offeredTerms.set(candidate.id, terms);
+        return true;
+      },
     );
     if (!destination) continue;
-    const terms = calculateLoanTerms(
-      player,
-      club,
-      destination,
-      week,
-      season,
-      rng,
-      seasonLength,
-    );
-    const durationWeeks = Math.max(
-      1,
-      gameWeeksBetweenWithSeasonLength(
-        { week: terms.startWeek, season: terms.startSeason },
-        { week: terms.endWeek, season: terms.endSeason },
-        seasonLength,
-      ),
-    );
-    const totalCommitment = terms.loanFee + Math.round(
-      player.wage * durationWeeks * terms.wageContribution / 100,
-    );
-    if (destination.budget < totalCommitment) continue;
+    const terms = offeredTerms.get(destination.id)!;
+    const incumbents = destination.playerIds.map((id) => state.players[id])
+      .filter((member): member is Player => !!member && member.position === player.position);
+    const regularOpportunity = incumbents.length < 2
+      && incumbents.every((member) => player.currentAbility >= member.currentAbility);
     const deal: LoanDeal = {
       id: generateId("loan", rng),
       ...terms,
-      agreedPlayingTime: "rotation",
+      agreedPlayingTime: regularOpportunity ? "regular" : "rotation",
       startCurrentAbility: player.currentAbility,
       status: "active",
       performanceRecord: {
@@ -613,6 +688,7 @@ export function processAILoanDeals(
       },
     };
     deals.push(deal);
+    reserveLoan(deal);
     reservedPlayerIds.add(player.id);
 
     if (scoutedPlayerIds.has(player.id)) {
@@ -737,8 +813,14 @@ export function processLoanPerformance(
       50 + (appearanceRate > 0.5 ? 20 : -10) + newDevDelta * 5,
     ));
     const appearanceSatisfaction = appeared ? 5 : hasFixture ? -3 : 0;
+    // Ordinary good loans keep their score; outstanding accumulated match
+    // performance can make a permanent move attractive to the borrower.
+    const standoutPerformanceBonus = Math.min(20, Math.max(0,
+      (newAvgRating - 7) * 20,
+    ));
     const loanSatisfaction = Math.min(100, Math.max(0,
-      50 + (newAvgRating > 6.5 ? 15 : -10) + appearanceSatisfaction,
+      50 + (newAvgRating > 6.5 ? 15 : -10)
+        + standoutPerformanceBonus + appearanceSatisfaction,
     ));
 
     updatedLoans.push({

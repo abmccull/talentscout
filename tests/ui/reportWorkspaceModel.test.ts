@@ -8,6 +8,7 @@ import type {
   ScoutingCase,
 } from "@/engine/core/types";
 import { buildReportWorkspaceViewModel } from "@/components/game/reports/reportWorkspaceModel";
+import { hasReportBuyerEvidence, shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
 
 function report(id: string, playerId: string, overrides: Partial<ScoutReport> = {}): ScoutReport {
   return {
@@ -28,8 +29,66 @@ function report(id: string, playerId: string, overrides: Partial<ScoutReport> = 
 }
 
 describe("report workspace model", () => {
+  it("honours private monitoring until the scout explicitly starts distribution", () => {
+    const note = report("note", "p", { conviction: "note", recommendedAction: "monitor" });
+    const scoutingCase = { id: "case", playerId: "p", status: "reported", reportIds: [note.id],
+      deliveryIds: [], listingIds: [] } as unknown as ScoutingCase;
+    const gameState = { scout: { id: "scout-1", careerPath: "independent" }, reports: { note },
+      players: { p: { id: "p", firstName: "Alex", lastName: "Prospect" } }, unsignedYouth: {},
+      scoutingCases: { case: scoutingCase }, reportDeliveries: {}, clubs: {},
+    } as unknown as GameState;
+    const input = { gameState, reports: [note], casesNeedingDelivery: [scoutingCase], awaitingDecisionDeliveries: [],
+      placedCases: [], listingByReportId: {}, comparisonReportIds: [], pendingListingReportId: null as string | null,
+      staffWorkQueueCount: 0, journalEntryCount: 0, activeListingsCount: 0, pendingBidsCount: 0 };
+    const privateView = buildReportWorkspaceViewModel(input);
+    expect(privateView.featuredArtifact?.followUp).toContain("Keep this assessment private");
+    expect(privateView.featuredArtifact?.primaryAction.kind).toBe("openPlayer");
+    expect(privateView.lanes[0].items[0].body).toContain("keep this assessment private");
+    input.pendingListingReportId = note.id;
+    expect(buildReportWorkspaceViewModel(input).featuredArtifact?.followUp).toContain("Keep this assessment private");
+    note.intendedAudience = "academyDirector";
+    note.intendedClubId = "club";
+    expect(buildReportWorkspaceViewModel(input).featuredArtifact?.audience).toBe("Academy Director");
+    expect(buildReportWorkspaceViewModel(input).featuredArtifact?.followUp).toContain("Keep this assessment private");
+    expect(buildReportWorkspaceViewModel(input).lanes[0].items.some((item) => item.eyebrow === "Pricing decision")).toBe(false);
+    // A stale automatic prompt is not distribution; an actual listing is.
+    input.listingByReportId = { note: { id: "listing", reportId: "note", status: "active" } as ReportListing };
+    expect(buildReportWorkspaceViewModel(input).featuredArtifact?.followUp).not.toContain("Keep this assessment private");
+    input.listingByReportId = {};
+    gameState.reportDeliveries = { delivery: { reportId: note.id } as ReportDelivery };
+    expect(buildReportWorkspaceViewModel(input).featuredArtifact?.artifactLabel).not.toBe("Private monitoring assessment");
+  });
+  it("preserves explicit sale eligibility without automatically marketing a monitoring report", () => {
+    const note = report("note", "p", { recommendedAction: "monitor",
+      evidenceAssessment: { claims: [{ support: "supported" }] } as never });
+    expect(hasReportBuyerEvidence(note)).toBe(true);
+    expect(shouldPromptReportListing(note)).toBe(false);
+    expect(shouldPromptReportListing({ ...note, recommendedAction: "inviteForTrial" })).toBe(true);
+    expect(shouldPromptReportListing({ ...note, recommendedAction: "inviteForTrial",
+      evidenceAssessment: { claims: [] } as never })).toBe(false);
+  });
+  it("offers evidence review for a known observed player, excluding other scouts and future evidence", () => {
+    const gameState = { scout: { id: "scout-1" }, currentSeason: 2, currentWeek: 1,
+      players: { p: { id: "p", firstName: "Alex", lastName: "Prospect" } }, unsignedYouth: {},
+      observations: {
+        prior: { id: "prior", scoutId: "scout-1", playerId: "p", season: 1, week: 40 },
+        foreign: { id: "foreign", scoutId: "other", playerId: "p", season: 2, week: 1 },
+        future: { id: "future", scoutId: "scout-1", playerId: "p", season: 2, week: 2 },
+      },
+    } as unknown as GameState;
+    const input = { gameState, reports: [], casesNeedingDelivery: [], awaitingDecisionDeliveries: [],
+      placedCases: [], listingByReportId: {}, comparisonReportIds: [], pendingListingReportId: null,
+      staffWorkQueueCount: 0, journalEntryCount: 0, activeListingsCount: 0, pendingBidsCount: 0 };
+    expect(buildReportWorkspaceViewModel(input).evidenceReview).toEqual({
+      playerName: "Alex Prospect", action: { kind: "openPlayer", label: "Review the evidence", playerId: "p" },
+    });
+    delete gameState.observations.prior;
+    expect(buildReportWorkspaceViewModel(input).evidenceReview).toBeNull();
+    gameState.observations = {};
+    expect(buildReportWorkspaceViewModel(input).evidenceReview).toBeNull();
+  });
   it("does not nudge private pass decisions into a stale marketplace prompt", () => {
-    const passed = report("report-pass", "player-1", { recommendedAction: "pass" });
+    const passed = report("report-pass", "player-1", { recommendedAction: "pass", decisionReceipt: { action: "pass" } as ScoutReport["decisionReceipt"] });
     const gameState = {
       scout: { id: "scout-1", careerPath: "independent" }, reports: { [passed.id]: passed },
       scoutingCases: {}, reportDeliveries: {}, clubDecisions: {}, youthRecruitmentBriefs: {},
@@ -51,7 +110,7 @@ describe("report workspace model", () => {
       intendedClubId: "club-1",
       recruitmentNeed: "Press-resistant academy midfielder",
       recommendedAction: "inviteForTrial",
-      evidenceAssessment: { evidenceIds: ["e-1", "e-2"], confidence: "high" } as never,
+      evidenceAssessment: { evidenceIds: ["e-1", "e-2"], confidence: "high", claims: [{ support: "supported" }] } as never,
       categoryVerdicts: {
         roleFit: {
           verdict: "Fits the club's recruitment need.",
@@ -171,7 +230,7 @@ describe("report workspace model", () => {
       transferRecords: [],
     } as unknown as GameState;
 
-    const viewModel = buildReportWorkspaceViewModel({
+    const input = {
       gameState,
       reports: [pendingReport, awaitingReport],
       casesNeedingDelivery: [cases["case-1"]],
@@ -184,7 +243,8 @@ describe("report workspace model", () => {
       journalEntryCount: 3,
       activeListingsCount: 1,
       pendingBidsCount: 0,
-    });
+    };
+    const viewModel = buildReportWorkspaceViewModel(input);
 
     expect(viewModel.featuredArtifact?.reportId).toBe(pendingReport.id);
     expect(viewModel.featuredArtifact?.followUp).toMatch(/price/i);
@@ -193,5 +253,10 @@ describe("report workspace model", () => {
     expect(viewModel.lanes[0].title).toBe("Action required");
     expect(viewModel.lanes[0].items.some((item) => item.action?.kind === "openStaffQueue")).toBe(true);
     expect(viewModel.lanes[1].items[0]?.meta).toContain("S1 W7");
+    pendingReport.evidenceAssessment = { claims: [{ support: "withheld" }] } as never;
+    const uncertain = buildReportWorkspaceViewModel(input);
+    expect(uncertain.featuredArtifact?.primaryAction.kind).toBe("openReport");
+    expect(uncertain.featuredArtifact?.followUp).toContain("gather a supported finding");
+    expect(uncertain.lanes.flatMap((lane) => lane.items).some((item) => item.action?.kind === "listReport")).toBe(false);
   });
 });

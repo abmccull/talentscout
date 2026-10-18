@@ -1,3 +1,4 @@
+import type { MovementRowsArchiveV1, StoredObservationSituationSnapshot } from "./types/historyStorage";
 /**
  * Core type definitions for the TalentScout game engine.
  *
@@ -115,6 +116,7 @@ import type {
   League,
   LeagueCoverageTier,
   ScoutingPhilosophy,
+  StableFinancialIdentity,
   StandingEntry,
   Weather,
 } from "./types/world";
@@ -352,7 +354,7 @@ export interface Scout {
 
   // --- Deep Systems Overhaul ---
   /** Rolling accuracy tracking for recent reports. */
-  accuracyHistory?: { week: number; season: number; predictedCA: number; actualCA: number }[];
+  accuracyHistory?: { week: number; season: number; predictedCA: number; actualCA: number; assessmentBasis?: "submission" }[];
   /** Monthly performance pulse grades. */
   performancePulses?: PerformancePulse[];
 }
@@ -436,7 +438,7 @@ export interface Observation {
    * Persisted, player-visible conditions that shaped this evidence. Optional
    * for legacy saves and deliberately contains no hidden player truth.
    */
-  situation?: import("../observation/situations").ObservationSituationSnapshot;
+  situation?: import("../observation/situations").ObservationSituationSnapshot | StoredObservationSituationSnapshot;
   abilityReading?: AbilityReading;
   /**
    * A personality trait uncovered during this observation session.
@@ -611,6 +613,10 @@ export interface ScoutReport {
    * player development is not mistaken for an inaccurate original report.
    */
   validationSnapshot?: Partial<Record<PlayerAttribute, number>>;
+  /** Engine-only current ability at submission; never compare a present-tense report to later development. */
+  validationCurrentAbility?: number;
+  /** Durable legacy outcome: original truth is missing, so historical accuracy cannot be validated. */
+  validationStatus?: "unverifiable";
 }
 
 /**
@@ -654,6 +660,16 @@ export interface ProfessionalCaseContext {
   judgmentDecisionIds: string[];
 }
 
+export type ProspectFollowUpStage = "early-check" | "decision-point" | "accountability";
+
+/** Proof of an authored communication delivered, independent of inbox retention. */
+export interface ProspectFollowUpDelivery {
+  sourceId: string;
+  stage: ProspectFollowUpStage;
+  deliveredWeek: number;
+  deliveredSeason: number;
+}
+
 export interface ScoutingCase {
   id: string;
   playerId: string;
@@ -678,6 +694,8 @@ export interface ScoutingCase {
   placementReportIds: string[];
   /** Long-horizon review records generated from the recommendation. */
   reviewIds?: string[];
+  /** Missing only in legacy saves; absence does not prove any prior delivery. */
+  prospectFollowUpDeliveries?: ProspectFollowUpDelivery[];
   alumniRecordId?: string;
   /** True when a legacy placement had no authored scout report to link. */
   legacyUnlinked?: boolean;
@@ -1200,6 +1218,7 @@ export type EvidenceClassificationId =
   | "technicalExecution"
   | "decisionMaking"
   | "preReceiveDecision"
+  | "defensiveReading"
   | "offBallMovement"
   | "pressureResponse"
   | "physicalExecution"
@@ -1641,6 +1660,55 @@ export interface LoanDeal {
   performanceRecord?: LoanPerformanceRecord;
 }
 
+/** Complete v1 terminal archive; active deals remain ordinary domain records. */
+export type CompactLoanPerformanceV1 = [
+  appearances: number, goals: number, assists: number, avgRating: number,
+  developmentDelta: number, parentClubSatisfaction: number, loanClubSatisfaction: number,
+];
+export type CompactLoanOptionalV1 =
+  Omit<Pick<LoanDeal, "buyOptionFee" | "outcome" | "agreedPlayingTime"
+    | "startCurrentAbility" | "monitoringWeeks" | "scoutId" | "performanceRecord">, "performanceRecord">
+  & { performanceRecord?: CompactLoanPerformanceV1 };
+export type CompactTerminalLoanV1 = [
+  version: 1, id: string, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: Exclude<LoanDealStatus, "active">, optional: CompactLoanOptionalV1,
+];
+/** Optional own-undefined values survive JSON through a separate presence mask. */
+export type CompactTerminalLoanV2 = [
+  version: 2, id: string, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: Exclude<LoanDealStatus, "active">, undefinedMask: number, optional: CompactLoanOptionalV1,
+];
+/** Versioned ordinals mirror the closed tables in terminalRecordArchive. */
+export type CompactLoanOptionalV41 = Omit<CompactLoanOptionalV1, "outcome" | "agreedPlayingTime">
+  & { outcome?: 0 | 1 | 2 | 3 | 4 | 5; agreedPlayingTime?: 0 | 1 | 2 | 3 };
+export type CompactTerminalLoanV41 = [
+  version: 41, id: StableFinancialIdentity, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: 0 | 1 | 2, optional: CompactLoanOptionalV41,
+];
+export type CompactTerminalLoanV42 = [
+  version: 42, id: StableFinancialIdentity, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: 0 | 1 | 2, undefinedMask: number, optional: CompactLoanOptionalV41,
+];
+export type StoredLoanDeal = LoanDeal | CompactTerminalLoanV1 | CompactTerminalLoanV2
+  | CompactTerminalLoanV41 | CompactTerminalLoanV42 | CompactTerminalLoanV44;
+/** Ordered optional ordinals (0..6) and exact values, with separate undefined ownership. */
+export type CompactTerminalLoanV44 = [
+  version: 44, id: StableFinancialIdentity, playerId: string, parentClubId: string, loanClubId: string,
+  startWeek: number, startSeason: number, endWeek: number, endSeason: number,
+  loanFee: number, wageContribution: number, recallClause: boolean,
+  status: 0 | 1 | 2, undefinedMask: number, optionalOrder: string,
+  ...optionalValues: (string | number | string[] | [number, number, number, number, number, number, number])[],
+];
+export type LoanHistoryStored = StoredLoanDeal[];
+
 export interface LoanPerformanceRecord {
   appearances: number;
   goals: number;
@@ -1789,10 +1857,14 @@ export interface InvalidScenarioArchiveEntry {
 }
 
 export interface GameState {
-  /** First-assignment guide choice. Missing in legacy saves; false keeps navigation open. */
-  guidedSessionRequested?: boolean;
-  /** Durable observed-person photo reservations; retained after player history compaction. */
+  /** Unique playthrough identity; unlike the run manifest, repeated seeds get a new identity. */
+  careerInstanceId?: string;
+  /** Permanent terminal disposition; older snapshots are blocked by the local run record. */
+  careerEnd?: { reason: "ironman-fired"; season: number; week: number };
+  /** Permanent observed-person portrait reservations, including archived players. */
   playerPortraits?: import("../players/portraits/types").PlayerPortraitState;
+  /** First-assignment guide choice. Missing in legacy saves; false always keeps navigation open. */
+  guidedSessionRequested?: boolean;
   /** The world seed used for deterministic world generation. */
   seed: string;
   /** Immutable, version-pinned identity for this career simulation. */
@@ -1937,6 +2009,8 @@ export interface GameState {
    * locked decisions or make their rewards available again.
    */
   activeObservationSession?: import("../observation/types").ObservationSession | null;
+  /** Uncommitted weekly itinerary, dated so it cannot replay a later world tick. */
+  pendingWeekRecovery?: { week: number; season: number; simulation: WeekSimulationState } | null;
 
   /** Player IDs bookmarked by the scout for quick access. */
   watchlist: string[];
@@ -1973,7 +2047,7 @@ export interface GameState {
   /** Full archived entities for retired/exited players, keyed by player ID. */
   retiredPlayers: Record<string, Player>;
   /** Append-only canonical history of all player lifecycle movements. */
-  playerMovementHistory: PlayerMovementEvent[];
+  playerMovementHistory: PlayerMovementEvent[] | MovementRowsArchiveV1;
   /** Bounded, authoritative cross-entity archive written at season rollover. */
   worldHistory?: import("../world/worldHistory").WorldHistoryState;
   /** Authoritative club recruitment-philosophy changes resolved at season start. */
@@ -2018,7 +2092,8 @@ export interface GameState {
 
   /**
    * Per-fixture, per-player match ratings. Keyed fixtureId → playerId.
-   * Ephemeral — wiped at season end after consolidation into player.seasonRatings.
+   * Detailed performance is consolidated at season end; ratings for retained
+   * causally referenced fixtures remain available under the retention policy.
    */
   matchRatings: Record<string, Record<string, PlayerMatchRating>>;
 
@@ -2085,7 +2160,7 @@ export interface GameState {
   /** Currently active loan deals across the league. */
   activeLoans?: LoanDeal[];
   /** Completed/terminated loan deals for history. */
-  loanHistory?: LoanDeal[];
+  loanHistory?: LoanHistoryStored;
   /** Loan recommendations made by the scout. */
   loanRecommendations?: LoanRecommendation[];
 }
@@ -3126,6 +3201,8 @@ export interface FinancialRecord {
    * so repeated actions in one week remain unique and save/reload deterministic.
    */
   actionSequence?: number;
+  /** Recent outreach attempts retain costs, outcomes, and retry dates across saves. */
+  clientPitchHistory?: import("../finance/clientRelationships").ClientPitchAttempt[];
   /** 5-slot equipment loadout and owned items. */
   equipment?: EquipmentInventory;
 
@@ -3233,6 +3310,8 @@ export interface PerformancePulse {
   reportsSubmitted: number;
   reportQualityAvg: number;
   accuracyRate: number;
+  /** Zero means the neutral rate is a fallback, not a measured assessment. */
+  accuracySampleSize?: number;
   signingSuccess: number;
   fatigueAvg: number;
   /** Formal study kept the period professionally productive despite low case volume. */
@@ -3524,6 +3603,10 @@ export interface PlacementReport {
   targetClubId: string;
   pitchPosture?: PlacementPitchPosture;
   supportCondition?: PlacementSupportCondition;
+  /** Existing pending pitches keep the terms under which they were made. */
+  supportTermsVersion?: 1;
+  /** New placements only: executable scout follow-up, never a retroactive promise. */
+  supportCommitment?: import("../youth/placementSupport").PlacementSupportCommitment;
   scoutId: string;
   conviction: ConvictionLevel;
   clubResponse?: "pending" | "accepted" | "rejected" | "trial" | "followUpRequested";
@@ -3581,6 +3664,7 @@ export interface ReflectionHypothesisRecord {
 
 /** Durable qualitative evidence captured by the scout during a live session. */
 export interface ReflectionFlaggedMomentRecord {
+  momentId?: string;
   id: string;
   playerId: string;
   phaseIndex: number;
@@ -3599,6 +3683,11 @@ export interface ReflectionFlaggedMomentRecord {
 }
 
 export interface ReflectionJournalEntry {
+  /** Locked conversation choices, separate from direct observation evidence. */
+  conversationDecisions?: import("../observation/types").DialogueChoiceResolution[];
+  /** Exact scheduled booking, so repeated activities cannot borrow each other's evidence. */
+  activityInstanceId?: string;
+  sessionMode?: "fullObservation" | "investigation" | "analysis" | "quickInteraction";
   id: string;
   sessionId: string;
   activityType: ActivityType;
@@ -3634,6 +3723,8 @@ export interface AlumniMilestone {
   season: number;
   description: string;
   notified: boolean;
+  /** Canonical fixture or applied movement identity; absent in legacy records. */
+  sourceId?: string;
 }
 
 // --- F12: Youth Pipeline Tracking types ---
@@ -3662,6 +3753,8 @@ export interface AlumniCareerUpdate {
   season: number;
   type: AlumniCareerUpdateType;
   description: string;
+  /** Canonical fixture or applied movement identity; absent in legacy records. */
+  sourceId?: string;
 }
 
 export interface AlumniSeasonStats {
@@ -4118,7 +4211,7 @@ export interface DayResult {
   profilesGenerated: number;
   /** Anomalies flagged (data activities). */
   anomaliesFound: number;
-  /** XP gained per scout skill from this day's activity. */
+  /** Base XP preview; weekly processing applies modifiers before awarding XP. */
   xpGained: Partial<Record<ScoutSkill, number>>;
   /** Fatigue change from this day's activity. */
   fatigueChange: number;
@@ -4143,6 +4236,8 @@ export interface WeekSimulationState {
   focusedYouthPlayerIds?: string[];
   /** Pre-computed youth venue results — applied during advanceWeek to avoid double-processing. */
   youthVenueResults?: {
+    /** Per-observation effects, so rejected previews cannot overwrite live state. */
+    observationEffects?: Record<string, { youthId: string; buzzIncrease: number; visibilityIncrease: number }>;
     updatedUnsignedYouth: Record<string, UnsignedYouth>;
     newObservations: Record<string, Observation>;
     newDiscoveries: DiscoveryRecord[];

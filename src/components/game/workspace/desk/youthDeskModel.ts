@@ -1,7 +1,7 @@
 "use client";
 
 import type { Observation, ReportRecommendedAction, ScoutReport } from "@/engine/core/types";
-import { getFreshReportObservationIds } from "@/engine/reports/reportAccountability";
+import { getFreshReportObservationIds, isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 
 /** The latest authored choice controls nudges; new evidence permits reconsideration. */
 export function buildYouthDeskDecisionIndex(
@@ -27,8 +27,8 @@ export function buildYouthDeskDecisionIndex(
   }
   return new Map([...latest].map(([playerId, report]) => [playerId, {
     filedAction: report.recommendedAction,
-    passedForNow: report.recommendedAction === "pass",
-    canReconsider: report.recommendedAction === "pass"
+    passedForNow: isPrivateScoutingDecision(report),
+    canReconsider: isPrivateScoutingDecision(report)
       && getFreshReportObservationIds(byPlayer.get(playerId) ?? [], report).length > 0,
   }]));
 }
@@ -47,6 +47,9 @@ export interface YouthDeskProspectEntry {
     };
   };
   observationCount: number;
+  videoCount?: number;
+  analysisCount?: number;
+  conversationCount?: number;
   intelCount: number;
   reported: boolean;
   filedAction?: ReportRecommendedAction;
@@ -141,7 +144,7 @@ export function buildYouthActiveCaseModel(args: {
 
   let stageIndex = 0;
   if (focusEntry?.canReconsider) stageIndex = 2;
-  else if (focusEntry?.reported || pendingPlacementCount > 0) stageIndex = 4;
+  else if (focusEntry?.reported) stageIndex = 4;
   else if (focusEntry?.hasFirmRead) stageIndex = 3;
   else if ((focusEntry?.observationCount ?? 0) >= 2 || (focusEntry?.intelCount ?? 0) >= 2) stageIndex = 2;
   else if ((focusEntry?.observationCount ?? 0) >= 1) stageIndex = 1;
@@ -224,10 +227,18 @@ export function buildYouthActiveCaseModel(args: {
     stageId,
     stageLabel: focusEntry.canReconsider ? "Reconsider" : stageId === "tracked" ? "Judgment filed" : stageLabel,
     stageSteps,
-    evidenceLine: `${focusEntry.observationCount} live look${focusEntry.observationCount === 1 ? "" : "s"} and ${focusEntry.intelCount} context note${focusEntry.intelCount === 1 ? "" : "s"} are on file.`,
+    evidenceLine: [
+      `${focusEntry.observationCount} live look${focusEntry.observationCount === 1 ? "" : "s"}`,
+      ...(focusEntry.videoCount ? [`${focusEntry.videoCount} video review${focusEntry.videoCount === 1 ? "" : "s"}`] : []),
+      ...(focusEntry.analysisCount ? [`${focusEntry.analysisCount} analysis record${focusEntry.analysisCount === 1 ? "" : "s"}`] : []),
+      ...(focusEntry.conversationCount ? [`${focusEntry.conversationCount} conversation record${focusEntry.conversationCount === 1 ? "" : "s"}`] : []),
+      `${focusEntry.intelCount} contact note${focusEntry.intelCount === 1 ? "" : "s"}`,
+    ].join(", ") + " on file.",
     networkLine: focusEntry.intelCount > 0
-      ? `You have background notes. Compare them with what you saw on the pitch.`
-      : "A coach, family or trusted contact could help you test the remaining question.",
+      ? `Private context is attached to the case. Make sure it sharpens the read instead of replacing it.`
+      : focusEntry.conversationCount
+        ? "Conversations are recorded. Check their attributed accounts and unanswered questions; a meeting alone establishes no player finding."
+        : "No supporting context is attached yet. The next week can still add family, coach, or contact color.",
     scheduleLine: openDayCount === 0
       ? "The week is fully committed. Every new call now requires displacing something else."
       : `${openDayCount} open day${openDayCount === 1 ? "" : "s"} remain. Decide which question deserves your next day.`,

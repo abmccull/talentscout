@@ -1,3 +1,4 @@
+import { createScoutingDecisionReceipt } from "@/engine/youth/decisionReviews";
 import { describe, expect, it } from "vitest";
 import { RNG } from "@/engine/rng";
 import type {
@@ -137,16 +138,17 @@ const visiblePlayer = {
 };
 
 describe("academy placement decisions", () => {
-  it("never treats a private pass as an acquisition request even when its evidence scores highly", () => {
-    const result = scoreAcademyClubDecision({
-      rng: new RNG("fixed-academy-decision"),
-      report: report({ ...structuredInput(), recommendedAction: "pass", conviction: "tablePound" }),
-      brief: brief(), player: visiblePlayer, observations: observations(),
-      scout: decisionScout, club: club(), relationshipScore: 100,
-    });
-    expect(result.outcome).toBe("rejected");
-    expect(result.requestedEvidenceCategory).toBeUndefined();
-    expect(result.reasons[0]).toContain("does not authorize recruitment");
+  it("rejects authored private receipts while preserving receipt-less historical pass treatment", () => {
+    const historical = report({ ...structuredInput(), recommendedAction: "pass" });
+    const receipt = createScoutingDecisionReceipt(historical);
+    const input = { brief: brief(), player: visiblePlayer, observations: observations(),
+      scout: decisionScout, club: club(), relationshipScore: 70 };
+    const privateResult = scoreAcademyClubDecision({ ...input, rng: new RNG("private-boundary"),
+      report: { ...historical, recommendedAction: "offerAcademyPlace", decisionReceipt: receipt } });
+    expect(privateResult.outcome).toBe("rejected");
+    expect(privateResult.reasons).toContain("The scout passed for now; this judgment does not authorize recruitment.");
+    const legacyResult = scoreAcademyClubDecision({ ...input, rng: new RNG("private-boundary"), report: historical });
+    expect(legacyResult.reasons).not.toContain("The scout passed for now; this judgment does not authorize recruitment.");
   });
   it("lets authored report fields materially change score and outcome under a fixed seed", () => {
     const strongReport = report({

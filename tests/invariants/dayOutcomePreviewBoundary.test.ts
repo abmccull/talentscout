@@ -46,7 +46,7 @@ describe("day outcome preview boundary", () => {
     const day = pendingDay();
     const html = render(day);
     expect(html).not.toContain(OUTCOME);
-    expect(html).toContain("Choose an approach or complete a live session");
+    expect(html).toContain("Choose your approach before the evidence, fatigue, and skill growth are revealed.");
     expect(html).toContain("Broad Assessment");
     expect(html).toContain("Targeted Testing");
     expect(html).toContain("Decision pending");
@@ -60,7 +60,7 @@ describe("day outcome preview boundary", () => {
     const html = render(day);
     expect(html).toContain(OUTCOME);
     expect(html).toContain("Today’s result");
-    expect(html).not.toContain("Choose an approach or complete a live session");
+    expect(html).not.toContain("Choose your approach before the evidence, fatigue, and skill growth are revealed.");
   });
 
   it("reveals the same narrative after live observation and for automatic noninteractive days", () => {

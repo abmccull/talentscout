@@ -1,7 +1,7 @@
 import runtimeEntries from "@/data/portraits/documentary-runtime.json";
 import type { CatalogEntry, PortraitCatalog } from "./types";
 
-/** Reviewed offline photographs. Saved bindings never depend on catalog order. */
+/** Pre-rendered HumGen age sets plus legacy photos retained for saved bindings. */
 // The build checks this derived index against the strictly validated full pack.
 // File checksums stay in the offline manifest; immutable face hashes stay here.
 const entries = runtimeEntries as unknown as CatalogEntry[];

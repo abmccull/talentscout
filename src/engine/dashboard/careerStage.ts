@@ -1,5 +1,6 @@
 "use client";
 
+import { calculateCashRunway } from "@/engine/finance/cashRunway";
 import {
   getBoardMeetingEligibility,
   getManagerMeetingEligibility,
@@ -373,6 +374,7 @@ export function deriveCareerStageProfile(state: GameState): CareerStageProfile {
   const finances = state.finances ?? undefined;
   const operatingPath = deriveCareerOperatingModel(state.scout, finances);
   const rolePackage = deriveCareerRolePackage({
+    cashRunwayMonths: calculateCashRunway(finances, state.scout),
     scout: state.scout,
     finances,
     club: state.scout.currentClubId

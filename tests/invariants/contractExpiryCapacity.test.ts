@@ -40,6 +40,23 @@ function player(index: number): Player {
 }
 
 describe("club squad capacity", () => {
+  it("declines a renewal that would consume wages needed to complete a depleted squad", () => {
+    const squad = Array.from({ length: 6 }, (_, i) => ({ ...player(i),
+      contractExpiry: i < 4 ? 4 : 1, wage: i === 5 ? 7000 : 500,
+    }));
+    const destination: Club = { id: "club", name: "Budget FC", shortName: "BUD", leagueId: "league",
+      reputation: 15, budget: 500_000, weeklyWageBudget: 11_000, playerIds: squad.map((p) => p.id),
+      scoutingPhilosophy: "marketSmart", managerId: "manager", youthAcademyRating: 5 };
+    const state = { currentWeek: 46, currentSeason: 1, clubs: { club: destination },
+      players: Object.fromEntries(squad.map((p) => [p.id, p])), leagues: { league: { country: "England" } },
+    } as unknown as GameState;
+    const rng = { chance: () => true, nextInt: (min: number) => min };
+    const result = processContractExpiries(state, rng as never);
+    expect(result.renewedPlayerIds).not.toContain(squad[5].id);
+    expect(result.renewedPlayerIds).toContain(squad[4].id);
+    expect(state.players[squad[5].id].wage).toBe(7000);
+    expect(destination.weeklyWageBudget).toBe(11_000);
+  });
   it("releases excess depth even when the normal renewal roll would pass", () => {
     const players = Object.fromEntries(
       Array.from({ length: SENIOR_SQUAD_RENEWAL_CAP + 2 }, (_, index) => {
@@ -54,8 +71,6 @@ describe("club squad capacity", () => {
       leagueId: "league",
       reputation: 50,
       budget: 1_000_000,
-      // This fixture isolates the sporting roster cap; affordability is covered separately.
-      weeklyWageBudget: 1_000_000,
       scoutingPhilosophy: "marketSmart",
       managerId: "manager",
       playerIds: Object.keys(players),

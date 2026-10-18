@@ -16,11 +16,12 @@ import { getScreenGuide } from "./screenGuides";
  * - Club path → Margaret Chen
  * - Independent path → Tommy Reyes
  *
- * Positioned absolutely in the top-right corner of its nearest positioned
- * ancestor. Only renders when the current screen has a defined guide.
+ * Workspace help shares the reserved sidebar brand header on tablet/desktop
+ * and the phone header on mobile. Watch keeps its contextual content placement.
+ * Only renders when the current screen has a defined guide.
  */
 interface ScreenHelpButtonProps {
-  placement?: "content" | "mobileHeader";
+  placement?: "content" | "mobileHeader" | "sidebar";
 }
 
 export function ScreenHelpButton({ placement = "content" }: ScreenHelpButtonProps) {
@@ -45,18 +46,19 @@ export function ScreenHelpButton({ placement = "content" }: ScreenHelpButtonProp
 
   const mentorName = careerPath === "independent" ? "Tommy" : "Margaret";
   const isMobileHeader = placement === "mobileHeader";
+  const isCompact = isMobileHeader || placement === "sidebar";
 
   return (
     <button
       onClick={() => openScreenGuide(currentScreen)}
       aria-label={`Ask ${mentorName} for help`}
       title={`Ask ${mentorName}`}
-      className={isMobileHeader
-        ? "flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 md:hidden"
+      className={isCompact
+        ? `${isMobileHeader ? "flex md:hidden" : "hidden md:flex"} h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--ring)]`
         : "absolute right-3 top-3 z-40 hidden min-h-11 items-center gap-1.5 rounded-full bg-zinc-700/90 px-4 text-xs font-medium text-zinc-200 backdrop-blur-sm transition hover:bg-zinc-600 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 md:flex"}
     >
       <span className="text-base font-semibold" aria-hidden="true">?</span>
-      {!isMobileHeader && <span>Ask {mentorName}</span>}
+      {!isCompact && <span>Ask {mentorName}</span>}
     </button>
   );
 }

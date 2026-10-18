@@ -1,3 +1,6 @@
+import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
+import { expandDevelopmentHistoryEntry, type ArchivedDevelopmentHistoryEntry } from "../players/developmentHistoryArchive";
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
 import type {
   Club,
   Fixture,
@@ -18,12 +21,8 @@ import { normalizeCountryKey } from "@/lib/country";
 import { deriveClubRecruitmentDoctrine } from "@/engine/world/recruitmentIdentity";
 import type { WorldFact } from "@/engine/consequences";
 
-export type DevelopmentEnvironmentBand =
-  | "excellent"
-  | "supportive"
-  | "mixed"
-  | "restricted"
-  | "adverse";
+import type { DevelopmentEnvironmentBand, PlayerDevelopmentHistoryEntry } from "../players/developmentHistoryTypes";
+export type { DevelopmentEnvironmentBand, PlayerDevelopmentHistoryEntry } from "../players/developmentHistoryTypes";
 
 export type DevelopmentFactorImpact =
   | "strong-positive"
@@ -67,16 +66,35 @@ export interface PlayerDevelopmentEnvironmentProjection {
   reviewPrompt: string;
 }
 
-/** Compact, bounded public record of why an observable career turn occurred. */
-export interface PlayerDevelopmentHistoryEntry {
-  id: string;
-  season: number;
-  week: number;
-  clubId?: string;
-  event: "routine-growth" | "breakthrough" | "decline" | "injury-setback";
-  outcome: "improved" | "declined" | "setback";
-  environmentBand: DevelopmentEnvironmentBand;
-  summary: string;
+export function getPlayerDevelopmentHistoryId(stored: ArchivedDevelopmentHistoryEntry, playerId: string): string {
+  const entry = expandDevelopmentHistoryEntry(stored);
+  return entry.id ?? `development_${entry.season}_${entry.week}_${playerId}_${entry.event}`;
+}
+
+export function getPlayerDevelopmentHistoryOutcome(
+  stored: ArchivedDevelopmentHistoryEntry,
+): "improved" | "declined" | "setback" {
+  const entry = expandDevelopmentHistoryEntry(stored);
+  return entry.outcome ?? (entry.event === "routine-growth" || entry.event === "breakthrough"
+    ? "improved" : entry.event === "injury-setback" ? "setback" : "declined");
+}
+
+/** Stable archive wording: keep this version independent of current UI labels. */
+export function getPlayerDevelopmentHistorySummary(stored: ArchivedDevelopmentHistoryEntry): string {
+  const entry = expandDevelopmentHistoryEntry(stored);
+  if (entry.summary !== undefined) return entry.summary;
+  const environments: Record<DevelopmentEnvironmentBand, string> = {
+    excellent: "excellent environment", supportive: "supportive environment", mixed: "mixed environment",
+    restricted: "restricted pathway", adverse: "adverse environment",
+  };
+  const environment = environments[entry.environmentBand];
+  return entry.event === "breakthrough"
+    ? `A visible development breakthrough arrived in a ${environment}.`
+    : entry.event === "routine-growth"
+      ? `Steady progress was recorded while the player was in a ${environment}.`
+      : entry.event === "injury-setback"
+        ? "A serious injury created a visible physical-development setback."
+        : `Age and current context produced a period of decline in a ${environment}.`;
 }
 
 export interface DevelopmentEnvironmentMechanics {
@@ -782,9 +800,10 @@ function healthFactor(player: Player): FactorDraft {
     );
   }
 
-  const visibleInjuries = player.injuryHistory?.injuries ?? [];
+  const visibleInjuries = expandPlayerInjuryHistory(player.injuryHistory, player.id)?.injuries ?? [];
   const recentSerious = visibleInjuries
     .slice(-3)
+    .map(entry => expandHistoricalInjury(entry, player.id))
     .filter((injury) => injury.recoveryWeeks >= 5).length;
   const points = recentSerious >= 2 ? -7 : recentSerious === 1 ? -3 : 2;
   return makeFactor(
@@ -1110,31 +1129,42 @@ export function createPlayerDevelopmentHistoryEntry(
  * explanation; the timeline only needs the visible turn and its context.
  */
 export function compactPlayerDevelopmentHistory(
-  current: readonly PlayerDevelopmentHistoryEntry[] | undefined,
+  current: readonly ArchivedDevelopmentHistoryEntry[] | undefined,
+  playerId?: string,
 ): PlayerDevelopmentHistoryEntry[] {
   const canonicalById = new Map<string, PlayerDevelopmentHistoryEntry>();
-  for (const entry of current ?? []) {
+  for (const stored of current ?? []) {
+    const entry = expandDevelopmentHistoryEntry(stored);
     const canonical: PlayerDevelopmentHistoryEntry = {
-      id: entry.id,
+      ...(entry.id !== undefined && (playerId === undefined
+        || entry.id !== `development_${entry.season}_${entry.week}_${playerId}_${entry.event}`)
+        ? { id: entry.id } : {}),
       season: entry.season,
       week: entry.week,
       ...(entry.clubId ? { clubId: entry.clubId } : {}),
       event: entry.event,
-      outcome: entry.outcome,
+      ...(entry.outcome !== undefined
+        && entry.outcome !== getPlayerDevelopmentHistoryOutcome({ ...entry, outcome: undefined })
+        ? { outcome: entry.outcome } : {}),
       environmentBand: entry.environmentBand,
-      summary: entry.summary,
+      ...(entry.summary !== undefined
+        && entry.summary !== getPlayerDevelopmentHistorySummary({ ...entry, summary: undefined })
+        ? { summary: entry.summary } : {}),
     };
     // A retry of the same deterministic event replaces the prior copy and
     // takes its actual chronological position.
-    canonicalById.delete(canonical.id);
-    canonicalById.set(canonical.id, canonical);
+    const key = playerId !== undefined ? getPlayerDevelopmentHistoryId(canonical, playerId)
+      : canonical.id ?? `implicit_${canonical.season}_${canonical.week}_${canonical.event}`;
+    canonicalById.delete(key);
+    canonicalById.set(key, canonical);
   }
   return [...canonicalById.values()].slice(-PLAYER_DEVELOPMENT_HISTORY_LIMIT);
 }
 
 export function appendPlayerDevelopmentHistory(
-  current: readonly PlayerDevelopmentHistoryEntry[] | undefined,
+  current: readonly ArchivedDevelopmentHistoryEntry[] | undefined,
   entry: PlayerDevelopmentHistoryEntry,
+  playerId?: string,
 ): PlayerDevelopmentHistoryEntry[] {
-  return compactPlayerDevelopmentHistory([...(current ?? []), entry]);
+  return compactPlayerDevelopmentHistory([...(current ?? []), entry], playerId);
 }

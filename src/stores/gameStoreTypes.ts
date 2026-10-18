@@ -152,6 +152,7 @@ export interface WeekSummary {
   skillXpGained: Record<string, number>;
   attributeXpGained: Record<string, number>;
   matchesAttended: number;
+  scoutingSessions?: number;
   reportsWritten: number;
   meetingsHeld: number;
   newMessages: number;
@@ -227,6 +228,7 @@ export interface GameStoreState {
   activeSaveLoadId: number | null;
   saveConflict: SaveConflictState | null;
   isResolvingSaveConflict: boolean;
+  autosaveStatus: "idle" | "pending" | "saved" | "error";
   autosaveError: string | null;
 
   selectedScenarioId: string | null;
@@ -247,7 +249,7 @@ export interface GameStoreState {
   suppressCareerMoment: (momentId: string, reason?: string) => void;
   dismissSeasonAwards: () => void;
 
-  startNewGame: (config: NewGameConfig) => Promise<void>;
+  startNewGame: (config: NewGameConfig) => Promise<GameState | void>;
   loadGame: (state: unknown) => void;
   saveGame: () => GameState | null;
   flushGameplaySave: () => Promise<void>;
@@ -268,7 +270,7 @@ export interface GameStoreState {
   setDelegationPolicy: (policyId: DelegationPolicyId) => void;
   requestWeekAdvance: () => void;
   advanceWeek: () => void;
-  advanceWeekAsync: () => Promise<void>;
+  advanceWeekAsync: () => Promise<"committed" | "cancelled" | "failed" | "skipped">;
   isAdvancingWeek: boolean;
   /** Transient invocation ownership; never included in persisted GameState. */
   activeWeeklyTransactionId: number | null;
@@ -335,7 +337,7 @@ export interface GameStoreState {
   selectDataPoint: (pointId: string) => void;
   selectStrategicChoice: (choiceId: string) => void;
   addSessionNote: (note: string) => void;
-  endObservationSession: () => void;
+  endObservationSession: (options?: { discard?: boolean }) => void;
   resolveOpeningDiscoveryChoice: (choiceId: OpeningCaseChoiceId) => void;
 
   useInsight: (actionId: InsightActionId) => boolean;
@@ -380,6 +382,7 @@ export interface GameStoreState {
   acknowledgeNarrativeEvent: (eventId: string) => void;
   resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => void;
   resolveConsequenceDecision: (decisionId: string, optionId: string) => void;
+  reviewRivalCampaign: (campaignId: string) => void;
   resolveRivalOrganizationOpportunity: (
     opportunityId: string,
     response: "exploit" | "decline",
@@ -495,6 +498,7 @@ export interface GameStoreState {
     pending: { type: string; targetId: string; label: string } | null,
   ) => void;
   pendingNetworkContactId: string | null;
+  pendingInboxMessageId: string | null;
   setPendingNetworkContactId: (contactId: string | null) => void;
   pendingRivalOpportunityId: string | null;
   setPendingRivalOpportunityId: (opportunityId: string | null) => void;

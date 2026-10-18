@@ -33,6 +33,12 @@ function fixture() {
     id: `report-${playerId}`, playerId, scoutId: scout.id, submittedWeek: 8, submittedSeason: 1,
     attributeAssessments: [], strengths: [], weaknesses: [], conviction: "note", summary: "A tentative case",
     estimatedValue: 200, qualityScore: 50, recommendedAction: "monitor", ...overrides,
+    ...(overrides.recommendedAction === "pass" ? { decisionReceipt: {
+      id: `decision-${overrides.id ?? playerId}`, action: "pass" as const,
+      season: 1, week: overrides.submittedWeek ?? 8, conviction: "note" as const,
+      evidenceObservationIds: Object.values(observations).filter((entry) => entry.playerId === playerId).map((entry) => entry.id),
+      evidenceCardIds: [], summary: "No further attention justified.",
+    } } : {}),
   });
   const activities = (reports: ScoutReport[] = []) => getAvailableActivities(scout, 9, [], [], undefined,
     observations, youth, {}, undefined, undefined, Object.fromEntries(reports.map((item) => [item.id, item])));
@@ -76,7 +82,8 @@ describe("searchable youth planner reachability", () => {
     const activities = f.activities([older, newer, ...f.ids.slice(1).map((id) => f.report(id))]);
     expect(activities.find((item) => item.type === "writePlacementReport")?.targetPool?.map((item) => item.id))
       .toEqual(f.ids.slice(4));
-    const reconsidered = { ...newer, revision: 3, recommendedAction: "monitor" as const };
+    const reconsidered = { ...newer, revision: 3, recommendedAction: "monitor" as const,
+      decisionReceipt: { ...newer.decisionReceipt!, id: "reconsidered", action: "monitor" as const } };
     expect(f.activities([older, reconsidered]).find((item) => item.type === "writePlacementReport")?.targetPool?.[0].id).toBe(f.ids[0]);
   });
 });

@@ -1,3 +1,4 @@
+import { expandPlayerPersonalityProfile } from "../players/playerStateArchive";
 /**
  * Contract Expiry Processing — season-end engine that decides which players
  * are renewed, released (→ free agent pool), or retired.
@@ -20,31 +21,21 @@ import {
 } from "@/engine/finance/clubEconomics";
 import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
-import { getContractWageBaseline } from "@/engine/finance/wages";
-import { getClubAbilityMidpoint } from "@/engine/players/clubAbility";
-import {
-  countRegisteredKeepers,
-  listRegisteredAtClub,
-  COMPETITIVE_REGISTERED_FLOOR,
-} from "@/engine/match/eligibleRoster";
+import { estimateContractWageBaseline } from "@/engine/players/wages";
+import { canFundSquadCompletion, getEmergencySquadVacancies, getGoalkeeperRecruitmentNeed } from "./squadPlanning";
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
-/** Sporting value relative to the club's generated senior ability range. */
-const RENEWAL_CHANCE_HIGH = 0.70;    // At or above the club's level
-const RENEWAL_CHANCE_MID = 0.50;     // Within 20 CA below the club's level
-const RENEWAL_CHANCE_LOW = 0.30;     // Further below the club's level
-
 /** Senior contracts above this depth are allowed to expire by ability order. */
 export const SENIOR_SQUAD_RENEWAL_CAP = 32;
 
 /** Pool duration tiers by CA (max weeks before dropout). */
-const POOL_DURATION_ELITE = 4;      // CA 75+
-const POOL_DURATION_QUALITY = 8;    // CA 60-74
-const POOL_DURATION_DEPTH = 16;     // CA 45-59
-const POOL_DURATION_JOURNEYMAN = 20; // CA < 45
+const POOL_DURATION_ELITE = 104;   // Two calendar years to find another level.
+const POOL_DURATION_QUALITY = 78;
+const POOL_DURATION_DEPTH = 52;
+const POOL_DURATION_JOURNEYMAN = 52;
 
 // =============================================================================
 // ID GENERATION
@@ -83,7 +74,7 @@ export interface ContractExpiryResult {
  * Process all expiring contracts at the end of a season.
  *
  * For each player whose contractExpiry <= currentSeason:
- *   1. Roll for renewal (based on relative ability, role, usage and form)
+ *   1. Roll for renewal (based on CA, club rep, form)
  *   2. If not renewed and old + low CA: roll for retirement
  *   3. Otherwise: release to free agent pool
  */
@@ -100,25 +91,83 @@ export function processContractExpiries(
     state.players,
     { currentWeek: state.currentWeek, currentSeason: state.currentSeason },
   );
+  const expiringPlayers = Object.values(state.players).filter((player) => {
+    const owner = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    return Boolean(owner && state.clubs[owner]) && player.contractExpiry <= state.currentSeason;
+  });
+  const appearanceIndex = buildRenewalAppearanceIndex(state, expiringPlayers);
+  // Expiry is one planning horizon: only ongoing contracts are committed.
+  // Reserve accepted replacement deals below, rather than charging both the
+  // old expiring payroll and the new deals during priority selection.
+  for (const player of expiringPlayers) {
+    const owner = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    const entry = affordabilityContext[owner!];
+    entry.currentWeeklyCommitment = Math.max(
+      0, entry.currentWeeklyCommitment - Math.max(0, Math.round(player.wage ?? 0)),
+    );
+  }
+  const ongoingKeeperClubs = new Set(Object.values(state.players)
+    .filter((player) => player.position === "GK" && player.age >= 18
+      && player.contractExpiry > state.currentSeason && !player.onLoan)
+    .map((player) => player.contractClubId ?? player.clubId));
+  const compareSportingPriority = (a: Player, b: Player): number => {
+    const ownerA = a.contractClubId ?? a.loanParentClubId ?? a.clubId;
+    const ownerB = b.contractClubId ?? b.loanParentClubId ?? b.clubId;
+    const keeperA = a.position === "GK" && a.age >= 18 && !ongoingKeeperClubs.has(ownerA);
+    const keeperB = b.position === "GK" && b.age >= 18 && !ongoingKeeperClubs.has(ownerB);
+    return Number(keeperB) - Number(keeperA)
+      || b.currentAbility - a.currentAbility
+      || b.potentialAbility - a.potentialAbility
+      || a.age - b.age
+      || a.id.localeCompare(b.id);
+  };
+  expiringPlayers.sort((a, b) => {
+    const ownerA = a.contractClubId ?? a.loanParentClubId ?? a.clubId ?? "";
+    const ownerB = b.contractClubId ?? b.loanParentClubId ?? b.clubId ?? "";
+    return ownerA.localeCompare(ownerB) || compareSportingPriority(a, b);
+  });
   const renewalPriorityByClub = new Map<string, Set<string>>();
+  const committedRosterByClub = new Map<string, Set<string>>();
   for (const club of Object.values(state.clubs)) {
+    // Next-season cover is ongoing owned contracts plus accepted renewals.
+    // Other expiring deals and borrowed players are not secured replacements.
+    committedRosterByClub.set(club.id, new Set(club.playerIds.filter((id) => {
+      const candidate = state.players[id];
+      return candidate && candidate.contractExpiry > state.currentSeason
+        && !candidate.onLoan && candidate.clubId === club.id
+        && (candidate.contractClubId ?? candidate.clubId) === club.id;
+    })));
     const ranked = (club.playerIds ?? [])
       .map((playerId) => state.players[playerId])
       .filter((player): player is Player => Boolean(player))
-      .sort(
-        (a, b) =>
-          b.currentAbility - a.currentAbility
-          || b.potentialAbility - a.potentialAbility
-          || a.age - b.age
-          || a.id.localeCompare(b.id),
-      )
+      .sort(compareSportingPriority)
       .slice(0, SENIOR_SQUAD_RENEWAL_CAP)
       .map((player) => player.id);
     renewalPriorityByClub.set(club.id, new Set(ranked));
   }
-  const pendingReleasesByClub = new Map<string, Set<string>>();
 
-  for (const [playerId, player] of Object.entries(state.players)) {
+  for (let index = 0; index < expiringPlayers.length; index++) {
+    const first = expiringPlayers[index];
+    const owner = first.contractClubId ?? first.loanParentClubId ?? first.clubId;
+    const secured = [...(committedRosterByClub.get(owner) ?? [])].map(id => state.players[id]);
+    const needsKeeper = !secured.some(member => member?.position === "GK");
+    const needsOutfield = secured.filter(member => member && member.position !== "GK").length < 10;
+    // Re-evaluate after each agreement or rejection. A first keeper's renewal
+    // must not keep every reserve keeper ahead of missing outfield starters.
+    const fillsPriority = (candidate: Player) => candidate.clubId === owner
+      && !candidate.onLoan && candidate.age >= 18
+      && (needsKeeper ? candidate.position === "GK" : needsOutfield && candidate.position !== "GK");
+    let next = index;
+    if (needsKeeper || needsOutfield) {
+      for (let search = index; search < expiringPlayers.length; search++) {
+        const candidate = expiringPlayers[search];
+        if ((candidate.contractClubId ?? candidate.loanParentClubId ?? candidate.clubId) !== owner) break;
+        if (fillsPriority(candidate)) { next = search; break; }
+      }
+    }
+    const [player] = expiringPlayers.splice(next, 1);
+    expiringPlayers.splice(index, 0, player);
+    const playerId = player.id;
     const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
     // Skip players without a contract owner (already unsigned/youth)
     if (!ownerClubId) continue;
@@ -130,86 +179,57 @@ export function processContractExpiries(
     const overCapacity = (club.playerIds?.length ?? 0) > SENIOR_SQUAD_RENEWAL_CAP;
     const retainedForSquadDepth = renewalPriorityByClub.get(ownerClubId)?.has(playerId) ?? false;
 
-    const renewalChance = calculateContractRenewalChance(player, club, state);
-    const rolledOffer = (!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance);
-    const pendingReleases = pendingReleasesByClub.get(ownerClubId) ?? new Set<string>();
-    const remainingAfterRelease = listRegisteredAtClub(club, state.players)
-      .filter((member) => !pendingReleases.has(member.id) && member.id !== playerId);
-    const pendingKeeperReleases = [...pendingReleases]
-      .filter((id) => state.players[id]?.position === "GK").length;
-    const wouldBreachFloor = remainingAfterRelease.length < COMPETITIVE_REGISTERED_FLOOR
-      || (player.position === "GK"
-        && countRegisteredKeepers(club, state.players) - pendingKeeperReleases <= 1);
-    const clubOffersRenewal = rolledOffer || wouldBreachFloor;
+    const committedRoster = committedRosterByClub.get(ownerClubId)!;
+    const planningClub = { ...club, playerIds: [...committedRoster] };
+    if (player.clubId === ownerClubId && !planningClub.playerIds.includes(playerId)) {
+      planningClub.playerIds.push(playerId);
+    }
+    const appearances = appearanceIndex.get(club.id)?.get(player.id) ?? 0;
+    const renewalChance = calculateRenewalChanceWithAppearances(player, planningClub, state, appearances);
 
-    if (clubOffersRenewal) {
-      const appearances = currentSeasonAppearances(player.id, club.id, state);
+    if ((!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance)) {
       const extension = preferredRenewalLength(player, appearances, player.morale ?? 5);
       const renewedWage = renewalWageExpectation(
         player,
-        club.reputation,
+        club,
         extension,
         appearances,
         player.morale ?? 5,
       );
-      const playerAcceptance = playerRenewalAcceptanceChance(player, club, state);
+      const playerAcceptance = playerRenewalAcceptanceChance(player, club, state, appearances);
       const clubAffordability = affordabilityContext[ownerClubId];
       const affordability = clubAffordability && assessClubAffordabilityFromContext(
         clubAffordability,
         {
           weeklyWageCommitment: renewedWage,
-          releasedWeeklyCommitment: Math.max(0, player.wage),
         },
       );
-      if (!affordability?.affordable) {
+      if (!affordability?.affordable
+        || !canFundSquadCompletion(affordability.remainingWeeklyHeadroom, planningClub.playerIds.length, renewedWage,
+          getGoalkeeperRecruitmentNeed(player, planningClub, state.players), getEmergencySquadVacancies(player, planningClub, state.players), player.age)
+        || !rng.chance(playerAcceptance)) {
         // Fall through to release when the club cannot carry the next deal.
       } else {
-        // Depth/GK floor offers still require affordability. Player refusal cannot
-        // dissolve the last competitive XI or the last registered keeper.
-        const playerRoll = rng.chance(playerAcceptance);
-        if (!(wouldBreachFloor || playerRoll)) {
-          // Fall through when the player declines an ordinary offer.
-        } else {
-          renewals.push({
-            playerId,
-            clubId: ownerClubId,
-            contractLength: extension,
-            wage: renewedWage,
-          });
-          renewedPlayerIds.push(playerId);
-          continue;
-        }
+        renewals.push({
+          playerId,
+          clubId: ownerClubId,
+          contractLength: extension,
+          wage: renewedWage,
+        });
+        renewedPlayerIds.push(playerId);
+        if (player.clubId === ownerClubId && !player.onLoan) committedRoster.add(playerId);
+        // Later negotiations must include every agreement already made here.
+        affordabilityContext[ownerClubId] = {
+          club: clubAffordability.club,
+          currentWeeklyCommitment: affordability.projectedWeeklyCommitment,
+        };
+        continue;
       }
     }
 
-    // Release to free agent pool
-    pendingReleases.add(playerId);
-    pendingReleasesByClub.set(ownerClubId, pendingReleases);
-    const countryKey =
-      normalizeCountryKey(state.leagues[club.leagueId]?.country)
-      ?? countryKeyFromNationality(player.nationality)
-      ?? "england";
-    const freeAgent = createFreeAgentFromPlayer(
-      player,
-      club,
-      state.currentSeason,
-      countryKey,
-    );
-    releasedPlayers.push(freeAgent);
-
-    // Notable release message (CA > 65)
-    if (player.currentAbility > 65) {
-      messages.push({
-        id: makeMessageId("fa_release", rng),
-        week: state.currentWeek,
-        season: state.currentSeason,
-        type: "event",
-        title: `${player.firstName} ${player.lastName} Released`,
-        body: `${player.firstName} ${player.lastName} (${player.age}, ${player.position}) has been released by ${club.name} and is available as a free agent.`,
-        read: false,
-        actionRequired: false,
-      });
-    }
+    const release = createContractReleaseFeedback(player, club, state, rng);
+    releasedPlayers.push(release.agent);
+    messages.push(...release.messages);
   }
 
   return {
@@ -220,15 +240,48 @@ export function processContractExpiries(
   };
 }
 
+/** Shared prospective release terms; callers publish only applied releases. */
+export function createContractReleaseFeedback(
+  player: Player,
+  club: Club,
+  state: Pick<GameState, "leagues" | "currentWeek" | "currentSeason">,
+  rng: RNG,
+): { agent: FreeAgent; messages: InboxMessage[] } {
+  const countryKey = normalizeCountryKey(state.leagues[club.leagueId]?.country)
+    ?? countryKeyFromNationality(player.nationality) ?? "england";
+  return {
+    agent: createFreeAgentFromPlayer(player, club, state.currentSeason, countryKey),
+    messages: player.currentAbility > 65 ? [{
+      id: makeMessageId("fa_release", rng),
+      week: state.currentWeek,
+      season: state.currentSeason,
+      type: "event",
+      title: `${player.firstName} ${player.lastName} Released`,
+      body: `${player.firstName} ${player.lastName} (${player.age}, ${player.position}) has been released by ${club.name} and is available as a free agent.`,
+      read: false,
+      actionRequired: false,
+      relatedId: player.id,
+      relatedEntityType: "player",
+    }] : [],
+  };
+}
+
 // =============================================================================
 // HELPERS
 // =============================================================================
 
-function getRenewalChance(ca: number, clubReputation: number): number {
-  const abilityAboveClubLevel = ca - getClubAbilityMidpoint(clubReputation);
-  if (abilityAboveClubLevel >= 0) return RENEWAL_CHANCE_HIGH;
-  if (abilityAboveClubLevel >= -20) return RENEWAL_CHANCE_MID;
-  return RENEWAL_CHANCE_LOW;
+function sportingRenewalValue(player: Player, club: Club, players: GameState["players"]): number {
+  const squad = [...new Set(club.playerIds)].map((id) => players[id])
+    .filter((candidate): candidate is Player => Boolean(candidate) && Number.isFinite(candidate.currentAbility));
+  const abilities = squad.map((candidate) => candidate.currentAbility).sort((a, b) => a - b);
+  const typicalAbility = abilities.length
+    ? abilities[Math.floor(abilities.length / 2)]
+    : club.reputation * 2;
+  const advantage = player.currentAbility - typicalAbility;
+  const qualityValue = advantage >= 10 ? 0.85 : advantage >= -10 ? 0.7 : 0.4;
+  // Sporting continuity matters before replacing a player: a short squad
+  // should actively try to keep viable depth, even at a low playing level.
+  return qualityValue + (squad.length < 18 ? 0.15 : 0);
 }
 
 function currentSeasonAppearances(playerId: string, clubId: string, state: GameState): number {
@@ -247,6 +300,42 @@ function currentSeasonAppearances(playerId: string, clubId: string, state: GameS
     }
   }
   return appearances;
+}
+
+function buildRenewalAppearanceIndex(
+  state: GameState,
+  expiringPlayers: readonly Player[],
+): Map<string, Map<string, number>> {
+  const index = new Map<string, Map<string, number>>();
+  for (const player of expiringPlayers) {
+    const owner = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    const club = state.clubs[owner];
+    if (!club) continue;
+    let counts = index.get(club.id);
+    if (!counts) { counts = new Map(); index.set(club.id, counts); }
+    counts.set(player.id, 0);
+  }
+  if (index.size === 0) return index;
+  // Fixtures and ratings do not change during the negotiation batch. Query
+  // only the expiring players for each fixture club, preserving the scalar
+  // lookup's legacy/key semantics without repeated whole-ledger scans.
+  for (const [fixtureId, ratings] of Object.entries(state.matchRatings ?? {})) {
+    const fixture = state.fixtures[fixtureId];
+    if (!fixture?.played || fixture.season !== state.currentSeason) continue;
+    const clubIds = fixture.homeClubId === fixture.awayClubId
+      ? [fixture.homeClubId] : [fixture.homeClubId, fixture.awayClubId];
+    for (const clubId of clubIds) {
+      const counts = index.get(clubId);
+      if (!counts) continue;
+      for (const playerId of counts.keys()) {
+        const rating = ratings[playerId];
+        if (rating && (rating.minutesPlayed !== undefined ? rating.minutesPlayed > 0 : rating.started ?? true)) {
+          counts.set(playerId, counts.get(playerId)! + 1);
+        }
+      }
+    }
+  }
+  return index;
 }
 
 function tacticalPositions(formation: string): ReadonlySet<Player["position"]> {
@@ -281,12 +370,12 @@ function preferredRenewalLength(
 
 function renewalWageExpectation(
   player: Player,
-  clubReputation: number,
+  club: Club,
   contractLength: number,
   appearances: number,
   morale: number,
 ): number {
-  const abilityBaseline = getContractWageBaseline(player, clubReputation);
+  const abilityBaseline = estimateContractWageBaseline(player.currentAbility, club.reputation, player.wage);
   const usageMultiplier = appearances >= 12 ? 1.12
     : appearances >= 6 ? 1.05
       : appearances === 0 ? 0.94
@@ -294,7 +383,7 @@ function renewalWageExpectation(
   const moraleMultiplier = morale >= 7 ? 1.05
     : morale <= 3 ? 0.96
       : 1;
-  const transferWillingness = player.personalityProfile?.transferWillingness ?? 0.5;
+  const transferWillingness = expandPlayerPersonalityProfile(player.personalityProfile)?.transferWillingness ?? 0.5;
   const personalityMultiplier = transferWillingness >= 0.75 ? 1.08
     : transferWillingness <= 0.25 ? 0.96
       : 1;
@@ -307,7 +396,7 @@ function renewalWageExpectation(
   return Math.max(
     100,
     Math.round(
-      Math.max(player.wage, abilityBaseline)
+      abilityBaseline
       * usageMultiplier
       * moraleMultiplier
       * personalityMultiplier
@@ -321,11 +410,11 @@ function playerRenewalAcceptanceChance(
   player: Player,
   club: Club,
   state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
+  appearances: number,
 ): number {
   const morale = player.morale ?? 5;
-  const appearances = currentSeasonAppearances(player.id, club.id, state as GameState);
   const coverage = positionCoverage(player, club, state);
-  const transferWillingness = player.personalityProfile?.transferWillingness ?? 0.5;
+  const transferWillingness = expandPlayerPersonalityProfile(player.personalityProfile)?.transferWillingness ?? 0.5;
   let chance = 0.48;
 
   chance += Math.max(-0.15, Math.min(0.15, (morale - 5) * 0.05));
@@ -366,7 +455,18 @@ export function calculateContractRenewalChance(
   club: Club,
   state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
 ): number {
-  let chance = getRenewalChance(player.currentAbility, club.reputation);
+  return calculateRenewalChanceWithAppearances(
+    player, club, state, currentSeasonAppearances(player.id, club.id, state as GameState),
+  );
+}
+
+function calculateRenewalChanceWithAppearances(
+  player: Player,
+  club: Club,
+  state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
+  appearances: number,
+): number {
+  let chance = sportingRenewalValue(player, club, state.players);
   chance += Math.max(-0.12, Math.min(0.12, player.form * 0.035));
   chance += Math.max(-0.12, Math.min(0.12, ((player.morale ?? 5) - 5) * 0.025));
 
@@ -380,7 +480,6 @@ export function calculateContractRenewalChance(
       : coverage >= 4 ? -0.12
         : 0;
 
-  const appearances = currentSeasonAppearances(player.id, club.id, state as GameState);
   if (appearances >= 12) chance += 0.1;
   else if (appearances >= 6) chance += 0.04;
   else if (appearances === 0 && player.age >= 23) chance -= 0.12;
@@ -399,10 +498,12 @@ export function calculateContractRenewalChance(
   return Math.min(0.95, Math.max(0.03, chance));
 }
 
-function getMaxWeeksInPool(ca: number): number {
-  if (ca >= 75) return POOL_DURATION_ELITE;
-  if (ca >= 60) return POOL_DURATION_QUALITY;
-  if (ca >= 45) return POOL_DURATION_DEPTH;
+export function getMaxWeeksInPool(ca: number): number {
+  // Ability uses a 1–200 scale. Better players should have longer viable
+  // careers, not disappear sooner because interest was expected to be fast.
+  if (ca >= 150) return POOL_DURATION_ELITE;
+  if (ca >= 120) return POOL_DURATION_QUALITY;
+  if (ca >= 90) return POOL_DURATION_DEPTH;
   return POOL_DURATION_JOURNEYMAN;
 }
 
@@ -412,11 +513,10 @@ export function createFreeAgentFromPlayer(
   currentSeason: number,
   countryKey: string,
 ): FreeAgent {
-  // Preserve the player's actual market context when a contract ends.
-  const baseWage = getContractWageBaseline(player, club.reputation);
+  const baseWage = estimateContractWageBaseline(player.currentAbility, club.reputation, player.wage);
   // Older players accept lower wages
   const ageFactor = player.age > 30 ? 0.8 : player.age > 28 ? 0.9 : 1.0;
-  const wageExpectation = Math.max(200, Math.round(baseWage * ageFactor));
+  const wageExpectation = Math.round(baseWage * ageFactor);
 
   // Signing bonus: 2-4 weeks wages
   const signingBonusExpectation = Math.round(wageExpectation * 3);

@@ -27,8 +27,9 @@ function market() {
   return { scout, club, player, report, finances, suggested };
 }
 
-function offered(ask: number, options: { exclusive?: boolean; ordinary?: boolean; upgrade?: boolean; budget?: number } = {}) {
+function offered(ask: number, options: { exclusive?: boolean; ordinary?: boolean; upgrade?: boolean; budget?: number; reportPatch?: Partial<ScoutReport> } = {}) {
   const data = market();
+  Object.assign(data.report, options.reportPatch);
   if (options.budget !== undefined) data.club.scoutingBudget = options.budget;
   let listed = listReport(data.finances, data.report.id, ask, options.exclusive ?? false, undefined, 1, 1);
   if (options.ordinary || options.upgrade) listed = { ...listed, reportSalesRevenue: 50 };
@@ -52,6 +53,32 @@ function offered(ask: number, options: { exclusive?: boolean; ordinary?: boolean
 }
 
 describe("club report reservation values", () => {
+  it("does not generate a purchase or upgrade for an explicit private receipt", () => {
+    const reportPatch = { recommendedAction: "monitor", decisionReceipt: { action: "pass", id: "private-receipt" },
+      evidenceAssessment: { claims: [{ support: "supported" }] } } as unknown as Partial<ScoutReport>;
+    expect(offered(10_000, { reportPatch }).bid).toBeUndefined();
+    expect(offered(10_000, { reportPatch, upgrade: true }).bid).toBeUndefined();
+  });
+
+  it.each(["pass", "monitor"] as const)("preserves explicitly listed supported %s assessments", (recommendedAction) => {
+    const evidenceAssessment = { claims: [{ support: "supported" }] } as unknown as ScoutReport["evidenceAssessment"];
+    expect(offered(market().suggested, { reportPatch: { recommendedAction, evidenceAssessment } }).bid).toBeDefined();
+  });
+
+  it.each([{ claims: [] }, { claims: [{ support: "withheld" }] }, { claims: [{ support: "stretch" }] }])("does not buy unsupported structured evidence: $claims", ({ claims }) => {
+    const evidenceAssessment = { claims } as unknown as ScoutReport["evidenceAssessment"];
+    expect(offered(10_000, { reportPatch: { evidenceAssessment } }).bid).toBeUndefined();
+  });
+
+  it("records the normal and inflated-ask witness before any pricing repair", () => {
+    const baseline = offered(market().suggested);
+    const excessive = offered(10_000);
+    const impossible = offered(10_000_000);
+    console.info(JSON.stringify({ scenario: "same-seed-report-reservation", suggested: baseline.suggested,
+      normalBid: baseline.bid?.amount ?? null, inflatedAsk: 10_000, inflatedBid: excessive.bid?.amount ?? null,
+      impossibleAsk: 10_000_000, impossibleBid: impossible.bid?.amount ?? null }));
+  });
+
   it("guarantees a sensible counteroffer even when the ask exceeds every club budget", () => {
     const normal = offered(market().suggested);
     const excessive = offered(10_000);
@@ -70,11 +97,15 @@ describe("club report reservation values", () => {
     expect(offered(50, { ordinary: true }).bid!.amount).toBeLessThan(normal.bid!.amount);
   });
 
-  it("preserves exclusivity premiums and independently bounds exclusive upgrade offers", () => {
+  it("preserves exclusivity premiums", () => {
     const nonExclusive = offered(10_000);
     const exclusive = offered(10_000, { exclusive: true });
     expect(exclusive.bid!.amount).toBeGreaterThan(nonExclusive.bid!.amount);
     expect(offered(10_000_000, { exclusive: true }).bid?.amount).toBe(exclusive.bid!.amount);
+  });
+
+  it("independently bounds exclusive upgrade offers", () => {
+    const nonExclusive = offered(market().suggested);
     const upgrade = offered(market().suggested, { upgrade: true });
     expect(upgrade.bid?.isExclusiveUpgrade).toBe(true);
     expect(upgrade.bid!.amount).toBeGreaterThan(nonExclusive.bid!.amount);

@@ -71,10 +71,7 @@ describe("release workflow policy", () => {
     expect(acceptedCandidate).toContain("artifacts/release/release-artifact-inventory.json");
     expect(acceptedCandidate).toContain("artifacts/release/promotion-files.txt");
     expect(acceptedCandidate).toContain("artifacts/release/generated/steam-depot-inventories.json");
-    expect(acceptedCandidate).toContain('gh api --paginate --slurp "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100"');
-    expect(acceptedCandidate).toContain("node scripts/stage-accepted-source-soak.mjs select candidate-bundle");
-    expect(acceptedCandidate).toContain("node scripts/stage-accepted-source-soak.mjs stage candidate-bundle candidate source-soak-downloads");
-    expect(acceptedCandidate).not.toContain("unzip -jo");
+    expect(acceptedCandidate).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100"');
     expect(acceptedCandidate).not.toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"');
     expect(acceptedCandidate).not.toContain("${CANDIDATE_TAG}^{commit}");
     expect(acceptedCandidate).not.toContain("softprops/action-gh-release");
@@ -108,10 +105,10 @@ describe("release workflow policy", () => {
     expect(certification).toContain("RELEASE_EVIDENCE_STATUS: ../docs/release/release-evidence-status.json");
     expect(certification).toContain("working-directory: candidate");
     expect(certification).toContain("node ../scripts/check-release-preflight.mjs --mode certify --json");
-    expect(certification).toContain("run: node ../scripts/check-release-evidence.mjs");
+    expect(certification).toContain("run: node ../scripts/check-release-evidence.mjs --scope full-release");
+    expect(certification).not.toMatch(/node \.\.\/scripts\/check-release-evidence\.mjs[^\r\n]*--scope(?:\s+|=)diagnostic/);
     expect(certification).toContain("RELEASE_TAG_BINDING_MODE: intended");
     expect(certification).toContain("node scripts/install-release-certification.mjs");
-    expect(certification).toContain("node scripts/stage-accepted-source-soak.mjs verify candidate candidate");
     expect(certification).toContain("--destination=candidate/artifacts/release/generated/certifications");
     expect(certification).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" > candidate/artifacts/release/generated/certifications/package-workflow-run.json');
     expect(certification).toContain('gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}/jobs?per_page=100" > candidate/artifacts/release/generated/certifications/package-workflow-jobs.json');

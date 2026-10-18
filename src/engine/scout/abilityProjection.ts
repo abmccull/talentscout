@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
 /** Forecasts use observed tools and growth, never a latent ability ceiling. */
 import {
   ATTRIBUTE_DOMAINS, HIDDEN_ATTRIBUTES,
@@ -48,7 +49,7 @@ export function projectAbilityFromEvidence(
   const evidenceWeight = clamp(coverage * (0.5 + evidenceConfidence * 0.5), 0.12, 0.95);
   const estimatedAttribute = agePrior * (1 - evidenceWeight) + observedMean * evidenceWeight;
   const estimatedAbility = clamp(1 + (estimatedAttribute - 1) / 19 * 199, 1, 200);
-  const contexts = new Set([...history.map((observation) => observation.situation?.repetitionKey ?? observation.context), context]);
+  const contexts = new Set([...history.map((observation) => expandObservationSituationSnapshot(observation.situation)?.repetitionKey ?? observation.context), context]);
   const contextFactor = Math.min(1, contexts.size / 3);
   const judgment = clamp(scout.skills.playerJudgment ?? 1, 1, 20) / 20;
   const caConfidence = clamp(evidenceConfidence * (0.45 + coverage * 0.25 + domainCoverage * 0.15 + contextFactor * 0.15)

@@ -1,3 +1,5 @@
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { expandPlayerInjuryHistory } from "@/engine/players/playerStateArchive";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -441,6 +443,13 @@ describe("academy recommendation reviews", () => {
     "utf8",
   )) as { state: unknown };
 
+  function injuryHistoryFacts(target: Player) {
+    const history = expandPlayerInjuryHistory(target.injuryHistory, target.id);
+    return history ? { ...history,
+      injuries: history.injuries.map(entry => expandHistoricalInjury(entry, target.id)),
+    } : history;
+  }
+
   function careerWithProspect(prospect: Player, storage: "registered" | "unsigned"): GameState {
     // Normalize the full fixture first, then inject the deliberately unmigrated
     // prospect so this test exercises its first reload rather than fixture gaps.
@@ -594,7 +603,8 @@ describe("academy recommendation reviews", () => {
       const loaded = storedProspect(migrateSaveState(state), prospect.id, storage);
 
       expect(before.status).toBe("completed");
-      expect(loaded.injuryHistory).toEqual(prospect.injuryHistory);
+      expect(injuryHistoryFacts(loaded))
+        .toEqual(injuryHistoryFacts(prospect));
       expect(completedReviewFor(loaded)).toEqual(before);
     },
   );
@@ -614,8 +624,9 @@ describe("academy recommendation reviews", () => {
       expect.soft(prospect.injuryHistory).toEqual(expected);
       const state = careerWithProspect(prospect, storage);
       const loaded = storedProspect(migrateSaveState(state), prospect.id, storage);
-      expect(loaded.injuryHistory).toEqual(expected);
-      expect(loaded.injuryHistory).toEqual(prospect.injuryHistory);
+      expect(injuryHistoryFacts(loaded)).toEqual(expected);
+      expect(injuryHistoryFacts(loaded))
+        .toEqual(injuryHistoryFacts(prospect));
     },
   );
 

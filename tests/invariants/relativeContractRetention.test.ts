@@ -24,10 +24,11 @@ function regular(reputation: number, relativeAbility = 0) {
   const player = { ...generatePlayer(new RNG("relative-regular"), { position: "CM", ageRange: [26, 26],
     abilityRange: [ability, ability], nationality: "English", clubId: "club", clubReputation: reputation }),
     id: "target", wage: 1_000, contractExpiry: 1, form: 0, morale: 5, secondaryPositions: [], personalityProfile: undefined };
-  const squadMates = Array.from({ length: 14 }, (_, index) => {
+  const squadMates = Array.from({ length: 17 }, (_, index) => {
     const id = `squad-${index}`;
     const position = index === 0 ? "GK"
-      : index < 5 ? "CB"
+      : index < 3 ? "CM"
+        : index < 5 ? "CB"
         : index < 9 ? "FB"
           : "ST";
     return {
@@ -41,8 +42,8 @@ function regular(reputation: number, relativeAbility = 0) {
       clubId: "club",
       contractClubId: "club",
       contractExpiry: 4,
-      currentAbility: ability,
-      potentialAbility: ability,
+      currentAbility: Math.ceil(clubLevel),
+      potentialAbility: Math.ceil(clubLevel),
       marketValue: 10_000,
       wage: 500,
       form: 0,
@@ -87,7 +88,7 @@ describe("contract retention relative to club level", () => {
     expect(measurements[0].clubOffer).toBeCloseTo(measurements[1].clubOffer);
     expect(measurements[0].clubOffer).toBeCloseTo(measurements[2].clubOffer);
     expect(measurements[0].clubOffer).toBeCloseTo(measurements[3].clubOffer);
-    expect(measurements[0].clubOffer).toBeCloseTo(0.92);
+    expect(measurements[0].clubOffer).toBeCloseTo(0.8);
     expect(measurements.every((row) => row.clubOffer < 1 && row.playerAcceptance < 1)).toBe(true);
     expect(measurements[0].playerAcceptance).toBe(measurements[2].playerAcceptance);
   });

@@ -23,7 +23,7 @@ function PortraitPhoto({ path, name, size, eager, fallback }: { path: string; na
 /** Pure photographic presentation. Image failure never allocates or changes a face. */
 export function PlayerPortraitFrame({ portrait, size = 48, name, className = "", eager = false }: PlayerPortraitFrameProps) {
   const initials = name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "—";
-  const fallback = <span role="img" aria-label={name + " — photograph unavailable"}
+  const fallback = <span role={name ? "img" : undefined} aria-label={name ? name + " — photograph unavailable" : undefined} aria-hidden={name ? undefined : true}
     className="flex h-full w-full items-center justify-center bg-[#222827] font-medium tracking-widest text-[#b7c0b8]"
     style={{ fontSize: Math.max(11, Math.round(size * 0.24)) }}>{initials}</span>;
   return <span

@@ -40,6 +40,7 @@ function loadPortraitSources(repoDirectory) {
     ...load(path.join(sourceRoot, "types.ts")),
     ...load(path.join(sourceRoot, "identity.ts")),
     ...load(path.join(sourceRoot, "catalog.ts")),
+    ...load(path.join(sourceRoot, "procedural.ts")),
     ...load(path.join(sourceRoot, "offline", "verifyPackFiles.ts")),
   };
 }

@@ -1,3 +1,5 @@
+import { persistCareerEnd } from "@/lib/careerDisposition";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { processScoutingDecisionReviews } from "@/engine/youth/decisionReviews";
 /**
  * Weekly cycle, calendar scheduling, match, day simulation, and season
@@ -257,9 +259,19 @@ const INTERACTIVE_WEEKLY_RUNTIME: WeeklyActionRuntime = {
 
 export function createWeeklyActions(
   get: GetState,
-  set: SetState,
+  rawSet: SetState,
   runtime: WeeklyActionRuntime = INTERACTIVE_WEEKLY_RUNTIME,
 ) {
+  const set: SetState = (update) => {
+    const previousSimulation = get().weekSimulation;
+    rawSet(update);
+    const current = get();
+    if (!runtime.persistenceEnabled || !current.gameState
+      || current.weekSimulation === previousSimulation) return;
+    const saved = snapshotPersistedGameState(current.gameState, current.activeSession, current.weekSimulation);
+    rawSet({ gameState: saved });
+    queueGameplayAutosave(saved, rawSet);
+  };
   return {
   // ══════════════════════════════════════════════════════════════════════════
   // Schedule Management (scheduleActivity, unscheduleActivity)
@@ -303,7 +315,7 @@ export function createWeeklyActions(
       weekSimulation: null,
     });
     if (runtime.persistenceEnabled) {
-      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+      queueGameplayAutosave(snapshotPersistedGameState(get().gameState!), set);
     }
 
     // Tutorial auto-advance — generic and specialization-specific conditions.
@@ -356,7 +368,7 @@ export function createWeeklyActions(
       weekSimulation: null,
     });
     if (runtime.persistenceEnabled) {
-      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+      queueGameplayAutosave(snapshotPersistedGameState(get().gameState!), set);
     }
   },
 
@@ -921,9 +933,6 @@ export function createWeeklyActions(
       };
     });
 
-    // Complete due one- and two-season reviews from canonical movement,
-    // appearance/rating, and injury history. Hidden ability is never read.
-    stateWithScheduleApplied = processScoutingDecisionReviews(stateWithScheduleApplied);
     let recommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
     let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
@@ -942,7 +951,7 @@ export function createWeeklyActions(
     noteActivityDiagnostic("dueRecommendationReviews", dueRecommendationReviews.length);
     const movementHistoryByPlayerId = new Map<
       string,
-      typeof stateWithScheduleApplied.playerMovementHistory
+      ReturnType<typeof expandPlayerMovementHistory>
     >();
     const careerInterventionsByPlayerId = new Map<
       string,
@@ -954,7 +963,7 @@ export function createWeeklyActions(
         dueRecommendationReviews.map((review) => review.playerId),
       );
       noteActivityDiagnostic("dueRecommendationReviewPlayers", dueReviewPlayerIds.size);
-      for (const movement of stateWithScheduleApplied.playerMovementHistory) {
+      for (const movement of expandPlayerMovementHistory(stateWithScheduleApplied.playerMovementHistory)) {
         if (!dueReviewPlayerIds.has(movement.playerId)) continue;
         const movements = movementHistoryByPlayerId.get(movement.playerId) ?? [];
         movements.push(movement);
@@ -1361,7 +1370,6 @@ export function createWeeklyActions(
     newState = processWeeklyPostTickSystems({
       beforeWeek: gameState,
       state: newState,
-      alumniMilestones: tickResult.alumniMilestones,
     });
     // ── Season transition: regenerate events, fixtures, and transfer windows ─
     weeklyPipeline.enter("season-rollover");
@@ -1372,11 +1380,26 @@ export function createWeeklyActions(
       endOfSeasonTriggered: tickResult.endOfSeasonTriggered,
       predictionAccuracyBonus: weekEquipBonuses?.predictionAccuracy ?? 0,
     });
+    // Review once after dated world history and season rollover have committed.
+    // Interactive and worker execution share this authoritative state.
+    const reviewedState = processScoutingDecisionReviews(seasonRollover.state);
     if (seasonRollover.terminal === "ironman-fired") {
-      set({ gameState: null, isLoaded: false, currentScreen: "mainMenu" });
+      const endedState: GameState = {
+        ...reviewedState,
+        careerEnd: { reason: "ironman-fired", season: gameState.currentSeason, week: gameState.currentWeek },
+        activeObservationSession: null,
+        pendingWeekRecovery: null,
+      };
+      // Headless workers return a portable terminal snapshot. Only the owned
+      // main-thread commit may write the independent permanent run record.
+      if (runtime.persistenceEnabled) {
+        persistCareerEnd(endedState);
+        queueGameplayAutosave(endedState, set);
+      }
+      set({ gameState: runtime.persistenceEnabled ? null : endedState, isLoaded: false, currentScreen: "mainMenu" });
       return;
     }
-    newState = seasonRollover.state;
+    newState = reviewedState;
     if (tickResult.endOfSeasonTriggered) {
       newState = {
         ...newState,

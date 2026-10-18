@@ -1,3 +1,6 @@
+import { buildAcademyPromotionNews } from "@/engine/youth/academyPromotionNews";
+import { recruitForSeasonOpening } from "@/engine/freeAgents/seasonOpening";
+import { buildPlayingSquadQuoteIndex, getPlayingSquadWeeklyReserve } from "@/engine/freeAgents/squadPlanning";
 import type {
   DiscoveryRecord,
   GameState,
@@ -6,7 +9,7 @@ import type {
   ScoutReport,
   UnsignedYouth,
 } from "@/engine/core/types";
-import { getSeasonLength } from "@/engine/core/gameLoop";
+import { getSeasonLength, reconcileClubRosters } from "@/engine/core/gameLoop";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
 import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
 import { generateSeasonEvents } from "@/engine/core/seasonEvents";
@@ -53,10 +56,12 @@ import {
   calculatePerformanceBonusAmount,
   processAnnualAwards,
   reapproveAnnualClubEconomics,
+  buildClubAffordabilityContext,
 } from "@/engine/finance";
 import { generateAnalystCandidate, resolvePredictions } from "@/engine/data";
 import {
   calculateReportAccountabilityMetrics,
+  hasCompleteReportSubmissionSnapshot,
   isReportOutcomeValidatable,
   REPORT_VALIDATION_HORIZON_SEASONS,
   selectMatureReportCasesForValidation,
@@ -164,6 +169,15 @@ export function validateMatureReportCasesAtSeasonEnd(
     const player = resolvePlayerEntity(state, accountableReport.playerId)?.player;
     if (!player) continue;
 
+    if (!hasCompleteReportSubmissionSnapshot(accountableReport)) {
+      updatedReports[accountableReport.id] = { ...accountableReport, validationStatus: "unverifiable" };
+      messages.push({ id: `retro-unverifiable-${accountableReport.id}`, week: state.currentWeek,
+        season: state.currentSeason, title: `Historical assessment unavailable: ${player.firstName} ${player.lastName}`,
+        body: "This legacy report cannot receive a historical accuracy score because its submission-time attribute evidence is incomplete. Current ability and later development cannot reconstruct that evidence. The original report is preserved; no reputation reward or penalty was applied. A new report with fresh evidence can be assessed separately.",
+        type: "feedback", read: false, actionRequired: false, relatedId: player.id, relatedEntityType: "player" });
+      continue;
+    }
+
     const seasonsSinceReport = completedSeason - accountableReport.submittedSeason;
     const accountableAccuracy = trackPostTransfer(
       accountableReport,
@@ -187,12 +201,15 @@ export function validateMatureReportCasesAtSeasonEnd(
     const predictedCA = accountableReport.perceivedCAStars !== undefined
       ? starsToAbility(accountableReport.perceivedCAStars)
       : Math.round((assessmentAverage / 20) * 200);
-    if (!reportCase.wasPreviouslyValidated) {
+    // Old saves lack submission-time ability. Their attribute-based validation
+    // still applies, but current ability cannot reconstruct a historical fact.
+    if (!reportCase.wasPreviouslyValidated && Number.isFinite(accountableReport.validationCurrentAbility)) {
       accuracyHistory.push({
         week: state.currentWeek,
         season: state.currentSeason,
         predictedCA,
-        actualCA: player.currentAbility,
+        actualCA: accountableReport.validationCurrentAbility!,
+        assessmentBasis: "submission",
       });
     }
 
@@ -202,6 +219,10 @@ export function validateMatureReportCasesAtSeasonEnd(
         || completedSeason - report.submittedSeason < REPORT_VALIDATION_HORIZON_SEASONS
         || !isReportOutcomeValidatable(report)
       ) {
+        continue;
+      }
+      if (!hasCompleteReportSubmissionSnapshot(report)) {
+        updatedReports[report.id] = { ...report, validationStatus: "unverifiable" };
         continue;
       }
       updatedReports[report.id] = {
@@ -224,8 +245,8 @@ export function validateMatureReportCasesAtSeasonEnd(
         || transferredReportIds.has(report.id)
       );
     const outcomeContext = hadRecordedRecruitmentAction
-      ? "The recorded recruitment outcome and subsequent career evidence informed the review."
-      : "No signing or transfer was required; the original judgment was reviewed against the player's subsequent career evidence.";
+      ? "The original assessment was checked against its submission evidence; recruitment and later development remain separate outcomes."
+      : "No signing or transfer was required; the original assessment was checked against the evidence preserved with the report.";
     messages.push({
       id: `retro-${accountableReport.id}-s${completedSeason}`,
       week: state.currentWeek,
@@ -589,7 +610,7 @@ export function processWeeklySeasonRollover(
               ? "You have received a formal warning. Improve your performance next season."
               : "Your contract has been terminated.";
       const youthCaseReview = newState.scout.primarySpecialization === "youth"
-        ? deriveYouthSeasonCaseReview(newState, completedSeason)
+        ? deriveYouthSeasonCaseReview(newState, completedSeason, { completed: true })
         : null;
       seasonEndMessages.push({
         id: `review-s${completedSeason}`,
@@ -952,7 +973,7 @@ export function processWeeklySeasonRollover(
       // unused scouting budget to compound forever.
       newState = {
         ...newState,
-        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players, newState.currentSeason),
+        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players, newState.currentSeason, newState.freeAgentPool.agents),
       };
 
       // Generate new season fixtures for core leagues only (skip secondary talent pools)
@@ -1017,6 +1038,9 @@ export function processWeeklySeasonRollover(
       const youthRng = createRNG(`${gameState.seed}-youth-s${newState.currentSeason}`);
       const newYouth: UnsignedYouth[] = [];
       const newAcademyPlayers: Player[] = [];
+      const academyAffordability = buildClubAffordabilityContext(newState.clubs, newState.players,
+        { currentWeek: newState.currentWeek, currentSeason: newState.currentSeason });
+      const academyQuotes = buildPlayingSquadQuoteIndex(newState.freeAgentPool.agents, newState.players);
 
       for (const countryKey of newState.countries) {
         const countryData = getCountryDataSync(countryKey);
@@ -1046,6 +1070,10 @@ export function processWeeklySeasonRollover(
           return league?.country.toLowerCase() === countryData.name.toLowerCase();
         });
         for (const club of countryClubs) {
+          // Discretionary intake must leave funds for an actual playing eleven.
+          // Only already registered cover counts; loaned-out payroll is still
+          // charged by the authoritative affordability context below.
+          const playingReserve = getPlayingSquadWeeklyReserve(club, newState.players, academyQuotes);
           const intake = limitAcademyIntakeToClubCapacity(
             club,
             generateAcademyIntake(
@@ -1054,6 +1082,8 @@ export function processWeeklySeasonRollover(
               countryData,
               newState.currentSeason,
             ),
+            Math.max(0, (academyAffordability[club.id]?.club.weeklyWageBudget ?? 0)
+              - (academyAffordability[club.id]?.currentWeeklyCommitment ?? 0) - playingReserve),
           );
           newAcademyPlayers.push(...intake);
         }
@@ -1084,10 +1114,23 @@ export function processWeeklySeasonRollover(
             };
           }
         }
-        newState = { ...newState, players: updatedPlayers, clubs: updatedClubs };
+        // Intake runs after core-tick reconciliation. Apply the same graduation
+        // and emergency call-up rules now, before the new season is exposed.
+        const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers, newState.disciplinaryRecords);
+        const promotionNews = buildAcademyPromotionNews(newState, updatedClubs, reconciledClubs,
+          updatedPlayers, newState.currentWeek, newState.currentSeason);
+        newState = {
+          ...newState,
+          players: updatedPlayers,
+          clubs: reconciledClubs,
+          inbox: [...newState.inbox, ...promotionNews],
+        };
       }
 
       // ── First-team season-end: regenerate directives and update transfer records ──
+      newState = recruitForSeasonOpening(newState,
+        createRNG(`${gameState.seed}-season-opening-market-s${newState.currentSeason}`));
+
       if (newState.scout.primarySpecialization === "firstTeam") {
         // Generate new manager directives for the new season
         if (newState.scout.currentClubId) {
@@ -1122,53 +1165,8 @@ export function processWeeklySeasonRollover(
         };
       }
 
-      // ── Season consolidation: matchRatings → player.seasonRatings, then wipe ──
-      if (Object.keys(newState.matchRatings).length > 0) {
-        const consolidatedPlayers = { ...newState.players };
-
-        // Gather all ratings per player from all fixtures this season
-        const playerSeasonRatings = new Map<string, import("@/engine/core/types").PlayerMatchRating[]>();
-        for (const fixtureRatings of Object.values(newState.matchRatings)) {
-          for (const [pid, rating] of Object.entries(fixtureRatings)) {
-            if (!playerSeasonRatings.has(pid)) playerSeasonRatings.set(pid, []);
-            playerSeasonRatings.get(pid)!.push(rating);
-          }
-        }
-
-        // Build SeasonRatingRecord for each player
-        for (const [pid, ratings] of playerSeasonRatings) {
-          const player = consolidatedPlayers[pid];
-          if (!player) continue;
-
-          const avgRating = ratings.reduce((s, r) => s + r.rating, 0) / ratings.length;
-          const appearances = ratings.length;
-          let goals = 0;
-          let assists = 0;
-          let cleanSheets = 0;
-          for (const r of ratings) {
-            goals += r.stats.goals ?? 0;
-            assists += r.stats.assists ?? 0;
-            if (r.stats.cleanSheet) cleanSheets++;
-          }
-
-          const seasonRecord = {
-            season: completedSeason,
-            avgRating: Math.round(avgRating * 10) / 10,
-            appearances,
-            goals,
-            assists,
-            cleanSheets,
-          };
-
-          consolidatedPlayers[pid] = {
-            ...player,
-            seasonRatings: [...(player.seasonRatings ?? []), seasonRecord],
-          };
-        }
-
-        // Wipe per-fixture match ratings, keep recentMatchRatings on players (carries form)
-        newState = { ...newState, players: consolidatedPlayers, matchRatings: {} };
-      }
+      // Core rollover already projected full-season player statistics before
+      // pruning. Retained match ratings still serve referenced fixture details.
 
       // ── Data scout season-end: resolve predictions and generate new analyst candidates ──
       if (newState.scout.primarySpecialization === "data") {

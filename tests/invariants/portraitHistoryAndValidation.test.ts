@@ -34,6 +34,26 @@ describe("retained photographic age history", () => {
 });
 
 describe("portrait ledger import validation", () => {
+  it("normalizes an accepted compact reservation to the full retained identity before consumers use it", async () => {
+    const { revealPortraits, resolvePortrait } = await import("@/engine/players/portraits/allocation");
+    const { bundledPortraitCatalog } = await import("@/engine/players/portraits/bundledCatalog");
+    const { createVisualIdentity } = await import("@/engine/players/portraits/identity");
+    const id = "pruned-marker-reservation";
+    const identity = createVisualIdentity(id);
+    const seen = revealPortraits({ players: { [id]: { id, age: 27, firstName: "Ari", lastName: "Reed" } } },
+      [id], { season: 8, week: 3 }, "observed", bundledPortraitCatalog);
+    const expected = resolvePortrait(identity, 39, seen.playerPortraits, bundledPortraitCatalog);
+    expect(expected.status).toBe("available");
+    const raw = JSON.parse(JSON.stringify(seen.playerPortraits)) as PlayerPortraitState;
+    raw.reservations[identity.identityId]!.identity = { version: 1 } as typeof identity;
+    const before = JSON.stringify(raw);
+    const validated = validatePortraitState(raw);
+    expect(validated).toEqual(seen.playerPortraits);
+    expect(resolvePortrait(validated.reservations[identity.identityId]!.identity, 39,
+      validated, bundledPortraitCatalog)).toEqual(expected);
+    expect(JSON.stringify(raw)).toBe(before);
+  });
+
   it.each([
     ["root", []],
     ["reservations", { version: 1, reservations: [], faceOwners: {} }],

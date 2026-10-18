@@ -133,7 +133,7 @@ describe.sequential("IndexedDB save journal version 5 migration", () => {
       processSaveSyncTask,
     } = await import("@/lib/db");
 
-    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(4);
+    expect(CURRENT_SAVE_SCHEMA_VERSION).toBe(10);
     const steam = await getSaveSyncTask("steam", 1);
     expect(steam).toMatchObject({
       operation: "upload",

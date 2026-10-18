@@ -1,3 +1,4 @@
+import { createScoutingDecisionReceipt } from "@/engine/youth/decisionReviews";
 import { describe, expect, it } from "vitest";
 import type { GameState, PlacementReport, ScoutReport } from "@/engine/core/types";
 import {
@@ -9,13 +10,14 @@ import {
 } from "@/engine/reports/scoutingCases";
 
 function report(overrides: Partial<ScoutReport> = {}): ScoutReport {
-  return {
+  const authored: ScoutReport = {
     id: "report-s1w11-r2", caseId: "case-1", playerId: "player-1", scoutId: "scout-1",
     submittedWeek: 11, submittedSeason: 1, revision: 2,
     attributeAssessments: [], strengths: [], weaknesses: [], conviction: "recommend",
     summary: "Authored judgment", estimatedValue: 1_000, qualityScore: 70,
     ...overrides,
   };
+  return { ...authored, decisionReceipt: createScoutingDecisionReceipt(authored) };
 }
 
 function oldPlacement(): PlacementReport {

@@ -1,10 +1,15 @@
 import type {
   Club,
   ClubFinancialObligation,
+  StoredClubFinancialObligation,
   Player,
   PlayerMatchRating,
   TransferAddOn,
+  FreeAgent,
 } from "@/engine/core/types";
+import { estimatePlayerWeeklyWage } from "@/engine/players/wages";
+import { buildPlayingSquadQuoteIndex, getPlayingSquadWeeklyReserve } from "@/engine/freeAgents/squadPlanning";
+import { compactClubFinancialObligation, expandClubFinancialObligation } from "./terminalRecordArchive";
 
 const MIN_WEEKLY_WAGE_BUDGET = 800;
 // Elite first-team squads can carry several million pounds of weekly payroll.
@@ -119,7 +124,7 @@ function normalizeObligation(
     ? obligation.status
     : "active";
 
-  return {
+  const normalized: ClubFinancialObligation = {
     ...obligation,
     id: obligation.id || `${clubId}_obligation_${index}`,
     playerId: obligation.playerId,
@@ -136,6 +141,14 @@ function normalizeObligation(
       : currentSeason,
     status: normalizedStatus,
   };
+  // Preserve original optional ownership for closed rows. Active normalization
+  // retains its existing shape, including computed undefined properties.
+  if (normalizedStatus !== "active") {
+    for (const key of ["amount", "percentage", "weeklyAmount", "remainingWeeks"] as const) {
+      if (normalized[key] === undefined && !Object.hasOwn(obligation, key)) delete normalized[key];
+    }
+  }
+  return normalized;
 }
 
 export function getClubWeeklyWageCommitment(
@@ -146,7 +159,8 @@ export function getClubWeeklyWageCommitment(
 }
 
 export function getClubWeeklyObligationCommitment(club: Club): number {
-  return (club.financialObligations ?? []).reduce((sum, obligation) => {
+  return (club.financialObligations ?? []).reduce((sum, storedObligation) => {
+    const obligation = expandClubFinancialObligation(storedObligation);
     if (obligation.status !== "active") return sum;
     if (!Number.isFinite(obligation.weeklyAmount) || (obligation.weeklyAmount ?? 0) <= 0) {
       return sum;
@@ -165,16 +179,27 @@ export function getClubWeeklyCommitmentTotal(
 export function deriveClubWeeklyWageBudget(
   club: Club,
   players: Record<string, Player>,
+  agents: readonly FreeAgent[] = [],
 ): number {
   const roster = getClubRosterEconomics(club.id, players);
-  return deriveClubWeeklyWageBudgetFromRoster(club, roster);
+  return deriveClubWeeklyWageBudgetFromRoster(club, roster,
+    getPlayingSquadWeeklyReserve(club, players, buildPlayingSquadQuoteIndex(agents, players)));
 }
 
 function deriveClubWeeklyWageBudgetFromRoster(
   club: Club,
   roster: ClubRosterEconomics,
+  playingWeeklyReserve = 0,
 ): number {
-  const committedWages = roster.weeklyWageCommitment;
+  // Borrowed players' wages are paid through obligations, not owned payroll.
+  // Annual approval must recognize the same commitments as recruitment does.
+  const committedWages = roster.weeklyWageCommitment + getClubWeeklyObligationCommitment(club);
+  // Departures free payroll for replacements; they must not erase the club's
+  // capacity to field a squad. The market already maps CA/2 to club reputation.
+  const plannedSquadPayroll = 22 * Math.max(
+    500,
+    estimatePlayerWeeklyWage(club.reputation * 2, club.reputation),
+  );
   const structuralAllowance =
     club.reputation * 140
     + club.youthAcademyRating * 50
@@ -182,9 +207,9 @@ function deriveClubWeeklyWageBudgetFromRoster(
     + Math.min(25_000, Math.max(0, club.budget) * 0.00025);
 
   return clamp(
-    roundToNearest(
-      Math.max(committedWages * 1.1, structuralAllowance),
-      50,
+    Math.max(
+      roundToNearest(Math.max(committedWages * 1.1, structuralAllowance, plannedSquadPayroll), 50),
+      Math.ceil((committedWages + playingWeeklyReserve) / 50) * 50,
     ),
     MIN_WEEKLY_WAGE_BUDGET,
     MAX_WEEKLY_WAGE_BUDGET,
@@ -201,29 +226,25 @@ export function deriveClubScoutingBudget(
   );
 }
 
-/** Legacy funding depends on stature, never on depleted cash or missing players. */
-export function deriveAnnualRecruitmentBudget(club: Club): number {
-  if (Number.isFinite(club.annualRecruitmentBudget) && (club.annualRecruitmentBudget ?? -1) >= 0) {
-    return Math.round(club.annualRecruitmentBudget!);
-  }
-  return Math.max(10_000, Math.round(50 * clamp(club.reputation, 1, 100) ** 3));
-}
-
 /**
  * Reapprove every club's annual recruitment envelope from one roster scan.
- * Vacancies preserve approved wage capacity for replacements. Sporting funding
- * changes belong to promotion/relegation, not to the surviving payroll size.
+ * The result is formula-identical to calling both public derivation helpers
+ * for each club, but avoids O(clubs * players) work at season rollover.
  */
 export function reapproveAnnualClubEconomics(
   clubs: Record<string, Club>,
   players: Record<string, Player>,
-  currentSeason?: number,
+  season?: number,
+  agents: readonly FreeAgent[] = [],
 ): Record<string, Club> {
   const rosterEconomics = buildClubRosterEconomicsIndex(players);
+  const quotes = buildPlayingSquadQuoteIndex(agents, players);
   const reapproved: Record<string, Club> = {};
   for (const [clubId, club] of Object.entries(clubs)) {
-    const allocateRecruitment = Number.isInteger(currentSeason) && currentSeason! > 0;
-    if (allocateRecruitment && (club.lastRecruitmentAllocation?.season ?? 0) >= currentSeason!) {
+    if (season !== undefined && (!Number.isInteger(season) || season < 1)) {
+      throw new Error("Annual club allocation requires a positive integer season");
+    }
+    if (season !== undefined && (club.recruitmentAllocation?.season ?? 0) >= season) {
       reapproved[clubId] = club;
       continue;
     }
@@ -235,27 +256,21 @@ export function reapproveAnnualClubEconomics(
     );
     reapproved[clubId] = {
       ...club,
-      weeklyWageBudget: Number.isFinite(club.weeklyWageBudget) && (club.weeklyWageBudget ?? 0) > 0
-        ? Math.round(club.weeklyWageBudget!)
-        : deriveClubWeeklyWageBudgetFromRoster(club, roster),
+      weeklyWageBudget: deriveClubWeeklyWageBudgetFromRoster(club, roster,
+        getPlayingSquadWeeklyReserve(club, players, quotes)),
       scoutingBudget: annualScoutingBudget + carryover,
     };
-    if (allocateRecruitment) {
-      const grant = deriveAnnualRecruitmentBudget(club);
-      const previousBalance = club.budget;
-      const recruitmentCarryover = Math.min(Math.round(grant * 0.2), Math.max(0, previousBalance));
-      // The budget represents this season's spending authority. The board
-      // retains excess unspent funds; outstanding debts are never erased.
+    if (season !== undefined) {
+      // Net recruitment funding, not gross operating revenue: six weeks of
+      // a standard 22-player payroll at this club's level. Independent of
+      // remaining cash and actual wages so depletion/overspending cannot
+      // amplify the next allocation. Provisional fictional-market scale.
+      const amount = 6 * 22 * Math.max(500, estimatePlayerWeeklyWage(club.reputation * 2, club.reputation));
       reapproved[clubId] = {
         ...reapproved[clubId],
-        annualRecruitmentBudget: grant,
-        budget: grant + recruitmentCarryover + Math.min(0, previousBalance),
-        lastRecruitmentAllocation: {
-          season: currentSeason!,
-          grant,
-          carryover: recruitmentCarryover,
-          returned: Math.max(0, previousBalance - recruitmentCarryover),
-          previousBalance,
+        budget: club.budget + amount,
+        recruitmentAllocation: {
+          season, amount, budgetBefore: club.budget, budgetAfter: club.budget + amount,
         },
       };
     }
@@ -295,6 +310,50 @@ export function normalizeClubEconomics(
   );
 }
 
+function sameObligationFacts(before: ClubFinancialObligation, after: ClubFinancialObligation): boolean {
+  const keys = Reflect.ownKeys(before);
+  if (keys.length !== Reflect.ownKeys(after).length) return false;
+  return keys.every((key) => {
+    const previous = Object.getOwnPropertyDescriptor(before, key);
+    const next = Object.getOwnPropertyDescriptor(after, key);
+    return previous !== undefined && next !== undefined
+      && Object.hasOwn(previous, "value") && Object.hasOwn(next, "value")
+      && Object.is(previous.value, next.value)
+      && previous.enumerable === next.enumerable
+      && previous.writable === next.writable
+      && previous.configurable === next.configurable;
+  });
+}
+
+interface NormalizedClubEconomicsResult {
+  club: Club;
+  weeklyObligationCommitment: number;
+}
+
+// Reuse is confined to the current synchronous assessment. Authored accessors
+// or exotic collection behavior keep the original post-normalization read:
+// they can mutate an earlier retained archive during a later row or Club spread.
+function hasPlainDataProperties(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Reflect.ownKeys(value).every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && Object.hasOwn(descriptor, "value");
+  });
+}
+
+function hasPlainDataArrayEntries(value: unknown[]): boolean {
+  if (Object.getPrototypeOf(value) !== Array.prototype) return false;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== value.length + 1) return false;
+  return keys.every((key, index) => {
+    if (key !== (index === value.length ? "length" : String(index))) return false;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && Object.hasOwn(descriptor, "value");
+  });
+}
+
 function normalizeClubEconomicsFromRoster(
   club: Club,
   roster: ClubRosterEconomics,
@@ -303,6 +362,18 @@ function normalizeClubEconomicsFromRoster(
     currentSeason?: number;
   } = {},
 ): Club {
+  return normalizeClubEconomicsResultFromRoster(club, roster, options).club;
+}
+
+function normalizeClubEconomicsResultFromRoster(
+  club: Club,
+  roster: ClubRosterEconomics,
+  options: {
+    currentWeek?: number;
+    currentSeason?: number;
+  } = {},
+  collectWeeklyCommitment = false,
+): NormalizedClubEconomicsResult {
   const currentWeek = options.currentWeek ?? 1;
   const currentSeason = options.currentSeason ?? 1;
   const weeklyWageBudget = Number.isFinite(club.weeklyWageBudget)
@@ -312,15 +383,44 @@ function normalizeClubEconomicsFromRoster(
   const scoutingBudget = Number.isFinite(club.scoutingBudget)
     ? Math.max(0, Math.round(club.scoutingBudget ?? 0))
     : deriveClubScoutingBudgetFromRoster(club, roster);
-  const financialObligations = (club.financialObligations ?? []).map((obligation, index) =>
-    normalizeObligation(club.id, obligation, index, currentWeek, currentSeason),
-  );
+  // Derive legacy budgets from raw obligations above, before collecting the
+  // distinct normalized commitment used by the immediate affordability caller.
+  const sourceObligations = club.financialObligations ?? [];
+  let canReuseCommitment = collectWeeklyCommitment
+    && hasPlainDataProperties(club)
+    && typeof club.id === "string"
+    && hasPlainDataArrayEntries(sourceObligations);
+  let weeklyObligationCommitment = 0;
+  const financialObligations = sourceObligations.map((obligation, index) => {
+    // This remains the public validating decode of each original stored row.
+    const decoded = expandClubFinancialObligation(obligation);
+    if (collectWeeklyCommitment && decoded === obligation && !hasPlainDataProperties(decoded)) {
+      canReuseCommitment = false;
+    }
+    const normalized = normalizeObligation(club.id, decoded, index, currentWeek, currentSeason);
+    if (collectWeeklyCommitment && normalized.status === "active"
+      && Number.isFinite(normalized.weeklyAmount) && (normalized.weeklyAmount ?? 0) > 0) {
+      weeklyObligationCommitment += Math.max(0, Math.round(normalized.weeklyAmount ?? 0));
+    }
+    // Preserve stored identity only after the existing domain normalization.
+    // JSON equality would erase absent versus owned-undefined distinctions.
+    if (decoded !== obligation && sameObligationFacts(decoded, normalized)) return obligation;
+    return compactClubFinancialObligation(normalized);
+  });
 
-  return {
+  const normalizedClub: Club = {
     ...club,
     weeklyWageBudget,
     scoutingBudget,
     financialObligations,
+  };
+  return {
+    club: normalizedClub,
+    weeklyObligationCommitment: collectWeeklyCommitment
+      ? canReuseCommitment
+        ? weeklyObligationCommitment
+        : getClubWeeklyObligationCommitment(normalizedClub)
+      : 0,
   };
 }
 
@@ -423,15 +523,24 @@ export function buildClubAffordabilityContext(
     currentSeason?: number;
   } = {},
 ): ClubAffordabilityContext {
-  const rosterEconomics = buildClubRosterEconomicsIndex(players);
+  const clubEntries = Object.entries(clubs);
+  // Opening recruitment reassesses one club after each approach. A global
+  // index allocates totals for every unrelated club on each such call. Keep
+  // the ownership scan (including loaned-out wages), but only total the club
+  // being assessed. Multi-club callers still share one world scan.
+  const rosterEconomics = clubEntries.length > 1
+    ? buildClubRosterEconomicsIndex(players)
+    : undefined;
   const context: ClubAffordabilityContext = {};
-  for (const [clubId, club] of Object.entries(clubs)) {
-    const roster = rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS;
-    const normalizedClub = normalizeClubEconomicsFromRoster(club, roster, options);
+  for (const [clubId, club] of clubEntries) {
+    const roster = rosterEconomics
+      ? rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS
+      : getClubRosterEconomics(clubId, players);
+    const normalized = normalizeClubEconomicsResultFromRoster(club, roster, options, true);
     context[clubId] = {
-      club: normalizedClub,
+      club: normalized.club,
       currentWeeklyCommitment:
-        roster.weeklyWageCommitment + getClubWeeklyObligationCommitment(normalizedClub),
+        roster.weeklyWageCommitment + normalized.weeklyObligationCommitment,
     };
   }
   return context;
@@ -451,10 +560,14 @@ export function assessClubAffordabilityFromContext(
 export function assessClubAffordability(
   request: ClubAffordabilityRequest,
 ): ClubAffordabilityResult {
-  const normalizedClub = normalizeClubEconomics(request.club, request.players);
-  const currentWeeklyCommitment = getClubWeeklyCommitmentTotal(normalizedClub, request.players);
+  // Both normalization and affordability need the same owned-roster totals.
+  // Compute them once per assessment; do not cache across lifecycle mutations.
+  const roster = getClubRosterEconomics(request.club.id, request.players);
+  const normalized = normalizeClubEconomicsResultFromRoster(request.club, roster, {}, true);
+  const currentWeeklyCommitment = roster.weeklyWageCommitment
+    + normalized.weeklyObligationCommitment;
   return assessNormalizedClubAffordability(
-    normalizedClub,
+    normalized.club,
     currentWeeklyCommitment,
     request,
   );
@@ -577,9 +690,10 @@ export function settleWeeklyClubObligations(
   for (const clubId of Object.keys(nextClubs)) {
     const club = nextClubs[clubId];
     let budget = club.budget;
-    const nextObligations: ClubFinancialObligation[] = [];
+    const nextObligations: StoredClubFinancialObligation[] = [];
 
-    for (const obligation of club.financialObligations ?? []) {
+    for (const storedObligation of club.financialObligations ?? []) {
+      const obligation = expandClubFinancialObligation(storedObligation);
       if (
         obligation.status !== "active"
         || !Number.isFinite(obligation.weeklyAmount)
@@ -590,20 +704,20 @@ export function settleWeeklyClubObligations(
           && obligation.lastProcessedSeason === currentSeason
         )
       ) {
-        nextObligations.push(obligation);
+        nextObligations.push(storedObligation);
         continue;
       }
 
       const outstandingAmount = activeObligationAmount(obligation);
       if (outstandingAmount <= 0) {
-        nextObligations.push({
+        nextObligations.push(compactClubFinancialObligation({
           ...obligation,
           amount: 0,
           status: "settled",
           remainingWeeks: 0,
           lastProcessedWeek: currentWeek,
           lastProcessedSeason: currentSeason,
-        });
+        }));
         settledObligationIds.push(obligation.id);
         continue;
       }
@@ -626,14 +740,14 @@ export function settleWeeklyClubObligations(
 
       const remainingAmount = Math.max(0, outstandingAmount - payment);
       if (remainingAmount <= 0) {
-        nextObligations.push({
+        nextObligations.push(compactClubFinancialObligation({
           ...obligation,
           amount: 0,
           remainingWeeks: 0,
           status: "settled",
           lastProcessedWeek: currentWeek,
           lastProcessedSeason: currentSeason,
-        });
+        }));
         settledObligationIds.push(obligation.id);
         continue;
       }
@@ -694,7 +808,8 @@ export function settleTriggeredClubObligations(
     const relevantFixtures = fixtures.filter((fixture) =>
       fixture.homeClubId === clubId || fixture.awayClubId === clubId
     );
-    const obligations = (club.financialObligations ?? []).map((obligation) => {
+    const obligations = (club.financialObligations ?? []).map((storedObligation) => {
+      const obligation = expandClubFinancialObligation(storedObligation);
       if (
         obligation.status !== "active"
         || obligation.triggeredSeason !== undefined
@@ -706,7 +821,7 @@ export function settleTriggeredClubObligations(
           obligation.lastTriggerEvaluationWeek === currentWeek
           && obligation.lastTriggerEvaluationSeason === currentSeason
         )
-      ) return obligation;
+      ) return storedObligation;
 
       let appearances = obligation.appearancesRecorded ?? 0;
       let goals = obligation.goalsRecorded ?? 0;
@@ -750,14 +865,14 @@ export function settleTriggeredClubObligations(
       const remaining = due - payment;
       if (remaining <= 0) {
         settledObligationIds.push(obligation.id);
-        return {
+        return compactClubFinancialObligation({
           ...obligation,
           ...progress,
           amount: 0,
           status: "settled" as const,
           triggeredWeek: currentWeek,
           triggeredSeason: currentSeason,
-        };
+        });
       }
       return {
         ...obligation,
@@ -795,12 +910,13 @@ export function settleRelegationClubObligations(
     const club = nextClubs[clubId];
     if (!club) continue;
     let budget = club.budget;
-    const obligations = (club.financialObligations ?? []).map((obligation) => {
+    const obligations = (club.financialObligations ?? []).map((storedObligation) => {
+      const obligation = expandClubFinancialObligation(storedObligation);
       if (
         obligation.type !== "relegationClause"
         || obligation.status !== "active"
         || obligation.triggeredSeason !== undefined
-      ) return obligation;
+      ) return storedObligation;
 
       const due = Math.max(0, Math.round(obligation.amount ?? 0));
       const payment = Math.min(due, Math.max(0, budget));
@@ -820,13 +936,13 @@ export function settleRelegationClubObligations(
       const remaining = due - payment;
       if (remaining <= 0) {
         settledObligationIds.push(obligation.id);
-        return {
+        return compactClubFinancialObligation({
           ...obligation,
           amount: 0,
           status: "settled" as const,
           triggeredWeek: currentWeek,
           triggeredSeason: currentSeason,
-        };
+        });
       }
       return {
         ...obligation,

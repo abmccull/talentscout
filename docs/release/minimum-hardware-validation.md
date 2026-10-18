@@ -11,18 +11,24 @@ player-facing limits below.
 
 ## Declared Steam minimums under test
 
-These values mirror `docs/steam-store-page.md`. If a machine class cannot pass,
-raise the published minimum before release; do not weaken this protocol after
-seeing results.
+These profiles use the intended operating-system minimums in `STEAM_STORE_COPY.md`,
+selected by `docs/steam-store-assets.json`. CPU equivalence and display details
+remain certification targets to reconcile with the approved public requirements.
+If a machine class cannot pass, raise the published minimum before release;
+do not weaken this protocol after seeing results.
 
 | Platform | Operating system | CPU | Memory | Graphics | Storage | Display |
 |---|---|---|---:|---|---:|---:|
 | Windows x64 | Windows 10 64-bit | Intel Core i3 / AMD Ryzen 3 or equivalent | 4 GB | Integrated | 1 GB free before install | 1280 x 720 |
 | macOS | macOS 12 Monterey | Supported 64-bit Intel or Apple Silicon processor for the shipped package | 4 GB | Integrated | 1 GB free before install | 1280 x 720 |
-| Linux x64 | Ubuntu 20.04 LTS | Intel Core i3 / AMD Ryzen 3 or equivalent | 4 GB | Integrated | 1 GB free before install | 1280 x 720 |
+| Linux x64 | Ubuntu 22.04 LTS (64-bit) | Intel Core i3 / AMD Ryzen 3 or equivalent | 4 GB | Integrated | 1 GB free before install | 1280 x 720 |
 
 Test every architecture the store and depot claim to support. A passing Apple
 Silicon run does not certify an Intel package, or vice versa.
+
+Ubuntu 22.04 is the intended advertised Linux minimum. Optional Ubuntu 20.04
+compatibility results may broaden supporting evidence, but do not substitute for
+a run on the supported minimum and every shipped architecture.
 
 ## Controlled setup
 

@@ -8,6 +8,7 @@
  * creates run-to-run variation without allowing randomness to overwhelm need.
  */
 
+import { expandClubSeasonHistory } from "./clubSeasonArchive";
 import type {
   Club,
   GameState,
@@ -27,9 +28,6 @@ import {
   type ClubRecruitmentExpressionId,
   type DoctrineBase,
   type DoctrineExpression,
-  type RecruitmentEvidencePreference,
-  type RecruitmentReach,
-  type RecruitmentRiskTolerance,
 } from "./recruitmentDoctrineCatalog";
 
 export type RecruitmentFocus = YouthBriefPriority;
@@ -40,12 +38,6 @@ export type RegionRecruitmentArchetype =
   | "tradingMarket"
   | "internationalAccessHub";
 
-export type ClubRecruitmentArchetype =
-  | "academyBuilder"
-  | "immediateImpact"
-  | "valueTrader"
-  | "crossBorderNetwork";
-
 export type {
   ClubRecruitmentExpressionId,
   RecruitmentEvidencePreference,
@@ -53,44 +45,16 @@ export type {
   RecruitmentRiskTolerance,
 } from "./recruitmentDoctrineCatalog";
 
-/**
- * One authoritative, player-safe description of how a club recruits.
- *
- * Numeric traits are 0-100 and intentionally derive only from visible club,
- * manager, region, season, and run-seed facts. Consumers must not recreate
- * philosophy switches of their own; this contract keeps briefs, market bids,
- * tactical fit, development patience, and career affinity explainable.
- */
-export interface ClubRecruitmentDoctrine {
-  version: 1;
-  clubId: string;
-  family: ScoutingPhilosophy;
-  archetype: ClubRecruitmentArchetype;
-  expressionId: ClubRecruitmentExpressionId;
-  expressionLabel: string;
-  preferredSeniorAgeRange: [number, number];
-  academyIntakeAgeRange: [number, number];
-  evidencePreference: RecruitmentEvidencePreference;
-  riskTolerance: RecruitmentRiskTolerance;
-  geographicReach: RecruitmentReach;
-  adaptationTolerance: number;
-  pathwayPatience: number;
-  tacticalRoleRigidity: number;
-  sellingPressure: number;
-  managerInfluence: number;
-  directorInfluence: number;
-  minimumEvidenceQuality: number;
-  seasonalObjective: RecruitmentFocus;
-  specializationAffinity: Specialization[];
-  reasons: string[];
-}
-
-export interface HistoricalRecruitmentDoctrineSnapshot extends ClubRecruitmentDoctrine {
-  snapshotVersion: 1;
-  capturedWeek: number;
-  capturedSeason: number;
-  primaryFocus: RecruitmentFocus;
-}
+import type {
+  ClubRecruitmentArchetype,
+  ClubRecruitmentDoctrine,
+  HistoricalRecruitmentDoctrineSnapshot,
+} from "./recruitmentIdentityTypes";
+export type {
+  ClubRecruitmentArchetype,
+  ClubRecruitmentDoctrine,
+  HistoricalRecruitmentDoctrineSnapshot,
+} from "./recruitmentIdentityTypes";
 
 export interface RegionRecruitmentIdentity {
   regionId: string;
@@ -725,7 +689,8 @@ function resolveHistoricalRecruitmentContext(
   const archivedSeason = Array.isArray(state.worldHistory?.seasons)
     ? state.worldHistory.seasons.find((candidate) => candidate.season === season)
     : undefined;
-  const archivedClub = archivedSeason?.clubs.find((candidate) => candidate.clubId === club.id);
+  const archivedEntry = archivedSeason?.clubs.find((candidate) => candidate.clubId === club.id);
+  const archivedClub = archivedEntry ? expandClubSeasonHistory(archivedEntry) : undefined;
   if (archivedClub && isScoutingPhilosophy(archivedClub.scoutingPhilosophy)) {
     return {
       philosophy: archivedClub.scoutingPhilosophy,

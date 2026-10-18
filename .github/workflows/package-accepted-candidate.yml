@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       accepted_source_run_id:
-        description: "Accepted source workflow run that already carries the bounded 20x30 evidence"
+        description: "Successful canonical-release-soak run carrying fresh 20x30/c3 and seed-one replay evidence"
         required: true
         type: string
       verification_only:
@@ -169,6 +169,9 @@ jobs:
           CORE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: node ../scripts/create-candidate-core-evidence.mjs --start
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
         working-directory: candidate
 
@@ -199,6 +202,22 @@ jobs:
       - name: Unit and migration tests
         working-directory: candidate
         run: npm run test:unit
+
+      - name: Accepted-source soak staging contract
+        working-directory: candidate
+        run: npm run test:accepted-soak-staging
+
+      - name: Canonical source ingestion and archive contracts
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/release/canonicalSoakStaging.test.mjs tests/release/canonicalSoakWorkflowPolicy.test.cjs
+          python3 tests/release/canonicalSoakTransport.test.py
+
+      - name: Windows installer input contract
+        working-directory: candidate
+        run: npm run test:windows-installer-inputs
 
       - name: Critical simulation and persistence coverage gate
         working-directory: candidate
@@ -321,6 +340,9 @@ jobs:
       - name: Isolate immutable candidate package workspace
         run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
         working-directory: candidate
 
@@ -374,6 +396,21 @@ jobs:
         working-directory: candidate
         run: node ../scripts/assert-packaged-runtime-slim.mjs --app-dir dist/win-unpacked
 
+      - name: Capture Windows fonts from all immutable distributable contents
+        working-directory: candidate
+        env:
+          FONT_CAPTURE_7ZIP_PATH: ${{ vars.WINDOWS_FONT_CAPTURE_7ZIP_PATH }}
+          FONT_CAPTURE_7ZIP_SHA256: ${{ vars.WINDOWS_FONT_CAPTURE_7ZIP_SHA256 }}
+        run: node ../scripts/accepted-package-font-handoff.mjs capture windows
+
+      - name: Upload Windows package font capture
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: font-capture-windows
+          path: candidate/artifacts/release/generated/font-captures/windows/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -425,6 +462,9 @@ jobs:
 
       - name: Isolate immutable candidate package workspace
         run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
+
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
 
       - run: npm ci
         working-directory: candidate
@@ -497,6 +537,25 @@ jobs:
           xcrun stapler validate steam-stage/macos/TalentScout.app
           spctl --assess --type execute --verbose=2 steam-stage/macos/TalentScout.app
 
+      - name: Capture macOS fonts from all immutable distributable contents
+        working-directory: candidate
+        env:
+          FONT_CAPTURE_7ZIP_PATH: ${{ vars.MACOS_FONT_CAPTURE_7ZIP_PATH }}
+          FONT_CAPTURE_7ZIP_SHA256: ${{ vars.MACOS_FONT_CAPTURE_7ZIP_SHA256 }}
+          FONT_CAPTURE_HDIUTIL_PATH: ${{ vars.MACOS_FONT_CAPTURE_HDIUTIL_PATH }}
+          FONT_CAPTURE_HDIUTIL_SHA256: ${{ vars.MACOS_FONT_CAPTURE_HDIUTIL_SHA256 }}
+          FONT_CAPTURE_PLUTIL_PATH: ${{ vars.MACOS_FONT_CAPTURE_PLUTIL_PATH }}
+          FONT_CAPTURE_PLUTIL_SHA256: ${{ vars.MACOS_FONT_CAPTURE_PLUTIL_SHA256 }}
+        run: node ../scripts/accepted-package-font-handoff.mjs capture macos
+
+      - name: Upload macOS package font capture
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: font-capture-macos
+          path: candidate/artifacts/release/generated/font-captures/macos/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -550,6 +609,9 @@ jobs:
       - name: Isolate immutable candidate package workspace
         run: node -e "require('node:fs').renameSync('package-lock.json', 'package-lock.release-control.json')"
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
         working-directory: candidate
 
@@ -581,6 +643,23 @@ jobs:
       - name: Verify packaged Linux dependency boundary
         working-directory: candidate
         run: node ../scripts/assert-packaged-runtime-slim.mjs --app-dir dist/linux-unpacked
+
+      - name: Capture Linux fonts from all immutable distributable contents
+        working-directory: candidate
+        env:
+          FONT_CAPTURE_7ZIP_PATH: ${{ vars.LINUX_FONT_CAPTURE_7ZIP_PATH }}
+          FONT_CAPTURE_7ZIP_SHA256: ${{ vars.LINUX_FONT_CAPTURE_7ZIP_SHA256 }}
+          FONT_CAPTURE_UNSQUASHFS_PATH: ${{ vars.LINUX_FONT_CAPTURE_UNSQUASHFS_PATH }}
+          FONT_CAPTURE_UNSQUASHFS_SHA256: ${{ vars.LINUX_FONT_CAPTURE_UNSQUASHFS_SHA256 }}
+        run: node ../scripts/accepted-package-font-handoff.mjs capture linux
+
+      - name: Upload Linux package font capture
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: font-capture-linux
+          path: candidate/artifacts/release/generated/font-captures/linux/
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -643,6 +722,69 @@ jobs:
           name: quality-evidence
           path: quality-evidence
 
+      - name: Retain exact canonical source workflow and artifact receipts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          evidence=candidate-bundle/artifacts/release/generated/certifications
+          mkdir -p "$evidence/source-long-career-shards"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > "$evidence/source-workflow-run.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > "$evidence/source-workflow-jobs.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > "$evidence/source-long-career-shards/source-artifacts.json"
+
+      - name: Select the one provider-bound canonical campaign archive
+        id: canonical_source
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence=candidate-bundle/artifacts/release/generated/certifications
+          python3 scripts/prepare-canonical-soak-artifact.py --select-only \
+            --run="$evidence/source-workflow-run.json" \
+            --artifacts="$evidence/source-long-career-shards/source-artifacts.json" \
+            --candidate-sha="$RELEASE_CANDIDATE_SHA" --source-run-id="$SOURCE_WORKFLOW_RUN_ID" \
+            --repository="$GITHUB_REPOSITORY" --outputs="$GITHUB_OUTPUT"
+
+      - name: Verify original archive bytes and preserve all canonical phase receipts
+        id: canonical_transport
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANONICAL_ARTIFACT_ID: ${{ steps.canonical_source.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          evidence=candidate-bundle/artifacts/release/generated/certifications
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${CANONICAL_ARTIFACT_ID}/zip" | \
+            python3 scripts/prepare-canonical-soak-artifact.py --archive-stdin \
+              --run="$evidence/source-workflow-run.json" \
+              --artifacts="$evidence/source-long-career-shards/source-artifacts.json" \
+              --candidate-sha="$RELEASE_CANDIDATE_SHA" --source-run-id="$SOURCE_WORKFLOW_RUN_ID" \
+              --repository="$GITHUB_REPOSITORY" --outputs="$GITHUB_OUTPUT" \
+              --destination="$evidence/source-long-career-shards/canonical" \
+              --receipt="$evidence/source-long-career-shards/canonical-artifact.json"
+
+      - name: Stage genuine fresh canonical 20x30/c3 source campaign
+        working-directory: candidate
+        shell: bash
+        env:
+          SOURCE_ARTIFACT_ID: ${{ steps.canonical_transport.outputs.artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ steps.canonical_transport.outputs.artifact_digest }}
+          SOURCE_ARTIFACT_CREATED_AT: ${{ steps.canonical_transport.outputs.artifact_created_at }}
+          SOURCE_CAMPAIGN_SHA256: ${{ steps.canonical_transport.outputs.source_campaign_sha256 }}
+        run: |
+          set -euo pipefail
+          evidence=../candidate-bundle/artifacts/release/generated/certifications
+          node ../scripts/stage-accepted-soak-evidence.mjs \
+            --candidate-dir=. \
+            --run="$evidence/source-workflow-run.json" \
+            --jobs="$evidence/source-workflow-jobs.json" \
+            --campaign="$evidence/source-long-career-shards/canonical/long-career-release-summary.json" \
+            --out=../candidate-bundle/artifacts/release/generated/long-career-release-summary.json \
+            --source-run-id="$SOURCE_WORKFLOW_RUN_ID" \
+            --source-artifact-id="$SOURCE_ARTIFACT_ID" --source-artifact-digest="$SOURCE_ARTIFACT_DIGEST" \
+            --source-artifact-created-at="$SOURCE_ARTIFACT_CREATED_AT" --source-campaign-sha256="$SOURCE_CAMPAIGN_SHA256"
+
       - name: Download exact release package artifacts
         if: inputs.verification_only != true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -684,6 +826,27 @@ jobs:
         with:
           name: steam-linux
           path: candidate/dist/linux-unpacked
+
+      - name: Download exact Windows package font capture
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: font-capture-windows
+          path: candidate/artifacts/release/generated/font-capture-inputs/windows
+
+      - name: Download exact macOS package font capture
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: font-capture-macos
+          path: candidate/artifacts/release/generated/font-capture-inputs/macos
+
+      - name: Download exact Linux package font capture
+        if: inputs.verification_only != true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: font-capture-linux
+          path: candidate/artifacts/release/generated/font-capture-inputs/linux
 
       - name: Validate release package artifacts
         if: inputs.verification_only != true
@@ -792,6 +955,11 @@ jobs:
           fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
           NODE
 
+      - name: Validate and stage all accepted distributable font bytes
+        if: inputs.verification_only != true
+        working-directory: candidate
+        run: node ../scripts/accepted-package-font-handoff.mjs stage
+
       - name: Stage accepted candidate evidence
         shell: bash
         env:
@@ -831,6 +999,7 @@ jobs:
             cp candidate/artifacts/release/release-artifact-inventory.json candidate-bundle/artifacts/release/release-artifact-inventory.json
             cp candidate/artifacts/release/promotion-files.txt candidate-bundle/artifacts/release/promotion-files.txt
             cp candidate/artifacts/release/generated/steam-depot-inventories.json candidate-bundle/artifacts/release/generated/steam-depot-inventories.json
+            cp -R candidate/artifacts/release/generated/font-handoff candidate-bundle/artifacts/release/generated/font-handoff
           fi
           if [ -d candidate/release-artifacts ]; then
             cp -R candidate/release-artifacts candidate-bundle/release-artifacts
@@ -838,6 +1007,8 @@ jobs:
           node <<'NODE'
           const fs = require("node:fs");
           const path = require("node:path");
+
+          const crypto = require("node:crypto");
 
           const output = path.resolve(
             "candidate-bundle",
@@ -868,34 +1039,15 @@ jobs:
             steamDepotInventoryPath: process.env.VERIFICATION_ONLY === "true"
               ? null
               : "artifacts/release/generated/steam-depot-inventories.json",
+            fontHandoff: process.env.VERIFICATION_ONLY === "true" ? null : {
+              path: "artifacts/release/generated/font-handoff/index.json",
+              sha256: crypto.createHash("sha256").update(fs.readFileSync(path.resolve(
+                "candidate-bundle", "artifacts", "release", "generated", "font-handoff", "index.json",
+              ))).digest("hex"),
+            },
             generatedAt: new Date().toISOString(),
           }, null, 2)}\n`, "utf8");
           NODE
-
-      - name: Download raw source workflow evidence via GitHub token
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SOURCE_WORKFLOW_RUN_ID: ${{ inputs.accepted_source_run_id }}
-        run: |
-          mkdir -p candidate-bundle/artifacts/release/generated/certifications/source-long-career-shards
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-run.json
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/jobs?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-jobs.json
-          gh api --paginate --slurp "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_WORKFLOW_RUN_ID}/artifacts?per_page=100" > candidate-bundle/artifacts/release/generated/certifications/source-workflow-artifacts.json
-          node scripts/stage-accepted-source-soak.mjs select candidate-bundle > source-artifacts.tsv
-          while IFS=$'\t' read -r artifact_id artifact_name; do
-            [ -n "$artifact_id" ] || continue
-            mkdir -p "source-soak-downloads/$artifact_name"
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > source-artifact.zip
-            # Validate archive paths before extraction; keep artifact directories
-            # separate so equal filenames can never silently overwrite evidence.
-            unzip -Z1 source-artifact.zip > source-archive-paths.txt
-            node -e 'const fs=require("node:fs"); for(const p of fs.readFileSync("source-archive-paths.txt","utf8").split(/\r?\n/).filter(Boolean)){if(p.startsWith("/")||p.includes("\\")||p.split("/").includes("..")||p.includes(":"))throw Error("Unsafe source archive path");}'
-            unzip -q source-artifact.zip -d "source-soak-downloads/$artifact_name"
-            rm -f source-artifact.zip
-          done < source-artifacts.tsv
-          node scripts/stage-accepted-source-soak.mjs stage candidate-bundle candidate source-soak-downloads
-          node scripts/stage-accepted-source-soak.mjs verify candidate-bundle candidate
 
       - name: Upload accepted candidate bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

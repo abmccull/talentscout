@@ -1,6 +1,7 @@
 import { ALL_ATTRIBUTES, ALL_POSITIONS } from "@/engine/core/types";
 import type { FinancialRecord, GameState, Player } from "@/engine/core/types";
 import { getSeasonBirthYear } from "@/engine/core/seasonDate";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 
 export const GAME_SYSTEMS_CHECKPOINTS = [1, 5, 10, 20, 30] as const;
 
@@ -173,7 +174,7 @@ export function collectGameSystemsHealth(state: GameState, completedSeasons: num
       fail("loan-reference", loan.id, loan.playerId);
     }
   }
-  const movements = state.playerMovementHistory ?? [];
+  const movements = expandPlayerMovementHistory(state.playerMovementHistory ?? []);
   const retirementDates = new Map<string, { season: number; week: number }>();
   for (const movement of movements) {
     if (movement.type !== "retirement" && movement.type !== "footballExit") continue;
@@ -241,8 +242,7 @@ export function collectGameSystemsHealth(state: GameState, completedSeasons: num
       registeredCount: registered.length, availableCount: available.length,
       registeredKeepers: registered.filter((player) => player.position === "GK").length,
       availableKeepers: available.filter((player) => player.position === "GK").length,
-      annualRecruitmentBudget: club.annualRecruitmentBudget ?? null,
-      lastRecruitmentAllocation: club.lastRecruitmentAllocation ?? null,
+      recruitmentAllocation: club.recruitmentAllocation ? { ...club.recruitmentAllocation } : null,
       budget: club.budget, weeklyWageBudget: club.weeklyWageBudget ?? null, weeklyPayroll: payroll.get(club.id) ?? 0 };
   });
   return {

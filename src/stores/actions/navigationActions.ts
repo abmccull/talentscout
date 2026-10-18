@@ -29,7 +29,11 @@ export function createNavigationActions(get: GetState, set: SetState) {
   const openScreen = (screen: GameScreen) => {
     const gs = get().gameState;
     const resolvedScreen = resolveGameScreenForBuild(screen, Boolean(gs));
-    set({ currentScreen: resolvedScreen });
+    set({ currentScreen: resolvedScreen,
+      ...(resolvedScreen !== "inbox" ? { pendingInboxMessageId: null } : {}),
+      ...(get().currentScreen === "calendar" && resolvedScreen !== "calendar"
+        ? { pendingCalendarActivity: null } : {}),
+    });
     const activeMatch = get().activeMatch;
     let matchFixture: string | undefined;
     if (resolvedScreen === "match" && activeMatch && gs) {
@@ -84,6 +88,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
     set({
       pendingCalendarActivity: focusCalendarActivity,
       pendingNetworkContactId: target.screen === "network" ? target.contactId ?? null : null,
+      pendingInboxMessageId: target.screen === "inbox" ? target.messageId ?? null : null,
       pendingRivalOpportunityId: target.screen === "rivals" ? target.opportunityId ?? null : null,
       pendingInternationalCountry: target.screen === "internationalView" ? target.countryId ?? null : null,
     });
@@ -196,7 +201,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
         : current.gameState;
       set({ selectedPlayerId: playerId, gameState: nextState });
       if (nextState && nextState !== current.gameState) {
-        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession, current.weekSimulation), set);
       }
     },
     selectFixture: (fixtureId: string | null) => set({ selectedFixtureId: fixtureId }),
@@ -326,7 +331,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
         "tracked",
       );
       set({ gameState: nextState });
-      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession), set);
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
     },
   };
 }

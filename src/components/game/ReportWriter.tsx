@@ -1,4 +1,5 @@
 "use client";
+import { expandPlayerPersonalityProfile } from "../../engine/players/playerStateArchive";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
@@ -36,6 +37,7 @@ import {
   getApplicableAnalystReview,
 } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
+import { hasReportBuyerEvidence } from "@/engine/finance/reportMarketplace";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { YouthPortraitWithFallback } from "@/components/game/YouthPortrait";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -116,6 +118,7 @@ export function ReportWriter() {
   const selectedPlayerId = useGameStore((state) => state.selectedPlayerId);
   const setScreen = useGameStore((state) => state.setScreen);
   const submitReport = useGameStore((state) => state.submitReport);
+  const setPendingCalendarActivity = useGameStore((state) => state.setPendingCalendarActivity);
   const getPlayerObservations = useGameStore(
     (state) => state.getPlayerObservations,
   );
@@ -138,7 +141,7 @@ export function ReportWriter() {
   const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
   const [recruitmentNeed, setRecruitmentNeed] = useState("");
   const [projectedRole, setProjectedRole] = useState<PlayerRole | "">("");
-  const [recommendedAction, setRecommendedAction] = useState<StructuredReportInput["recommendedAction"]>("inviteForTrial");
+  const [chosenRecommendedAction, setRecommendedAction] = useState<StructuredReportInput["recommendedAction"] | null>(null);
   const [riskDrafts, setRiskDrafts] = useState<Partial<Record<string, RiskDraft>>>({});
   const [estimatedWeeklyWage, setEstimatedWeeklyWage] = useState(250);
   const [alternativePlayerId, setAlternativePlayerId] = useState("");
@@ -172,6 +175,7 @@ export function ReportWriter() {
     ? resolvePlayerEntity(gameState, selectedPlayerId)
     : null;
   const player = resolvedPlayer?.player;
+  const personalityProfile = useMemo(() => expandPlayerPersonalityProfile(player?.personalityProfile), [player?.personalityProfile]);
   const canonicalPlayerId = resolvedPlayer?.playerId ?? selectedPlayerId ?? undefined;
   const club = player ? getClub(player.clubId) : undefined;
   const observations = useMemo(
@@ -315,8 +319,8 @@ export function ReportWriter() {
     [activeBrief?.id, canonicalPlayerId, gameState, isYouthCase],
   );
   const freshObservationIds = useMemo(
-    () => getFreshReportObservationIds(observations, previousReport),
-    [observations, previousReport],
+    () => getFreshReportObservationIds(observations, previousReport, Object.values(gameState?.reports ?? {})),
+    [observations, previousReport, gameState?.reports],
   );
   const preparedWorkItem = useMemo(
     () => gameState && canonicalPlayerId
@@ -365,6 +369,13 @@ export function ReportWriter() {
     return [...new Map(cards.map((card) => [card.id, card])).values()]
       .sort((left, right) => left.minute - right.minute || left.id.localeCompare(right.id));
   }, [canonicalPlayerId, gameState]);
+  // An unclassified or inconclusive visit is a reason to keep watching. Once
+  // the scout chooses an action, evidence refreshes must not overwrite it.
+  const recommendedAction = chosenRecommendedAction ?? (
+    isYouthCase && !initialAssessmentCards.some((card) =>
+      getEvidenceClaimOptions(card).some((option) => option.support === "supported"),
+    ) ? "monitor" : "inviteForTrial"
+  );
   const alternativeCandidates = useMemo(() => {
     if (!gameState || !player) return [];
     return Object.values(gameState.unsignedYouth)
@@ -590,15 +601,20 @@ export function ReportWriter() {
 
   // Live pricing estimate for independent scouts
   const isIndependent = gameState?.scout.careerPath === "independent";
+  const draftAssessment = initialAssessmentResult?.assessment ?? formalAssessmentResult?.assessment;
+  const isPrivateDraft = (initialAssessmentMode ? initialAssessmentInput?.recommendation : recommendedAction) === "pass";
+  const hasSaleEvidence = !isPrivateDraft && (initialAssessmentMode || structuredInput?.evidenceVersion === 1
+    ? Boolean(draftAssessment && hasReportBuyerEvidence({ evidenceAssessment: draftAssessment }))
+    : true);
   const priceEstimate = useMemo(() => {
-    if (!isIndependent || !gameState?.finances) return null;
+    if (!isIndependent || !hasSaleEvidence || !gameState?.finances) return null;
     return estimateReportPriceRange(
       effectiveConviction,
       craftRead.representativeScore,
       gameState.scout.reputation,
       gameState.finances.marketTemperature,
     );
-  }, [isIndependent, effectiveConviction, craftRead.representativeScore, gameState?.scout.reputation, gameState?.finances]);
+  }, [isIndependent, hasSaleEvidence, effectiveConviction, craftRead.representativeScore, gameState?.scout.reputation, gameState?.finances]);
 
   // Pre-populate form state from draft (one-shot) and auto-generate summary
   useEffect(() => {
@@ -620,7 +636,7 @@ export function ReportWriter() {
       buildAutoGeneratedSummary({
         draft,
         observationsCount: observations.length,
-        player,
+        player: player ? { ...player, personalityProfile } : player,
         strengths: nextStrengths,
         weaknesses: nextWeaknesses,
         strengthClaimsByDescriptor,
@@ -631,6 +647,7 @@ export function ReportWriter() {
   }, [
     draft,
     player,
+    personalityProfile,
     observations.length,
     strengthClaimsByDescriptor,
     weaknessClaimsByDescriptor,
@@ -684,7 +701,11 @@ export function ReportWriter() {
                   <ArrowLeft size={14} className="mr-2" aria-hidden="true" />
                   Back to profile
                 </Button>
-                <Button className="min-h-11" onClick={() => setScreen("calendar")}>
+                <Button className="min-h-11" onClick={() => {
+                  setPendingCalendarActivity({ type: "followUpSession", targetId: player.id,
+                    label: `Follow-up: ${player.firstName} ${player.lastName}` });
+                  setScreen("calendar");
+                }}>
                   Plan focused observation
                 </Button>
               </div>
@@ -796,7 +817,7 @@ export function ReportWriter() {
     hasFreshEvidence: freshObservationIds.length > 0,
     hasSummary: effectiveSummary.trim().length > 0,
     initialAssessmentReady: Boolean(initialAssessmentInput && initialAssessmentResult?.valid),
-    openingDecisionCount: 5 - initialAssessmentCompletedSteps,
+    openingDecisionCount: 6 - initialAssessmentCompletedSteps,
     youthValidationErrors: structuredValidation.errors,
   });
   const canSubmit = reportStatus.canSubmit;
@@ -851,7 +872,7 @@ export function ReportWriter() {
             age={player.age}
             size={96}
             className="shrink-0"
-            alt={`${player.firstName} ${player.lastName}`}
+            alt=""
           />
           <div className="min-w-0">
             <h1 className="dossier-eyebrow">{t("title")}</h1>
@@ -1133,7 +1154,7 @@ export function ReportWriter() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-eyebrow font-semibold uppercase tracking-[0.2em] text-cyan-300">Boardroom step</p>
-                        <h3 id="presentation-room-title" className="mt-1 text-lg font-bold text-white">Choose how you make the case</h3>
+                        <h2 id="presentation-room-title" className="mt-1 text-lg font-bold text-white">Choose how you make the case</h2>
                         <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-400">
                           Framing changes what the room notices. It cannot improve the underlying evidence, and every approach gives something up.
                         </p>
@@ -1293,7 +1314,7 @@ export function ReportWriter() {
                                 })}
                                 className="sr-only"
                               />
-                              {status === "assessed" ? "Make a claim" : "Leave unassessed"}
+                              {status === "assessed" ? "Interpret a saved cue" : "Leave unassessed"}
                             </label>
                           ))}
                         </div>
@@ -1323,6 +1344,14 @@ export function ReportWriter() {
                                 ))}
                               </select>
                             </label>
+                            {selectedCard && (
+                              <blockquote className="border-l-2 border-emerald-400/40 pl-3 text-xs leading-5 text-zinc-200" data-testid={`report-selected-cue-${category}`}>
+                                <p>{selectedCard.minute}&apos; — {selectedCard.summary}</p>
+                                {selectedCard.detail && selectedCard.detail !== selectedCard.summary && (
+                                  <p className="mt-1 text-zinc-300">{selectedCard.detail}</p>
+                                )}
+                              </blockquote>
+                            )}
                             {selectedCard && (
                               <fieldset className="space-y-2">
                                 <legend className="text-meta font-medium text-zinc-400">Interpretation</legend>
@@ -1415,6 +1444,9 @@ export function ReportWriter() {
                   <div className="mt-3 grid gap-2 lg:grid-cols-2">
                     {YOUTH_REPORT_RISK_OPTIONS.filter((option) => option.id !== "noMaterialSignal").map((option) => {
                       const riskDraft = riskDrafts[option.id];
+                      const riskEvidence = riskDraft?.status === "observed"
+                        ? initialAssessmentCards.find(card => card.id === riskDraft.evidenceCardId)
+                        : undefined;
                       return (
                         <div key={option.id} className={`grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_11rem] sm:items-center ${riskDraft ? "border-amber-400/35 bg-amber-400/[0.07]" : "border-white/10 bg-black/20"}`}>
                           <div>
@@ -1462,6 +1494,14 @@ export function ReportWriter() {
                                 ))}
                               </select>
                             </label>
+                          )}
+                          {riskEvidence && (
+                            <blockquote className="border-l-2 border-emerald-400/40 pl-3 text-xs leading-5 text-zinc-200 sm:col-span-2" data-testid={`report-risk-cue-${option.id}`}>
+                              <p>{riskEvidence.minute}&apos; — {riskEvidence.summary}</p>
+                              {riskEvidence.detail && riskEvidence.detail !== riskEvidence.summary && (
+                                <p className="mt-1 text-zinc-300">{riskEvidence.detail}</p>
+                              )}
+                            </blockquote>
                           )}
                         </div>
                       );
@@ -1625,7 +1665,7 @@ export function ReportWriter() {
           {/* Observation summary */}
           <Card data-tutorial-id="report-observation-summary">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{t("observationSummary")}</CardTitle>
+              <CardTitle as="h2" className="text-sm">{t("observationSummary")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4">
               <div>
@@ -1653,7 +1693,7 @@ export function ReportWriter() {
           {draft && (draft.perceivedCAStars != null || draft.estimatedValue > 0) && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Ability Overview</CardTitle>
+                <CardTitle as="h2" className="text-sm">Ability Overview</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-6">
@@ -1703,7 +1743,7 @@ export function ReportWriter() {
           {draft && draft.comparisonSuggestions.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Comparison Angles</CardTitle>
+                <CardTitle as="h2" className="text-sm">Comparison Angles</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
@@ -1728,7 +1768,7 @@ export function ReportWriter() {
           {/* Current Form */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Current Form</CardTitle>
+              <CardTitle as="h2" className="text-sm">Current Form</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-3 mb-3">
@@ -1747,7 +1787,7 @@ export function ReportWriter() {
           {merged.size > 0 && (
             <Card data-tutorial-id="report-attributes">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">{t("attributeAssessments")}</CardTitle>
+                <CardTitle as="h2" className="text-sm">{t("attributeAssessments")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1795,7 +1835,7 @@ export function ReportWriter() {
           {!isYouthCase && (
           <Card data-tutorial-id="report-strengths">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
+              <CardTitle as="h2" className="text-sm">
                 {t("strengths")} ({selectedStrengths.length})
               </CardTitle>
             </CardHeader>
@@ -1899,7 +1939,7 @@ export function ReportWriter() {
           {!isYouthCase && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
+              <CardTitle as="h2" className="text-sm">
                 {t("weaknesses")} ({selectedWeaknesses.length})
               </CardTitle>
             </CardHeader>
@@ -2001,24 +2041,24 @@ export function ReportWriter() {
           )}
 
           {/* Character Assessment (F9) */}
-          {!isYouthCase && player.personalityProfile && !player.personalityProfile.hiddenUntilRevealed && (
+          {!isYouthCase && personalityProfile && !personalityProfile.hiddenUntilRevealed && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Character Assessment</CardTitle>
+                <CardTitle as="h2" className="text-sm">Character Assessment</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-zinc-500">Personality Type:</span>
-                    <Tooltip content={ARCHETYPE_DESCRIPTIONS[player.personalityProfile.archetype]} side="top">
+                    <Tooltip content={ARCHETYPE_DESCRIPTIONS[personalityProfile.archetype]} side="top">
                       <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 cursor-help underline decoration-dotted underline-offset-2">
-                        {ARCHETYPE_LABELS[player.personalityProfile.archetype]}
+                        {ARCHETYPE_LABELS[personalityProfile.archetype]}
                       </span>
                     </Tooltip>
                   </div>
-                  {player.personalityProfile.revealedTraits.length > 0 && (
+                  {personalityProfile.revealedTraits.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {player.personalityProfile.revealedTraits.map((trait) => (
+                      {personalityProfile.revealedTraits.map((trait) => (
                         <Badge key={trait} variant="secondary" className="text-eyebrow capitalize">
                           {trait.replace(/([A-Z])/g, " $1").trim()}
                         </Badge>
@@ -2030,26 +2070,26 @@ export function ReportWriter() {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <span className="text-zinc-500">Dressing Room: </span>
-                        <span className={player.personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : player.personalityProfile.dressingRoomImpact <= -1 ? "text-red-400" : "text-zinc-300"}>
-                          {player.personalityProfile.dressingRoomImpact >= 2 ? "Low Risk" : player.personalityProfile.dressingRoomImpact <= -1 ? "High Risk" : "Moderate"}
+                        <span className={personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : personalityProfile.dressingRoomImpact <= -1 ? "text-red-400" : "text-zinc-300"}>
+                          {personalityProfile.dressingRoomImpact >= 2 ? "Low Risk" : personalityProfile.dressingRoomImpact <= -1 ? "High Risk" : "Moderate"}
                         </span>
                       </div>
                       <div>
                         <span className="text-zinc-500">Form Stability: </span>
-                        <span className={player.personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : player.personalityProfile.formVolatility >= 0.7 ? "text-red-400" : "text-amber-400"}>
-                          {player.personalityProfile.formVolatility <= 0.3 ? "Stable" : player.personalityProfile.formVolatility >= 0.7 ? "Unpredictable" : "Variable"}
+                        <span className={personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : personalityProfile.formVolatility >= 0.7 ? "text-red-400" : "text-amber-400"}>
+                          {personalityProfile.formVolatility <= 0.3 ? "Stable" : personalityProfile.formVolatility >= 0.7 ? "Unpredictable" : "Variable"}
                         </span>
                       </div>
                       <div>
                         <span className="text-zinc-500">Retention: </span>
-                        <span className={player.personalityProfile.transferWillingness <= 0.3 ? "text-emerald-400" : player.personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : "text-amber-400"}>
-                          {player.personalityProfile.transferWillingness <= 0.3 ? "Likely to Stay" : player.personalityProfile.transferWillingness >= 0.7 ? "Flight Risk" : "Moderate"}
+                        <span className={personalityProfile.transferWillingness <= 0.3 ? "text-emerald-400" : personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : "text-amber-400"}>
+                          {personalityProfile.transferWillingness <= 0.3 ? "Likely to Stay" : personalityProfile.transferWillingness >= 0.7 ? "Flight Risk" : "Moderate"}
                         </span>
                       </div>
                       <div>
                         <span className="text-zinc-500">Big Matches: </span>
-                        <span className={player.personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : player.personalityProfile.bigMatchModifier <= -1 ? "text-red-400" : "text-zinc-300"}>
-                          {player.personalityProfile.bigMatchModifier >= 1 ? "Reliable" : player.personalityProfile.bigMatchModifier <= -1 ? "Concern" : "Average"}
+                        <span className={personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : personalityProfile.bigMatchModifier <= -1 ? "text-red-400" : "text-zinc-300"}>
+                          {personalityProfile.bigMatchModifier >= 1 ? "Reliable" : personalityProfile.bigMatchModifier <= -1 ? "Concern" : "Average"}
                         </span>
                       </div>
                     </div>
@@ -2065,7 +2105,7 @@ export function ReportWriter() {
           {/* Written summary */}
           <Card className="hidden">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{t("scoutSummary")}</CardTitle>
+              <CardTitle as="h2" className="text-sm">{t("scoutSummary")}</CardTitle>
             </CardHeader>
             <CardContent>
               {effectiveSummary.trim() ? (
@@ -2084,7 +2124,7 @@ export function ReportWriter() {
           {observations.length > 0 && (
             <Card className="hidden">
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <TrendingUp size={14} className="text-zinc-400" aria-hidden="true" />
                    Craft Preview
                 </CardTitle>
@@ -2168,6 +2208,11 @@ export function ReportWriter() {
           )}
 
           {/* Pricing Guidance (independent scouts only) */}
+          {isIndependent && !hasSaleEvidence && (
+            <p className="text-sm text-zinc-400">
+              You can retain an inconclusive report in your case history. Gather a supported finding before offering it for sale.
+            </p>
+          )}
           {priceEstimate && (
             <details id="report-pricing" className="group rounded-2xl border border-emerald-500/20 bg-[#11161c]/95 p-4 sm:p-5">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
@@ -2182,7 +2227,7 @@ export function ReportWriter() {
               </summary>
             <Card className="mt-4 border-emerald-500/20">
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <DollarSign size={14} className="text-emerald-400" aria-hidden="true" />
                   Price Estimate
                   <Badge
@@ -2244,7 +2289,7 @@ export function ReportWriter() {
           {systemFit && (
             <Card className="border-blue-500/20">
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle as="h2" className="flex items-center gap-2 text-sm">
                   <Target size={14} className="text-blue-400" aria-hidden="true" />
                   System Fit
                   <span

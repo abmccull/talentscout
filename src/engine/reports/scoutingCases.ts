@@ -1,3 +1,4 @@
+import { isPrivateScoutingDecision } from "./reportAccountability";
 import type {
   ClubDecision,
   ClubDecisionOutcome,
@@ -107,6 +108,7 @@ function createCase(
     placementReportIds: [],
     hypothesisIds: [],
     reviewIds: [],
+    prospectFollowUpDeliveries: [],
     ...(legacyUnlinked ? { legacyUnlinked: true } : {}),
   };
 }
@@ -451,7 +453,7 @@ function deriveAccountability(
   const latestReview = reviews.filter((review) => review.status === "complete").at(-1);
   const reviewScore = latestReview?.overallScore;
 
-  if (latestReport?.recommendedAction === "pass") {
+  if (latestReport && isPrivateScoutingDecision(latestReport)) {
     return {
       status: "closed",
       latestReviewId: latestReview?.id,
@@ -637,7 +639,7 @@ export function ensureScoutingCaseForReport(
     ...base,
     legacyUnlinked: false,
     status: preserveAuthoredState ? base.status
-      : base.status === "placed" ? "placed" : report.recommendedAction === "pass" ? "closed" : "reported",
+      : base.status === "placed" ? "placed" : isPrivateScoutingDecision(report) ? "closed" : "reported",
     briefId: preserveAuthoredState ? base.briefId : report.briefId ?? base.briefId,
     activeReportId: preserveAuthoredState ? base.activeReportId : report.id,
     hypothesisIds: [...new Set([...(base.hypothesisIds ?? []), ...reportHypothesisIds])],
@@ -958,7 +960,7 @@ function latestReportForPlayer(
     )[0];
   // A later-authored report cannot explain an earlier placement. A private
   // pass is also not evidence that the scout delivered a recruitment pitch.
-  return latest?.recommendedAction === "pass" ? undefined : latest;
+  return latest && isPrivateScoutingDecision(latest) ? undefined : latest;
 }
 
 /**

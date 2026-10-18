@@ -57,7 +57,7 @@ import { LeagueStandingsWidget } from "./LeagueStandingsWidget";
 import { useTranslations } from "next-intl";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
-import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
+import { buildYouthDeskEvidenceIndex } from "@/lib/youthDeskEvidence";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { buildYouthActiveCaseModel, buildYouthDeskDecisionIndex } from "./workspace/desk/youthDeskModel";
 import { buildYouthDeskStakes, shouldShowYouthDeskStakes } from "@/engine/youth/youthDeskStakes";
@@ -236,32 +236,26 @@ export function Dashboard() {
       )
     : new Set<string>();
   const youthReportedCount = youthReportedIds.size;
+  const youthEvidenceIndex = buildYouthDeskEvidenceIndex(gameState);
   const observations = Object.values(gameState.observations);
   const youthDecisionIndex = buildYouthDeskDecisionIndex(Object.values(gameState.reports), observations, scout.id);
-  const observationCountByPlayer = new Map<string, number>();
-  for (const observation of observations) {
-    observationCountByPlayer.set(
-      observation.playerId,
-      (observationCountByPlayer.get(observation.playerId) ?? 0) + 1,
-    );
-  }
   const observedYouthEvidence = specialization === "youth"
     ? youthList
         .filter((y) => y.discoveredBy.includes(scout.id))
         .map((y) => {
-          const perceived = getPerceivedAbility(observations, y.player.id);
+          const evidence = youthEvidenceIndex.get(y.player.id);
           return {
             youth: y,
-            observationCount: observationCountByPlayer.get(y.player.id) ?? 0,
+            observationCount: evidence?.observationCount ?? 0,
+            videoCount: evidence?.videoCount ?? 0,
+            analysisCount: evidence?.analysisCount ?? 0,
+            conversationCount: evidence?.conversationCount ?? 0,
             intelCount: gameState.contactIntel[y.player.id]?.length ?? 0,
             reported: youthReportedIds.has(y.id) || youthDecisionIndex.has(y.player.id),
             ...youthDecisionIndex.get(y.player.id),
             buzzLevel: y.buzzLevel,
             visibility: y.visibility,
-            hasFirmRead:
-              perceived != null &&
-              perceived.observationCount >= 2 &&
-              (perceived.caConfidence >= 0.7 || perceived.paConfidence >= 0.7),
+            hasFirmRead: evidence?.hasFirmRead ?? false,
           };
         })
     : [];
@@ -399,8 +393,8 @@ export function Dashboard() {
       setScreen("calendar");
       return;
     }
-    if (youthDeskAction.kind === "report" && nextProspect) {
-      selectPlayer(nextProspect.youth.player.id);
+    if (youthDeskAction.kind === "report" && decisionReadyYouth[0]) {
+      selectPlayer(decisionReadyYouth[0].youth.player.id);
       setScreen("reportWriter");
       return;
     }

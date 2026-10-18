@@ -1,3 +1,6 @@
+import { getEligibleMatchRoster } from "@/engine/match/eligibleRoster";
+import { calculateFixtureExpectedGoals, sampleFixtureGoals } from "../match/scoreModel";
+import { calculateTacticalMatchup } from "../match/tactics";
 import type {
   Club,
   DisciplinaryRecord,
@@ -8,7 +11,6 @@ import type {
   Weather,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
-import { getEligibleMatchRoster } from "@/engine/match/eligibleRoster";
 
 export const ABSTRACT_COMPETITION_SIMULATION_DETAIL = "abstract" as const;
 
@@ -38,9 +40,10 @@ export interface AbstractCompetitionWeekInput {
   leagues: Record<string, League>;
   clubs: Record<string, Club>;
   players: Record<string, Player>;
+  /** Current match-week records, after the caller's suspension countdown. */
+  disciplinaryRecords?: Record<string, DisciplinaryRecord>;
   fixtures?: Record<string, Fixture>;
   matchRatings?: Record<string, Record<string, PlayerMatchRating>>;
-  disciplinaryRecords?: Record<string, DisciplinaryRecord>;
   /**
    * Optional global season length from the parent world. When it is longer
    * than the league's abstract round count, rounds are spaced across that
@@ -318,9 +321,9 @@ function comparePlayers(left: Player, right: Player): number {
 function getClubRoster(
   club: Club,
   players: Record<string, Player>,
-  discipline: Readonly<Record<string, DisciplinaryRecord>> = {},
+  disciplinaryRecords: Record<string, DisciplinaryRecord>,
 ): Player[] {
-  return getEligibleMatchRoster(club, players, discipline).sort(comparePlayers);
+  return getEligibleMatchRoster(club, players, disciplinaryRecords).sort(comparePlayers);
 }
 
 function takeBestPlayers(
@@ -342,9 +345,9 @@ function selectParticipants(
   club: Club,
   players: Record<string, Player>,
   rng: RNG,
-  discipline: Readonly<Record<string, DisciplinaryRecord>> = {},
+  disciplinaryRecords: Record<string, DisciplinaryRecord>,
 ): Participant[] {
-  const roster = getClubRoster(club, players, discipline);
+  const roster = getClubRoster(club, players, disciplinaryRecords);
   if (roster.length === 0) return [];
 
   const selected = new Map<string, Player>();
@@ -352,11 +355,16 @@ function selectParticipants(
   takeBestPlayers(roster, selected, 4, (player) => positionGroup(player.position) === "def");
   takeBestPlayers(roster, selected, 3, (player) => positionGroup(player.position) === "mid");
   takeBestPlayers(roster, selected, 3, (player) => positionGroup(player.position) === "att");
-  takeBestPlayers(roster, selected, 11, () => true);
+  takeBestPlayers(roster, selected, 11, (player) => positionGroup(player.position) !== "gk");
 
   const starters = [...selected.values()].sort(comparePlayers).slice(0, 11);
   const starterIds = new Set(starters.map((player) => player.id));
-  const bench = roster.filter((player) => !starterIds.has(player.id)).slice(0, 5);
+  // Routine tactical substitutions are outfield changes. A reserve keeper must
+  // not gain weekly appearances or fill an outfield vacancy through fallback.
+  // Keeper replacements need a separate injury/dismissal event model.
+  const bench = roster.filter((player) =>
+    !starterIds.has(player.id) && positionGroup(player.position) !== "gk",
+  ).slice(0, 5);
 
   const participants: Participant[] = starters.map((player) => ({
     player,
@@ -409,23 +417,8 @@ function selectParticipants(
 }
 
 function averageStrength(participants: readonly Participant[]): number {
-  if (participants.length === 0) return 80;
-  const total = participants.reduce(
-    (sum, participant) => sum + participant.player.currentAbility,
-    0,
-  );
-  return total / participants.length;
-}
-
-function samplePoisson(lambda: number, rng: RNG): number {
-  const limit = Math.exp(-clamp(lambda, 0.15, 4.5));
-  let product = 1;
-  let draws = 0;
-  while (product > limit && draws < 8) {
-    draws += 1;
-    product *= Math.max(rng.next(), 1e-9);
-  }
-  return Math.max(0, draws - 1);
+  return participants.reduce((sum, participant) =>
+    sum + participant.player.currentAbility * participant.minutesPlayed / 90, 0) / 11;
 }
 
 function pickWeather(season: number, week: number, rng: RNG): Weather {
@@ -616,29 +609,21 @@ function simulateFixture(
   fixtureId: string,
   rng: RNG,
   existingFixture?: Fixture,
-  discipline: Readonly<Record<string, DisciplinaryRecord>> = {},
+  disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
 ): AbstractPlayedFixture {
-  const homeParticipants = selectParticipants(homeClub, players, new RNG(`${fixtureId}:home`), discipline);
-  const awayParticipants = selectParticipants(awayClub, players, new RNG(`${fixtureId}:away`), discipline);
+  const homeParticipants = selectParticipants(homeClub, players, new RNG(`${fixtureId}:home`), disciplinaryRecords);
+  const awayParticipants = selectParticipants(awayClub, players, new RNG(`${fixtureId}:away`), disciplinaryRecords);
 
   const homeStrength = averageStrength(homeParticipants);
   const awayStrength = averageStrength(awayParticipants);
-  const homeExpectedGoals = clamp(
-    1.18 + (homeStrength - awayStrength) / 34 + 0.18,
-    0.3,
-    3.6,
-  );
-  const awayExpectedGoals = clamp(
-    1.02 + (awayStrength - homeStrength) / 36,
-    0.2,
-    3.3,
-  );
-  // Do not create goals that cannot be attributed to any active participant.
-  // The lifecycle/intake systems can restore the roster at the next boundary;
-  // the current fixture remains deterministic and recoverable in the meantime.
-  const homeGoals = homeParticipants.length > 0 ? samplePoisson(homeExpectedGoals, rng) : 0;
-  const awayGoals = awayParticipants.length > 0 ? samplePoisson(awayExpectedGoals, rng) : 0;
   const weather = pickWeather(season, week, rng);
+  const matchup = homeClub.tacticalStyle && awayClub.tacticalStyle
+    ? calculateTacticalMatchup(homeClub.tacticalStyle, awayClub.tacticalStyle) : undefined;
+  const expected = calculateFixtureExpectedGoals(homeStrength, awayStrength,
+    matchup ? 1 + matchup.homeModifier * 0.5 : 1,
+    matchup ? 1 + matchup.awayModifier * 0.5 : 1, weather);
+  const homeGoals = sampleFixtureGoals(expected.home, rng);
+  const awayGoals = sampleFixtureGoals(expected.away, rng);
   const playerRatings = {
     ...buildRatings(
       fixtureId,

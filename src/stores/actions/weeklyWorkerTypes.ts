@@ -13,6 +13,7 @@ import type {
   WeeklyTransactionJob,
   WeeklyWorkerMetrics,
   WeeklyWorkerTelemetry,
+  WeeklyWorkerStageTimings,
 } from "@/engine/core/weeklyTransactionProtocol";
 
 /** Player-profile tutorial facts required by weekly presentation decisions. */
@@ -151,6 +152,7 @@ export interface WeeklyWorkerWireRequest {
 }
 
 export type WeeklyWorkerMessage =
+  | { kind: "weekly-worker-ready"; protocolVersion: 1 }
   | {
       kind: "weekly-transaction-result";
       protocolVersion: 1;
@@ -162,6 +164,8 @@ export type WeeklyWorkerMessage =
         week: number;
       };
       state: WeeklyWorkerCommit;
+      /** Outside the canonical commit so the wire state and byte estimate stay exact. */
+      timings?: Pick<WeeklyWorkerStageTimings, "wireSyncMs" | "compactionMs">;
     }
   | {
       kind: "weekly-transaction-error";

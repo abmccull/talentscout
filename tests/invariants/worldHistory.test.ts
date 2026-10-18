@@ -1,3 +1,5 @@
+import { expandClubSeasonHistory } from "@/engine/world/clubSeasonArchive";
+import { archivePlayerSeasonRatings } from "@/engine/players/seasonRatingArchive";
 import { describe, expect, it } from "vitest";
 import type {
   Club,
@@ -249,7 +251,7 @@ describe("authoritative world history", () => {
       "beta",
       "gamma",
     ]);
-    expect(season.clubs.find((entry) => entry.clubId === "alpha")).toEqual(
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "alpha")).toEqual(
       expect.objectContaining({
         standing: expect.objectContaining({ position: 1, played: 2, points: 6 }),
         leagueMovement: "stayed",
@@ -257,15 +259,15 @@ describe("authoritative world history", () => {
         manager: expect.objectContaining({ managerName: "Ada Manager" }),
       }),
     );
-    expect(season.clubs.find((entry) => entry.clubId === "beta")).toEqual(
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "beta")).toEqual(
       expect.objectContaining({
         standing: expect.objectContaining({ position: 2, points: 0 }),
         leagueMovement: "relegated",
         nextLeagueId: "lower",
       }),
     );
-    expect(season.clubs.find((entry) => entry.clubId === "beta")?.manager).toBeUndefined();
-    expect(season.clubs.find((entry) => entry.clubId === "gamma")?.standing).toBeUndefined();
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "beta")?.manager).toBeUndefined();
+    expect(season.clubs.map(expandClubSeasonHistory).find((entry) => entry.clubId === "gamma")?.standing).toBeUndefined();
 
     expect(season.players.find((entry) => entry.playerId === "active")).toEqual(
       expect.objectContaining({
@@ -344,8 +346,8 @@ describe("authoritative world history", () => {
     expect(
       recordCompletedSeasonWorldHistory(undefined, reordered, 1, relegationResult()),
     ).toEqual(first);
-    expect(first.seasons[0].clubs.every((club) => club.recruitmentDoctrine)).toBe(true);
-    expect(first.seasons[0].clubs[0].recruitmentDoctrine?.preferredSeniorAgeRange)
+    expect(first.seasons[0].clubs.map(expandClubSeasonHistory).every((club) => club.recruitmentDoctrine)).toBe(true);
+    expect(expandClubSeasonHistory(first.seasons[0].clubs[0]).recruitmentDoctrine?.preferredSeniorAgeRange)
       .toHaveLength(2);
   });
 
@@ -371,7 +373,7 @@ describe("authoritative world history", () => {
     snapshot.clubs.alpha.tacticalStyle!.eventDistribution!.shot = 9;
     snapshot.clubs.alpha.tacticalStyle!.strengthAgainst!.push("balanced");
 
-    expect(history.seasons[0].clubs.find((club) => club.clubId === "alpha")?.tacticalStyle)
+    expect(history.seasons[0].clubs.map(expandClubSeasonHistory).find((club) => club.clubId === "alpha")?.tacticalStyle)
       .toMatchObject({
         eventDistribution: { shot: 1.2 },
         strengthAgainst: ["possessionBased"],
@@ -390,7 +392,7 @@ describe("authoritative world history", () => {
       { ...relegationResult(), season: 2 },
     );
 
-    expect(absent.seasons[0].clubs.every((entry) => entry.leagueMovement === undefined)).toBe(true);
+    expect(absent.seasons[0].clubs.map(expandClubSeasonHistory).every((entry) => entry.leagueMovement === undefined)).toBe(true);
     expect(mismatched).toEqual(absent);
   });
 
@@ -407,5 +409,113 @@ describe("authoritative world history", () => {
 
     const replayedTrimmedSeason = recordCompletedSeasonWorldHistory(history, snapshot, 1);
     expect(replayedTrimmedSeason).toBe(history);
+  });
+
+  it("projects exact active and retired ratings without inventing rated orphan players", () => {
+    const snapshot = baseSnapshot();
+    const legacySeasonRating = {
+      season: 1, avgRating: 5, appearances: 1, goals: 0, assists: 0, cleanSheets: 0,
+      clubBreakdown: { academy: 1 },
+    };
+    snapshot.players.active = player("active", {
+      seasonRatings: [
+        [3, 7.2, 12, 1, 2, 0],
+        legacySeasonRating,
+        [2, 6.5, 5, 2, 1, 0],
+      ],
+    });
+    snapshot.matchRatings.first.veteran = rating("first", "veteran", {
+      started: true, rating: 8.2, stats: { goals: 2, cleanSheet: true },
+    });
+    snapshot.matchRatings.second.veteran = rating("second", "veteran", {
+      started: true, minutesPlayed: 0, rating: 9, stats: { goals: 9 },
+    });
+    snapshot.matchRatings.first.orphan = rating("first", "orphan", {
+      started: true, minutesPlayed: 90, rating: 9.8, stats: { goals: 99 },
+    });
+    const before = structuredClone(snapshot);
+
+    const active = archivePlayerSeasonRatings(snapshot.players, snapshot.fixtures, snapshot.matchRatings, 1);
+    const retired = archivePlayerSeasonRatings(snapshot.retiredPlayers, snapshot.fixtures, snapshot.matchRatings, 1);
+
+    expect(active).toStrictEqual({
+      ...before.players,
+      active: {
+        ...before.players.active,
+        seasonRatings: [
+          { season: 1, avgRating: 7.1, appearances: 2, goals: 1, assists: 1, cleanSheets: 0,
+            clubBreakdown: { academy: 1 } },
+          [2, 6.5, 5, 2, 1, 0],
+          [3, 7.2, 12, 1, 2, 0],
+        ],
+      },
+    });
+    expect(retired).toStrictEqual({
+      ...before.retiredPlayers,
+      veteran: { ...before.retiredPlayers.veteran, seasonRatings: [[1, 8.2, 1, 2, 0, 1]] },
+    });
+    expect(Object.keys(active)).toEqual(["unsupported", "active"]);
+    expect(Object.keys(retired)).toEqual(["veteran"]);
+    expect(active.unsupported).toBe(snapshot.players.unsupported);
+    expect(active.active.seasonRatings?.[1]).toBe(snapshot.players.active.seasonRatings?.[2]);
+    const empty: Record<string, Player> = {};
+    expect(archivePlayerSeasonRatings(empty, snapshot.fixtures, snapshot.matchRatings, 1)).toBe(empty);
+    expect(snapshot).toStrictEqual(before);
+  });
+
+  it("counts actual league membership and played-season fixtures in stable league order", () => {
+    const snapshot = baseSnapshot();
+    snapshot.leagues = {
+      zeta: { ...snapshot.leagues.lower, id: "zeta", tier: 4, clubIds: [] },
+      upper: snapshot.leagues.upper,
+      empty: { ...snapshot.leagues.lower, id: "empty", tier: 3, clubIds: ["alpha", "beta"] },
+      lower: { ...snapshot.leagues.lower, clubIds: [] },
+    };
+    snapshot.clubs.delta = club("delta", "lower");
+    snapshot.clubs.unknown = club("unknown", "not-declared");
+    const first = snapshot.fixtures.first;
+    const fixture = (id: string, overrides: Partial<Fixture>): Fixture => ({ ...first, id, ...overrides });
+    snapshot.fixtures = {
+      ...snapshot.fixtures,
+      unplayed: fixture("unplayed", { played: false }),
+      wrongSeason: fixture("wrongSeason", { season: 2 }),
+      legacyCurrent: fixture("fixture-upper-s1-w03-legacy", { season: undefined }),
+      legacyWrong: fixture("fixture-upper-s2-w03-legacy", { season: undefined }),
+      unscoped: fixture("unscoped", {
+        season: undefined, leagueId: "lower", homeClubId: "gamma", awayClubId: "delta",
+      }),
+      unknown: fixture("unknown", { leagueId: "not-declared" }),
+    };
+    const before = structuredClone(snapshot);
+    const history = recordCompletedSeasonWorldHistory(undefined, snapshot, 1);
+
+    expect(history.seasons[0].leagues).toStrictEqual([
+      { leagueId: "empty", country: "england", tier: 3, clubCount: 0, playedFixtures: 0 },
+      { leagueId: "lower", country: "england", tier: 2, clubCount: 2, playedFixtures: 1 },
+      { leagueId: "upper", country: "england", tier: 1, clubCount: 2, playedFixtures: 3 },
+      { leagueId: "zeta", country: "england", tier: 4, clubCount: 0, playedFixtures: 0 },
+    ]);
+    const reordered: WorldHistorySnapshot = {
+      ...snapshot,
+      leagues: Object.fromEntries(Object.entries(snapshot.leagues).reverse()),
+      clubs: Object.fromEntries(Object.entries(snapshot.clubs).reverse()),
+      fixtures: Object.fromEntries(Object.entries(snapshot.fixtures).reverse()),
+    };
+    expect(recordCompletedSeasonWorldHistory(undefined, reordered, 1)).toStrictEqual(history);
+    expect(snapshot).toStrictEqual(before);
+  });
+
+  it("records empty league, club, and player histories for an empty world", () => {
+    const snapshot: WorldHistorySnapshot = {
+      totalWeeksPlayed: 0, leagues: {}, clubs: {}, players: {}, fixtures: {}, managerProfiles: {},
+      matchRatings: {}, retiredPlayerIds: [], retiredPlayers: {}, playerMovementHistory: [],
+    };
+    const before = structuredClone(snapshot);
+    const history = recordCompletedSeasonWorldHistory(undefined, snapshot, 1);
+
+    expect(history.seasons[0]).toStrictEqual({
+      season: 1, recordedAfterTotalWeeks: 1, leagues: [], clubs: [], players: [],
+    });
+    expect(snapshot).toStrictEqual(before);
   });
 });

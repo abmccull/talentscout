@@ -55,6 +55,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+// The final refinements are harder than early development. PA is a ceiling,
+// not a destination promised by enough uninterrupted training weeks.
+function remainingDevelopmentMultiplier(player: Player): number {
+  return 0.35 + 0.65 * clamp(
+    (player.potentialAbility - player.currentAbility) / 40, 0, 1,
+  );
+}
+
 /** Return the numeric delta that matches a semantic improvement or decline. */
 export function getSemanticDevelopmentDelta(
   attribute: PlayerAttribute,
@@ -355,6 +363,7 @@ export function computeSemanticPlayerDevelopment(
     : clamp(2 - mindset, 0.7, 1.3);
   const multiplier = direction === "growth"
     ? baseMultiplier
+      * remainingDevelopmentMultiplier(player)
       * developmentRateModifier
       * (environment?.growthQualityMultiplier ?? 1)
       * mindsetModifier
@@ -363,7 +372,9 @@ export function computeSemanticPlayerDevelopment(
       * mindsetModifier;
 
   const formBonus = player.form * 0.017;
-  let developmentChance = clamp(0.15 + formBonus, 0.05, 0.25);
+  let developmentChance = direction === "growth"
+    ? clamp(0.20 + formBonus, 0.08, 0.30)
+    : clamp(0.15 + formBonus, 0.05, 0.25);
   const momentum = player.formMomentum ?? 0;
   const trend = player.formTrend ?? "stable";
   if (trend === "rising" && momentum > 0) {
@@ -413,7 +424,7 @@ export function computeSemanticBreakthrough(
   if (player.age < 17 || player.age > 25) return null;
   if (player.form < 1) return null;
   if (player.currentAbility >= player.potentialAbility) return null;
-  if (!rng.chance(clamp(BREAKTHROUGH_CHANCE * environmentMultiplier, 0, 0.04))) {
+  if (!rng.chance(clamp(BREAKTHROUGH_CHANCE * environmentMultiplier * remainingDevelopmentMultiplier(player), 0, 0.04))) {
     return null;
   }
 

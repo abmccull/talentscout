@@ -424,6 +424,23 @@ function responseMessage(campaign: RivalCampaign, decisionId: string): InboxMess
   };
 }
 
+/** Player-requested review is available even when the director deferred its notification. */
+export function openRivalCampaignResponse(state: GameState, campaignId: string): GameState {
+  const campaign = state.rivalOrganizationState.campaignState.campaigns[campaignId];
+  if (!campaign || campaign.status !== "active" || campaign.phase !== "response"
+    || !campaign.responseDecisionId || campaign.responseOptions.length === 0) return state;
+  const due = campaign.responseDueAt;
+  if (due && (state.currentSeason > due.season
+    || (state.currentSeason === due.season && state.currentWeek > due.week))) return state;
+  if (state.consequenceState.decisions[campaign.responseDecisionId]
+    || state.consequenceState.history.some((entry) => entry.decisionId === campaign.responseDecisionId)) return state;
+  const presentation = campaignCandidate(state, campaign);
+  return applyDirectedWeeklyRivalCampaigns({ state,
+    prepared: { state, presentations: [presentation], candidates: [presentation.candidate] },
+    acceptedCandidateIds: new Set([presentation.candidate.id]),
+  });
+}
+
 /** Materialize only campaign prompts accepted by Story Director V2. */
 export function applyDirectedWeeklyRivalCampaigns(input: {
   state: GameState;

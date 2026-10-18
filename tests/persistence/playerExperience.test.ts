@@ -13,6 +13,7 @@ import {
   updatePlayerExperience,
 } from "@/lib/playerExperience";
 import {
+  CURRENT_SAVE_SCHEMA_VERSION,
   createSaveEnvelope,
   extractSavePlayerExperience,
   migrateSaveEnvelope,
@@ -124,7 +125,7 @@ describe("player experience persistence", () => {
       state: { currentSeason: 1 },
     });
 
-    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.schemaVersion).toBe(CURRENT_SAVE_SCHEMA_VERSION);
     expect(migrated.playerExperience).toEqual({
       version: 2,
       tutorial: { completed: false, dismissed: false },
@@ -133,7 +134,7 @@ describe("player experience persistence", () => {
     });
   });
 
-  it("upgrades experience v1 inside an already-current save envelope", () => {
+  it("upgrades experience v1 inside a historical schema-four save envelope", () => {
     const migrated = migrateSaveEnvelope({
       schemaVersion: 4,
       rulesVersion: "youth-ea.3",

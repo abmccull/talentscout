@@ -22,7 +22,7 @@ import type {
   VenueAtmosphere,
 } from "./types";
 import type { ObservationSituationSnapshot } from "./situations";
-import { MOMENT_ACTIONS, type MomentAction } from "./momentActions";
+import { FOOTBALL_ACTIONS, type FootballAction } from "./footballActions";
 
 // =============================================================================
 // TYPES
@@ -155,6 +155,31 @@ export const MOMENT_TYPE_WEIGHTS: Record<string, MomentTypeWeights> = {
   },
 };
 
+// =============================================================================
+// MOMENT DESCRIPTION TEMPLATES
+// =============================================================================
+
+// =============================================================================
+// VAGUE DESCRIPTIONS
+// =============================================================================
+
+/**
+ * Short, non-specific descriptions shown when the scout has not allocated
+ * a focus token to the player involved. Peripheral vision only.
+ */
+export const VAGUE_DESCRIPTIONS: Record<MomentType, string[]> = {
+  technicalAction: ["There was an action on the ball, but the execution was difficult to judge."],
+  physicalTest: ["There was a physical contest, but the movement was difficult to judge."],
+  mentalResponse: ["There was a decision to make, but the player's response was difficult to judge."],
+  tacticalDecision: ["There was movement away from the ball, but the positioning was difficult to judge."],
+  characterReveal: ["There was a reaction to the previous passage, but the response was difficult to judge."],
+};
+
+/** Every hint must belong to an authored action in this domain. */
+export function getMomentAttributeHints(momentType: MomentType): PlayerAttribute[] {
+  return [...new Set(FOOTBALL_ACTIONS.filter((action) => action.momentType === momentType)
+    .flatMap((action) => action.attributes))];
+}
 
 // =============================================================================
 // TEMPLATE HELPERS
@@ -212,7 +237,7 @@ export function selectMomentType(
   return rng.pickWeighted(items);
 }
 
-function getRoleAttributePriorities(player: Pick<SessionPlayer, "position" | "naturalRole">): Set<PlayerAttribute> {
+function getRoleAttributePriorities(player: SessionPlayer): Set<PlayerAttribute> {
   const byPosition: Record<string, readonly PlayerAttribute[]> = {
     GK: ["composure", "positioning", "anticipation", "passing", "decisionMaking", "agility"],
     CB: ["positioning", "defensiveAwareness", "marking", "heading", "strength", "anticipation"],
@@ -256,13 +281,13 @@ function getRoleAttributePriorities(player: Pick<SessionPlayer, "position" | "na
  *
  * Selection rules:
  *   - 3–6 moments per phase.
- *   - Player rotation and random slots are independent of scout focus.
- *     Attention changes the evidence noticed, never the football that happens.
- *   - Moment quality is biased by the selected action's contributing attributes
+ *   - Early slots rotate across the pool; later slots sample players uniformly.
+ *   - Scout focus changes the read, never which football event occurs.
+ *   - Moment quality is biased by the player's relevant attribute pool
  *     (simulated here via a gaussian draw — the actual attribute values are
  *     not exposed to the scout, this is just internal quality generation).
- *   - Pressure-weighted action selection rises with phase progression and
- *     crowd intensity; the action determines its own pressure context.
+ *   - pressureContext: intrinsic to pressured actions, otherwise 20% base chance, scaled by phase progression and
+ *     atmosphere.crowdIntensity.
  *   - isStandout: true when quality >= 8.
  */
 export function generateMoments(
@@ -296,21 +321,36 @@ export function generateMoments(
     // --- Select moment type weighted by venue ---
     const momentType = selectMomentType(rng, venueType, player, situation, opponent);
 
-    // Select a football action first. Position changes how often it occurs,
-    // never which attributes a short pass or header happens to assess.
-    const action = selectMomentAction(rng, momentType, player, pressureProbability);
+    // --- Generate quality (1–10, gaussian-biased toward 5) ---
+    // Quality is resolved after the hinted attributes and pressure context are known.
+
+    // Choose the attempted action before resolving its outcome. Role priorities
+    // alter frequency, but cannot attach unrelated evidence to the action.
+    const rolePriorities = getRoleAttributePriorities(player);
+    const action = rng.pickWeighted(FOOTBALL_ACTIONS
+      .filter((candidate) => candidate.momentType === momentType
+        && (player.position !== "GK" || !candidate.outfieldOnly))
+      .map((candidate) => ({
+        item: candidate,
+        weight: candidate.attributes.some((attribute) => rolePriorities.has(attribute)) ? 2 : 1,
+      })));
     const attributesHinted = [...action.attributes];
-    const pressureContext = action.pressure;
+
+    // Consume the same context draw for every action. An explicitly pressured
+    // action cannot lose that context because the atmosphere roll was quiet.
+    const situationalPressure = rng.chance(pressureProbability);
+    const pressureContext = action.requiresPressure || situationalPressure;
     const quality = calculateMomentQuality(
       rng,
       playerProfiles?.[player.playerId],
       attributesHinted,
       pressureContext,
-      { phaseProgress, opponent, situation, performanceOffset: performanceOffsets?.[player.playerId] ?? 0 },
+      { phaseProgress, opponent, situation, performanceOffset: performanceOffsets?.[player.playerId] },
     );
 
     // --- Generate descriptions ---
     const { description, vagueDescription } = buildDescriptions(
+      rng,
       action,
       player.name,
       quality,
@@ -325,9 +365,9 @@ export function generateMoments(
 
     moments.push({
       id,
-      actionId: action.id,
       playerId: player.playerId,
       momentType,
+      actionId: action.id,
       quality,
       attributesHinted,
       description,
@@ -347,8 +387,8 @@ export function generateMoments(
 /**
  * Selects a player to feature in a moment slot.
  *
- * Early slots rotate through the pool; later slots use seeded random selection.
- * Attention never changes who is involved in the football action.
+ * Early slots rotate through the full pool; later slots sample uniformly.
+ * Scout focus affects perception only, never which football events occur.
  */
 function selectMomentPlayer(
   rng: RNG,
@@ -462,35 +502,24 @@ function getMomentCountRange(venueType: string): [number, number] {
  * Quality bands:
  *   high   → 7–10
  *   medium → 5–6
- *   low    → 1–4 (the same negative band used by scout cue interpretation)
+ *   low    → 1–4
  */
 function buildDescriptions(
-  action: MomentAction,
+  rng: RNG,
+  action: FootballAction,
   playerName: string,
   quality: number,
 ): { description: string; vagueDescription: string } {
   const band: "high" | "medium" | "low" =
     quality >= 7 ? "high" : quality >= 5 ? "medium" : "low";
 
-  return {
-    description: formatMomentDescription(action.descriptions[band], playerName),
-    vagueDescription: action.vague,
-  };
-}
+  const vagueTemplates = VAGUE_DESCRIPTIONS[action.momentType];
 
-export function selectMomentAction(
-  rng: RNG,
-  momentType: MomentType,
-  player: Pick<SessionPlayer, "position" | "naturalRole">,
-  pressureProbability: number,
-): MomentAction {
-  const priorities = getRoleAttributePriorities(player);
-  const pressureWeight = Math.max(0.05, Math.min(0.95, pressureProbability));
-  return rng.pickWeighted(MOMENT_ACTIONS
-    .filter((action) => action.momentType === momentType && !(player.position === "GK" && action.outfieldOnly))
-    .map((action) => ({
-      item: action,
-      weight: (1 + action.attributes.filter((attribute) => priorities.has(attribute)).length / action.attributes.length * 1.5)
-        * (action.pressure ? pressureWeight : 1 - pressureWeight),
-    })));
+  const detailedTemplate = action.outcomes[band];
+  const vagueTemplate = rng.pick(vagueTemplates);
+
+  return {
+    description: formatMomentDescription(detailedTemplate, playerName),
+    vagueDescription: vagueTemplate,
+  };
 }

@@ -3,6 +3,7 @@
 import { useGameStore } from "@/stores/gameStore";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { resolvePortrait } from "@/engine/players/portraits/allocation";
+import { withVisualIdentity } from "@/engine/players/portraits/identity";
 import { bundledPortraitCatalog } from "@/engine/players/portraits/bundledCatalog";
 import { PlayerPortraitFrame } from "./PlayerPortraitFrame";
 
@@ -25,7 +26,7 @@ export function PlayerAvatar({ playerId, size = 48, age, atAge, className, alt }
   const ledger = useGameStore((state) => state.gameState?.playerPortraits);
   const canonicalId = player?.id ?? playerId;
   const reservation = ledger?.reservations["person:v1:" + canonicalId];
-  const identity = player?.visualIdentity ?? reservation?.identity;
+  const identity = player ? withVisualIdentity(player).visualIdentity : reservation?.identity;
   const displayAge = atAge ?? age ?? player?.age ?? reservation?.firstSeenAge;
   const portrait = identity && displayAge !== undefined
     ? resolvePortrait(identity, displayAge, ledger, bundledPortraitCatalog)

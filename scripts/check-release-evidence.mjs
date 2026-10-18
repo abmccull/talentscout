@@ -1,11 +1,14 @@
+import { validateSentryProviderReceipt } from "./validate-sentry-provider-receipt.mjs";
+import { validateAcceptedFontHandoff } from "./accepted-package-font-handoff.mjs";
+import { validateReleaseCalendarReceipt } from "./release-calendar-receipt.mjs";
+import { auditAssetProvenance, listShippingFontFiles, readOrdinaryFile, safeRelativePath, writeOwnedReport } from "./audit-asset-provenance.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { access, lstat, stat } from "node:fs/promises";
+import { loadArtifactProfile, createArtifactContext } from "./release-artifact-io.mjs";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { verifyAcceptedSourceSoak } from "./stage-accepted-source-soak.mjs";
-import { validateSentryProviderReceipt } from "./validate-sentry-provider-receipt.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(process.cwd());
@@ -17,7 +20,53 @@ const outputPath = resolve(
   root,
   process.env.RELEASE_EVIDENCE_OUTPUT ?? "artifacts/release/release-evidence-check.json",
 );
-const reportOnly = process.argv.includes("--report-only");
+const checkerArguments = process.argv.slice(2);
+const reportOnly = checkerArguments.includes("--report-only");
+let validationScope = "full-release";
+let scopeSelected = false;
+let invalidScope = false;
+for (let index = 0; index < checkerArguments.length; index += 1) {
+  const argument = checkerArguments[index];
+  if (argument === "--scope") {
+    if (scopeSelected) invalidScope = true;
+    scopeSelected = true;
+    const selected = checkerArguments[index + 1];
+    if (selected !== "full-release" && selected !== "diagnostic") invalidScope = true;
+    else validationScope = selected;
+    index += 1;
+  } else if (argument.startsWith("--scope")) {
+    invalidScope = true;
+  }
+}
+if (invalidScope) {
+  console.error("release policy scope: invalid scope selection");
+  process.exit(1);
+}
+const fullReleaseGateIds = Object.freeze([
+  "automatedCoreSuites",
+  "manualNvda",
+  "manualVoiceOver",
+  "moderatedUsability",
+  "moderatedPairedCareerReplayability",
+  "physicalLowEndHardware",
+  "packagedWindows",
+  "packagedMacos",
+  "packagedLinux",
+  "assetCommercialRights",
+  "onlineFeedbackBackend",
+  "sentryProviderReceipt",
+  "longSaveGrowthAndCompaction",
+]);
+const fullReleasePackageKinds = Object.freeze([
+  "windows-installer",
+  "macos-dmg",
+  "macos-zip",
+  "linux-appimage",
+  "linux-deb",
+]);
+const isOrdinaryPolicyRecord = (value) => value !== null
+  && typeof value === "object"
+  && Object.getPrototypeOf(value) === Object.prototype;
 const allowedStatuses = new Set(["Passed", "Failed", "Unverified", "N/A"]);
 const hashPattern = /^[a-f0-9]{64}$/i;
 const commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
@@ -79,8 +128,187 @@ async function sha256(path) {
   return hash.digest("hex");
 }
 
-const statusDocument = JSON.parse(await readFile(statusPath, "utf8"));
-const packageDocument = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+const loadedArtifactProfile = await loadArtifactProfile();
+const artifactContext = createArtifactContext({
+  loadedProfile: loadedArtifactProfile,
+  domain: "checker",
+  phase: null,
+  evidenceClassification: validationScope === "full-release" ? "canonical" : "diagnostic-fixture",
+});
+const globalArtifactAdmissionFailures = [];
+
+function recordArtifactAdmissionFailure(result, message) {
+  const text = String(message);
+  if (result) {
+    result.artifactAdmissionFailures ??= [];
+    result.artifactAdmissionFailures.push(text);
+    result.failures.push("artifact admission: " + text);
+    result.status = "Failed";
+  } else {
+    globalArtifactAdmissionFailures.push(text);
+    failures.push("artifact admission: " + text);
+  }
+}
+
+function retainArtifactReadFailure(result, error) {
+  const actual = artifactContext.snapshot().firstFailure;
+  const typedCode = typeof error?.code === "string"
+    && error.code.startsWith("ERR_RELEASE_ARTIFACT_") ? error.code : null;
+  if (actual || typedCode) {
+    recordArtifactAdmissionFailure(result,
+      (actual?.code ?? typedCode ?? "artifact I/O failure")
+      + " role=" + (actual?.role ?? "unknown")
+      + " operation=" + (actual?.operation ?? "read"));
+  }
+}
+
+async function readEvidenceJson(path, options, result) {
+  try {
+    return await artifactContext.readJson(path, options);
+  } catch (error) {
+    retainArtifactReadFailure(result, error);
+    throw error;
+  }
+}
+
+const artifactAdmissionKeys = Object.freeze([
+  "schemaVersion", "profileId", "profileSha256", "purpose",
+  "expectedExecutionIdentityHash", "expectedCandidateCommitSha",
+  "expectedCandidateTreeSha", "failureReceiptPath",
+]);
+function validArtifactAdmission(value) {
+  return isOrdinaryPolicyRecord(value)
+    && Object.keys(value).length === artifactAdmissionKeys.length
+    && artifactAdmissionKeys.every((key) => Object.hasOwn(value, key))
+    && value.schemaVersion === 1
+    && typeof value.profileId === "string" && value.profileId.length > 0
+    && Buffer.byteLength(value.profileId, "utf8") <= 128
+    && typeof value.profileSha256 === "string" && /^[a-f0-9]{64}$/.test(value.profileSha256)
+    && (value.purpose === "canonical" || value.purpose === "diagnostic")
+    && typeof value.expectedExecutionIdentityHash === "string" && /^[a-f0-9]{64}$/.test(value.expectedExecutionIdentityHash)
+    && typeof value.expectedCandidateCommitSha === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.expectedCandidateCommitSha)
+    && typeof value.expectedCandidateTreeSha === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.expectedCandidateTreeSha)
+    && safeRelativePath(value.failureReceiptPath);
+}
+
+async function inspectCurrentArtifactFailure(admission, result) {
+  if (admission === undefined) return;
+  if (!validArtifactAdmission(admission)
+    || admission.expectedCandidateCommitSha !== candidateSha
+    || admission.expectedCandidateTreeSha !== currentTreeSha) {
+    recordArtifactAdmissionFailure(result, "artifact admission policy is invalid or belongs to another candidate");
+    return;
+  }
+  if (validationScope === "full-release" && (admission.purpose !== "canonical"
+    || admission.profileId !== "canonical-career-artifact-io-v1"
+    || admission.profileSha256 !== "193f139435344eb680c868385483a62dca0fca27732e206ae93ed50ef94f47e5")) {
+    recordArtifactAdmissionFailure(result, "full release artifact policy must bind the reviewed canonical profile");
+  }
+  const path = resolve(root, admission.failureReceiptPath);
+  let receipt;
+  try {
+    receipt = (await artifactContext.readJson(path, {
+      role: "failure-receipt", expectedSha256: null,
+    })).value;
+  } catch (error) {
+    if (error?.code === "ENOENT" && !artifactContext.snapshot().firstFailure) return;
+    recordArtifactAdmissionFailure(result, "declared current artifact failure receipt cannot be read");
+    retainArtifactReadFailure(result, error);
+    return;
+  }
+  if (!isOrdinaryPolicyRecord(receipt)
+    || receipt.schemaVersion !== 1
+    || receipt.evidenceKind !== "long-career-artifact-failure"
+    || receipt.status !== "Failed"
+    || !isOrdinaryPolicyRecord(receipt.failure)
+    || !Number.isSafeInteger(receipt.driverPid) || receipt.driverPid <= 0
+    || !(receipt.failure.code === null || typeof receipt.failure.code === "string")
+    || !(receipt.failure.role === null || typeof receipt.failure.role === "string")
+    || typeof receipt.failure.stack !== "string"
+    || typeof receipt.candidateCommitSha !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(receipt.candidateCommitSha)
+    || typeof receipt.candidateTreeSha !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(receipt.candidateTreeSha)
+    || typeof receipt.executionIdentityHash !== "string" || !/^[a-f0-9]{64}$/.test(receipt.executionIdentityHash)
+    || typeof receipt.artifactProfileId !== "string" || receipt.artifactProfileId.length === 0
+    || Buffer.byteLength(receipt.artifactProfileId, "utf8") > 128
+    || typeof receipt.artifactProfileSha256 !== "string" || !/^[a-f0-9]{64}$/.test(receipt.artifactProfileSha256)
+    || (receipt.artifactProfilePurpose !== "canonical" && receipt.artifactProfilePurpose !== "diagnostic")
+    || (receipt.failure.code === "ERR_RELEASE_ARTIFACT_READ_SIZE" && receipt.failure.role === "worker"
+      && (!Number.isSafeInteger(receipt.failure.admittedFileBytes) || receipt.failure.admittedFileBytes <= 0
+        || !Number.isSafeInteger(receipt.failure.observedFileBytes)
+        || receipt.failure.observedFileBytes <= receipt.failure.admittedFileBytes))) {
+    recordArtifactAdmissionFailure(result, "declared artifact failure receipt has an invalid shape");
+    return;
+  }
+  const current = receipt.candidateCommitSha === admission.expectedCandidateCommitSha
+    && receipt.candidateTreeSha === admission.expectedCandidateTreeSha
+    && receipt.executionIdentityHash === admission.expectedExecutionIdentityHash
+    && receipt.artifactProfileId === admission.profileId
+    && receipt.artifactProfileSha256 === admission.profileSha256
+    && receipt.artifactProfilePurpose === admission.purpose;
+  if (!current) return; // A genuine earlier context cannot become a current cause.
+  recordArtifactAdmissionFailure(result, "current campaign artifact failure: "
+    + String(receipt.failure.code) + " role=" + String(receipt.failure.role));
+}
+
+function validateArtifactBinding(evidence, expected, result) {
+  const binding = evidence?.artifactIo;
+  if (binding === undefined && expected === undefined && validationScope === "diagnostic") return;
+  if (!validArtifactAdmission(binding)) {
+    recordArtifactAdmissionFailure(result, "soak evidence has no valid observed artifact I/O binding");
+    return;
+  }
+  if (expected !== undefined && (!validArtifactAdmission(expected)
+    || artifactAdmissionKeys.some((key) => binding[key] !== expected[key]))) {
+    recordArtifactAdmissionFailure(result, "soak artifact I/O binding does not match the expected campaign");
+  }
+  const identity = evidence.checkpoint?.executionIdentity;
+  if (binding.expectedCandidateCommitSha !== candidateSha
+    || binding.expectedCandidateTreeSha !== currentTreeSha
+    || binding.expectedExecutionIdentityHash !== evidence.checkpoint?.executionIdentityHash
+    || identity?.artifactProfileId !== binding.profileId
+    || identity?.artifactProfileSha256 !== binding.profileSha256
+    || identity?.artifactProfilePurpose !== binding.purpose) {
+    recordArtifactAdmissionFailure(result, "soak artifact profile/context identity is inconsistent");
+  }
+  if (validationScope === "full-release") {
+    const required = loadedArtifactProfile.profile.campaign.requiredCertification;
+    if (binding.purpose !== "canonical"
+      || binding.profileId !== "canonical-career-artifact-io-v1"
+      || binding.profileSha256 !== "193f139435344eb680c868385483a62dca0fca27732e206ae93ed50ef94f47e5"
+      || identity?.seedCount !== required.primarySeeds || identity?.seedStart !== required.freshReplaySeed
+      || identity?.seasonCount !== required.seasons || identity?.concurrency !== required.concurrency
+      || evidence.profile?.concurrency !== required.concurrency
+      || evidence.checkpoint?.resumeEnabled !== required.resume
+      || evidence.checkpoint?.reusedSeedCount !== 0
+      || evidence.checkpoint?.executedSeedCount !== required.primarySeeds
+      || evidence.checkpoint?.determinismReplayExecuted !== true
+      || evidence.runs?.[0]?.seed !== "release-soak-01"
+      || evidence.persistenceReplay?.seed !== "release-soak-01") {
+      recordArtifactAdmissionFailure(result, "full release requires the canonical fresh 20x30/c3 campaign and fresh seed-one replay");
+    }
+  }
+}
+
+async function readOrdinaryPolicyJson(path, role, expectedSha256, result) {
+  if (!safeRelativePath(path)) throw new Error("Unsafe relative policy JSON path");
+  let current = root;
+  const parts = path.split("/");
+  for (let index = 0; index < parts.length; index += 1) {
+    current = resolve(current, parts[index]);
+    const metadata = await lstat(current);
+    if (metadata.isSymbolicLink()
+      || (index < parts.length - 1 ? !metadata.isDirectory() : !metadata.isFile())) {
+      throw new Error("Nonordinary policy JSON path: " + path);
+    }
+  }
+  return readEvidenceJson(current, { role, expectedSha256 }, result);
+}
+
+const admittedStatus = await artifactContext.readJson(statusPath, { role: "status", expectedSha256: null });
+const statusDocument = admittedStatus.value;
+const packageDocument = (await artifactContext.readJson(resolve(root, "package.json"), {
+  role: "package", expectedSha256: null,
+})).value;
 const productVersion = String(packageDocument.version ?? "").trim();
 const currentSha = (await git(["rev-parse", "HEAD"])).toLowerCase();
 const currentTreeSha = (await git(["rev-parse", "HEAD^{tree}"])).toLowerCase();
@@ -99,6 +327,28 @@ const candidateShaSource = process.env.RELEASE_CANDIDATE_SHA?.trim()
     : "git HEAD";
 
 const failures = [];
+const policyCompletenessFailures = [];
+const policyGates = isOrdinaryPolicyRecord(statusDocument.gates) ? statusDocument.gates : {};
+if (!isOrdinaryPolicyRecord(statusDocument.gates)) {
+  policyCompletenessFailures.push("release policy completeness: gates must be an ordinary object");
+}
+for (const [gateId, gate] of Object.entries(policyGates)) {
+  if (!isOrdinaryPolicyRecord(gate)) {
+    policyCompletenessFailures.push("release policy completeness: declared gate " + gateId + " must be an ordinary object");
+  }
+}
+if (validationScope === "full-release") {
+  for (const gateId of fullReleaseGateIds) {
+    if (!Object.hasOwn(policyGates, gateId)) {
+      policyCompletenessFailures.push("release policy completeness: missing gate " + gateId);
+    }
+  }
+  const sentryPolicy = policyGates.sentryProviderReceipt;
+  if (sentryPolicy?.status === "N/A" || sentryPolicy?.generatedEvidence?.kind !== "sentry-provider-receipt"
+    || !safeRelativePath(sentryPolicy?.generatedEvidence?.path)) {
+    policyCompletenessFailures.push("release policy completeness: mandatory Sentry provider receipt policy is missing or weakened");
+  }
+}
 if (statusDocument.schemaVersion !== 2) {
   failures.push(`release evidence status has unsupported schemaVersion ${String(statusDocument.schemaVersion)}`);
 }
@@ -152,21 +402,37 @@ const requiredPackageKinds = Array.isArray(configuredRequiredKinds)
   : [];
 if (!Array.isArray(configuredRequiredKinds) || requiredPackageKinds.length !== configuredRequiredKinds.length) {
   failures.push("candidate.requiredPackageKinds must be an array of non-empty strings");
+  policyCompletenessFailures.push("release policy completeness: candidate.requiredPackageKinds must be an array of non-empty strings");
 }
 if (new Set(requiredPackageKinds).size !== requiredPackageKinds.length) {
   failures.push("candidate.requiredPackageKinds contains duplicates");
+  policyCompletenessFailures.push("release policy completeness: candidate.requiredPackageKinds contains duplicates");
+}
+if (validationScope === "full-release") {
+  const ownKindsDeclared = Object.hasOwn(statusDocument, "candidate")
+    && isOrdinaryPolicyRecord(statusDocument.candidate)
+    && Object.hasOwn(statusDocument.candidate, "requiredPackageKinds");
+  for (const kind of fullReleasePackageKinds) {
+    if (!ownKindsDeclared || !requiredPackageKinds.includes(kind)) {
+      policyCompletenessFailures.push("release policy completeness: missing package kind " + kind);
+    }
+  }
 }
 const packageResults = [];
 let packageManifest = null;
 let packageManifestPath = null;
+let packageManifestSha256 = null;
 
 if (!configuredManifest) {
   failures.push("no release package manifest is configured");
 } else {
   packageManifestPath = resolve(root, configuredManifest);
   try {
-    packageManifest = JSON.parse(await readFile(packageManifestPath, "utf8"));
+    const admittedManifest = await artifactContext.readJson(packageManifestPath, { role: "manifest", expectedSha256: null });
+    packageManifest = admittedManifest.value;
+    packageManifestSha256 = admittedManifest.sha256;
   } catch (error) {
+    retainArtifactReadFailure(null, error);
     failures.push(
       `release package manifest cannot be read: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -313,10 +579,21 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     return result;
   }
 
+  if (result.kind === "long-career-release-soak") {
+    await inspectCurrentArtifactFailure(policy.artifactAdmission, result);
+  }
   let evidence;
   try {
-    evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    const role = result.kind === "long-career-release-soak" ? "campaign"
+      : result.kind === "candidate-core-suites" ? "core" : "other-supported-json";
+    evidence = (result.kind === "sentry-provider-receipt"
+      ? await readOrdinaryPolicyJson(result.path, role, null, result)
+      : await artifactContext.readJson(evidencePath, { role, expectedSha256: null })).value;
   } catch (error) {
+    retainArtifactReadFailure(result, error);
+    if (validationScope === "full-release" && result.kind === "long-career-release-soak") {
+      recordArtifactAdmissionFailure(result, "full release cannot verify the actual canonical fresh campaign from missing or unreadable success evidence");
+    }
     result.failures.push(
       `generated evidence cannot be read: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -355,11 +632,16 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   }
 
   if (result.kind === "sentry-provider-receipt") {
-    result.failures.push(...await validateSentryProviderReceipt({
-      root, evidence, candidateSha, candidateTreeSha: currentTreeSha,
-      candidateTag: configuredTag, packageManifest, packageManifestPath,
-    }));
-    if (result.failures.length === 0) result.status = "Passed";
+    try {
+      result.failures.push(...await validateSentryProviderReceipt({
+        evidence, candidateSha, candidateTreeSha: currentTreeSha, candidateTag: configuredTag,
+        packageManifest, packageManifestSha256,
+        readBoundJson: (path, expectedSha256) => readOrdinaryPolicyJson(path, "other-supported-json", expectedSha256, result),
+      }));
+    } catch (error) {
+      result.failures.push(`Sentry receipt validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    result.status = result.failures.length === 0 ? "Passed" : "Failed";
     return result;
   }
 
@@ -398,7 +680,7 @@ async function validateGeneratedGateEvidence(gateId, policy) {
         );
       } else {
         try {
-          const replayability = JSON.parse(await readFile(replayabilityPath, "utf8"));
+          const replayability = (await readEvidenceJson(replayabilityPath, { role: "replayability", expectedSha256: null }, result)).value;
           const authority = replayability.humanFacingProxies?.authority;
           if (replayability.passed !== true) {
             result.replayabilityArtifact.failures.push(
@@ -529,7 +811,7 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     let expectedManifestHash = null;
     if (packageManifestPath) {
       try {
-        expectedManifestHash = await sha256(packageManifestPath);
+        expectedManifestHash = packageManifestSha256;
       } catch {
         // The package-manifest validation above records the actionable failure.
       }
@@ -572,7 +854,10 @@ async function validateGeneratedGateEvidence(gateId, policy) {
         continue;
       }
       try {
-        if (await sha256(absoluteEntryPath) !== expectedHash) {
+        const admittedEntry = extname(entryPath).toLowerCase() === ".json"
+          ? await readEvidenceJson(absoluteEntryPath, { role: "other-supported-json", expectedSha256: null }, result)
+          : null;
+        if ((admittedEntry?.sha256 ?? await sha256(absoluteEntryPath)) !== expectedHash) {
           result.failures.push(`release gate evidence hash does not match: ${entryPath}`);
         }
       } catch (error) {
@@ -585,13 +870,7 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     return result;
   }
 
-  if (policy.requireAcceptedSourceTransport === true) {
-    try {
-      await verifyAcceptedSourceSoak({ root, candidateRoot: root, controlWorkflowSha: process.env.GITHUB_SHA });
-    } catch (error) {
-      result.failures.push(`accepted source soak transport: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+  validateArtifactBinding(evidence, policy.artifactAdmission, result);
   if (evidence.schemaVersion !== 3) result.failures.push("soak evidence schemaVersion must be 3");
   if (evidence.evidenceKind !== result.kind) result.failures.push("soak evidence kind does not match policy");
   if (String(evidence.candidateCommitSha ?? "").toLowerCase() !== candidateSha) {
@@ -610,6 +889,10 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   const seasonCount = evidence.profile?.seasonCount;
   const checkpoint = evidence.checkpoint;
   const executionIdentity = checkpoint?.executionIdentity;
+  if (!Number.isSafeInteger(executionIdentity?.maxOutputBytes)
+    || executionIdentity?.maxOutputBytes <= 0) {
+    result.failures.push("soak executionIdentity.maxOutputBytes must be a positive safe integer");
+  }
   const calculatedIdentityHash = executionIdentity && typeof executionIdentity === "object"
     ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
     : null;
@@ -690,6 +973,15 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   ) {
     result.failures.push("one or more soak careers did not process a complete canonical weekly timeline");
   }
+  const calendarAdmissionFailures = [];
+  for (const run of runs) {
+    calendarAdmissionFailures.push(...validateReleaseCalendarReceipt(run, seasonCount)
+      .map((failure) => `soak run ${run?.seed ?? "unknown"} ${failure}`));
+  }
+  calendarAdmissionFailures.push(...validateReleaseCalendarReceipt(evidence.persistenceReplay, seasonCount)
+    .map((failure) => `soak persistence replay ${failure}`));
+  result.calendarAdmissionFailures = calendarAdmissionFailures;
+  result.failures.push(...calendarAdmissionFailures);
   if (policy.requireDeterministicReplay === true) {
     const firstRun = runs[0];
     if (
@@ -783,8 +1075,9 @@ async function validateReleaseException(gateId, gate) {
 
   let exception;
   try {
-    exception = JSON.parse(await readFile(exceptionPath, "utf8"));
+    exception = (await artifactContext.readJson(exceptionPath, { role: "exception", expectedSha256: null })).value;
   } catch (error) {
+    retainArtifactReadFailure(result, error);
     result.failures.push(
       `release exception cannot be read: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -835,7 +1128,7 @@ async function validateReleaseException(gateId, gate) {
   let expectedManifestHash = null;
   if (packageManifestPath) {
     try {
-      expectedManifestHash = await sha256(packageManifestPath);
+      expectedManifestHash = packageManifestSha256;
     } catch {
       // Package validation above records the primary failure.
     }
@@ -858,9 +1151,9 @@ async function validateReleaseException(gateId, gate) {
       result.failures.push("candidate core evidence path escapes the repository root");
     } else {
       try {
-        const coreEvidenceBytes = await readFile(absoluteCoreEvidencePath);
-        const coreEvidenceHash = createHash("sha256").update(coreEvidenceBytes).digest("hex");
-        const coreEvidence = JSON.parse(coreEvidenceBytes.toString("utf8"));
+        const admittedCoreEvidence = await readEvidenceJson(absoluteCoreEvidencePath, { role: "core", expectedSha256: null }, result);
+        const coreEvidenceHash = admittedCoreEvidence.sha256;
+        const coreEvidence = admittedCoreEvidence.value;
         if (
           String(exception.candidateCoreEvidenceSha256 ?? "").toLowerCase()
             !== coreEvidenceHash
@@ -1028,6 +1321,7 @@ async function validateReleaseException(gateId, gate) {
 
   const evidenceFiles = Array.isArray(exception.evidence) ? exception.evidence : [];
   const evidenceHashes = new Map();
+  const sourceJsonReads = new Map();
   if (evidenceFiles.length === 0) {
     result.failures.push("release exception contains no hashed source evidence");
   }
@@ -1049,7 +1343,11 @@ async function validateReleaseException(gateId, gate) {
       continue;
     }
     try {
-      if (await sha256(absoluteEntryPath) !== expectedHash) {
+      const actualHash = extname(entryPath).toLowerCase() === ".json"
+        ? (await readEvidenceJson(absoluteEntryPath, { role: "source-exception", expectedSha256: null }, result))
+        : null;
+      if (actualHash) sourceJsonReads.set(entryPath, actualHash);
+      if ((actualHash?.sha256 ?? await sha256(absoluteEntryPath)) !== expectedHash) {
         result.failures.push(`release exception evidence hash does not match: ${entryPath}`);
       }
     } catch (error) {
@@ -1076,7 +1374,12 @@ async function validateReleaseException(gateId, gate) {
       return null;
     }
     try {
-      return JSON.parse(await readFile(absoluteSourcePath, "utf8"));
+      const admitted = sourceJsonReads.get(sourcePath)
+        ?? await readEvidenceJson(absoluteSourcePath, { role: "source-exception", expectedSha256: null }, result);
+      if (admitted.sha256 !== evidenceHashes.get(sourcePath)) {
+        throw new Error(label + " source JSON hash does not match");
+      }
+      return admitted.value;
     } catch (error) {
       result.failures.push(
         `${label} cannot be read: ${error instanceof Error ? error.message : String(error)}`,
@@ -1150,10 +1453,20 @@ async function validateReleaseException(gateId, gate) {
     const shard = await readBoundSourceJson(shardPath, `source seed ${seedIndex} evidence`);
     const checkpoint = shard?.checkpoint;
     const executionIdentity = shard?.checkpoint?.executionIdentity;
+    if (!Number.isSafeInteger(executionIdentity?.maxOutputBytes)
+      || executionIdentity?.maxOutputBytes <= 0) {
+      result.failures.push(`source seed ${seedIndex} executionIdentity.maxOutputBytes must be a positive safe integer`);
+    }
     const calculatedIdentityHash = executionIdentity && typeof executionIdentity === "object"
       ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
       : null;
     const run = Array.isArray(shard?.runs) && shard.runs.length === 1 ? shard.runs[0] : null;
+    result.failures.push(...validateReleaseCalendarReceipt(run, shard?.profile?.seasonCount)
+      .map((failure) => `source seed ${seedIndex} ${failure}`));
+    if (shard?.persistenceReplay !== undefined) {
+      result.failures.push(...validateReleaseCalendarReceipt(shard.persistenceReplay, shard?.profile?.seasonCount)
+        .map((failure) => `source seed ${seedIndex} supplied replay ${failure}`));
+    }
     if (shard && (
       shard.schemaVersion !== 3
       || shard.evidenceKind !== "long-career-release-soak"
@@ -1233,8 +1546,100 @@ async function validateReleaseException(gateId, gate) {
   return result;
 }
 
+async function validateAssetCommercialRights(gate) {
+  const result = { status: "Unverified", failures: [], sourceAudit: null, shippingReview: null };
+  result.sourceAudit = await auditAssetProvenance(root);
+  if (result.sourceAudit.status !== "pass") {
+    result.status = "Failed";
+    result.failures.push(`source asset audit remains blocked (${result.sourceAudit.summary.blockerCount} blockers)`);
+  }
+  const policy = gate.shippingAssetReview;
+  if (!policy) {
+    result.failures.push("shipping asset review is missing; a source inventory cannot clear generated fonts or packages");
+    return result;
+  }
+  try {
+    if (!safeRelativePath(policy.path) || !hashPattern.test(String(policy.sha256 ?? ""))) {
+      throw new Error("shipping asset review requires an ordinary path and SHA-256");
+    }
+    const admittedReview = await readOrdinaryPolicyJson(policy.path, "other-supported-json", null, result);
+    if (admittedReview.sha256 !== policy.sha256.toLowerCase()) {
+      throw new Error("shipping asset review hash changed");
+    }
+    const review = admittedReview.value;
+    result.shippingReview = { path: policy.path, sha256: policy.sha256.toLowerCase(), review };
+    if (review.schemaVersion !== 1 || review.evidenceKind !== "shipping-asset-rights-review"
+      || review.status !== "Passed" || review.scope !== "source-assets-and-shipping-generated-fonts"
+      || review.candidateCommitSha !== candidateSha || review.candidateTreeSha !== currentTreeSha
+      || typeof review.reviewer !== "string" || !review.reviewer.trim()
+      || !Number.isFinite(Date.parse(review.reviewedAt)) || Date.parse(review.reviewedAt) > Date.now()
+      || review.assetProvenanceManifestSha256 !== result.sourceAudit.manifestSha256
+      || !packageManifestPath || !packageManifest || packageResults.length === 0
+      || packageResults.some((entry) => entry.status !== "Passed")
+      || review.packageManifestSha256 !== packageManifestSha256) {
+      throw new Error("shipping asset review is not bound to the current candidate, source manifest and verified package hashes");
+    }
+    const acceptedHandoff = await validateAcceptedFontHandoff(root, {
+      candidateSha, candidateTreeSha: currentTreeSha, packageManifestPath, workflowRunId: requiredWorkflowRunId,
+    });
+    const actualFonts = acceptedHandoff ? acceptedHandoff.fonts : await listShippingFontFiles(root);
+    result.shippingReview.fontTransport = acceptedHandoff
+      ? { path: acceptedHandoff.path, sha256: acceptedHandoff.sha256, scope: acceptedHandoff.scope, allDistributableContentsBound: true }
+      : { scope: "local-nonaccepted-export-supporting-review", allDistributableContentsBound: false };
+    if (acceptedHandoff) {
+      if (review.fontHandoffSha256 !== acceptedHandoff.sha256 || review.fontInventoryScope !== acceptedHandoff.scope
+        || !Array.isArray(review.notices) || review.notices.length !== acceptedHandoff.notices.length) {
+        throw new Error("shipping review is not bound to all accepted distributable fonts and notices");
+      }
+      const noticesSeen = new Set();
+      for (const notice of review.notices) {
+        const actual = acceptedHandoff.notices.find((entry) => entry.platform === notice.platform && entry.path === notice.path);
+        if (!actual || noticesSeen.has(notice.path.toLowerCase()) || notice.sha256 !== actual.sha256
+          || notice.bytes !== actual.bytes || notice.memberPath !== actual.memberPath || notice.source !== actual.source) {
+          throw new Error("shipping review notice inventory is incomplete or changed");
+        }
+        noticesSeen.add(notice.path.toLowerCase());
+      }
+    }
+    if (!Array.isArray(review.fonts) || review.fonts.length !== actualFonts.length) {
+      throw new Error("shipping asset review font inventory is incomplete");
+    }
+    const seen = new Set();
+    for (const font of review.fonts) {
+      if (!safeRelativePath(font?.path) || !hashPattern.test(String(font?.sha256 ?? ""))
+        || seen.has(font.path.toLowerCase())) throw new Error("shipping asset review contains an invalid or duplicate font");
+      seen.add(font.path.toLowerCase());
+      const actual = actualFonts.find((entry) => entry.path === font.path);
+      if (!actual || actual.sha256 !== font.sha256.toLowerCase()
+        || (acceptedHandoff && (font.platform !== actual.platform || font.bytes !== actual.bytes
+          || font.memberPath !== actual.memberPath || font.source !== actual.source))) throw new Error(`shipping font bytes changed: ${font.path}`);
+      const license = font.license;
+      if (license?.kind !== "fontLicenseNotice" || !safeRelativePath(license?.path)
+        || !hashPattern.test(String(license?.sha256 ?? ""))) throw new Error(`font license notice is unsupported: ${font.path}`);
+      if (acceptedHandoff && !acceptedHandoff.notices.some((notice) => notice.platform === font.platform
+        && notice.path === license.path && notice.sha256 === license.sha256.toLowerCase())) {
+        throw new Error(`font license notice was not retained from its accepted platform packages: ${font.path}`);
+      }
+      if (createHash("sha256").update(await readOrdinaryFile(root, license.path)).digest("hex") !== license.sha256.toLowerCase()) {
+        throw new Error(`font license notice changed: ${license.path}`);
+      }
+    }
+    // Complete local structural checks retain their original diagnostics before
+    // requiring every actual distributable for commercial-rights acceptance.
+    if (!acceptedHandoff) {
+      result.failures.push("accepted all-five-package font/notice handoff required; completed local review is supporting evidence only");
+    } else if (result.failures.length === 0) result.status = "Passed";
+  } catch (error) {
+    result.status = "Failed";
+    result.failures.push(`shipping asset review: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return result;
+}
+
+failures.push(...policyCompletenessFailures);
 const gateResults = [];
-for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
+for (const [gateId, gate] of Object.entries(policyGates)) {
+  if (!isOrdinaryPolicyRecord(gate)) continue;
   if (!allowedStatuses.has(gate.status)) {
     failures.push(`${gateId} has invalid status ${String(gate.status)}`);
   }
@@ -1252,7 +1657,10 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
   const releaseException = generatedEvidence?.status === "Passed"
     ? null
     : await validateReleaseException(gateId, gate);
-  const exceptionApplied = releaseException?.status === "Accepted";
+  const exceptionApplied = releaseException?.status === "Accepted"
+    && (generatedEvidence?.calendarAdmissionFailures?.length ?? 0) === 0
+    && (generatedEvidence?.artifactAdmissionFailures?.length ?? 0) === 0
+    && (releaseException?.artifactAdmissionFailures?.length ?? 0) === 0;
   let effectiveStatus = gate.status;
   if (gate.status === "Unverified" && generatedEvidence?.status === "Passed") {
     effectiveStatus = "Passed";
@@ -1264,6 +1672,17 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
   }
   if (releaseException && releaseException.status !== "Accepted") {
     failures.push(`${gateId} release exception: ${releaseException.failures.join(", ")}`);
+  }
+  const assetReview = gateId === "assetCommercialRights"
+    ? await validateAssetCommercialRights(gate)
+    : null;
+  if (assetReview) {
+    effectiveStatus = gate.status === "Passed" && assetReview.status === "Passed"
+      ? "Passed"
+      : gate.status === "Failed" || assetReview.status === "Failed"
+        ? "Failed"
+        : "Unverified";
+    for (const failure of assetReview.failures) failures.push(`${gateId}: ${failure}`);
   }
   const effectiveEvidenceCount =
     (gate.evidence?.length ?? 0)
@@ -1285,12 +1704,18 @@ for (const [gateId, gate] of Object.entries(statusDocument.gates ?? {})) {
     evidence: gate.evidence ?? [],
     missingEvidence,
     generatedEvidence,
+    assetReview,
     resolution: exceptionApplied ? "AcceptedRisk" : effectiveStatus,
     exceptionApplied,
     releaseException,
   });
 }
 
+const finalArtifactFailure = artifactContext.snapshot().firstFailure;
+if (finalArtifactFailure && globalArtifactAdmissionFailures.length === 0) {
+  recordArtifactAdmissionFailure(null, (finalArtifactFailure.code ?? "artifact I/O failure")
+    + " role=" + (finalArtifactFailure.role ?? "unknown"));
+}
 const acceptedRisks = gateResults
   .filter((gate) => gate.exceptionApplied)
   .map((gate) => ({
@@ -1299,8 +1724,17 @@ const acceptedRisks = gateResults
     path: gate.releaseException?.path,
   }));
 
+const reportStatus = failures.length > 0
+  ? "Failed"
+  : acceptedRisks.length > 0
+    ? "PassedWithAcceptedRisk"
+    : "Passed";
 const report = {
   schemaVersion: 2,
+  validationScope,
+  fullReleaseEligible: validationScope === "full-release"
+    && policyCompletenessFailures.length === 0
+    && (reportStatus === "Passed" || reportStatus === "PassedWithAcceptedRisk"),
   generatedAt: new Date().toISOString(),
   candidate: {
     commitSha: candidateSha,
@@ -1313,21 +1747,37 @@ const report = {
   },
   dirty,
   dirtyPaths,
-  status: failures.length > 0
-    ? "Failed"
-    : acceptedRisks.length > 0
-      ? "PassedWithAcceptedRisk"
-      : "Passed",
+  status: reportStatus,
   packageVerification: {
     requiredKinds: requiredPackageKinds,
     packages: packageResults,
   },
   gateResults,
   acceptedRisks,
+  artifactAdmissionFailures: globalArtifactAdmissionFailures,
   failures,
 };
-await mkdir(dirname(outputPath), { recursive: true });
-await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+function declaredPolicyInputs(value) {
+  if (typeof value === "string") return [value.replaceAll("<candidate-sha>", candidateSha)];
+  if (Array.isArray(value)) return value.flatMap(declaredPolicyInputs);
+  if (value && typeof value === "object") return Object.values(value).flatMap(declaredPolicyInputs);
+  return [];
+}
+await writeOwnedReport(root, outputPath, report, {
+  allowCanonicalRelease: true,
+  writeJsonReport: async (path, value) => {
+    const encoded = await artifactContext.encodeJson(value, { role: "checker-report", pretty: true, terminalNewline: true });
+    const written = await artifactContext.writeJson(path, encoded, { method: "exclusive", role: "checker-report" });
+    const readback = await artifactContext.readJson(path, { role: "checker-report", expectedSha256: encoded.sha256 });
+    if (written.sha256 !== encoded.sha256 || written.bytes !== encoded.bytes
+      || readback.sha256 !== encoded.sha256 || readback.bytes !== encoded.bytes) {
+      throw new Error("New report raw bounded readback failed");
+    }
+  },
+  inputPaths: [statusPath, resolve(root, "package.json"), packageManifestPath,
+    ...declaredPolicyInputs(statusDocument),
+    ...gateResults.flatMap((gate) => gate.assetReview?.sourceAudit?.inputPaths ?? [])],
+});
 console.info(`RELEASE_EVIDENCE_CHECK ${JSON.stringify({ status: report.status, failures: failures.length })}`);
 console.info(`Evidence: ${relative(root, outputPath)}`);
 if (!reportOnly && failures.length > 0) {

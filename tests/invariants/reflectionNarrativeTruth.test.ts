@@ -18,7 +18,11 @@ function negativeWatch(): ObservationSession {
     moment: { id: `moment-${phaseIndex}`, playerId: "lead", momentType: "technicalAction", quality: phaseIndex === 0 ? 5 : 2, vagueDescription: detail, description: detail, attributesHinted: ["passing"], pressureContext: false },
   })) as SessionFlaggedMoment[];
   return {
-    ...session, state: "reflection", currentPhaseIndex: 2, phases: session.phases.slice(0, 3),
+    ...session, state: "reflection", currentPhaseIndex: 2,
+    phases: flaggedMoments.map((flag) => ({
+      index: flag.phaseIndex, minute: flag.minute, description: flag.moment.vagueDescription,
+      moments: [flag.moment],
+    })),
     players: session.players.map((player) => player.playerId === "lead"
       ? { ...player, isFocused: true, currentLens: "mental", focusedPhases: [0, 1, 2], focusHistory: [0, 1, 2].map((phaseIndex) => ({ phaseIndex, lens: "mental" })) }
       : player),

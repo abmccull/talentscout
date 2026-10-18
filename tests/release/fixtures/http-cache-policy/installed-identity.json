@@ -1,0 +1,70 @@
+{
+  "schema": "installed-http-cache-policy-identity-v1",
+  "status": "frozen",
+  "pending": [],
+  "policy": {
+    "specifier": "http-cache-semantics",
+    "name": "@talentscout/http-cache-policy",
+    "version": "4.3.0-ts.1",
+    "private": true,
+    "files": [
+      {
+        "path": "LICENSE",
+        "bytes": 1274,
+        "sha256": "ab868ad5a2ef5068560d9cd3b2180ec63c140bb4c5cae1ba779d300a0ac74fa3"
+      },
+      {
+        "path": "README.md",
+        "bytes": 12687,
+        "sha256": "be77466544e7060ad859664e779d84db4440f6dcca28da0975d0bcd97000c9fa"
+      },
+      {
+        "path": "index.js",
+        "bytes": 36685,
+        "sha256": "9073361ea5a25272688b3433790ec0bcdfb6d6fa4eb8f4d285aea5b9e8d93c98"
+      },
+      {
+        "path": "package.json",
+        "bytes": 637,
+        "sha256": "739b3f40ee6cfcc6ecc465bee0abce7e25c9fe68ec96305a5e0e35129708d855"
+      }
+    ],
+    "archive": {
+      "path": "vendor/talentscout-http-cache-policy-4.3.0-ts.1.tgz",
+      "bytes": 14176,
+      "sha256": "c006ee20e7141ddf901d4afc71c2cf7642f1f5ba8f0ab625ee7b61f7cd6476ec"
+    }
+  },
+  "consumers": {
+    "got": {
+      "specifier": "got",
+      "name": "got",
+      "version": "11.8.6",
+      "manifestSha256": "48233e01876e5114699a823cd53c597a9c3a3510c3223350c5cb19cbc9e3f251",
+      "entrySha256": "bd013ea2c1e2809a951d6c95b9b9309180d5f5fbdc9c1952d45e2643e24a955b"
+    },
+    "cacheableRequest": {
+      "specifier": "cacheable-request",
+      "name": "cacheable-request",
+      "version": "7.0.4",
+      "manifestSha256": "04af7e62979b2a3d5b512c3704732a92bae610b43cc34a377c07d416d68d5447",
+      "entrySha256": "3ce05ac3531f61529210bf6390f18d5e709ec110e37dee22af7e72b4065ca627"
+    },
+    "keyv": {
+      "specifier": "keyv",
+      "name": "keyv",
+      "version": "4.5.4",
+      "manifestSha256": "e8afd30f2f2a40ef5023928b50fdaed3a3338aa7e1c4e86205413afb05e8a099",
+      "entrySha256": "4987708b4b13159c654c09d239bd0c439533b0b792a6fd4e8769d8a509ad4da6"
+    },
+    "jsonBuffer": {
+      "specifier": "json-buffer",
+      "name": "json-buffer",
+      "version": "3.0.1",
+      "manifestSha256": "67bd0213396ba4664a9f2fafa3d2d25864a29f4f3800e766ea17c2aa3f4dbef9",
+      "entrySha256": "d7596e0f7c808f2800aa6fa9dfa723c5547ab964aba7dcd9014cebf292f667d1"
+    }
+  },
+  "note": "Expected installed identity only: Root-frozen independently reviewed four-file candidate and actual deterministic archive. This fixture does not admit a future Source installation or claim execution/adoption; the E2E must verify actual installed bytes and consumer resolutions."
+}
+

@@ -1,3 +1,5 @@
+import { expandPlayerInjuryHistory } from "../players/playerStateArchive";
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
 /**
  * Transfer Tracker — tracks transfer outcomes, classifies success/failure,
  * generates narrative reasons, and applies scout accountability.
@@ -242,7 +244,7 @@ export function buildTransferSeasonParticipation(
       ratings.reduce((total, rating) => total + rating.rating, 0) / ratings.length * 10,
     ) / 10
     : undefined;
-  const injuries = (player.injuryHistory?.injuries ?? []).filter((injury) =>
+  const injuries = (expandPlayerInjuryHistory(player.injuryHistory, player.id)?.injuries ?? []).map(entry => expandHistoricalInjury(entry, player.id)).filter((injury) =>
     injury.occurredSeason === context.completedSeason
     && isOnOrAfterTransfer(record, injury.occurredSeason, injury.occurredWeek)
   );

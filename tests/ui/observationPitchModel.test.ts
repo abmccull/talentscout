@@ -6,6 +6,7 @@ import type {
 import {
   buildObservationPitchMarkers,
   inferObservationPhaseType,
+  observationPassageLabel,
   normalizeObservationPosition,
 } from "@/components/game/observation/observationPitchModel";
 
@@ -51,7 +52,7 @@ describe("observation pitch model", () => {
     expect(normalizeObservationPosition("Forward")).toBe("ST");
   });
 
-  it("derives its visual phase from the dominant real moment context", () => {
+  it("uses a deterministic schematic layout for the dominant moment category", () => {
     const moments = [
       createMoment("one", "tacticalDecision"),
       createMoment("two", "tacticalDecision"),
@@ -95,4 +96,21 @@ describe("observation pitch model", () => {
       expect(marker.y).toBeLessThanOrEqual(91);
     }
   });
+});
+
+it("changing scout attention changes highlights without moving any footballer", () => {
+  const players = [createPlayer("one", "CM"), createPlayer("two", "CM"), createPlayer("three", "ST")];
+  const phase = { moments: [createMoment("one", "tacticalDecision"), createMoment("two", "physicalTest")] };
+  const before = buildObservationPitchMarkers(players, phase);
+  const focused = buildObservationPitchMarkers(players.map(p => ({ ...p, isFocused: p.playerId === "one" })), phase);
+  expect(focused.map(({ playerId, x, y }) => ({ playerId, x, y })))
+    .toEqual(before.map(({ playerId, x, y }) => ({ playerId, x, y })));
+  expect(focused[0].isFocused).toBe(true);
+  expect(before[0].isFocused).toBe(false);
+});
+
+it("labels passages without asserting unsupported football phases", () => {
+  expect(observationPassageLabel({ moments: [createMoment("one", "characterReveal")] })).toBe("Player reactions");
+  expect(observationPassageLabel({ moments: [createMoment("one", "technicalAction"), createMoment("two", "mentalResponse")] })).toBe("Mixed passages");
+  expect(observationPassageLabel({ moments: [] })).toBe("Watching play");
 });

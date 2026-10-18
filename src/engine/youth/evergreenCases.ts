@@ -4,7 +4,7 @@ import type {
   Player,
   ScoutingCase,
 } from "@/engine/core/types";
-import { addGameWeeks, gameWeeksBetween } from "@/engine/core/gameDate";
+import { addGameWeeks, gameWeeksBetween, createGameCalendarIndex, gameWeeksBetweenWithCalendar } from "@/engine/core/gameDate";
 import {
   registerDecision,
   type ConsequenceEffect,
@@ -360,9 +360,10 @@ function latestYouthCaseDate(state: GameState): GameDate | undefined {
       .map((record) => record.offeredAt),
   ];
   const now = { week: state.currentWeek, season: state.currentSeason };
+  const calendar = createGameCalendarIndex(state.fixtures);
   return dates.sort((left, right) =>
-    gameWeeksBetween(state.fixtures, left, now)
-    - gameWeeksBetween(state.fixtures, right, now),
+    gameWeeksBetweenWithCalendar(calendar, left, now)
+    - gameWeeksBetweenWithCalendar(calendar, right, now),
   )[0];
 }
 

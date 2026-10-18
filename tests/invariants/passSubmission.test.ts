@@ -5,6 +5,7 @@ import { createScout } from "@/engine/scout/creation";
 import { generatePlayer } from "@/engine/players/generation";
 import { observePlayerLight } from "@/engine/scout/perception";
 import { initializeFinances } from "@/engine/finance";
+import { getFreshReportObservationIds } from "@/engine/reports/reportAccountability";
 import { createReportActions } from "@/stores/actions/reportActions";
 import type { GameStoreState, GetState, SetState } from "@/stores/actions/types";
 import { queueGameplayAutosave } from "@/stores/actions/persistGameplayAutosave";
@@ -95,5 +96,47 @@ describe("Pass for now submission authority", () => {
     expect(after.reports[original.id].playerId).toBe(player.id);
     actions.submitReport("recommend", "New evidence supports a trial.", [], [], reconsidered);
     expect(get().gameState!.scout.reportsSubmitted).toBe(scout.reportsSubmitted + 1);
+  });
+});
+
+describe("private decision cross-brief boundary", () => {
+  it("requires new observation before reconsidering the same player under another brief", () => {
+    const { get, set, actions, input, observation } = setup();
+    actions.submitReport("note", "Pass for now.", [], [], input);
+    const before = get().gameState!;
+    expect(Object.values(before.reports)).toHaveLength(1);
+    set({ gameState: { ...before, currentWeek: 2, youthRecruitmentBriefs: {
+      ...before.youthRecruitmentBriefs,
+      "brief-b": { ...before.youthRecruitmentBriefs["brief-a"], id: "brief-b" },
+    } } });
+    actions.submitReport("recommend", "The same evidence under another brief.", [], [],
+      { ...input, briefId: "brief-b", recommendedAction: "inviteForTrial" });
+    expect(Object.values(get().gameState!.reports)).toHaveLength(1);
+    expect(get().gameState!.scout.reportsSubmitted).toBe(before.scout.reportsSubmitted);
+    expect(get().gameState!.inbox.some((message) => message.title === "Reconsideration needs new evidence")).toBe(true);
+    const original = Object.values(before.reports)[0];
+    const receipt = structuredClone(original.decisionReceipt);
+    const fresh = { ...observation, id: "new-brief-fresh-observation", week: 2 };
+    set({ gameState: { ...get().gameState!, observations: { ...before.observations, [fresh.id]: fresh } } });
+    actions.submitReport("recommend", "Fresh evidence under another brief.", [], [],
+      { ...input, briefId: "brief-b", recommendedAction: "inviteForTrial" });
+    expect(Object.values(get().gameState!.reports)).toHaveLength(2);
+    expect(get().gameState!.scout.reportsSubmitted).toBe(before.scout.reportsSubmitted + 1);
+    expect(get().gameState!.reports[original.id].decisionReceipt).toEqual(receipt);
+  });
+
+  it("uses immutable private receipts while preserving unrelated and legacy scopes", () => {
+    const { get, actions, input, observation } = setup();
+    actions.submitReport("note", "Pass for now.", [], [], input);
+    const original = Object.values(get().gameState!.reports)[0];
+    const edited = { ...original, evidenceObservationIds: [], recommendedAction: "inviteForTrial" as const };
+    expect(getFreshReportObservationIds([observation], undefined, [edited])).toEqual([]);
+    expect(getFreshReportObservationIds([observation], edited)).toEqual([]);
+    expect(getFreshReportObservationIds([observation], undefined,
+      [{ ...edited, scoutId: "another-scout" }])).toEqual([observation.id]);
+    expect(getFreshReportObservationIds([observation], undefined,
+      [{ ...edited, playerId: "another-player" }])).toEqual([observation.id]);
+    expect(getFreshReportObservationIds([observation], undefined,
+      [{ ...original, decisionReceipt: undefined }])).toEqual([observation.id]);
   });
 });

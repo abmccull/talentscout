@@ -205,9 +205,16 @@ export class GamePage {
   async navigateTo(screen: string): Promise<void> {
     const viewport = this.page.viewportSize();
     const isMobile = Boolean(viewport && viewport.width < 768);
-    const mobileSidebarOpen = isMobile && await this.page
+    let mobileSidebarOpen = isMobile && await this.page
       .locator('aside[aria-label="Game navigation"]')
       .evaluate((sidebar) => sidebar.classList.contains("translate-x-0"));
+
+    // Settings and other secondary destinations live in the phone menu,
+    // not in the limited bottom navigation bar.
+    if (isMobile && !mobileSidebarOpen && await this.page.locator(mobileNavItem(screen)).count() === 0) {
+      await this.page.getByRole("button", { name: "Open navigation menu", exact: true }).click();
+      mobileSidebarOpen = true;
+    }
 
     await this.page.click(
       isMobile && !mobileSidebarOpen ? mobileNavItem(screen) : navItem(screen),
@@ -343,8 +350,103 @@ export class GamePage {
     await this.page.waitForTimeout(300);
   }
 
-  async advanceCanonicalWeek(options: { launchLiveSession?: boolean } = {}): Promise<void> {
-    const { launchLiveSession = false } = options;
+  async continueCanonicalSeasonReview(sourceSeason: number, acknowledge = true): Promise<boolean> {
+    if (await this.getCurrentScreen() !== "seasonAwards") return false;
+    const boundary = await this.page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState();
+      return { season: state.gameState.currentSeason, week: state.gameState.currentWeek,
+        reviewSeason: state.gameState.seasonAwardsData?.season ?? null, busy: state.isAdvancingWeek };
+    });
+    // Only the actual completed-season acknowledgement is accepted here.
+    // An arbitrary unexpected route or unfinished rollover must still fail.
+    expect(boundary).toEqual({ season: sourceSeason + 1, week: 1,
+      reviewSeason: sourceSeason, busy: false });
+    await expect(this.page.getByRole("heading", { name: `Season ${sourceSeason} Complete`, exact: true })).toBeVisible();
+    // Inspect the actual completed review before accepting its public continuation.
+    if (!acknowledge) return true;
+    const continueButton = this.page.getByRole("button", { name: "Continue to Next Season", exact: true });
+    const continuationDeadline = Date.now() + 15_000;
+    let clickedContinuation = false;
+    let lastActionability = "No attempt";
+    while (Date.now() < continuationDeadline) {
+      // Post-commit chunks can mount the next acknowledgement after an earlier
+      // drain returned. Only these known, single-action acknowledgement controls
+      // are eligible; no career archive navigation or gameplay choice is used.
+      const acknowledgements = [
+        this.page.getByTestId("career-moment-overlay").getByRole("button", { name: "Continue", exact: true }),
+        this.page.getByRole("dialog", { name: /^(Epic achievement|Achievement):/ })
+          .getByRole("button", { name: /^(Continue|Incredible!)$/ }),
+        this.page.getByRole("dialog", { name: "Week Summary", exact: true })
+          .getByRole("button", { name: /^(Close week summary|Continue to promotion|Continue to milestone)$/ }),
+      ];
+      let acknowledged = false;
+      for (const button of acknowledgements) {
+        if (!(await button.isVisible().catch(() => false))) continue;
+        try {
+          await button.click({ timeout: Math.max(1, Math.min(750, continuationDeadline - Date.now())) });
+          acknowledged = true;
+        } catch (error) {
+          lastActionability = String(error).slice(0, 240);
+        }
+        break;
+      }
+      if (acknowledged) {
+        await this.page.waitForTimeout(100);
+        continue;
+      }
+      if (Date.now() >= continuationDeadline) break;
+      try {
+        await continueButton.scrollIntoViewIfNeeded({ timeout: Math.max(1, Math.min(500, continuationDeadline - Date.now())) });
+        const hit = await continueButton.evaluate((button) => {
+          const rect = button.getBoundingClientRect();
+          const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return { receivesPointer: rect.width > 0 && rect.height > 0 && top !== null && button.contains(top),
+            blockingElement: top?.getAttribute("data-testid") ?? top?.tagName ?? "none" };
+        });
+        lastActionability = JSON.stringify(hit);
+        if (hit.receivesPointer) {
+          await continueButton.click({ trial: true, timeout: Math.max(1, Math.min(500, continuationDeadline - Date.now())) });
+          // A delayed overlay can still mount after the trial. Bound this real
+          // pointer click and return to acknowledgement discovery if it does.
+          await continueButton.click({ timeout: Math.max(1, Math.min(750, continuationDeadline - Date.now())) });
+          clickedContinuation = true;
+          break;
+        }
+      } catch (error) {
+        lastActionability = String(error).slice(0, 240);
+      }
+      await this.page.waitForTimeout(100);
+    }
+    if (!clickedContinuation) {
+      throw new Error(`Season ${sourceSeason} continuation stayed blocked for 15 seconds. Screen: ${await this.getCurrentScreen()}. Last actionability: ${lastActionability}`);
+    }
+    await this.waitForScreen("dashboard");
+    const continued = await this.page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState();
+      return { season: state.gameState.currentSeason, week: state.gameState.currentWeek,
+        reviewSeason: state.gameState.seasonAwardsData?.season ?? null, busy: state.isAdvancingWeek };
+    });
+    expect(continued).toEqual({ season: sourceSeason + 1, week: 1,
+      reviewSeason: null, busy: false });
+    await this.dismissBlockingDialogs();
+    await this.navigateTo("calendar");
+    return true;
+  }
+
+  async advanceCanonicalWeek(options: {
+    launchLiveSession?: boolean;
+    maxLiveSessions?: number;
+    completeLiveSession?: (gamePage: GamePage) => Promise<void>;
+    acknowledgeSeasonReview?: boolean;
+  } = {}): Promise<void> {
+    const { launchLiveSession = false, maxLiveSessions = Number.POSITIVE_INFINITY,
+      acknowledgeSeasonReview = true, completeLiveSession } = options;
+    if (maxLiveSessions !== Number.POSITIVE_INFINITY
+      && (!Number.isInteger(maxLiveSessions) || maxLiveSessions < 1)) {
+      throw new Error("maxLiveSessions must be a positive integer when provided");
+    }
+    const sourceSeason = await this.page.evaluate(() =>
+      (window as any).__GAME_STORE__.getState().gameState.currentSeason as number);
     await this.page.getByRole("button", { name: /^Advance Week$/ }).click();
 
     const emptyDayAdvance = this.page.getByRole("button", { name: /^Advance$/ });
@@ -361,12 +463,32 @@ export class GamePage {
 
     await this.waitForScreen("weekSimulation", 10_000);
 
+    await this.settleCanonicalWeek(sourceSeason, {
+      launchLiveSession,
+      maxLiveSessions,
+      completeLiveSession,
+      acknowledgeSeasonReview,
+    });
+  }
+
+  /** Settle a week already entered through its real Planner confirmations. */
+  async settleCanonicalWeek(sourceSeason: number, options: {
+    launchLiveSession?: boolean;
+    maxLiveSessions?: number;
+    completeLiveSession?: (gamePage: GamePage) => Promise<void>;
+    acknowledgeSeasonReview?: boolean;
+  } = {}): Promise<void> {
+    const { launchLiveSession = false, maxLiveSessions = Number.POSITIVE_INFINITY,
+      acknowledgeSeasonReview = true, completeLiveSession } = options;
+
     let settlementDeadline = Date.now() + 30_000;
+    let completedLiveSessionCount = 0;
     while (Date.now() < settlementDeadline) {
       // Milestones can replace the final simulation controls with a week-summary
       // and celebration stack. These are acknowledgement dialogs, not gameplay
       // choices, so clear them before looking for the next canonical control.
       await this.dismissBlockingDialogs();
+      if (await this.continueCanonicalSeasonReview(sourceSeason, acknowledgeSeasonReview)) break;
       if (await this.getCurrentScreen() === "calendar") break;
 
       const interactionResolved = await this.resolveWeekSimulationInteraction();
@@ -375,7 +497,10 @@ export class GamePage {
         continue;
       }
 
-      if (launchLiveSession) {
+      // A bounded writer/marketplace fixture can watch one complete session,
+      // then settle later occupied days through the existing real quick choice.
+      // Other callers retain the default of watching every available session.
+      if (launchLiveSession && completedLiveSessionCount < maxLiveSessions) {
         const launchResult = await this.activateVisibleButton(["Launch Live Session"]);
         if (launchResult === "disabled") {
           await this.page.waitForTimeout(250);
@@ -384,8 +509,10 @@ export class GamePage {
         if (launchResult === "clicked") {
           const liveSessionStartedAt = Date.now();
           await this.waitForScreen("observation", 10_000);
-          await this.completeObservationViaUI();
+          if (completeLiveSession) await completeLiveSession(this);
+          else await this.completeObservationViaUI();
           await this.waitForScreen("weekSimulation", 10_000);
+          completedLiveSessionCount += 1;
           // Watching and reflecting are player activity, not stalled weekly
           // settlement. Keep their time outside this bounded settlement wait.
           settlementDeadline += Date.now() - liveSessionStartedAt;
@@ -435,10 +562,13 @@ export class GamePage {
     // turn, then clear it so the caller receives an actually interactive screen.
     await this.page.waitForTimeout(250);
     await this.dismissBlockingDialogs();
+    // A delayed Week Summary can hand off to this review after the Planner
+    // first paints, so acknowledge that same guarded boundary here as well.
+    await this.continueCanonicalSeasonReview(sourceSeason, acknowledgeSeasonReview);
     await dismissCareerMomentOverlays(this.page, 5);
 
     const finalScreen = await this.getCurrentScreen();
-    if (finalScreen !== "calendar") {
+    if (finalScreen !== "calendar" && !(finalScreen === "seasonAwards" && !acknowledgeSeasonReview)) {
       const consoleContext = this.consoleErrors.length > 0
         ? `\nConsole errors:\n${this.consoleErrors.join("\n")}`
         : "";
@@ -511,7 +641,7 @@ export class GamePage {
 
   async submitCurrentReportViaUI(
     conviction: "note" | "recommend" | "strongRecommend" | "tablePound" = "recommend",
-    options: { submit?: boolean } = {},
+    options: { submit?: boolean; preferredEvidenceId?: string } = {},
   ): Promise<void> {
     const shouldSubmit = options.submit ?? true;
     const convictionLabels: Record<typeof conviction, string> = {
@@ -532,7 +662,11 @@ export class GamePage {
     const fileInitialAssessment = this.page.getByRole("button", { name: /^File initial assessment$/ });
     if (await fileInitialAssessment.isVisible({ timeout: 500 }).catch(() => false)) {
       await this.page.getByRole("button", { name: /^Evidence\b/ }).click();
-      await this.page.getByRole("group", { name: "Saved evidence" }).getByRole("radio").first().locator("..").click();
+      const evidenceChoices = this.page.getByRole("group", { name: "Saved evidence" }).getByRole("radio");
+      const evidenceValues = await evidenceChoices.evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value));
+      const evidenceIndex = options.preferredEvidenceId ? evidenceValues.indexOf(options.preferredEvidenceId) : 0;
+      expect(evidenceIndex, "Requested earned evidence must be offered by the report").toBeGreaterThanOrEqual(0);
+      await evidenceChoices.nth(evidenceIndex).locator("..").click();
       await this.page.getByRole("button", { name: /^Suggests\b/ }).click();
       await this.page.getByRole("group", { name: "What it suggests" }).getByRole("radio").first().locator("..").click();
       await this.page.getByRole("button", { name: /^Untested\b/ }).click();
@@ -590,12 +724,18 @@ export class GamePage {
       ];
       for (const categoryName of categoryNames) {
         const category = this.page.getByRole("group", { name: categoryName, exact: true });
-        const makeClaim = category.getByRole("radio", { name: "Make a claim", exact: true });
+        const makeClaim = category.getByRole("radio", { name: "Interpret a saved cue", exact: true });
         const canAssess = await makeClaim.isEnabled().catch(() => false);
         if (canAssess) {
           await makeClaim.locator("..").click();
           await expect(makeClaim).toBeChecked();
-          await category.getByLabel("Supporting cue").selectOption({ index: 1 });
+          const cueSelect = category.getByLabel("Supporting cue");
+          const offeredCueIds = await cueSelect.locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value));
+          if (options.preferredEvidenceId && offeredCueIds.includes(options.preferredEvidenceId)) {
+            await cueSelect.selectOption(options.preferredEvidenceId);
+          } else {
+            await cueSelect.selectOption({ index: 1 });
+          }
           const interpretation = category.getByRole("group", { name: "Interpretation" }).getByRole("radio").first();
           await interpretation.locator("..").click();
           await expect(interpretation).toBeChecked();
@@ -664,6 +804,10 @@ export class GamePage {
     const technicalLens = this.page.getByRole("button", { name: /^Use technical lens for / }).first();
     if (await technicalLens.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await technicalLens.click();
+    }
+    const closeFocusControls = this.page.getByRole("button", { name: "Close focus controls", exact: true });
+    if (await closeFocusControls.isVisible()) {
+      await closeFocusControls.click();
     }
 
     const focusedPlayerName = await this.page.getByRole("button", { name: /^Remove focus from / }).first()

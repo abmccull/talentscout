@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type {
   GameState,
   Player,
@@ -123,7 +124,7 @@ export function deriveClubRecruitmentMemory(
   lookbackSeasons = 5,
 ): ClubRecruitmentMemory {
   const cutoffSeason = Math.max(1, state.currentSeason - lookbackSeasons);
-  const movements = [...(state.playerMovementHistory ?? [])].sort((left, right) =>
+  const movements = [...expandPlayerMovementHistory(state.playerMovementHistory ?? [])].sort((left, right) =>
     left.season - right.season || left.week - right.week || left.id.localeCompare(right.id)
   );
   const arrivals = movements.filter((movement) =>

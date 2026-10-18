@@ -30,6 +30,7 @@ import { confidenceLabel } from "./player-profile/playerProfileFormatting";
 import { listYouthCases, type YouthCaseListItem } from "@/engine/youth/youthCaseList";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getCountryDisplayName } from "@/lib/country";
+import { buildYouthDeskEvidenceIndex } from "@/lib/youthDeskEvidence";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
 
@@ -274,7 +275,7 @@ function YouthCard({ youth, perceived, scoutId, reportedIds, observationCount, c
     <button type="button" onClick={onClick} aria-label={`View profile for ${name}`}
       className="group w-full border-b border-[var(--border)] py-5 text-left outline-none transition-colors hover:bg-white/[0.025] focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--background)] motion-reduce:transition-none sm:py-6">
       <div className="flex items-start gap-4">
-        <YouthPortrait playerId={youth.player.id} nationality={youth.player.nationality} age={youth.player.age} size={96} className="shrink-0" alt={name} />
+        <YouthPortrait playerId={youth.player.id} nationality={youth.player.nationality} age={youth.player.age} size={96} className="shrink-0" alt="" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -323,17 +324,17 @@ function VenueCard({ venue }: VenueCardProps) {
       <div className="flex items-start justify-between gap-2">
         <p className="font-semibold text-white">{venue.name}</p>
         <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="secondary" className="text-[10px]">
+          <Badge variant="secondary" className="text-eyebrow">
             {venue.slots} slot{venue.slots !== 1 ? "s" : ""}
           </Badge>
-          <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+          <Badge variant="outline" className="text-eyebrow text-amber-400 border-amber-500/30">
             -{venue.fatigue} fatigue
           </Badge>
         </div>
       </div>
       <p className="text-sm text-zinc-400">{venue.description}</p>
-      <p className="text-xs text-zinc-600">
-        <span className="text-zinc-500">Requires: </span>
+      <p className="text-xs text-quiet">
+        <span className="text-quiet">Requires: </span>
         {venue.requirement}
       </p>
     </div>
@@ -370,6 +371,7 @@ interface UnsignedYouthTabProps {
   filterNationality: string;
   setFilterNationality: (n: string) => void;
   observations: Observation[];
+  observationCountByPlayer: Map<string, number>;
   caseByPlayerId?: Map<string, YouthCaseListItem>;
 }
 
@@ -401,6 +403,7 @@ function UnsignedYouthTab({
   filterNationality,
   setFilterNationality,
   observations,
+  observationCountByPlayer,
   caseByPlayerId,
 }: UnsignedYouthTabProps) {
   const [tableSortKey, setTableSortKey] = useState<YouthSortKey>("buzz");
@@ -417,7 +420,7 @@ function UnsignedYouthTab({
   };
 
   const TableSortIcon = ({ col }: { col: YouthSortKey }) => {
-    if (tableSortKey !== col) return <ChevronDown size={12} className="text-zinc-400" />;
+    if (tableSortKey !== col) return <ChevronDown size={12} className="text-quiet" />;
     return tableSortDir === "asc" ? (
       <ChevronUp size={12} className="text-emerald-400" />
     ) : (
@@ -451,15 +454,6 @@ function UnsignedYouthTab({
   if (filterNationality) {
     filtered = filtered.filter((y) => y.player.nationality === filterNationality);
   }
-  // Build a count of observation sessions per player for pipeline stage logic
-  const observationCountByPlayer = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const obs of observations) {
-      map.set(obs.playerId, (map.get(obs.playerId) ?? 0) + 1);
-    }
-    return map;
-  }, [observations]);
-
   // Build perceived ability map for all filtered youth
   const perceivedMap = useMemo(() => {
     const map = new Map<string, PerceivedAbility | null>();
@@ -606,7 +600,7 @@ function UnsignedYouthTab({
                     >
                       <td className="px-4 py-3">
                         <button type="button" className="flex min-h-11 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" aria-label={`View profile for ${y.player.firstName} ${y.player.lastName}`}>
-                          <YouthPortrait playerId={y.player.id} age={y.player.age} nationality={y.player.nationality} size={48} alt={`${y.player.firstName} ${y.player.lastName}`} className="shrink-0" />
+                          <YouthPortrait playerId={y.player.id} age={y.player.age} nationality={y.player.nationality} size={48} alt="" className="shrink-0" />
                           <span><span className="block font-medium text-[var(--foreground)]">{y.player.firstName} {y.player.lastName}</span><span className="mt-1 block text-xs text-zinc-400">{observationBadge?.label ?? "No live look yet"}</span></span>
                         </button>
                       </td>
@@ -677,8 +671,8 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
           <Globe size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-          <p className="text-sm text-zinc-500">No sub-regions available.</p>
-          <p className="mt-1 text-xs text-zinc-600">
+          <p className="text-sm text-quiet">No sub-regions available.</p>
+          <p className="mt-1 text-xs text-quiet">
             Sub-regions are unlocked as you scout different areas.
           </p>
         </CardContent>
@@ -691,11 +685,11 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
       {countries.map((country) => (
         <div key={country}>
           <div className="mb-3 flex items-center gap-2">
-            <Globe size={14} className="text-zinc-500" aria-hidden="true" />
+            <Globe size={14} className="text-quiet" aria-hidden="true" />
             <h3 className="text-sm font-semibold text-zinc-300">
               {getCountryDisplayName(country)}
             </h3>
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge variant="secondary" className="text-eyebrow">
               {grouped[country].length}
             </Badge>
           </div>
@@ -707,7 +701,7 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <MapPin size={12} className="shrink-0 text-zinc-500" aria-hidden="true" />
+                    <MapPin size={12} className="shrink-0 text-quiet" aria-hidden="true" />
                     <p className="truncate text-sm font-medium text-white">
                       {sr.name}
                     </p>
@@ -718,7 +712,7 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
                     {sr.familiarity}%
                   </span>
                 </div>
-                <div className="mb-1 text-[10px] text-zinc-500">
+                <div className="mb-1 text-eyebrow text-quiet">
                   Familiarity
                 </div>
                 <Progress
@@ -755,7 +749,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
       <div>
         <h3 className="mb-3 text-sm font-semibold text-zinc-300">Upcoming & Active ({upcoming.length})</h3>
         {upcoming.length === 0 ? (
-          <p className="text-xs text-zinc-500">No discovered tournaments upcoming. Meet contacts or build regional familiarity to discover events.</p>
+          <p className="text-xs text-quiet">No discovered tournaments upcoming. Meet contacts or build regional familiarity to discover events.</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {upcoming.map(t => {
@@ -765,7 +759,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium text-zinc-100">{t.name}</CardTitle>
-                      {isActive && <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Active</Badge>}
+                      {isActive && <Badge className="bg-emerald-500/20 text-emerald-400 text-eyebrow">Active</Badge>}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-1 text-xs text-zinc-400">
@@ -809,7 +803,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
       {undiscovered.length > 0 && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-zinc-300">Undiscovered ({undiscovered.length})</h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-quiet">
             {undiscovered.length} tournament{undiscovered.length > 1 ? "s" : ""} remain undiscovered this season. Build regional familiarity and meet contacts to uncover them.
           </p>
         </div>
@@ -823,7 +817,7 @@ function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tou
             {past.map(t => (
               <div key={t.id} className="flex items-center justify-between rounded border border-zinc-700/30 bg-zinc-800/30 px-3 py-2 text-xs">
                 <span className="text-zinc-300">{t.name}</span>
-                <Badge className={t.attended ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-600/20 text-zinc-500"}>
+                <Badge className={t.attended ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-600/20 text-quiet"}>
                   {t.attended ? "Attended" : "Missed"}
                 </Badge>
               </div>
@@ -867,13 +861,13 @@ export function YouthScoutingScreen() {
   if (!gameState) return null;
   const { unsignedYouth, subRegions, legacyScore, scout } = gameState;
 
+  const evidenceIndex = buildYouthDeskEvidenceIndex(gameState);
+  const visibleAbilityObservations = [...evidenceIndex.values()].flatMap((entry) => entry.abilityObservations);
   const allYouthList = Object.values(unsignedYouth);
   const subRegionList = Object.values(subRegions);
 
   // Build sets for fast lookup
-  const observedPlayerIds = new Set(
-    Object.values(gameState.observations).map((o) => o.playerId),
-  );
+  const observedPlayerIds = new Set(evidenceIndex.keys());
   const scoutHomeCountry = getScoutHomeCountry(scout);
 
   // Visibility filter: only show youth the scout has knowledge of
@@ -909,24 +903,13 @@ export function YouthScoutingScreen() {
       .filter((r) => r.scoutId === scout.id)
       .map((r) => r.unsignedYouthId),
   );
-  const observationCountByPlayer = new Map<string, number>();
-  for (const observation of Object.values(gameState.observations)) {
-    observationCountByPlayer.set(
-      observation.playerId,
-      (observationCountByPlayer.get(observation.playerId) ?? 0) + 1,
-    );
-  }
+  const observationCountByPlayer = new Map([...evidenceIndex].map(([id, evidence]) => [id, evidence.observationCount]));
   const repeatLookCount = youthList.filter(
     (youth) => (observationCountByPlayer.get(youth.player.id) ?? 0) >= 2,
   ).length;
   const decisionReadyCount = youthList.filter((youth) => {
     if (youth.placed || reportedIds.has(youth.id)) return false;
-    const perceived = getPerceivedAbility(Object.values(gameState.observations), youth.player.id);
-    return (
-      (observationCountByPlayer.get(youth.player.id) ?? 0) >= 2 &&
-      perceived != null &&
-      (perceived.caConfidence >= 0.7 || perceived.paConfidence >= 0.7)
-    );
+    return evidenceIndex.get(youth.player.id)?.hasFirmRead ?? false;
   }).length;
 
   const handleSelectYouth = (playerId: string) => {
@@ -968,9 +951,10 @@ export function YouthScoutingScreen() {
       nationalities={nationalities}
       filterNationality={filterNationality}
       setFilterNationality={setFilterNationality}
-      observations={Object.values(gameState.observations)}
+      observations={visibleAbilityObservations}
+      observationCountByPlayer={observationCountByPlayer}
       caseByPlayerId={IS_YOUTH_EARLY_ACCESS
-        ? new Map(listYouthCases(gameState).map((item) => [item.playerId, item]))
+        ? new Map(listYouthCases(gameState, evidenceIndex).map((item) => [item.playerId, item]))
         : undefined}
     />
   );

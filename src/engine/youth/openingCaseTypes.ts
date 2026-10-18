@@ -41,6 +41,8 @@ export interface OpeningCaseProjection {
   headline: string;
   uncertainty: string;
   signalLabel: string;
+  signal: string;
+  openQuestion: string;
   questionLabel: string;
   premise?: string;
   pressure?: string;

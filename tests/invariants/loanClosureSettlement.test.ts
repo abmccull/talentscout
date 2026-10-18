@@ -4,10 +4,10 @@ import { RNG } from "@/engine/rng";
 import { generatePlayer } from "@/engine/players/generation";
 import { createScout } from "@/engine/scout/creation";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
-import { processLoanOutcomeReputation } from "@/engine/firstTeam/loanIntegration";
 import * as loans from "@/engine/world/loans";
 import { resolvePlayerMovements, type LifecycleWorldState } from "@/engine/world/playerLifecycle";
-import { settleLoanClosures, type DeferredLoanClosure } from "@/engine/world/loanClosureSettlement";
+import { projectAppliedLoanClosures } from "@/engine/core/weekly/loanClosureFeedback";
+import type { LoanClosureFeedbackInput } from "@/engine/core/weekly/loanClosureFeedback";
 import { runWeeklyLoanPhase } from "@/engine/core/weekly/tickPhases";
 import { advanceWeek, type TickResult } from "@/engine/core/gameLoop";
 
@@ -36,7 +36,6 @@ function fixture() {
   const players: Record<string, Player> = {};
   const activeLoans: LoanDeal[] = [];
   const recommendations: LoanRecommendation[] = [];
-  const prepared: DeferredLoanClosure[] = [];
   for (const index of [1, 2]) {
     const player = { ...generatePlayer(new RNG(`closure-player-${index}`), {
       position: "CM", ageRange: [24, 24], abilityRange: [40, 40], nationality: "English",
@@ -59,16 +58,23 @@ function fixture() {
     recommendations.push({ id: `recommendation-${index}`, loanDealId: deal.id, playerId: player.id,
       targetClubId: "buyer", scoutId: scout.id, week: 1, season: 2, rationale: "development",
       suggestedDuration: 5, suggestedWageContribution: 40, status: "accepted", reputationApplied: false });
-    prepared.push({ loanDealId: deal.id, recommendationId: `recommendation-${index}`,
-      feedbackMessageId: `feedback-${index}`, movementMessage: { id: `movement-${index}`,
-        week: 6, season: 2, type: "transferUpdate", title: "Proposed buy", body: "Uncommitted buy",
-        read: false, actionRequired: false, relatedId: player.id, relatedEntityType: "player" } });
+  }
+  const template = Object.values(players)[0];
+  for (let index = 0; index < 22; index++) {
+    const id = `existing-buyer-cover-${index}`;
+    players[id] = { ...template, id, age: 24, position: index < 2 ? "GK" : "CM", clubId: "buyer", contractClubId: "buyer",
+      contractExpiry: 5, onLoan: undefined, loanParentClubId: undefined, wage: 0 };
+    clubs.buyer.playerIds.push(id);
   }
   const world: LifecycleWorldState = { players, clubs, activeLoans, loanHistory: [], retiredPlayers: {},
     retiredPlayerIds: [], playerMovementHistory: [], freeAgentPool: { agents: [], lastRefreshSeason: 1,
       totalReleasedThisSeason: 0, totalSignedThisSeason: 0, totalRetiredThisSeason: 0 } };
-  const input = { scout, recommendations, prepared, players, clubs, inbox: [], week: 6, season: 2 };
+  const input = { scout, recommendations, players, clubs, previousLoanHistory: [], week: 6, season: 2 };
   return { world, input };
+}
+
+function settle(input: LoanClosureFeedbackInput) {
+  return projectAppliedLoanClosures(input, new RNG("applied-closure-test"));
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -81,19 +87,19 @@ describe("applied loan closure accountability", () => {
       outcome: "buy-option-exercised",
     })), 6, 2);
     expect(resolution.applied.map((movement) => movement.type)).toEqual(["loanBuyOption", "loanReturn"]);
-    const settled = settleLoanClosures({ ...input, players: resolution.state.players,
-      applied: resolution.applied, loanHistory: resolution.state.loanHistory });
+    const settled = settle({ ...input, players: resolution.state.players,
+      movements: resolution.applied, loanHistory: resolution.state.loanHistory });
     expect(settled.reputationDelta).toBe(13);
     expect(settled.xpAward).toBe(80);
-    expect(settled.recommendations.map((item) => item.outcome)).toEqual(["buy-option-exercised", "successful"]);
-    expect(settled.recommendations.every((item) => item.status === "completed" && item.reputationApplied)).toBe(true);
-    expect(settled.messages.map((message) => message.id)).toEqual(["movement-1", "feedback-1", "movement-2", "feedback-2"]);
+    expect(settled.updatedRecommendations.map((item) => item.outcome)).toEqual(["buy-option-exercised", "successful"]);
+    expect(settled.updatedRecommendations.every((item) => item.status === "completed" && item.reputationApplied)).toBe(true);
+    expect(settled.messages.map((message) => message.id)).toEqual(resolution.applied.flatMap((movement) => [`loan-closure-${movement.id}`, `loan-closure-feedback-${movement.id}`]));
     expect(settled.messages[2].title).toMatch(/^Loan Return:/);
     expect(settled.messages[3].body).not.toContain("option to buy");
     expect(settled.messages[3].body).toContain("(+5 reputation, +30 XP)");
-    const replay = settleLoanClosures({ ...input, players: resolution.state.players,
-      recommendations: settled.recommendations, inbox: settled.messages,
-      applied: resolution.applied, loanHistory: resolution.state.loanHistory });
+    const replay = settle({ ...input, players: resolution.state.players,
+      recommendations: settled.updatedRecommendations, previousLoanHistory: resolution.state.loanHistory,
+      movements: resolution.applied, loanHistory: resolution.state.loanHistory });
     expect(replay).toMatchObject({ reputationDelta: 0, xpAward: 0, messages: [] });
   });
 
@@ -105,14 +111,14 @@ describe("applied loan closure accountability", () => {
       { type: "retirement", playerId: deal.playerId },
     ], 6, 2);
     expect(retired.applied.map((event) => event.type)).toEqual(["retirement"]);
-    const termination = settleLoanClosures({ ...input, applied: retired.applied, loanHistory: retired.state.loanHistory });
+    const termination = settle({ ...input, movements: retired.applied, loanHistory: retired.state.loanHistory });
     expect(termination).toMatchObject({ reputationDelta: 0, xpAward: 0, messages: [] });
-    expect(termination.recommendations[0]).toMatchObject({ status: "completed", outcome: "terminated", reputationApplied: true });
-    expect(termination.recommendations[1]).toEqual(input.recommendations[1]);
+    expect(termination.updatedRecommendations[0]).toMatchObject({ status: "completed", outcome: "terminated", reputationApplied: true });
+    expect(termination.updatedRecommendations[1]).toEqual(input.recommendations[1]);
     const returned = resolvePlayerMovements(world, [{ type: "loanEnd", playerId: deal.playerId,
       dealId: deal.id, resolution: "return", outcome: "successful" }], 6, 2);
-    expect(settleLoanClosures({ ...input, applied: returned.applied, loanHistory: [] }).messages).toEqual([]);
-    expect(settleLoanClosures({ ...input, applied: [], loanHistory: returned.state.loanHistory }).messages).toEqual([]);
+    expect(settle({ ...input, movements: returned.applied, loanHistory: [] }).messages).toEqual([]);
+    expect(settle({ ...input, movements: [], loanHistory: returned.state.loanHistory }).messages).toEqual([]);
   });
 
   it("settles a real recall, while another scout receives no accountability reward", () => {
@@ -120,17 +126,17 @@ describe("applied loan closure accountability", () => {
     const deal = world.activeLoans[0];
     const recalled = resolvePlayerMovements(world, [{ type: "loanEnd", playerId: deal.playerId,
       dealId: deal.id, resolution: "recall" }], 5, 2);
-    const own = settleLoanClosures({ ...input, applied: recalled.applied, loanHistory: recalled.state.loanHistory });
+    const own = settle({ ...input, movements: recalled.applied, loanHistory: recalled.state.loanHistory });
     expect(own).toMatchObject({ reputationDelta: -1, xpAward: 5 });
-    expect(own.recommendations[0].outcome).toBe("recalled-early");
-    const other = settleLoanClosures({ ...input,
+    expect(own.updatedRecommendations[0].outcome).toBe("recalled-early");
+    const other = settle({ ...input,
       recommendations: input.recommendations.map((item) => ({ ...item, scoutId: "someone-else" })),
-      applied: recalled.applied, loanHistory: recalled.state.loanHistory });
+      movements: recalled.applied, loanHistory: recalled.state.loanHistory });
     expect(other).toMatchObject({ reputationDelta: 0, xpAward: 0 });
     expect(other.messages).toHaveLength(1);
   });
 
-  it("reserves the legacy message IDs and RNG continuation without prepaying closure rewards", () => {
+  it("preserves the proposal RNG continuation without prepaying closure rewards", () => {
     const { world, input } = fixture();
     const state = { ...world, scout: input.scout, loanRecommendations: input.recommendations,
       currentWeek: 6, currentSeason: 2, fixtures: {} } as GameState;
@@ -139,12 +145,8 @@ describe("applied loan closure accountability", () => {
     const referenceRng = new RNG("closure-rng-parity");
     const updated = loans.processLoanPerformance(state, 6, 2, [], 46);
     const returns = loans.processLoanReturns({ ...state, activeLoans: updated }, 6, 2, referenceRng, 46);
-    const feedback = returns.deals.map((deal) => processLoanOutcomeReputation(input.scout,
-      input.recommendations.find((item) => item.loanDealId === deal.id), deal.outcome!, deal,
-      state.players[deal.playerId], 6, 2, referenceRng));
     expect(actualRng.next()).toBe(referenceRng.next());
-    expect(phase.deferredLoanClosures.map((closure) => closure.movementMessage?.id)).toEqual(returns.messages.map((message) => message.id));
-    expect(phase.deferredLoanClosures.map((closure) => closure.feedbackMessageId)).toEqual(feedback.map((reward) => reward.message.id));
+    expect(phase.loanReturnResult).toEqual(returns);
     expect(phase).toMatchObject({ loanOutcomeReputation: 0, loanOutcomeXp: 0, loanMessages: [],
       updatedLoanRecommendations: input.recommendations });
   });
@@ -174,7 +176,7 @@ describe("applied loan closure accountability", () => {
       formMomentumUpdates: [], satisfactionDeltas: [], loanReturns: world.activeLoans.map((deal) =>
         ({ ...deal, status: "completed", outcome: "buy-option-exercised" })),
       updatedActiveLoans: world.activeLoans, updatedLoanRecommendations: input.recommendations,
-      deferredLoanClosures: input.prepared, loanOutcomeXp: 15 };
+      loanOutcomeXp: 15 };
     const advanced = advanceWeek(state, tick);
     expect(advanced.activeLoans).toEqual([]);
     expect(advanced.loanRecommendations?.map((item) => item.status)).toEqual(["completed", "completed"]);
@@ -182,12 +184,12 @@ describe("applied loan closure accountability", () => {
     const expectedScout = applyScoutSkillXp(input.scout, { potentialAssessment: 95 });
     expect(advanced.scout.skillXp).toEqual(expectedScout.skillXp);
     expect(advanced.scout.skills).toEqual(expectedScout.skills);
-    expect(advanced.inbox.find((message) => message.id === "movement-2")?.title).toMatch(/^Loan Return:/);
-    expect(advanced.inbox.find((message) => message.id === "feedback-2")?.body).toContain("(+5 reputation, +30 XP)");
+    expect(advanced.inbox.find((message) => message.id.startsWith("loan-closure-") && message.relatedId === world.activeLoans[1].playerId && message.type === "transferUpdate")?.title).toMatch(/^Loan Return:/);
+    expect(advanced.inbox.find((message) => message.id.startsWith("loan-closure-feedback-") && message.relatedId === world.activeLoans[1].playerId)?.body).toContain("(+5 reputation, +30 XP)");
     const retired = advanceWeek(state, { ...tick,
       playerRetirements: { retiredPlayerIds: [world.activeLoans[0].playerId], outlooks: {} } });
     expect(retired.loanRecommendations?.[0]).toMatchObject({ status: "completed", outcome: "terminated", reputationApplied: true });
-    expect(retired.inbox.some((message) => message.id === "feedback-1" || message.id === "movement-1")).toBe(false);
+    expect(retired.inbox.some((message) => message.id.startsWith("loan-closure-") && message.relatedId === world.activeLoans[0].playerId)).toBe(false);
     expect(retired.scout.reputation).toBe(input.scout.reputation + 8);
   }, 60_000);
 });

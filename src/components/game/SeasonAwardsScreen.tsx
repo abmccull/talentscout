@@ -33,6 +33,9 @@ function scoutAwardCopy(award: SeasonAward) {
 }
 
 function leagueAwardCopy(award: LeagueAward, playerName: string) {
+  if (award.evidenceSource === "recordedSeasonFacts") {
+    return { name: award.name, record: award.stat, description: award.description };
+  }
   // Preserve award IDs and results while keeping hidden ability and simulated
   // proxies out of the player's evidence record.
   switch (award.id) {

@@ -1,3 +1,4 @@
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { describe, expect, it } from "vitest";
 import type { AlumniRecord, LoanDeal, Player, PlayerMatchRating } from "@/engine/core/types";
 import { buildStandingsByLeague } from "@/engine/core/standings";
@@ -199,7 +200,7 @@ describe("abstract competition cross-consumer authority", () => {
       clubId: player.clubId,
     });
     expect(alumniSummary.seasonStats[0].appearances).not.toBe(
-      player.seasonRatings[0].appearances,
+      expandSeasonRating(player.seasonRatings[0]).appearances,
     );
   });
 });

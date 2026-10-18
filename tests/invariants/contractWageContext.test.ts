@@ -19,10 +19,13 @@ describe("contract wage context", () => {
     const player = { ...generatePlayer(new RNG("small-club-wage"), { position: "CM", ageRange: [23, 23],
       abilityRange: [40, 40], nationality: "English", clubId: "club", clubReputation: 13, currentSeason: 1 }),
       wage: 1_000, contractExpiry: 2, form: 0, morale: 7 };
+    // The club must fund its actual playing squad as well as this renewal.
+    const teammates = Array.from({ length: 17 }, (_, index) => ({ ...player,
+      id: `teammate-${index}`, contractExpiry: 5, position: index === 0 ? "GK" as const : "CM" as const }));
     const club: Club = { id: "club", name: "Local FC", shortName: "LFC", managerId: "manager", scoutingPhilosophy: "academyFirst",
-      reputation: 13, budget: 100_000, weeklyWageBudget: 1_500,
-      playerIds: [player.id], academyPlayerIds: [], leagueId: "league", youthAcademyRating: 5 };
-    const state = { players: { [player.id]: player }, clubs: { club }, currentSeason: 2, currentWeek: 46,
+      reputation: 13, budget: 100_000, weeklyWageBudget: 19_000,
+      playerIds: [player.id, ...teammates.map(teammate => teammate.id)], academyPlayerIds: [], leagueId: "league", youthAcademyRating: 5 };
+    const state = { players: { [player.id]: player, ...Object.fromEntries(teammates.map(teammate => [teammate.id, teammate])) }, clubs: { club }, currentSeason: 2, currentWeek: 46,
       leagues: { league: { country: "england" } }, fixtures: {}, matchRatings: {}, managerProfiles: {} } as unknown as GameState;
     const renewals = Array.from({ length: 100 }, (_, index) => processContractExpiries(state, new RNG(`renewal-${index}`)))
       .flatMap((result) => result.renewals);

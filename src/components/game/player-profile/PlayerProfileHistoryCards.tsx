@@ -1,3 +1,7 @@
+import { expandPlayerInjuryHistory } from "../../../engine/players/playerStateArchive";
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
 import { AlertTriangle, CalendarPlus, HeartPulse, TrendingUp } from "lucide-react";
 import type { DisciplinaryRecord, Player } from "@/engine/core/types";
 import { Badge } from "@/components/ui/badge";
@@ -39,8 +43,8 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 export function InjuryStatusCard({ player }: { player: Player }) {
   const currentInjury = player.currentInjury;
-  const history = player.injuryHistory;
-  const injuries = history?.injuries ?? [];
+  const history = expandPlayerInjuryHistory(player.injuryHistory, player.id);
+  const injuries = (history?.injuries ?? []).map(entry => expandHistoricalInjury(entry, player.id));
   const totalWeeksMissed = history?.totalWeeksMissed ?? 0;
   const recurringConcern = hasObservableRecurringInjuryConcern(history);
 
@@ -143,8 +147,8 @@ export function InjuryStatusCard({ player }: { player: Player }) {
 }
 
 export function FormPerformanceCard({ player }: { player: Player }) {
-  const recentRatings = player.recentMatchRatings ?? [];
-  const seasonRatings = player.seasonRatings ?? [];
+  const recentRatings = (player.recentMatchRatings ?? []).map(expandMatchFormEntry);
+  const seasonRatings = (player.seasonRatings ?? []).map(expandSeasonRating);
   const form = formLabel(player.form);
 
   const avgRating = recentRatings.length > 0
@@ -223,26 +227,31 @@ export function FormPerformanceCard({ player }: { player: Player }) {
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
               Season History
             </p>
-            <div className="text-[10px]">
-              <div className="mb-1 grid grid-cols-6 gap-1 font-medium text-zinc-600">
-                <span>Season</span>
-                <span className="text-right">Avg</span>
-                <span className="text-right">Apps</span>
-                <span className="text-right">Goals</span>
-                <span className="text-right">Ast</span>
-                <span className="text-right">CS</span>
-              </div>
-              {seasonRatings.map((seasonRating) => (
-                <div key={seasonRating.season} className="grid grid-cols-6 gap-1 text-zinc-300">
-                  <span>{seasonRating.season}</span>
-                  <span className="text-right font-bold">{seasonRating.avgRating.toFixed(1)}</span>
-                  <span className="text-right">{seasonRating.appearances}</span>
-                  <span className="text-right">{seasonRating.goals}</span>
-                  <span className="text-right">{seasonRating.assists}</span>
-                  <span className="text-right">{seasonRating.cleanSheets > 0 ? seasonRating.cleanSheets : "-"}</span>
-                </div>
-              ))}
-            </div>
+            <table className="w-full table-fixed text-xs leading-6 tabular-nums">
+              <caption className="sr-only">Season performance history</caption>
+              <thead>
+                <tr className="font-medium text-zinc-400">
+                  <th scope="col" className="pb-1 text-left">Season</th>
+                  <th scope="col" className="pb-1 text-right" aria-label="Average rating">Avg</th>
+                  <th scope="col" className="pb-1 text-right" aria-label="Appearances">Apps</th>
+                  <th scope="col" className="pb-1 text-right">Goals</th>
+                  <th scope="col" className="pb-1 text-right" aria-label="Assists">Ast</th>
+                  <th scope="col" className="pb-1 text-right" aria-label="Clean sheets">CS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {seasonRatings.map((seasonRating) => (
+                  <tr key={seasonRating.season} className="text-zinc-300">
+                    <th scope="row" className="text-left font-normal">{seasonRating.season}</th>
+                    <td className="text-right font-bold">{seasonRating.avgRating.toFixed(1)}</td>
+                    <td className="text-right">{seasonRating.appearances}</td>
+                    <td className="text-right">{seasonRating.goals}</td>
+                    <td className="text-right">{seasonRating.assists}</td>
+                    <td className="text-right">{seasonRating.cleanSheets > 0 ? seasonRating.cleanSheets : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </CardContent>

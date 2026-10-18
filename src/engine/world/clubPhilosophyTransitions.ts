@@ -5,6 +5,7 @@ import type {
   ScoutingPhilosophy,
 } from "@/engine/core/types";
 import type { ClubSeasonHistory } from "@/engine/world/worldHistory";
+import { expandClubSeasonHistory } from "./clubSeasonArchive";
 import {
   getWorldConditionDefinition,
   type WorldConditionDefinition,
@@ -245,7 +246,8 @@ function getCompletedSeasonClubHistory(
   const seasons = state.worldHistory?.seasons ?? [];
   const seasonRecord = seasons.find((season) => season.season === targetSeason)
     ?? seasons[seasons.length - 1];
-  return seasonRecord?.clubs.find((club) => club.clubId === clubId);
+  const entry = seasonRecord?.clubs.find((club) => club.clubId === clubId);
+  return entry ? expandClubSeasonHistory(entry) : undefined;
 }
 
 function getClubCountry(

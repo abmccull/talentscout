@@ -5,6 +5,8 @@
  * All functions are pure: (state, rng) => newState.
  */
 
+import { isSubmissionAccuracy } from "@/engine/scout/accuracyHistory";
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type { RNG } from "../rng/index";
 import type {
   FinancialRecord,
@@ -110,15 +112,15 @@ const ADJACENT_POSITIONS: Record<Position, Position[]> = {
 // ---------------------------------------------------------------------------
 
 /**
- * Compute a scout's accuracy score from their recent prediction history.
+ * Compute accuracy only from verified submission-time comparisons.
  * Same formula as performancePulse.ts: 100 - |predictedCA - actualCA| * 2,
- * averaged over the last 20 entries. Returns 50 (neutral) when no data.
+ * averaged over the last 20 verified entries. Unknown legacy dates are neutral.
  */
 function computeAccuracyScore(
-  accuracyHistory: { predictedCA: number; actualCA: number }[] | undefined,
+  accuracyHistory: Scout["accuracyHistory"],
 ): number {
-  if (!accuracyHistory || accuracyHistory.length === 0) return 50;
-  const recent = accuracyHistory.slice(-20);
+  const recent = (accuracyHistory ?? []).filter(isSubmissionAccuracy).slice(-20);
+  if (recent.length === 0) return 50;
   return (
     recent.reduce((sum, a) => {
       const diff = Math.abs(a.predictedCA - a.actualCA);
@@ -337,9 +339,19 @@ export function listReport(
     3,
     seasonLength,
   );
-  const actionSequence = (finances.actionSequence ?? 0) + 1;
+  let actionSequence = finances.actionSequence ?? 0;
+  if (!Number.isSafeInteger(actionSequence) || actionSequence < 0) return finances;
+  const existingIds = new Set(finances.reportListings.map(listing => listing.id));
+  let listingId: string;
+  do {
+    if (actionSequence >= Number.MAX_SAFE_INTEGER) return finances;
+    actionSequence++;
+    listingId = `listing_s${season}w${week}_a${actionSequence}`;
+  } while (existingIds.has(listingId));
+  // The report link is stored explicitly below. Repeating its long identity in
+  // the listing ID amplified every downstream bid, inbox and delivery record.
   const listing: ReportListing = {
-    id: `listing_${reportId}_s${season}w${week}_a${actionSequence}`,
+    id: listingId,
     reportId,
     caseId,
     price,
@@ -358,6 +370,17 @@ export function listReport(
     actionSequence,
     reportListings: [...finances.reportListings, listing],
   };
+}
+
+/** A structured report needs an evidenced finding before clubs bid for it. */
+export function hasReportBuyerEvidence(report: Pick<ScoutReport, "evidenceAssessment" | "decisionReceipt">): boolean {
+  return !isPrivateScoutingDecision(report) && (!report.evidenceAssessment
+    || (report.evidenceAssessment.claims ?? []).some((claim) => claim.support === "supported"));
+}
+
+/** Monitoring remains private by default; the scout may still explicitly list it. */
+export function shouldPromptReportListing(report: Pick<ScoutReport, "evidenceAssessment" | "recommendedAction" | "decisionReceipt">): boolean {
+  return report.recommendedAction !== "monitor" && hasReportBuyerEvidence(report);
 }
 
 /**
@@ -452,6 +475,7 @@ function generateBidsForListing(
   } = { valueMultiplier: 1, demandMultiplier: 1 },
   marketTemperature: MarketTemperature = "normal",
 ): { bids: MarketplaceBid[]; inboxMessages: InboxMessage[] } {
+  if (!hasReportBuyerEvidence(report)) return { bids: [], inboxMessages: [] };
   const newBids: MarketplaceBid[] = [];
   const messages: InboxMessage[] = [];
 
@@ -507,8 +531,8 @@ function generateBidsForListing(
 
     // Bid probability
     const availableScoutingBudget = getClubScoutingBudget(club);
-    // The seller can negotiate below fair value, but an inflated ask cannot
-    // increase a club's valuation or hide a sensible onboarding counteroffer.
+    // A seller can negotiate below assessed value, but raising the ask cannot
+    // increase the club's valuation or hide a sensible first counteroffer.
     const assessedValue = calculateReportPrice(report, scout, club, listing.isExclusive, marketTemperature);
     const negotiationBase = Math.min(listing.price, assessedValue);
     const affordability = Math.min(1, availableScoutingBudget / (negotiationBase * 5));
@@ -545,8 +569,8 @@ function generateBidsForListing(
       negotiationBase * needMult * budgetMult * priorityMult * competitionMult
       * repeatBuyerMult * accuracyMult * noise * marketContext.valueMultiplier,
     );
-    // Preserve the existing bargaining range, anchored to report quality,
-    // reputation, club level and market demand rather than an arbitrary ask.
+    // Preserve bargaining premiums within a ceiling based on report quality,
+    // scout reputation, club level, market context and the procurement budget.
     const reservationValue = Math.min(availableScoutingBudget,
       Math.round(assessedValue * 2.5 * marketContext.valueMultiplier));
     amount = Math.max(
@@ -635,8 +659,8 @@ function generateBidsForListing(
         // 8% base chance
         if (!rng.chance(Math.min(0.16, 0.08 * marketContext.demandMultiplier))) continue;
 
-        // Preserve the 2-3x exclusivity premium on independently assessed
-        // nonexclusive value; raising the listing ask cannot raise this ceiling.
+        // Apply the exclusivity premium to independently assessed nonexclusive
+        // value, so an arbitrary asking price cannot inflate an upgrade offer.
         const upgradeMult = 2.0 + rng.next(); // 2.0 - 3.0
         const assessedValue = calculateReportPrice(report, scout, club, false, marketTemperature);
         const upgradeAmount = Math.min(getClubScoutingBudget(club), Math.round(
@@ -727,7 +751,7 @@ export function processMarketplaceBids(
 
   for (const listing of activeListings) {
     const report = reports[listing.reportId];
-    if (!report || report.recommendedAction === "pass") continue;
+    if (!report) continue;
     if (isGameDateAtOrAfter(
       { week, season },
       { week: listing.biddingEndsWeek, season: listing.biddingEndsSeason },

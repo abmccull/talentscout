@@ -1,3 +1,4 @@
+import { getWeeklySimulationGeneration } from "@/lib/weeklySimulationLifecycle";
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
@@ -249,11 +250,11 @@ export function createWeekSimulationActions(
         narrative = `${narrative} (Day ${occurrenceIndex + 1} of ${totalDays})`;
       }
 
-      // Get total XP from the activity type, then split across days
+      // Preview base XP; authoritative weekly processing applies modifiers.
       const skillXp = ACTIVITY_SKILL_XP_MAP[activity.type];
       let xpGained: Partial<Record<string, number>> = {};
       if (skillXp && totalDays > 1) {
-        // Split XP exactly across days so day totals match weekly totals.
+        // Split the unadjusted activity award exactly across its days.
         const split: Partial<Record<string, number>> = {};
         for (const [skill, xp] of Object.entries(skillXp)) {
           const base = Math.floor(xp / totalDays);
@@ -351,6 +352,7 @@ export function createWeekSimulationActions(
       // Scouting venues draw from the persistent pool. New prospects enter at
       // the season boundary, so simulating an ordinary week cannot inflate it.
       const newObservations: Record<string, Observation> = {};
+      const observationEffects: NonNullable<NonNullable<WeekSimulationState["youthVenueResults"]>["observationEffects"]> = {};
       const newDiscoveries: DiscoveryRecord[] = [];
       let totalObservations = 0;
       let totalDiscoveries = 0;
@@ -416,6 +418,9 @@ export function createWeekSimulationActions(
             );
 
             newObservations[observation.id] = observation;
+            observationEffects[observation.id] = {
+              youthId: youth.id, buzzIncrease: result.buzzIncrease, visibilityIncrease: result.visibilityIncrease,
+            };
             updatedUnsignedYouth[youth.id] = result.updatedYouth;
             totalObservations++;
 
@@ -464,6 +469,7 @@ export function createWeekSimulationActions(
 
       if (totalObservations > 0) {
         youthVenueResults = {
+          observationEffects,
           updatedUnsignedYouth,
           newObservations,
           newDiscoveries,
@@ -764,14 +770,11 @@ export function createWeekSimulationActions(
         },
       });
       // Trigger the actual week advancement
-      const sourceSeason = get().gameState?.currentSeason;
-      const sourceWeek = get().gameState?.currentWeek;
-      await get().advanceWeekAsync();
-      const committedState = get().gameState;
-      const advanced = committedState == null
-        || committedState.currentSeason !== sourceSeason
-        || committedState.currentWeek !== sourceWeek;
-      if (!advanced) return;
+      const generation = getWeeklySimulationGeneration();
+      const sourceSimulation = get().weekSimulation;
+      const result = await get().advanceWeekAsync();
+      if (result !== "committed" || generation !== getWeeklySimulationGeneration()
+        || (get().weekSimulation !== null && get().weekSimulation !== sourceSimulation)) return;
       const { currentScreen } = get();
       if (currentScreen === "weekSimulation") {
         set({ weekSimulation: null, currentScreen: "calendar" });
@@ -813,14 +816,11 @@ export function createWeekSimulationActions(
     });
 
     // Skip to end and run the full advanceWeek
-    const sourceSeason = get().gameState?.currentSeason;
-    const sourceWeek = get().gameState?.currentWeek;
-    await get().advanceWeekAsync();
-    const committedState = get().gameState;
-    const advanced = committedState == null
-      || committedState.currentSeason !== sourceSeason
-      || committedState.currentWeek !== sourceWeek;
-    if (!advanced) return;
+    const generation = getWeeklySimulationGeneration();
+    const sourceSimulation = get().weekSimulation;
+    const result = await get().advanceWeekAsync();
+    if (result !== "committed" || generation !== getWeeklySimulationGeneration()
+      || (get().weekSimulation !== null && get().weekSimulation !== sourceSimulation)) return;
     const { currentScreen } = get();
     if (currentScreen === "weekSimulation") {
       set({ weekSimulation: null, currentScreen: "calendar" });

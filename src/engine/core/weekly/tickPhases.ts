@@ -1,4 +1,3 @@
-import { processLoanOutcomeReputation } from "../../firstTeam/loanIntegration";
 import { processWeeklyGossip } from "../../network/gossip";
 import { processWeeklyReferrals } from "../../network/referrals";
 import { processWeeklyContactDecay } from "../../network/contacts";
@@ -7,7 +6,6 @@ import {
   revokeAccessAgreements,
 } from "../../consequences/accessAgreements";
 import {
-  evaluateLoanOutcome,
   processAILoanDeals,
   processLoanPerformance,
   processLoanRecalls,
@@ -18,7 +16,6 @@ import { getSeasonLength } from "../gameDate";
 import type {
   GameState,
   LoanDeal,
-  LoanOutcome,
   LoanRecommendation,
 } from "../types";
 import type {
@@ -27,7 +24,6 @@ import type {
   SimulatedFixture,
 } from "./types";
 import type { RNG } from "../../rng/index";
-import type { DeferredLoanClosure } from "../../world/loanClosureSettlement";
 
 export interface WeeklyLoanPhaseResult {
   updatedActiveLoans: LoanDeal[];
@@ -47,7 +43,6 @@ export interface WeeklyLoanPhaseResult {
   loanOutcomeReputation: number;
   loanOutcomeXp: number;
   loanMessages: GameState["inbox"];
-  deferredLoanClosures: DeferredLoanClosure[];
 }
 
 export function runWeeklyLoanPhase(
@@ -91,61 +86,12 @@ export function runWeeklyLoanPhase(
     ? processLoanRecalls(loanState, state.currentWeek, state.currentSeason, rng)
     : { deals: [], messages: [] };
 
+  // Closure feedback waits for the canonical lifecycle to approve ownership
+  // and funds. Loan-start messages/rewards retain their existing phase.
   const updatedLoanRecommendations = loanDealResult.updatedRecommendations;
   const loanOutcomeReputation = 0;
   const loanOutcomeXp = loanDealResult.xpAward;
   const loanMessages = [...loanDealResult.messages];
-  const deferredLoanClosures: DeferredLoanClosure[] = [];
-  const closedLoanIds = new Set<string>();
-  const loanClosures: Array<{ deal: LoanDeal; outcome: LoanOutcome }> = [];
-  for (const deal of loanReturnResult.deals) {
-    let outcome = deal.outcome ?? evaluateLoanOutcome(deal, activeSeasonLength);
-    if (
-      outcome === "buy-option-exercised" &&
-      (deal.buyOptionFee === undefined ||
-        (state.clubs[deal.loanClubId]?.budget ?? 0) < deal.buyOptionFee)
-    ) {
-      outcome = evaluateLoanOutcome(
-        { ...deal, buyOptionFee: undefined },
-        activeSeasonLength,
-      );
-    }
-    loanClosures.push({ deal, outcome });
-    closedLoanIds.add(deal.id);
-  }
-  for (const deal of loanRecallResult.deals) {
-    if (!closedLoanIds.has(deal.id)) {
-      loanClosures.push({ deal, outcome: "recalled-early" });
-      closedLoanIds.add(deal.id);
-    }
-  }
-  for (const { deal, outcome } of loanClosures) {
-    const preparedMessage = [...loanReturnResult.messages, ...loanRecallResult.messages]
-      .find((message) => message.relatedId === deal.playerId);
-    const closure: DeferredLoanClosure = {
-      loanDealId: deal.id,
-      movementMessage: preparedMessage,
-    };
-    deferredLoanClosures.push(closure);
-    const recommendation = updatedLoanRecommendations.find(
-      (item) => item.loanDealId === deal.id && !item.reputationApplied,
-    );
-    if (!recommendation || recommendation.scoutId !== state.scout.id) continue;
-    const reward = processLoanOutcomeReputation(
-      state.scout,
-      recommendation,
-      outcome,
-      deal,
-      state.players[deal.playerId],
-      state.currentWeek,
-      state.currentSeason,
-      rng,
-    );
-    // Reserve the same feedback ID (and RNG draws) as before, without settling
-    // a proposal whose purchase or return can still lose during application.
-    closure.recommendationId = recommendation.id;
-    closure.feedbackMessageId = reward.message.id;
-  }
 
   return {
     updatedActiveLoans,
@@ -156,7 +102,6 @@ export function runWeeklyLoanPhase(
     loanOutcomeReputation,
     loanOutcomeXp,
     loanMessages,
-    deferredLoanClosures,
   };
 }
 

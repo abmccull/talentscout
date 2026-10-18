@@ -1,0 +1,298 @@
+{
+  "schema": "http-cache-integration-cases-v1",
+  "status": "frozen-before-policy-fix",
+  "entryWriteWaitMs": 2000,
+  "childWholeDeadlineMs": 10000,
+  "diagnosticOptions": {
+    "retry": {
+      "limit": 0
+    },
+    "followRedirect": false,
+    "maxRedirects": 0,
+    "responseType": "buffer",
+    "throwHttpErrors": true,
+    "cacheOptionsStrictTtlOrMaxTtlOverride": false
+  },
+  "cases": [
+    {
+      "id": "HC01",
+      "purpose": "cookie-premise-control",
+      "shared": true,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "max-age=0",
+          "age": "120",
+          "set-cookie": "fixture=A"
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 200,
+        "body": "B",
+        "headers": {
+          "cache-control": "max-age=0",
+          "age": "0",
+          "set-cookie": "fixture=B"
+        }
+      },
+      "directives": {
+        "max-age": "0"
+      },
+      "expect": {
+        "base": "hit-A",
+        "candidate": "hit-A"
+      },
+      "requiredReproduction": false
+    },
+    {
+      "id": "HC02",
+      "purpose": "ordinary-stale-permission",
+      "shared": true,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, max-age=0",
+          "age": "120"
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 200,
+        "body": "B",
+        "headers": {
+          "cache-control": "public, max-age=0",
+          "age": "0"
+        }
+      },
+      "directives": {
+        "public": true,
+        "max-age": "0"
+      },
+      "expect": {
+        "base": "hit-A",
+        "candidate": "hit-A"
+      },
+      "requiredReproduction": false
+    },
+    {
+      "id": "HC03",
+      "purpose": "response-no-cache-private-consumer",
+      "shared": false,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "no-cache, max-age=3600",
+          "age": "120",
+          "etag": "\"A\""
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 200,
+        "body": "B",
+        "headers": {
+          "cache-control": "no-cache, max-age=3600",
+          "age": "0",
+          "etag": "\"B\""
+        }
+      },
+      "directives": {
+        "no-cache": true,
+        "max-age": "3600"
+      },
+      "expect": {
+        "base": "hit-A",
+        "candidate": "validated-B"
+      },
+      "requiredReproduction": true
+    },
+    {
+      "id": "HC04",
+      "purpose": "shared-proxy-revalidate",
+      "shared": true,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, max-age=0, proxy-revalidate",
+          "age": "120",
+          "etag": "\"A\""
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 200,
+        "body": "B",
+        "headers": {
+          "cache-control": "public, max-age=0, proxy-revalidate",
+          "age": "0",
+          "etag": "\"B\""
+        }
+      },
+      "directives": {
+        "public": true,
+        "max-age": "0",
+        "proxy-revalidate": true
+      },
+      "expect": {
+        "base": "hit-A",
+        "candidate": "validated-B"
+      },
+      "requiredReproduction": true
+    },
+    {
+      "id": "HC05",
+      "purpose": "zero-valued-shared-s-maxage",
+      "shared": true,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, max-age=3600, s-maxage=0",
+          "age": "120",
+          "etag": "\"A\""
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 200,
+        "body": "B",
+        "headers": {
+          "cache-control": "public, max-age=3600, s-maxage=0",
+          "age": "0",
+          "etag": "\"B\""
+        }
+      },
+      "directives": {
+        "public": true,
+        "max-age": "3600",
+        "s-maxage": "0"
+      },
+      "expect": {
+        "base": "hit-A",
+        "candidate": "validated-B"
+      },
+      "requiredReproduction": true
+    },
+    {
+      "id": "HC06",
+      "purpose": "existing-must-revalidate-error-control",
+      "shared": true,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, max-age=0, must-revalidate",
+          "age": "120",
+          "etag": "\"A\""
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 503,
+        "body": "origin-unavailable",
+        "headers": {
+          "cache-control": "no-store"
+        }
+      },
+      "directives": {
+        "public": true,
+        "max-age": "0",
+        "must-revalidate": true
+      },
+      "expect": {
+        "base": "http-error-503",
+        "candidate": "http-error-503"
+      },
+      "requiredReproduction": false
+    },
+    {
+      "id": "HC07",
+      "purpose": "private-shared-directive-control",
+      "shared": false,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, max-age=0, proxy-revalidate, s-maxage=0",
+          "age": "120"
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 200,
+        "body": "B",
+        "headers": {
+          "cache-control": "public, max-age=0, proxy-revalidate, s-maxage=0",
+          "age": "0"
+        }
+      },
+      "directives": {
+        "public": true,
+        "max-age": "0",
+        "proxy-revalidate": true,
+        "s-maxage": "0"
+      },
+      "expect": {
+        "base": "hit-A",
+        "candidate": "hit-A"
+      },
+      "requiredReproduction": false
+    },
+    {
+      "id": "HC08",
+      "purpose": "successful-no-cache-304-validation",
+      "shared": true,
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, no-cache, max-age=3600",
+          "age": "0",
+          "etag": "\"A\"",
+          "x-fixture-revision": "1"
+        }
+      },
+      "secondRequest": {
+        "cache-control": "max-stale=300"
+      },
+      "secondOrigin": {
+        "status": 304,
+        "body": "",
+        "headers": {
+          "age": "0",
+          "etag": "\"A\"",
+          "x-fixture-revision": "2"
+        }
+      },
+      "directives": {
+        "public": true,
+        "no-cache": true,
+        "max-age": "3600"
+      },
+      "expect": {
+        "base": "hit-A",
+        "candidate": "validated-304-A"
+      },
+      "requiredReproduction": true
+    }
+  ]
+}

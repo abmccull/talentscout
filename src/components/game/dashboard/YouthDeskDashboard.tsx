@@ -134,12 +134,19 @@ export function YouthDeskDashboard({
               scheduledSlots={scheduledSlots}
               onPrimaryAction={onPrimaryAction}
               onSecondaryAction={
-                youthDeskAction.kind === "planner"
-                  ? undefined
+                (youthDeskAction.kind === "planner" || youthDeskAction.kind === "watch")
+                  ? activeCaseModel.playerId
+                    ? () => {
+                      selectPlayer(activeCaseModel.playerId!);
+                      setScreen("playerProfile");
+                    }
+                    : undefined
                   : () => setScreen("calendar")
               }
               secondaryLabel={
-                youthDeskAction.kind === "planner" ? undefined : "Review itinerary"
+                (youthDeskAction.kind === "planner" || youthDeskAction.kind === "watch")
+                  ? activeCaseModel.playerId ? "Open dossier" : undefined
+                  : "Review itinerary"
               }
               asideContent={
                 !firstHour && currentCareerEra ? (

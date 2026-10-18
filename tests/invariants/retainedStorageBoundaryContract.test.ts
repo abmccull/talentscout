@@ -1,3 +1,4 @@
+import { expandPlayerInjuryHistory, compactPlayerInjuryHistory } from "@/engine/players/playerStateArchive";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { createDashboardActions } from "@/stores/actions/dashboardActions";
@@ -11,10 +12,12 @@ import {
   type PresentationReceipt,
 } from "../../e2e/helpers/retained-storage-boundaries";
 
+const identity = (id: string) => ({ version: 1 as const, identityId: `person:v1:${id}`, seed: `face:v1:${id}` });
+
 function input(): GameState {
   return {
     seed: "retained-boundary", currentSeason: 2, currentWeek: 1, lastSaved: 10,
-    players: { player: { id: "player", injured: false,
+    players: { player: { id: "player", injured: false, visualIdentity: identity("player"),
       injuryHistory: { playerId: "player", injuries: [], totalWeeksMissed: 0,
         injuryProneness: 0, reinjuryWindowWeeksLeft: 0 } } },
     unsignedYouth: {}, clubs: { club: { id: "club", budget: 500 } },
@@ -31,7 +34,7 @@ describe("retained native storage boundary contract", () => {
   it("rejects player-map reordering that changes the recipient of identical injury draws", () => {
     const expected = approvedCheckpointMigration(input());
     const first = { ...expected.players.player, attributes: { injuryProneness: 10 } } as GameState["players"][string];
-    const second = { ...first, id: "second", injuryHistory: { ...first.injuryHistory!, playerId: "second" } };
+    const second = { ...first, id: "second", visualIdentity: identity("second"), injuryHistory: { ...first.injuryHistory!, playerId: "second" } };
     expected.players = { player: first, second };
     const changed = { ...expected, players: { second, player: first } };
     const draws = () => {
@@ -52,7 +55,7 @@ describe("retained native storage boundary contract", () => {
       venueAppearances: [], generatedSeason: 1, placed: false, retired: false };
     expected.unsignedYouth = {
       first: { ...youthFields, id: "first", player: expected.players.player },
-      second: { ...youthFields, id: "second", player: { ...expected.players.player, id: "second" } },
+      second: { ...youthFields, id: "second", player: { ...expected.players.player, id: "second", visualIdentity: identity("second") } },
     };
     const changed = { ...expected, unsignedYouth: {
       second: expected.unsignedYouth.second, first: expected.unsignedYouth.first,
@@ -112,7 +115,15 @@ describe("retained native storage boundary contract", () => {
     const changed = structuredClone(expected);
     if (field === "case pointer") changed.scoutingCases.case.activeReportId = "old";
     if (field === "money") changed.finances!.balance += 1;
-    if (field === "injury") changed.players.player.injuryHistory!.totalWeeksMissed += 1;
+    if (field === "injury") {
+      const player = changed.players.player;
+      const history = expandPlayerInjuryHistory(player.injuryHistory, player.id);
+      if (!history) throw new Error("Expected the authored fixture's injury history");
+      const altered = { ...history, totalWeeksMissed: history.totalWeeksMissed + 1 };
+      player.injuryHistory = Array.isArray(player.injuryHistory)
+        ? compactPlayerInjuryHistory(altered, player.id)
+        : altered;
+    }
     if (field === "portrait") changed.playerPortraits = undefined;
     expect(() => assertCompleteCheckpoint(changed, expected, "boundary")).toThrow();
   });

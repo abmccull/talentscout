@@ -116,7 +116,6 @@ describe("weekly post-tick role accountability", () => {
     const processed = processWeeklyPostTickSystems({
       beforeWeek,
       state: afterTick,
-      alumniMilestones: [],
     });
 
     expect(processed.scout.clubTrust).toBe(51);

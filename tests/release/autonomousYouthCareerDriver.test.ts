@@ -72,15 +72,26 @@ describe("autonomous placement audience", () => {
     }
     delete state.reports.report.intendedClubId;
     state.reports.report.recommendedAction = "pass";
+    // Receipt-less historical professional reports keep their existing treatment.
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBe("need");
+    state.reports.report.decisionReceipt = { action: "pass" } as NonNullable<GameState["reports"][string]["decisionReceipt"]>;
     expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
-    state.reports.older = { ...state.reports.report, id: "older", submittedWeek: 1, recommendedAction: "inviteForTrial" };
+    state.reports.older = { ...state.reports.report, id: "older", submittedWeek: 1, recommendedAction: "inviteForTrial", decisionReceipt: undefined };
     expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
     delete state.reports.older;
     delete state.reports.report.recommendedAction;
+    delete state.reports.report.decisionReceipt;
     state.unsignedYouth.youth.retired = true;
     expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
     state.unsignedYouth.youth.retired = false;
     state.reports = {};
+    expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
+  });
+
+  it("honors the immutable private receipt even when the mutable recommendation disagrees", () => {
+    const state = placementState();
+    state.reports.report.recommendedAction = "inviteForTrial";
+    state.reports.report.decisionReceipt = { action: "pass" } as NonNullable<GameState["reports"][string]["decisionReceipt"]>;
     expect(chooseAutonomousPlacementDestination(state, "player")).toBeUndefined();
   });
 

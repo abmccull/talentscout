@@ -503,6 +503,12 @@ export default function Home() {
     && !isFeedbackOpen
     && (nextCareerMoment.magnitude !== "careerDefining" || autoOpenCareerDefiningMoments),
   );
+  const showTutorialSurfaces = !hasWeekSummary
+    && !showCelebration
+    && !showInsight
+    && !showScenario
+    && !showFeedback
+    && !showCareerMoment;
 
   return (
     <>
@@ -521,7 +527,9 @@ export default function Home() {
           launch path while retaining their existing priority and evaluation. */}
       {activeCareerId && (
         <>
-          {!hasWeekSummary && !showCelebration && !showInsight && !showScenario && !showFeedback && !showCareerMoment && <TutorialRuntime />}
+          {/* Unmount presentation only: queued tutorial state survives, and
+              hint auto-dismiss timers cannot expire behind another dialog. */}
+          {showTutorialSurfaces && <TutorialRuntime />}
           <AchievementRuntime />
         </>
       )}

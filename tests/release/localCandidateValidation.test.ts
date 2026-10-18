@@ -13,13 +13,13 @@ function run(root: string, command: string, args: string[]) {
   return result.stdout.trim();
 }
 function json(path: string, value: unknown) { writeFileSync(path, JSON.stringify(value)); }
-function fixture(requireSentry = false) {
+function fixture(requireSentry = false, sentryPolicy = "required") {
   const root = mkdtempSync(join(process.env.RELEASE_FIXTURE_ROOT ?? tmpdir(), "local-candidate-validation-"));
   directories.push(root);
   mkdirSync(join(root, "scripts"), { recursive: true });
   mkdirSync(join(root, "docs/release"), { recursive: true });
   mkdirSync(join(root, "artifacts/release/generated"), { recursive: true });
-  for (const script of ["validate-release-candidate.mjs", "check-release-evidence.mjs", "stage-accepted-source-soak.mjs", "validate-sentry-provider-receipt.mjs"]) {
+  for (const script of ["validate-release-candidate.mjs", "check-release-evidence.mjs", "release-artifact-io.mjs", "release-artifact-io-profile.json", "release-calendar-receipt.mjs", "audit-asset-provenance.mjs", "accepted-package-font-handoff.mjs", "passive-package-font-extractor.mjs", "validate-sentry-provider-receipt.mjs"]) {
     copyFileSync(resolve("scripts", script), join(root, "scripts", script));
   }
   writeFileSync(join(root, ".gitignore"), "artifacts/\n");
@@ -30,6 +30,14 @@ function fixture(requireSentry = false) {
     candidate: { requireVersionTag: true, packageManifest: "artifacts/release/candidate-package-manifest.json", requiredPackageKinds: ["test-package"] },
     gates: requireSentry ? { sentryProviderReceipt: { status: "Unverified", evidence: [], generatedEvidence: { kind: "sentry-provider-receipt", path: "artifacts/release/generated/sentry.json" } } } : { fixture: { status: "Passed", evidence: ["evidence.txt"] } },
   });
+  if (requireSentry && sentryPolicy !== "required") {
+    const policyPath = join(root, "docs/release/release-evidence-status.json");
+    const policy = JSON.parse(readFileSync(policyPath, "utf8"));
+    if (sentryPolicy === "not-applicable") policy.gates.sentryProviderReceipt.status = "N/A";
+    if (sentryPolicy === "omitted-generated") delete policy.gates.sentryProviderReceipt.generatedEvidence;
+    if (sentryPolicy === "wrong-kind") policy.gates.sentryProviderReceipt.generatedEvidence.kind = "release-gate-attestation";
+    json(policyPath, policy);
+  }
   run(root, "git", ["init"]);
   run(root, "git", ["config", "user.email", "fixture@example.test"]);
   run(root, "git", ["config", "user.name", "Fixture"]);
@@ -48,17 +56,31 @@ function fixture(requireSentry = false) {
 afterEach(() => { for (const root of directories.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("local-only candidate validation", () => {
-  it("runs the strict validator successfully without creating refs or changing candidate files", () => {
+  it("fails an incomplete full-release policy without creating refs or changing candidate files", () => {
     const f = fixture();
     const refs = run(f.root, "git", ["show-ref"]);
     const outcome = f.execute();
-    expect(outcome.status, outcome.stderr).toBe(0);
+    expect(outcome.status, outcome.stderr).toBe(1);
     expect(outcome.stdout).toContain("LOCAL_CANDIDATE_VALIDATION_ONLY");
     expect(run(f.root, "git", ["show-ref"])).toBe(refs);
     expect(run(f.root, "git", ["status", "--porcelain"])).toBe("");
     const report = JSON.parse(readFileSync(join(f.root, "artifacts/release/release-evidence-check.json"), "utf8"));
-    expect(report.status).toBe("Passed");
+    expect(report.status).toBe("Failed");
+    expect(report.validationScope).toBe("full-release");
+    expect(report.fullReleaseEligible).toBe(false);
     expect(report.candidate.tagBindingMode).toBe("intended");
+  }, 20_000);
+  it("exports only the explicit full-release checker command", () => {
+    const f = fixture();
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `const { localValidationPlan } = await import(${JSON.stringify(new URL(`file:///${join(f.root, "scripts/validate-release-candidate.mjs").replaceAll("\\", "/")}`).href)}); const plan = await localValidationPlan(${JSON.stringify(f.root)}); console.log(JSON.stringify(plan.commands));`], { cwd: f.root, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)[0].slice(1)).toEqual(["--scope", "full-release"]);
+  }, 20_000);
+  it.each(["not-applicable", "omitted-generated", "wrong-kind"])("rejects a weakened mandatory Sentry policy: %s", (policy) => {
+    const f = fixture(true, policy);
+    const outcome = f.execute();
+    expect(outcome.status).toBe(1);
+    expect(outcome.stderr).toContain("mandatory Sentry provider receipt policy");
   }, 20_000);
   it("rejects mutation arguments rather than forwarding them", () => {
     const f = fixture();
@@ -83,7 +105,7 @@ describe("local-only candidate validation", () => {
     expect(outcome.stderr).toContain("sentryProviderReceipt generated evidence: generated evidence cannot be read");
     expect(run(f.root, "git", ["tag", "--list"])).toBe("");
   }, 20_000);
-  it("accepts a bound provider fixture through the real strict checker and rejects a rehashed wrong-candidate event", () => {
+  it("validates a bound provider fixture without accepting the incomplete policy and rejects a rehashed wrong-candidate event", () => {
     const f = fixture(true);
     const providerId = "a".repeat(32);
     const values = [{ type: "Error", value: "Renderer exception (message omitted for privacy)" }];
@@ -105,7 +127,12 @@ describe("local-only candidate validation", () => {
     };
     json(join(f.root, "artifacts/release/generated/sentry.json"), receipt);
     const passed = f.execute();
-    expect(passed.status, passed.stderr).toBe(0);
+    expect(passed.status, passed.stderr).toBe(1);
+    const report = JSON.parse(readFileSync(join(f.root, "artifacts/release/release-evidence-check.json"), "utf8"));
+    expect(report.gateResults.find((gate: { gateId: string }) => gate.gateId === "sentryProviderReceipt")?.generatedEvidence.status).toBe("Passed");
+    expect(report.fullReleaseEligible).toBe(false);
+    // Owned checker outputs are never silently overwritten on a second attempt.
+    rmSync(join(f.root, "artifacts/release/release-evidence-check.json"));
     receipt.providerEvent = bound("received", { ...event, release: { version: "f".repeat(40) } });
     json(join(f.root, "artifacts/release/generated/sentry.json"), receipt);
     const failed = f.execute();

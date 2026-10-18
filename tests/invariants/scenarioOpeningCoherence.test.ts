@@ -1,3 +1,6 @@
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { expandPlayerInjuryHistory } from "@/engine/players/playerStateArchive";
+import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
 import "fake-indexeddb/auto";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { SCENARIOS } from "@/engine/scenarios";
@@ -25,7 +28,7 @@ function collectRescueWorldEvidence(state: GameState) {
   );
   const disciplinaryRecords = Object.values(state.disciplinaryRecords ?? {});
   const playersWithInjuryHistory = Object.values(state.players).filter(
-    (player) => (player.injuryHistory?.injuries.length ?? 0) > 0,
+    (player) => (expandPlayerInjuryHistory(player.injuryHistory, player.id)?.injuries.length ?? 0) > 0,
   );
 
   return {
@@ -81,7 +84,7 @@ function collectRescueWorldEvidence(state: GameState) {
       : 0,
     recentEvidencePlayerCount: playersWithRecentEvidence.length,
     recentEvidenceCoherent: playersWithRecentEvidence.every((player) => {
-      const recent = player.recentMatchRatings ?? [];
+      const recent = (player.recentMatchRatings ?? []).map(expandMatchFormEntry);
       return recent.length <= 6 && recent.every((entry, index) => {
         const previous = recent[index - 1];
         return entry.season === opening.season
@@ -108,7 +111,7 @@ function collectRescueWorldEvidence(state: GameState) {
     ),
     injuryHistoryPlayerCount: playersWithInjuryHistory.length,
     injuryHistoriesCoherent: playersWithInjuryHistory.every((player) => {
-      const injuries = player.injuryHistory?.injuries ?? [];
+      const injuries = (expandPlayerInjuryHistory(player.injuryHistory, player.id)?.injuries ?? []).map(entry => expandHistoricalInjury(entry, player.id));
       const eventsCoherent = injuries.every((injury) =>
         injury.playerId === player.id
         && injury.occurredSeason === opening.season

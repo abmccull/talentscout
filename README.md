@@ -38,6 +38,8 @@ npm run electron:dist
 
 Packages are written to `dist`. A successful local package is a verification artifact until signing, package-specific runtime checks, and release certification pass. Steam SDK redistributables are provisioned separately; local gameplay can run when Steam is unavailable.
 
+On Windows, after building the normal export and installing the Electron runtime, run `node scripts/run-source-windows-runtime-diagnostic.mjs` to exercise the real opening, manual save, graceful close and exact save reopen in an isolated offline profile. The result is written under `artifacts/source-runtime-diagnostics`. This uses local source and the Electron executable; it does not build, sign or certify an installer.
+
 ## Verify changes
 
 ```sh
@@ -56,7 +58,7 @@ npm run build:e2e
 npm run test:e2e:youth-ea
 ```
 
-Playwright uses `out-e2e`; shipping packages use `out`. Do not run concurrent builds in the same checkout because they share temporary Next.js output. CI also checks critical persistence coverage, retention, dependency advisories, and replayability. Full release soaks are separate multi-hour jobs; smaller development runs are supporting evidence only.
+Playwright uses `out-e2e`; shipping packages use `out`. Stop the development server before building, and do not run concurrent builds in the same checkout: both development and production write `.next`. Parallel work needs separate checkouts and generated output. CI also checks critical persistence coverage, retention, dependency advisories, and replayability. Full release soaks are separate multi-hour jobs; smaller development runs are supporting evidence only.
 
 ## Error reporting and optional services
 
@@ -74,11 +76,10 @@ Supabase credentials are optional for cloud features. Keep online feedback disab
 
 Passing source tests does not certify a signed installer, Steam integration, physical hardware, or human usability/accessibility. Release evidence must refer to the exact source candidate and package bytes being distributed.
 
+### Current release evidence and supporting diagnostics
 
-## Source runtime diagnostics and build isolation
+Release acceptance requires the complete current policy in `docs/release/release-evidence-status.json`, including the canonical fresh 20-seed, 30-season, concurrency-three campaign plus fresh seed-one replay, exact package evidence, Sentry provider receipt, and human/platform gates. Historical reports are not acceptance for a newly reconciled candidate.
 
-On Windows, after a normal export build and Electron runtime installation, `node scripts/run-source-windows-runtime-diagnostic.mjs` exercises the opening, manual save, graceful close and exact save reopen in an isolated offline profile. Results live under `artifacts/source-runtime-diagnostics`. This checks source Electron behavior; it does not build, sign or certify an installer.
+`node scripts/run-game-systems-diagnostics.mjs --profile=smoke --out=<new directory>` and `node scripts/run-career-balance-diagnostics.mjs --mode=smoke --out=<new directory>` produce supporting diagnostics only. Use `--profile=long --seasons=30 --seeds=1 --concurrency=1` for separate retained S1/S10/S30 inputs; actual browser-provider durability remains a separate test. These commands never add files to the canonical 45-member artifact.
 
-Stop the development server before a production build. Development and production share `.next`, so concurrent builds require separate checkouts and output directories. Playwright uses `out-e2e`; shipping uses `out`. Full release soaks remain separate from smaller development diagnostics.
-
-The current improvement work is tracked in `docs/QUALITY_IMPLEMENTATION.md`. Earlier canonical reports are preserved under `docs/history/canonical-readiness-20260904` with their original source scope.
+`npm run release:validate-candidate -- --candidate-root=<prepared checkout>` runs only the explicit full-release checker locally against a clean, source-bound accepted bundle. It does not tag, upload, publish, or manufacture missing evidence. See `docs/release/release-certification.md` and `docs/release/quality-diagnostics.md`.

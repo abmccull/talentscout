@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
 import { describe, expect, it } from "vitest";
 
 import type { CulturalInsight, NewGameConfig } from "@/engine/core/types";
@@ -44,6 +45,64 @@ const LEGACY_INSIGHT: CulturalInsight = {
 };
 
 describe("observation situations", () => {
+  it("extra passes refine one session without pretending to be prior visits", () => {
+    const scout = createScout(SCOUT_CONFIG, new RNG("one-visit-scout"));
+    const player = generatePlayer(new RNG("one-visit-player"), {
+      position: "CM", ageRange: [17, 17], abilityRange: [90, 90],
+      nationality: "English", clubId: "club-test",
+    });
+    const read = (passes: number) => observePlayerLight(new RNG("one-visit-read"), player, scout,
+      "streetFootball", [], 1, {
+        evidenceOnly: true, evidenceAttributes: ["dribbling"], evidencePasses: passes,
+      });
+    const single = read(1);
+    const repeated = read(3);
+    expect(repeated.attributeReadings[0].observationCount).toBe(1);
+    expect(repeated.attributeReadings[0].confidence).toBeCloseTo(single.attributeReadings[0].confidence, 12);
+    const nextVisit = observePlayerLight(new RNG("next-visit"), player, scout,
+      "streetFootball", [single], 1, {
+        evidenceOnly: true, evidenceAttributes: ["dribbling"], evidencePasses: 1,
+      });
+    expect(nextVisit.attributeReadings[0].observationCount).toBe(2);
+    expect(nextVisit.attributeReadings[0].confidence).toBeGreaterThan(repeated.attributeReadings[0].confidence);
+  });
+
+  it("an unreadable live watch cannot fall back to venue attributes or reveal ability and personality", () => {
+    const scout = createScout(SCOUT_CONFIG, new RNG("empty-live-scout"));
+    const player = generatePlayer(new RNG("empty-live-player"), {
+      position: "CM", ageRange: [17, 17], abilityRange: [90, 90],
+      nationality: "English", clubId: "club-test",
+    });
+    for (let seed = 0; seed < 24; seed++) {
+      const observation = observePlayerLight(new RNG(`empty-${seed}`), player, scout,
+        "streetFootball", [], 4, { evidenceOnly: true, evidenceAttributes: [], focusLens: "technical" });
+      expect(observation.attributeReadings).toEqual([]);
+      expect(observation.abilityReading).toBeUndefined();
+      expect(observation.revealedPersonalityTrait).toBeUndefined();
+      expect(observation.updatedPersonalityProfile).toBeUndefined();
+      expect(observation.notes.join(" ")).not.toContain("focus deepened");
+    }
+  });
+
+  it("a live dribbling cue cannot create readings for unrelated venue attributes", () => {
+    const scout = createScout(SCOUT_CONFIG, new RNG("dribble-live-scout"));
+    const player = generatePlayer(new RNG("dribble-live-player"), {
+      position: "CM", ageRange: [17, 17], abilityRange: [90, 90],
+      nationality: "English", clubId: "club-test",
+    });
+    const read = (evidenceOnly: boolean) => observePlayerLight(new RNG("dribble-read"), player, scout,
+      "streetFootball", [], 4, { evidenceOnly, evidenceAttributes: ["dribbling"] });
+    expect(read(true).attributeReadings.map((reading) => reading.attribute)).toEqual(["dribbling"]);
+    for (let seed = 0; seed < 24; seed++) {
+      const narrow = observePlayerLight(new RNG(`narrow-read-${seed}`), player, scout,
+        "streetFootball", [], 4, { evidenceOnly: true, evidenceAttributes: ["dribbling"] });
+      expect(narrow.abilityReading).toBeUndefined();
+      expect(narrow.revealedPersonalityTrait).toBeUndefined();
+      expect(narrow.updatedPersonalityProfile).toBeUndefined();
+    }
+    expect(read(false).attributeReadings.length).toBeGreaterThan(1);
+  });
+
   it("persists non-default authored variant identity through existing snapshot fields", () => {
     const seeds = Array.from({ length: 64 }, (_, index) => `school-variant-${index}`);
     const baselineSeed = seeds.find((seed) =>
@@ -238,6 +297,6 @@ describe("observation situations", () => {
     expect(averageConfidence(deepObservation.attributeReadings))
       .toBeGreaterThan(averageConfidence(blitzObservation.attributeReadings));
     expect(deepObservation.situation).toEqual(deepDive);
-    expect(blitzObservation.situation?.contextTags).toContain("travel-posture:opportunityBlitz");
+    expect(expandObservationSituationSnapshot(blitzObservation.situation)?.contextTags).toContain("travel-posture:opportunityBlitz");
   });
 });

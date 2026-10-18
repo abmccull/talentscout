@@ -307,7 +307,8 @@ Steamworks portal -> **Store Page** -> **Graphical Assets**
 
 ### Store description
 
-Use the copy in `docs/steam-store-page.md` for:
+Use the Youth Scout Early Access copy in `STEAM_STORE_COPY.md`, selected by
+`docs/steam-store-assets.json`, for:
 - **Store Page** -> **Description** -> **About This Game**
 
 ### Tags
@@ -327,6 +328,11 @@ Suggested tags:
 
 Steamworks portal -> **Store Page** -> **Basic Info** -> **System Requirements**
 
+Use the complete provisional requirements in `STEAM_STORE_COPY.md`, selected by
+`docs/steam-store-assets.json`. They take precedence over the summaries below.
+Confirm the declared minimums through `docs/release/minimum-hardware-validation.md`
+before publication.
+
 **Windows**
 - Minimum: Windows 10, 4 GB RAM, 1 GB disk
 - Recommended: Windows 10/11, 8 GB RAM, 2 GB disk
@@ -336,7 +342,7 @@ Steamworks portal -> **Store Page** -> **Basic Info** -> **System Requirements**
 - Recommended: macOS 14 or newer, 8 GB RAM, 2 GB disk
 
 **Linux**
-- Minimum: Ubuntu 20.04 or newer, 4 GB RAM, 1 GB disk
+- Minimum: Ubuntu 22.04 64-bit or newer, 4 GB RAM, 1 GB disk
 
 ---
 

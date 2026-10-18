@@ -19,7 +19,7 @@ import type {
   SessionFlaggedMoment,
   SessionPhase,
 } from "@/engine/observation/types";
-import { getPerceivedFlaggedMomentDescription } from "@/engine/observation/reflection";
+import { getPerceivedFlaggedMomentDescription, generateReflectionPrompts } from "@/engine/observation/reflection";
 import { createRNG } from "@/engine/rng";
 import {
   buildInitialAssessment,
@@ -32,6 +32,7 @@ import {
   resolveSessionCueReadings,
 } from "@/engine/scout/evidenceModel";
 import { validateStructuredReportInput } from "@/engine/reports/structuredYouthReport";
+import { hasReportBuyerEvidence } from "@/engine/finance/reportMarketplace";
 
 function scout(skill: number, fatigue = 0): Pick<Scout, "skills" | "attributes" | "fatigue"> {
   return {
@@ -105,7 +106,7 @@ function liveSession(momentOverrides: Partial<PlayerMoment> = {}): ObservationSe
 function firstCue(
   session: ObservationSession,
   ability: Pick<Scout, "skills" | "attributes" | "fatigue">,
-  questionId: "execution" | "movement" = "execution",
+  questionId: "execution" | "movement" | "decisions" = "execution",
   regionalKnowledgeLevel = 40,
 ) {
   const cue = resolveSessionCueReadings({
@@ -119,53 +120,93 @@ function firstCue(
 }
 
 describe("structured scouting evidence model", () => {
-  it("gives equally visible success and failure equal clarity without changing their direction", () => {
-    const success = firstCue(liveSession({ quality: 9, isStandout: true }), scout(15));
-    const failure = firstCue(liveSession({ quality: 2, isStandout: false }), scout(15));
-    expect(success.score).toBe(failure.score);
-    expect(success.confidence).toBe(failure.confidence);
-    expect(success.direction).toBe("positive");
-    expect(failure.direction).toBe("negative");
+  it("keeps the observed action's category across scouting questions", () => {
+    for (const [momentType, attributesHinted, expected] of [
+      ["technicalAction", ["firstTouch"], "technicalExecution"],
+      ["physicalTest", ["stamina"], "physicalExecution"],
+      ["mentalResponse", ["composure"], "noConclusion"],
+      ["tacticalDecision", ["offTheBall"], "offBallMovement"],
+      ["tacticalDecision", ["marking"], "defensiveReading"],
+      ["tacticalDecision", ["vision"], "noConclusion"],
+    ] as const) {
+      const session = liveSession({ momentType, attributesHinted: [...attributesHinted], pressureContext: false });
+      for (const questionId of ["execution", "movement", "decisions", "projection", "pressure", "repeatability"] as const) {
+        const cue = resolveSessionCueReadings({ session, scout: scout(20), questionId, regionalKnowledgeLevel: 100 })[0];
+        expect(cue.attributesHinted.length).toBeGreaterThan(0);
+        expect(cue.suggestedClassifications).toEqual(expected === "noConclusion" ? ["noConclusion"] : [expected, "noConclusion"]);
+        session.cueReadings = [cue];
+        session.flaggedMoments = [{ id: "category-flag", phaseIndex: 0, minute: 24,
+          moment: session.phases[0].moments[0], reaction: "interesting" }];
+        expect(buildSessionEvidenceCards(JSON.parse(JSON.stringify(session)))[0].classification).toBe(expected);
+      }
+    }
   });
 
-  it("makes a specialist lens a better answer to its question than general focus", () => {
-    const specialist = liveSession();
-    const general = structuredClone(specialist);
-    general.players[0].currentLens = "general";
-    general.players[0].focusHistory = [{ phaseIndex: 0, lens: "general" }];
-    expect(firstCue(specialist, scout(12)).score).toBeGreaterThan(firstCue(general, scout(12)).score);
-    expect(specialist.phases).toEqual(general.phases);
+  it("does not reveal a hidden tactical attribute through classification choices", () => {
+    const session = liveSession({ momentType: "tacticalDecision", quality: 1, attributesHinted: ["marking"] });
+    session.players = session.players.map((player) => ({ ...player, isFocused: false, focusedPhases: [], focusHistory: [] }));
+    const cue = firstCue(session, scout(1, 100), "execution", 0);
+    expect(cue.attributesHinted).toEqual([]);
+    expect(cue.suggestedClassifications).not.toContain("defensiveReading");
+    expect(cue.suggestedClassifications).not.toContain("offBallMovement");
   });
 
-  it("turns a negative action into a contextual concern rather than a supported strength", () => {
-    const cue = firstCue(liveSession({ quality: 2 }), scout(20), "execution", 100);
-    const card: ScoutingEvidenceCard = {
-      ...cue, version: 1, sourceType: "liveObservation", classification: "technicalExecution",
-      independenceKey: `session:${cue.sessionId}:negative`,
-    };
-    const [measured, stretch] = getEvidenceClaimOptions(card);
-    expect(measured.statement).toContain("broke down");
-    expect(measured.statement).not.toContain("clean technical execution");
-    expect(stretch.statement).toContain("recurring limitation");
-    const unknown = getEvidenceUnknownOptions(card)[0];
-    const result = buildInitialAssessment({
-      evidenceCardId: card.id, claimOptionId: measured.id,
-      unknownOptionId: unknown.id, nextTestId: getEvidenceNextTestOptions(unknown)[0].id,
-      confidence: "working", recommendation: "monitor",
-    }, [card]);
-    expect(result.valid).toBe(true);
-    expect(result.assessment?.score.claimEvidenceFit).toBe(20);
-    expect(result.assessment?.generatedSummary).toContain("broke down");
+  it("carries a visible marking error into defensive reflection and a cautious report claim", () => {
+    const session = liveSession({ momentType: "tacticalDecision", quality: 3,
+      attributesHinted: ["marking"], pressureContext: false,
+      description: "Milo lost the runner and allowed an uncontested reception.",
+      vagueDescription: "There was movement away from the ball.",
+    });
+    session.players[0].currentLens = "tactical";
+    session.players[0].focusHistory = [{ phaseIndex: 0, lens: "tactical" }];
+    const cue = firstCue(session, scout(20), "decisions", 80);
+    expect(cue.attributesHinted).toContain("marking");
+    expect(cue.summary).toContain("defensive reading");
+    expect(cue.suggestedClassifications).toEqual(["defensiveReading", "noConclusion"]);
+    session.cueReadings = [cue];
+    session.flaggedMoments = [{ id: "defensive-flag", phaseIndex: 0, minute: 24,
+      moment: session.phases[0].moments[0], reaction: "concerning" }];
+    const card = buildSessionEvidenceCards(JSON.parse(JSON.stringify(session)))[0];
+    expect(card.classification).toBe("defensiveReading");
+    const claim = getEvidenceClaimOptions(card)[0];
+    expect(claim.category).toBe("roleFit");
+    expect(claim.statement).toContain("raised a concern");
+    expect(claim.statement).not.toMatch(/before receiving|useful passing option|composed/);
+    expect(getEvidenceUnknownOptions(card).some((unknown) => unknown.label === "Translation to another role")).toBe(true);
   });
 
-  it("does not call an unreadable glimpse a supported trait claim", () => {
-    const cue = firstCue(liveSession({ quality: 2 }), scout(1, 100), "movement", 0);
-    const card: ScoutingEvidenceCard = {
-      ...cue, version: 1, sourceType: "liveObservation", classification: "technicalExecution",
-      independenceKey: `session:${cue.sessionId}:glimpse`,
-    };
-    expect(getEvidenceClaimOptions(card)[0]).toMatchObject({ support: "withheld", classification: "noConclusion" });
+  it("does not turn negative or mixed evidence into generic praise in any measured claim", () => {
+    const cue = firstCue(liveSession(), scout(20));
+    for (const [classification, actionId, attributesHinted, pressureContext] of [
+      ["technicalExecution", "pass", ["passing"], false],
+      ["decisionMaking", "choose-outlet", ["decisionMaking"], false],
+      ["offBallMovement", "support-run", ["offTheBall"], false],
+      ["pressureResponse", "composed-release", ["composure"], true],
+      ["physicalRepeatability", "repeat-run", ["stamina"], false],
+    ] as const) {
+      const card = { ...cue, version: 1, sourceType: "liveObservation", classification,
+        actionId, attributesHinted: [...attributesHinted], pressureContext,
+        independenceKey: "test", clarity: "strong", direction: "negative" } as ScoutingEvidenceCard;
+      expect(getEvidenceClaimOptions(card)[0].statement).toContain("raised a concern");
+      expect(getEvidenceClaimOptions({ ...card, direction: "mixed" })[0].statement).toContain("was mixed");
+    }
   });
+
+  it("always allows withholding a conclusion even when the cue suggests many categories", () => {
+    for (const question of ["execution", "movement"] as const) {
+      for (const skill of [1, 12, 20]) {
+        const cue = firstCue(liveSession(), scout(skill), question);
+        expect(cue.suggestedClassifications).toContain("noConclusion");
+        expect(cue.suggestedClassifications.length).toBeLessThanOrEqual(4);
+        const session = liveSession();
+        session.cueReadings = [cue];
+        session.flaggedMoments = [{ id: "withheld", phaseIndex: 0, minute: 24, moment: session.phases[0].moments[0], reaction: "needs_more_data" }];
+        session.evidenceDecisions = { [cue.id]: { cueId: cue.id, classification: "noConclusion" } } as ObservationSession["evidenceDecisions"];
+        expect(buildSessionEvidenceCards(session)[0].classification).toBe("noConclusion");
+      }
+    }
+  });
+
   it("keeps a flagged missed read vague through reflection and serialization", () => {
     const session = liveSession({ quality: 1, isStandout: false });
     session.players = session.players.map((player) => ({
@@ -181,8 +222,12 @@ describe("structured scouting evidence model", () => {
     const restored = JSON.parse(JSON.stringify({ session, flagged }));
     const description = getPerceivedFlaggedMomentDescription(restored.session, restored.flagged);
     expect(description).toContain(flagged.moment.vagueDescription);
-    expect(description).toContain("could not isolate a defensible cue");
+    expect(description).toBe(flagged.moment.vagueDescription);
     expect(description).not.toContain(flagged.moment.description);
+    restored.session.flaggedMoments = [restored.flagged];
+    const prompts = generateReflectionPrompts(restored.session, createRNG("missed-prompts")).join(" ");
+    expect(prompts).toContain(flagged.moment.vagueDescription);
+    expect(prompts).not.toContain(flagged.moment.description);
   });
 
   it("retains earned detailed evidence when a clearly read moment is flagged", () => {
@@ -244,7 +289,7 @@ describe("structured scouting evidence model", () => {
     expect(familiar).not.toHaveProperty("trueValue");
   });
 
-  it("preserves cue provenance and the player's classification in durable evidence", () => {
+  it("preserves cue provenance and a supported player classification in durable evidence", () => {
     const active = liveSession();
     const cue = firstCue(active, scout(14));
     const reflection: ObservationSession = {
@@ -259,7 +304,7 @@ describe("structured scouting evidence model", () => {
         reaction: "promising",
       }],
       evidenceDecisions: {
-        [cue.id]: { cueId: cue.id, classification: "noConclusion" },
+        [cue.id]: { cueId: cue.id, classification: "technicalExecution" },
       },
     };
 
@@ -269,11 +314,26 @@ describe("structured scouting evidence model", () => {
       sessionId: reflection.id,
       momentId: "moment-1",
       playerId: "player-1",
-      classification: "noConclusion",
+      classification: "technicalExecution",
       sourceType: "liveObservation",
       version: 1,
     });
     expect(card.independenceKey).toContain(reflection.id);
+  });
+
+  it.each(["missed", "glimpse"] as const)("never recommends a supported claim from a %s perception", (clarity) => {
+    const cue = firstCue(liveSession(), scout(5), "execution", 0);
+    const card: ScoutingEvidenceCard = {
+      ...cue, clarity, version: 1, sourceType: "liveObservation",
+      classification: "technicalExecution", independenceKey: "weak-perception",
+    };
+    const options = getEvidenceClaimOptions(card);
+    expect(options[0].support).toBe("withheld");
+    expect(options.some((option) => option.support === "supported")).toBe(false);
+    expect(options.find((option) => option.id.endsWith(":measured"))?.support).toBe("withheld");
+    const clearOptions = getEvidenceClaimOptions({ ...card, clarity: "strong", attributesHinted: ["firstTouch"] });
+    expect(clearOptions[0].support).toBe("supported");
+    expect(options.map((option) => option.id).sort()).toEqual(clearOptions.map((option) => option.id).sort());
   });
 
   it("builds report copy only from structured choices and exposes overclaiming", () => {
@@ -388,11 +448,51 @@ describe("structured scouting evidence model", () => {
     expect(first.assessment?.claims).toHaveLength(1);
     expect(first.assessment?.unknowns).toHaveLength(3);
     expect(first.assessment?.generatedSummary).toContain("Northbridge Academy");
+    expect(first.assessment?.generatedSummary).toContain("is being considered for");
+    expect(first.assessment?.generatedSummary).not.toContain("projects as");
     expect(first.assessment?.generatedSummary).not.toMatch(/\bthe game\b/i);
 
-    const contradictory = buildFormalAssessment(input, [{ ...card, direction: "negative" }]);
-    expect(contradictory.assessment?.score.claimEvidenceFit).toBe(0);
-    expect(contradictory.assessment!.score.total).toBeLessThan(first.assessment!.score.total);
+    const riskCard = { ...card, id: "risk-only-cue", contextKey: "separate-context", independenceKey: "separate-source", confidence: 1 };
+    const riskInput: StructuredReportInput = { ...input, evidenceIds: [card.id, riskCard.id],
+      riskAssessments: [{ id: "pressureResponse", label: "Pressure response", status: "observed", evidenceIds: [riskCard.id, riskCard.id] }] };
+    const riskOnly = buildFormalAssessment(riskInput, [card, riskCard]);
+    expect(riskOnly.assessment?.evidenceIds).toEqual([card.id, riskCard.id]);
+    expect(riskOnly.assessment?.score).toEqual(first.assessment?.score);
+    expect(riskOnly.assessment?.claims).toEqual(first.assessment?.claims);
+    expect(riskOnly.assessment?.confidence).toBe(first.assessment?.confidence);
+    expect(buildFormalAssessment({ ...riskInput,
+      riskAssessments: [{ ...riskInput.riskAssessments![0], status: "untested", evidenceIds: [] }],
+    }, [card, riskCard]).assessment?.evidenceIds).toEqual([card.id]);
+    expect(buildFormalAssessment(riskInput, [card]).assessment?.evidenceIds).toEqual([card.id]);
+
+    const leaveUnassessed = (category: keyof StructuredReportInput["categoryVerdicts"]) => ({
+      ...input.categoryVerdicts[category], status: "notAssessed" as const, evidenceIds: [],
+      classification: undefined, claimSupport: undefined,
+      verdict: "No reportable claim is being made from the available evidence.",
+    });
+    const inconclusive: StructuredReportInput = {
+      ...input,
+      recommendedAction: "monitor",
+      evidenceIds: [],
+      categoryVerdicts: {
+        potential: leaveUnassessed("potential"),
+        roleFit: leaveUnassessed("roleFit"),
+        characterRisk: leaveUnassessed("characterRisk"),
+      },
+    };
+    expect(validateStructuredReportInput(inconclusive, brief, new Set([card.id])).valid).toBe(true);
+    const note = buildFormalAssessment(inconclusive, [card], "Milo Vale", "Northbridge Academy");
+    expect(note.valid).toBe(true);
+    expect(note.assessment?.claims).toEqual([]);
+    expect(note.assessment?.recommendation).toBe("monitor");
+    expect(note.assessment?.generatedSummary).toContain("observation remains inconclusive");
+    expect(hasReportBuyerEvidence({ evidenceAssessment: note.assessment })).toBe(false);
+    expect(buildFormalAssessment(inconclusive, []).valid).toBe(false);
+    for (const recommendedAction of ["inviteForTrial", "offerAcademyPlace"] as const) {
+      const unsupportedRecommendation = { ...inconclusive, recommendedAction };
+      expect(validateStructuredReportInput(unsupportedRecommendation, brief).valid).toBe(false);
+      expect(buildFormalAssessment(unsupportedRecommendation, [card]).valid).toBe(false);
+    }
 
     const repeatedUnknown = "The same pressure question remains unanswered.";
     const repeatedUnknownInput: StructuredReportInput = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 
@@ -13,6 +13,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { DayResult, GameState, ScoutSkill } from "@/engine/core/types";
 import { INTERACTIVE_ACTIVITIES } from "@/engine/observation/types";
 import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
+import { getLiveActivitySummary } from "@/lib/liveActivitySummary";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useAudio } from "@/lib/audio/useAudio";
 import { DELEGATION_POLICIES } from "@/engine/core/weeklyStrategy";
@@ -497,7 +498,11 @@ export function DayCard({
           <section data-testid="week-journey-beat-2" aria-label="Today’s story and decision">
             <div className="space-y-4">
               <div className="space-y-2">
-                {narrativeParts.length > 0 ? (
+                {!isConsequenceResolved ? (
+                  <p className="text-sm leading-relaxed text-zinc-300">
+                    {dayResult.activity?.description ?? "Choose how to approach this assignment."}
+                  </p>
+                ) : narrativeParts.length > 0 ? (
                   narrativeParts.map((part, index) => (
                     <p
                       key={`${part.slice(0, 24)}-${index}`}
@@ -513,7 +518,7 @@ export function DayCard({
                 )}
               </div>
 
-              {dayResult.interaction && (
+              {dayResult.interaction && !interactiveSessionCompleted && (
                 <section aria-labelledby={`decision-${dayResult.dayIndex}`}>
                   <h4 id={`decision-${dayResult.dayIndex}`} className="font-editorial text-xl text-white">
                     Your call
@@ -630,7 +635,9 @@ export function DayCard({
                 <section className="border-l-2 border-[var(--accent)]/50 bg-white/[0.03] p-4" aria-label="Live observation session">
                   <h4 className="text-sm font-semibold text-zinc-200">Live observation</h4>
                   <p className="mt-1 text-xs leading-relaxed text-zinc-300">
-                    Step into the session for deeper reads, extra insight points, and stronger activity outcomes.
+                    {interactiveSessionCompleted
+                      ? "Your live session is complete. Continue to the next day."
+                      : "Step into the session and choose where to direct your attention."}
                   </p>
                   {interactiveSessionCompleted ? (
                     <Badge variant="outline" className="mt-2 border-emerald-500/30 text-emerald-300">
@@ -699,8 +706,8 @@ export function DayCard({
                 )}
 
               {xpEntries.length > 0 && (
-                <section aria-label="Skill XP gained">
-                  <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">Skill growth</h4>
+                <section aria-label="Base skill XP before weekly adjustments">
+                  <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">Base skill XP</h4>
                   <div className="flex flex-wrap gap-1.5">
                     {xpEntries.map(([skill, xp]) => (
                       <span key={skill} className="inline-flex items-center rounded-md border border-blue-400/20 bg-blue-400/[0.08] px-2 py-1 text-xs font-medium text-blue-300">
@@ -708,6 +715,9 @@ export function DayCard({
                       </span>
                     ))}
                   </div>
+                  <p className="mt-2 text-xs text-zinc-400">
+                    Final XP is awarded at week end, adjusted for work quality, fatigue and repeated activities.
+                  </p>
                 </section>
               )}
 
@@ -796,6 +806,23 @@ export function WeekSimulationScreen() {
   const prefersReducedMotion = useReducedMotion();
   const autoPlayWeekSimulation = useSettingsStore((s) => s.autoPlayWeekSimulation);
   const reducedMotionSetting = useSettingsStore((s) => s.reducedMotion);
+
+  const journeyRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLElement>(null);
+  const hasSimulation = weekSimulation !== null;
+
+  useLayoutEffect(() => {
+    const journey = journeyRef.current;
+    const actions = actionsRef.current;
+    if (!journey || !actions) return;
+    const reserveActions = () => {
+      journey.style.setProperty("--week-actions-height", `${actions.getBoundingClientRect().height}px`);
+    };
+    reserveActions();
+    const observer = new ResizeObserver(reserveActions);
+    observer.observe(actions);
+    return () => observer.disconnect();
+  }, [hasSimulation]);
 
   // All hooks must be called before any early return
   const currentDay = weekSimulation?.currentDay ?? 0;
@@ -902,9 +929,10 @@ export function WeekSimulationScreen() {
   return (
     <GameLayout>
       <div
+        ref={journeyRef}
         data-testid="week-journey-screen"
         data-reduced-motion={prefersReducedMotion ? "true" : "false"}
-        className="relative min-h-[calc(100dvh-7.5rem)] min-w-0 overflow-x-clip bg-[var(--background)] px-4 py-5 sm:p-6 lg:h-screen lg:min-h-0 lg:overflow-hidden"
+        className="relative min-h-[calc(100dvh-7.5rem)] min-w-0 overflow-x-clip bg-[var(--background)] px-4 pt-5 pb-[calc(var(--week-actions-height,192px)+1.25rem)] sm:px-6 sm:pt-6 lg:h-screen lg:min-h-0 lg:overflow-hidden lg:pb-6"
       >
         <ScreenBackground src={currentBg} opacity={0.4} />
         <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col lg:h-full">
@@ -963,7 +991,8 @@ export function WeekSimulationScreen() {
             </aside>
 
             <section
-              className="min-w-0 overflow-visible lg:overflow-y-auto lg:pr-1"
+              className="min-w-0 overflow-visible focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400 lg:overflow-y-auto lg:pr-1"
+              tabIndex={0}
               aria-labelledby="current-day-journey-heading"
               data-testid="current-day-journey"
             >
@@ -1013,7 +1042,19 @@ export function WeekSimulationScreen() {
                   >
                     {currentDayResult ? (
                       <DayCard
-                        dayResult={currentDayResult}
+                        dayResult={(() => {
+                          const live = gameState && currentDayResult.activity
+                            ? getLiveActivitySummary(gameState, currentDayResult.activity, currentDayResult.dayIndex)
+                            : null;
+                          return live ? {
+                            ...currentDayResult,
+                            narrative: live.narrative,
+                            observations: currentDayResult.observations.map((observation) => ({
+                              ...observation,
+                              topAttributes: live.playerEvidence[observation.playerId] ?? "No saved live claim for this player",
+                            })),
+                          } : currentDayResult;
+                        })()}
                         allDayResults={dayResults}
                         currentDay={currentDay}
                         onChooseInteraction={chooseInteractionWithFeedback}
@@ -1030,7 +1071,7 @@ export function WeekSimulationScreen() {
             </section>
           </div>
 
-          <footer className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 mt-4 flex shrink-0 flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between md:bottom-0 lg:static lg:px-0">
+          <footer ref={actionsRef} className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 flex shrink-0 flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 md:bottom-0 md:left-60 lg:static lg:mt-4 lg:px-0">
             <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
               {isComplete ? (
                 <Button

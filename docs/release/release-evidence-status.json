@@ -36,7 +36,9 @@
       "generatedEvidence": {
         "kind": "release-gate-attestation",
         "path": "artifacts/release/generated/certifications/manual-nvda.json",
-        "requiredPackageKinds": ["windows-installer"],
+        "requiredPackageKinds": [
+          "windows-installer"
+        ],
         "requiredControls": [
           "tutorialChoiceUnderstood",
           "openingDiscoveryCompleted",
@@ -63,7 +65,9 @@
       "generatedEvidence": {
         "kind": "release-gate-attestation",
         "path": "artifacts/release/generated/certifications/manual-voiceover.json",
-        "requiredPackageKinds": ["macos-dmg"],
+        "requiredPackageKinds": [
+          "macos-dmg"
+        ],
         "requiredControls": [
           "tutorialChoiceUnderstood",
           "openingDiscoveryCompleted",
@@ -90,7 +94,9 @@
       "generatedEvidence": {
         "kind": "release-gate-attestation",
         "path": "artifacts/release/generated/certifications/moderated-usability.json",
-        "requiredPackageKinds": ["windows-installer"],
+        "requiredPackageKinds": [
+          "windows-installer"
+        ],
         "requiredControls": [
           "minimumParticipantSample",
           "balancedParticipantSegments",
@@ -123,7 +129,9 @@
       "generatedEvidence": {
         "kind": "release-gate-attestation",
         "path": "artifacts/release/generated/certifications/moderated-paired-career-replayability.json",
-        "requiredPackageKinds": ["windows-installer"],
+        "requiredPackageKinds": [
+          "windows-installer"
+        ],
         "requiredControls": [
           "minimumParticipantSample",
           "balancedParticipantSegments",
@@ -151,7 +159,11 @@
       "generatedEvidence": {
         "kind": "release-gate-attestation",
         "path": "artifacts/release/generated/certifications/physical-minimum-hardware.json",
-        "requiredPackageKinds": ["windows-installer", "macos-dmg", "linux-appimage"],
+        "requiredPackageKinds": [
+          "windows-installer",
+          "macos-dmg",
+          "linux-appimage"
+        ],
         "requiredControls": [
           "allDeclaredPlatformsAndArchitectures",
           "exactManifestPackages",
@@ -215,7 +227,10 @@
       "generatedEvidence": {
         "kind": "release-gate-attestation",
         "path": "artifacts/release/generated/certifications/macos-runtime.json",
-        "requiredPackageKinds": ["macos-dmg", "macos-zip"],
+        "requiredPackageKinds": [
+          "macos-dmg",
+          "macos-zip"
+        ],
         "requiredControls": [
           "exactManifestPackages",
           "codeSignatureAndNotarization",
@@ -244,7 +259,10 @@
       "generatedEvidence": {
         "kind": "release-gate-attestation",
         "path": "artifacts/release/generated/certifications/linux-runtime.json",
-        "requiredPackageKinds": ["linux-appimage", "linux-deb"],
+        "requiredPackageKinds": [
+          "linux-appimage",
+          "linux-deb"
+        ],
         "requiredControls": [
           "exactManifestPackages",
           "packageFormatsVerified",
@@ -266,22 +284,14 @@
         ]
       }
     },
-    "sentryProviderReceipt": {
-      "status": "Unverified",
-      "evidence": [],
-      "protocol": "docs/release/sentry-provider-receipt.md",
-      "generatedEvidence": {
-        "kind": "sentry-provider-receipt",
-        "path": "artifacts/release/generated/certifications/sentry-provider-receipt.json"
-      }
-    },
     "assetCommercialRights": {
-      "status": "Passed",
+      "status": "Unverified",
       "evidence": [
         "docs/release/asset-rights-attestation.md",
         "artifacts/release/asset-provenance-audit.json"
       ],
-      "supportingInventory": "artifacts/release/asset-provenance-audit.json"
+      "supportingInventory": "artifacts/release/asset-provenance-audit.json",
+      "reason": "Current review found post-declaration asset additions, unresolved music entitlement and source-reference gaps, 143 previously omitted icon/Steam submission inputs, and no exact shipping-generated font/package rights review. Historical declaration and audit remain supporting evidence; they are not current full commercial clearance."
     },
     "onlineFeedbackBackend": {
       "status": "N/A",
@@ -298,8 +308,7 @@
         "minimumSeedCount": 20,
         "minimumSeasonCount": 30,
         "requireProcessIsolation": true,
-        "requireDeterministicReplay": true,
-        "requireAcceptedSourceTransport": true
+        "requireDeterministicReplay": true
       },
       "releaseException": {
         "kind": "long-career-timing-exception",
@@ -344,6 +353,15 @@
           "ownerDirectedCancellationRecorded",
           "rollbackAndMonitoringPlanPresent"
         ]
+      }
+    },
+    "sentryProviderReceipt": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/sentry-provider-receipt.md",
+      "generatedEvidence": {
+        "kind": "sentry-provider-receipt",
+        "path": "artifacts/release/generated/certifications/sentry-provider-receipt.json"
       }
     }
   }

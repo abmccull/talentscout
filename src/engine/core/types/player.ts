@@ -351,7 +351,7 @@ export type WonderkidTier =
   | "journeyman";
 
 export interface Player {
-  visualIdentity?: import("../../players/portraits/types").PlayerVisualIdentity;
+  visualIdentity?: import("../../players/portraits/types").StoredPlayerVisualIdentity;
   id: string;
   firstName: string;
   lastName: string;
@@ -384,7 +384,7 @@ export interface Player {
     updatedSeason: number;
   };
   currentInjury?: Injury;
-  injuryHistory?: InjuryHistory;
+  injuryHistory?: StoredInjuryHistory;
   personalityTraits: PersonalityTrait[];
   personalityRevealed: PersonalityTrait[];
   naturalRole?: PlayerRole;
@@ -392,9 +392,9 @@ export interface Player {
   playerTraits: PlayerTrait[];
   playerTraitsRevealed: PlayerTrait[];
   recentMatchRatings: MatchFormEntry[];
-  seasonRatings: SeasonRatingRecord[];
-  developmentHistory?: import("../../world/developmentEnvironment").PlayerDevelopmentHistoryEntry[];
-  personalityProfile?: PersonalityProfile;
+  seasonRatings: SeasonRatingEntry[];
+  developmentHistory?: import("../../players/developmentHistoryArchive").ArchivedDevelopmentHistoryEntry[];
+  personalityProfile?: StoredPersonalityProfile;
   disciplinaryRecord?: DisciplinaryRecord;
   loanParentClubId?: string;
   loanEndWeek?: number;
@@ -434,7 +434,7 @@ export interface MatchPlayerStats {
   avgEventQuality?: number;
 }
 
-export interface MatchFormEntry {
+export interface ExpandedMatchFormEntry {
   fixtureId: string;
   week: number;
   season: number;
@@ -449,6 +449,12 @@ export interface SeasonRatingRecord {
   assists: number;
   cleanSheets: number;
 }
+
+/** Lossless archive row; legacy object records remain valid. */
+export type SeasonRatingEntry = SeasonRatingRecord | [
+  season: number, avgRating: number, appearances: number,
+  goals: number, assists: number, cleanSheets: number,
+];
 
 // =============================================================================
 // UTILITY TYPES
@@ -487,6 +493,11 @@ export interface PersonalityProfile {
   revealedTraits: PersonalityTrait[];
 }
 
+/** Full version-one profile. Column order is a persisted contract. */
+export type StoredPersonalityProfile = PersonalityProfile
+  | ["pp", 1, PersonalityArchetype, PersonalityTrait[], number, number, number,
+    number, boolean, PersonalityTrait[]];
+
 // =============================================================================
 // INJURY SYSTEM
 // =============================================================================
@@ -521,11 +532,32 @@ export interface Injury {
 
 export interface InjuryHistory {
   playerId: string;
-  injuries: Injury[];
+  injuries: ArchivedInjury[];
   totalWeeksMissed: number;
   injuryProneness: number;
   reinjuryWindowWeeksLeft: number;
 }
+
+/** Full wrapper facts; incident payloads remain unchanged. */
+export type StoredInjuryHistory = InjuryHistory
+  | ["ih", 1, string, ArchivedInjury[], number, number, number]
+  | ["ih-own", 1, ArchivedInjury[], number, number, number];
+
+/** Scheduled IDs inherit their exact season and week from the containing form row. */
+export type MatchFormFixtureRef = string | [leagueId: string, fixtureOrdinal: number];
+
+/** Legacy objects/string tuples and compact, lossless scheduled references are supported. */
+export type MatchFormEntry = ExpandedMatchFormEntry | [fixtureRef: MatchFormFixtureRef, week: number, season: number, rating: number];
+
+/** Archive defaults are inherited from the owning history and original injury. */
+export type HistoricalInjury = Omit<Injury, "playerId" | "weeksRemaining" | "reinjuryRisk">
+  & Partial<Pick<Injury, "playerId" | "weeksRemaining" | "reinjuryRisk">>;
+
+/** Version-one common incident layout. Field order is a persisted contract. */
+export type ArchivedInjury = HistoricalInjury | [
+  id: string, type: InjuryType, severity: InjurySeverity, recoveryWeeks: number,
+  occurredWeek: number, occurredSeason: number,
+];
 
 // =============================================================================
 // DISCIPLINE / CARD SYSTEM

@@ -1,3 +1,5 @@
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { matchFormRating } from "@/engine/players/matchFormArchive";
 import type {
   GameState,
   Player,
@@ -44,9 +46,9 @@ function clubCountry(state: GameState, clubId: string): string | undefined {
 function recentRating(player: Player): number {
   const ratings = player.recentMatchRatings ?? [];
   if (ratings.length > 0) {
-    return ratings.reduce((sum, entry) => sum + entry.rating, 0) / ratings.length;
+    return ratings.reduce((sum, entry) => sum + matchFormRating(entry), 0) / ratings.length;
   }
-  const latestSeason = (player.seasonRatings ?? []).at(-1);
+  const latestSeason = (player.seasonRatings ?? []).map(expandSeasonRating).at(-1);
   return latestSeason?.avgRating ?? 6.5;
 }
 
@@ -126,7 +128,7 @@ export function getRivalSpecialtyFit(
     }
     case "data": {
       const recentSamples = (player.recentMatchRatings ?? []).length;
-      const historicalSamples = (player.seasonRatings ?? []).at(-1)?.appearances ?? 0;
+      const historicalSamples = (player.seasonRatings ?? []).map(expandSeasonRating).at(-1)?.appearances ?? 0;
       return recentSamples >= 3 || historicalSamples >= 8 ? 1.2 : recentSamples > 0 ? 1.05 : 0.85;
     }
     default:

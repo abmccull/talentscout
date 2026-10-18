@@ -48,7 +48,7 @@ export function RadioGroup<T extends string>({
         <label
           key={option.value}
           data-selected={value === option.value}
-          className="dossier-choice flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition"
+          className="dossier-choice has-[:focus-visible]:outline has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-3 has-[:focus-visible]:outline-[color:var(--ring)] flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition"
         >
           <input
             type="radio"

@@ -1,245 +1,49 @@
-import { describe, expect, it, vi } from "vitest";
-import { advanceWeek, processWeeklyTick } from "@/engine/core/gameLoop";
-import { repairCompetitiveRosterGaps } from "@/engine/freeAgents/emergencyRestock";
-import { createRNG } from "@/engine/rng";
-import {
-  COMPETITIVE_REGISTERED_FLOOR,
-  countRegisteredAtClub,
-  countRegisteredKeepers,
-} from "@/engine/match/eligibleRoster";
+import { describe, expect, it } from "vitest";
+import type { Club, FreeAgent, GameState, Player } from "@/engine/core/types";
+import { recruitForSeasonOpening } from "@/engine/freeAgents/seasonOpening";
+import { getClubWeeklyCommitmentTotal } from "@/engine/finance/clubEconomics";
+import { RNG } from "@/engine/rng";
 
-vi.mock("@/lib/activeSaveProvider", () => ({
-  getActiveSaveProvider: async () => ({ save: async () => undefined }),
-  isSupabaseCloudSaveActive: async () => false,
-}));
-
-vi.mock("@/lib/db", () => ({
-  AUTOSAVE_SLOT: 0,
-  migrateSaveState: (state: unknown) => state,
-  migrateFreeAgentGeography: () => undefined,
-  db: {
-    mods: { toArray: async () => [] },
-    leaderboard: { put: async () => undefined, clear: async () => undefined },
-  },
-}));
-
-describe("emergency restock through advanceWeek", () => {
-  it("restocks a funded club that lost every registered keeper", async () => {
-    const { useGameStore } = await import("@/stores/gameStore");
-    await useGameStore.getState().startNewGame({
-      scoutFirstName: "Emg",
-      scoutLastName: "Keeper",
-      scoutAge: 28,
-      specialization: "youth",
-      difficulty: "normal",
-      worldSeed: "emergency-advance-keeper",
-      selectedCountries: ["england"],
-      startingCountry: "england",
-      nationality: "English",
-      skillAllocations: {
-        technicalEye: 2,
-        psychologicalRead: 2,
-        playerJudgment: 2,
-        potentialAssessment: 2,
-      },
-      originId: "academy-apprentice",
-      flawId: "fragile-network",
-      doctrineIds: ["evidence-first"],
-    });
-
-    const generated = useGameStore.getState().gameState!;
-    const clubId = Object.keys(generated.clubs)[0]!;
-    const club = generated.clubs[clubId]!;
-    const players = { ...generated.players };
-    for (const player of Object.values(players)) {
-      if (player.clubId === clubId && player.position === "GK") {
-        players[player.id] = {
-          ...player,
-          clubId: "",
-          contractClubId: undefined,
-          contractExpiry: 0,
-        };
-      }
-    }
-    const state = {
-      ...generated,
-      players,
-      clubs: {
-        ...generated.clubs,
-        [clubId]: {
-          ...club,
-          budget: Math.max(club.budget, 500_000),
-          weeklyWageBudget: Math.max(club.weeklyWageBudget ?? 0, 50_000),
-          playerIds: club.playerIds.filter((id) => players[id]?.clubId === clubId),
-          academyPlayerIds: (club.academyPlayerIds ?? [])
-            .filter((id) => players[id]?.clubId === clubId),
-        },
-      },
-      freeAgentPool: {
-        agents: [],
-        lastRefreshSeason: generated.currentSeason,
-        totalReleasedThisSeason: 0,
-        totalSignedThisSeason: 0,
-        totalRetiredThisSeason: 0,
-      },
-      currentWeek: Math.min(generated.currentWeek, 20),
-    };
-    expect(countRegisteredKeepers(state.clubs[clubId]!, state.players)).toBe(0);
-
-    const tick = processWeeklyTick(state, createRNG(`${state.seed}:emergency-advance-keeper`));
-    expect(tick.freeAgentNPCSignings?.some((signing) =>
-      signing.clubId === clubId && signing.relaxWeeklyWageCap)).toBe(true);
-    expect(tick.emergencySpawnedPlayers?.some((player) => player.position === "GK")).toBe(true);
-
-    const next = advanceWeek(state, tick);
-    expect(countRegisteredKeepers(next.clubs[clubId]!, next.players)).toBeGreaterThanOrEqual(1);
-  }, 120_000);
-
-  it("post-advance repair fills residual XI/GK gaps after lifecycle apply", async () => {
-    const { useGameStore } = await import("@/stores/gameStore");
-    await useGameStore.getState().startNewGame({
-      scoutFirstName: "Emg",
-      scoutLastName: "Repair",
-      scoutAge: 28,
-      specialization: "youth",
-      difficulty: "normal",
-      worldSeed: "emergency-post-advance-repair",
-      selectedCountries: ["england"],
-      startingCountry: "england",
-      nationality: "English",
-      skillAllocations: {
-        technicalEye: 2,
-        psychologicalRead: 2,
-        playerJudgment: 2,
-        potentialAssessment: 2,
-      },
-      originId: "academy-apprentice",
-      flawId: "fragile-network",
-      doctrineIds: ["evidence-first"],
-    });
-
-    const generated = useGameStore.getState().gameState!;
-    const clubId = Object.keys(generated.clubs)[0]!;
-    const club = generated.clubs[clubId]!;
-    const players = { ...generated.players };
-    for (const player of Object.values(players)) {
-      if (player.clubId === clubId && player.position === "GK") {
-        players[player.id] = {
-          ...player,
-          clubId: "",
-          contractClubId: undefined,
-          contractExpiry: 0,
-        };
-      }
-    }
-    const broken = {
-      ...generated,
-      players,
-      clubs: {
-        ...generated.clubs,
-        [clubId]: {
-          ...club,
-          budget: Math.max(club.budget, 500_000),
-          weeklyWageBudget: Math.max(club.weeklyWageBudget ?? 0, 50_000),
-          playerIds: club.playerIds.filter((id) => players[id]?.clubId === clubId),
-          academyPlayerIds: (club.academyPlayerIds ?? [])
-            .filter((id) => players[id]?.clubId === clubId),
-        },
-      },
-      freeAgentPool: {
-        agents: [],
-        lastRefreshSeason: generated.currentSeason,
-        totalReleasedThisSeason: 0,
-        totalSignedThisSeason: 0,
-        totalRetiredThisSeason: 0,
-      },
-    };
-    expect(countRegisteredKeepers(broken.clubs[clubId]!, broken.players)).toBe(0);
-    const repaired = repairCompetitiveRosterGaps(broken, createRNG("post-advance-repair"));
-    expect(countRegisteredKeepers(repaired.clubs[clubId]!, repaired.players))
-      .toBeGreaterThanOrEqual(1);
-    expect(countRegisteredAtClub(repaired.clubs[clubId]!, repaired.players))
-      .toBeGreaterThanOrEqual(COMPETITIVE_REGISTERED_FLOOR);
-  }, 120_000);
-
-  it("restocks a funded thin club up to the competitive registered floor", async () => {
-    const { useGameStore } = await import("@/stores/gameStore");
-    await useGameStore.getState().startNewGame({
-      scoutFirstName: "Emg",
-      scoutLastName: "Depth",
-      scoutAge: 28,
-      specialization: "youth",
-      difficulty: "normal",
-      worldSeed: "emergency-advance-depth",
-      selectedCountries: ["england"],
-      startingCountry: "england",
-      nationality: "English",
-      skillAllocations: {
-        technicalEye: 2,
-        psychologicalRead: 2,
-        playerJudgment: 2,
-        potentialAssessment: 2,
-      },
-      originId: "academy-apprentice",
-      flawId: "fragile-network",
-      doctrineIds: ["evidence-first"],
-    });
-
-    const generated = useGameStore.getState().gameState!;
-    const clubId = Object.keys(generated.clubs).find((id) => {
-      const entry = generated.clubs[id]!;
-      return countRegisteredAtClub(entry, generated.players) >= COMPETITIVE_REGISTERED_FLOOR;
-    })!;
-    const club = generated.clubs[clubId]!;
-    const keepers = Object.values(generated.players)
-      .filter((player) => player.clubId === clubId && player.position === "GK");
-    const keepIds = new Set(keepers.slice(0, 1).map((player) => player.id));
-    const outfield = Object.values(generated.players)
-      .filter((player) => player.clubId === clubId && player.position !== "GK")
-      .slice(0, 6)
-      .map((player) => player.id);
-    const retained = new Set([...keepIds, ...outfield]);
-    const players = { ...generated.players };
-    for (const player of Object.values(players)) {
-      if (player.clubId === clubId && !retained.has(player.id)) {
-        players[player.id] = {
-          ...player,
-          clubId: "",
-          contractClubId: undefined,
-          contractExpiry: 0,
-        };
-      }
-    }
-    const state = {
-      ...generated,
-      players,
-      clubs: {
-        ...generated.clubs,
-        [clubId]: {
-          ...club,
-          budget: Math.max(club.budget, 500_000),
-          weeklyWageBudget: Math.max(club.weeklyWageBudget ?? 0, 50_000),
-          playerIds: club.playerIds.filter((id) => retained.has(id)),
-          academyPlayerIds: (club.academyPlayerIds ?? []).filter((id) => retained.has(id)),
-        },
-      },
-      freeAgentPool: {
-        agents: [],
-        lastRefreshSeason: generated.currentSeason,
-        totalReleasedThisSeason: 0,
-        totalSignedThisSeason: 0,
-        totalRetiredThisSeason: 0,
-      },
-      currentWeek: Math.min(generated.currentWeek, 20),
-    };
-    expect(countRegisteredAtClub(state.clubs[clubId]!, state.players)).toBeLessThan(
-      COMPETITIVE_REGISTERED_FLOOR,
-    );
-
-    const tick = processWeeklyTick(state, createRNG(`${state.seed}:emergency-advance-depth`));
-    const next = advanceWeek(state, tick);
-    expect(countRegisteredAtClub(next.clubs[clubId]!, next.players))
-      .toBeGreaterThanOrEqual(COMPETITIVE_REGISTERED_FLOOR);
-    expect(countRegisteredKeepers(next.clubs[clubId]!, next.players)).toBeGreaterThanOrEqual(1);
-  }, 120_000);
+function world(supply: boolean, wageBudget = 30_000): GameState {
+  const players: Record<string, Player> = {};
+  for (let index = 0; index < 10; index++) players['p' + index] = { id: 'p' + index, firstName: 'P', lastName: String(index),
+    age: 24, nationality: "English", position: "CM", clubId: "club", contractClubId: "club", contractExpiry: 5,
+    currentAbility: 40, potentialAbility: 50, wage: 500, marketValue: 5_000 } as Player;
+  const club: Club = { id: "club", name: "Club", shortName: "C", leagueId: "league", reputation: 20,
+    budget: 100_000, weeklyWageBudget: wageBudget, scoutingPhilosophy: "marketSmart", managerId: "m",
+    playerIds: Object.keys(players), academyPlayerIds: [], youthAcademyRating: 5 };
+  const agents: FreeAgent[] = [];
+  if (supply) {
+    players.keeper = { ...players.p0, id: "keeper", position: "GK", clubId: "", contractClubId: undefined, contractExpiry: 0 };
+    agents.push({ playerId: "keeper", country: "england", nationality: "English", releasedFrom: "other", releasedSeason: 1,
+      weeksInPool: 1, maxWeeksInPool: 52, wageExpectation: 500, signingBonusExpectation: 1_000,
+      discoverySource: null, discoveredByScout: false, npcInterest: [], status: "available" });
+  }
+  return { seed: "ordinary-repair", currentWeek: 1, currentSeason: 2, players, clubs: { club },
+    leagues: { league: { id: "league", country: "England", tier: 4, clubIds: ["club"] } },
+    managerProfiles: {}, fixtures: {}, activeLoans: [], loanHistory: [], retiredPlayers: {}, retiredPlayerIds: [],
+    playerMovementHistory: [], inbox: [], freeAgentPool: { agents, lastRefreshSeason: 2,
+      totalReleasedThisSeason: 0, totalSignedThisSeason: 0, totalRetiredThisSeason: 0 } } as unknown as GameState;
+}
+describe("thin-squad recovery through the ordinary season-opening authority", () => {
+  it("fills a missing goalkeeper from a real funded and accepted offer", () => {
+    const state = world(true); const before = structuredClone(state);
+    const rng = new RNG("accepted"); rng.chance = () => true;
+    const next = recruitForSeasonOpening(state, rng);
+    expect(next.players.keeper.clubId).toBe("club");
+    expect(next.clubs.club.budget).toBe(state.clubs.club.budget - 1_000);
+    expect(getClubWeeklyCommitmentTotal(next.clubs.club, next.players)).toBeLessThanOrEqual(next.clubs.club.weeklyWageBudget!);
+    expect(Object.keys(next.players)).toEqual(Object.keys(state.players));
+    expect(state).toEqual(before);
+  });
+  it.each(["empty", "declined", "payroll"])("keeps a truthful vacancy when ordinary supply is %s", mode => {
+    const state = world(mode !== "empty", mode === "payroll" ? 5_000 : 30_000);
+    const before = structuredClone(state); const rng = new RNG(mode); rng.chance = () => mode !== "declined";
+    const next = recruitForSeasonOpening(state, rng);
+    expect(next.clubs.club.playerIds).toEqual(before.clubs.club.playerIds);
+    expect(next.clubs.club.budget).toBe(before.clubs.club.budget);
+    expect(next.clubs.club.weeklyWageBudget).toBe(before.clubs.club.weeklyWageBudget);
+    expect(Object.keys(next.players)).toEqual(Object.keys(before.players));
+    expect(state).toEqual(before);
+  });
 });

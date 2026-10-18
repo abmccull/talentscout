@@ -1,3 +1,5 @@
+import { compactPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
 import { deriveProfessionalCaseAccountability } from "@/engine/reports/caseAccountability";
 import { describe, expect, it } from "vitest";
 import type { GameState, Player, PlayerMovementEvent, ScoutReport } from "@/engine/core/types";
@@ -6,7 +8,7 @@ import { ensureScoutingCaseForReport } from "@/engine/reports/scoutingCases";
 import { selectLatestReportsByCase, selectMatureReportCasesForValidation } from "@/engine/reports/reportAccountability";
 
 function report(overrides: Partial<ScoutReport> = {}): ScoutReport {
-  return {
+  const authored: ScoutReport = {
     id: "report-a", caseId: "case-a", playerId: "player-a", scoutId: "scout-a",
     submittedWeek: 4, submittedSeason: 1, conviction: "note", recommendedAction: "pass",
     summary: "The current evidence does not justify another allocation of attention.",
@@ -14,6 +16,7 @@ function report(overrides: Partial<ScoutReport> = {}): ScoutReport {
     strengths: [], weaknesses: ["Unknown under pressure"], estimatedValue: 1000, qualityScore: 70,
     perceivedPARange: [1, 4], evidenceObservationIds: ["observation-a"], ...overrides,
   };
+  return { ...authored, decisionReceipt: createScoutingDecisionReceipt(authored) };
 }
 function state(original = report()): GameState {
   const linked = ensureScoutingCaseForReport({}, original);
@@ -38,6 +41,26 @@ function reviewedPlayer(overrides: Partial<Player> = {}): Player {
 }
 
 describe("preserved decisions and non-placement career reviews", () => {
+  it("keeps receipt-less historical pass reports professional and does not invent a receipt", () => {
+    const historical = { ...report(), decisionReceipt: undefined };
+    expect(selectLatestReportsByCase([historical])).toEqual([historical]);
+    const linked = ensureScoutingCaseForReport({}, historical);
+    expect(linked.scoutingCase.status).toBe("reported");
+    expect(linked.report.decisionReceipt).toBeUndefined();
+  });
+
+  it("reads compact movement and season histories without changing the dated review", () => {
+    const original = state(report({ submittedWeek: 1 }));
+    const player = reviewedPlayer();
+    const expanded = { ...original, currentSeason: 2, players: { [player.id]: player }, playerMovementHistory: [movement()] };
+    const compact = { ...expanded,
+      players: { [player.id]: { ...player, seasonRatings: player.seasonRatings?.map(compactSeasonRating) } },
+      playerMovementHistory: compactPlayerMovementHistory(expanded.playerMovementHistory),
+    };
+    expect(processScoutingDecisionReviews(compact).recommendationReviews)
+      .toEqual(processScoutingDecisionReviews(expanded).recommendationReviews);
+  });
+
   it("records a private pass without inventing a club and schedules two unique checkpoints", () => {
     const original = state();
     const scheduled = reconcileScoutingDecisionReviews(original);

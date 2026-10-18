@@ -4,6 +4,11 @@ import { collectGameSystemsHealth, summarizeNumbers } from "./gameSystemsHealth"
 import type { GameState, Player } from "@/engine/core/types";
 import { generatePlayer } from "@/engine/players/generation";
 import { RNG } from "@/engine/rng";
+import { compactPlayerMovementHistory, expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 function player(id: string, age: number, clubId = "club"): Player {
   return { ...generatePlayer(new RNG(`health-${id}`), {
@@ -38,6 +43,39 @@ function state(): GameState {
 }
 
 describe("football health snapshots", () => {
+  it("reads compact movement archives without losing dated retirement or flow evidence", () => {
+    const source = state();
+    source.currentWeek = 12;
+    source.playerMovementHistory = [
+      ...expandPlayerMovementHistory(source.playerMovementHistory),
+      { id: "dated-retirement", playerId: "retired", type: "retirement", season: 6, week: 8 },
+      ...Array.from({ length: 40 }, (_, index) => ({ id: `move-${index}`, playerId: "senior",
+        type: "contractRenewal" as const, season: 5, week: index + 1, contractClubId: "club" })),
+    ];
+    source.fixtures.after = { id: "after", season: 6, week: 9, played: true,
+      homeClubId: "club", awayClubId: "opponent", leagueId: "league" };
+    source.matchRatings.after = { retired: { playerId: "retired", fixtureId: "after", minutesPlayed: 90,
+      rating: 6, eventCount: 1, stats: {}, source: "simulated" } };
+    const ordinary = collectGameSystemsHealth(source, 5);
+    source.playerMovementHistory = compactPlayerMovementHistory(source.playerMovementHistory);
+    expect(Array.isArray(source.playerMovementHistory)).toBe(false);
+    const before = JSON.stringify(source);
+    expect(collectGameSystemsHealth(source, 5)).toEqual(ordinary);
+    expect(ordinary.invariants.violationsByCode["retired-participation"]).toBe(1);
+    expect(ordinary.movements.completedSeasonByType.contractRenewal).toBe(40);
+    expect(JSON.stringify(source)).toBe(before);
+  });
+
+  it("reports only the recorded recruitment allocation and keeps missing amounts unknown", () => {
+    const source = state();
+    expect(collectGameSystemsHealth(source, 5).rosters.clubDepth[0]).toMatchObject({ recruitmentAllocation: null });
+    source.clubs.club.recruitmentAllocation = { season: 6, amount: 1200, budgetBefore: 4000, budgetAfter: 5200 };
+    const health = collectGameSystemsHealth(source, 5);
+    expect(health.rosters.clubDepth[0]).toMatchObject({ recruitmentAllocation: source.clubs.club.recruitmentAllocation });
+    expect(health.rosters.clubDepth[0]).not.toHaveProperty("annualRecruitmentBudget");
+    expect(health.rosters.clubDepth[0]).not.toHaveProperty("lastRecruitmentAllocation");
+  });
+
   it("reports population shape separately from retained archives and authoritative movement flows", () => {
     const source = state();
     const before = structuredClone(source);
@@ -75,7 +113,8 @@ describe("football health snapshots", () => {
   it("does not attribute world signings to the scout or confuse accepted youth pitches with placed alumni", () => {
     const source = state();
     source.scout.id = "scout";
-    source.playerMovementHistory!.push({ id: "ai-youth", playerId: "youth", type: "youthSigning", season: 5, week: 20 });
+    source.playerMovementHistory = [...expandPlayerMovementHistory(source.playerMovementHistory),
+      { id: "ai-youth", playerId: "youth", type: "youthSigning", season: 5, week: 20 }];
     const worldOnly = collectGameSystemsHealth(source, 5);
     expect(worldOnly.movements.completedSeasonByType.youthSigning).toBe(1);
     expect(worldOnly.scoutingCareer.transferAccountabilityRecords).toBe(0);
@@ -234,9 +273,10 @@ describe("football health snapshots", () => {
 
 describe("game-systems diagnostics runner", () => {
   it("plans smoke and long runs without launching simulations or writing outputs", () => {
+    const output = join(tmpdir(), `talentscout-health-plan-${randomUUID()}`);
     const plan = JSON.parse(execFileSync(process.execPath, [
       "scripts/run-game-systems-diagnostics.mjs", "--profile=long", "--seasons=30", "--seeds=2",
-      "--include-chooser-matrix", "--plan-only",
+      "--include-chooser-matrix", "--plan-only", `--out=${output}`,
     ], { encoding: "utf8" }));
     expect(plan.simulationsExecuted).toBe(false);
     expect(plan.effectiveCheckpoints).toEqual([0, 1, 5, 10, 20, 30]);
@@ -244,11 +284,12 @@ describe("game-systems diagnostics runner", () => {
     expect(plan.persistence).toContain("mocked");
     expect(plan.source.fingerprint).toMatch(/^[a-f0-9]{64}$/);
     const smoke = JSON.parse(execFileSync(process.execPath, [
-      "scripts/run-game-systems-diagnostics.mjs", "--plan-only",
+      "scripts/run-game-systems-diagnostics.mjs", "--plan-only", `--out=${output}`,
     ], { encoding: "utf8" }));
     expect(smoke.seasonCount).toBe(1);
     expect(smoke.seedCount).toBe(1);
     expect(smoke.effectiveCheckpoints).toEqual([0, 1]);
+    expect(existsSync(output)).toBe(false);
   });
 
   it("rejects malformed counts before invoking the canonical soak", () => {

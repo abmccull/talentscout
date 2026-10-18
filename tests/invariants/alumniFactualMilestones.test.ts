@@ -36,9 +36,10 @@ function ledger(count = 0, rating = 7.5) {
     matchRatings[id] = { player: { playerId: "player", fixtureId: id, minutesPlayed: 90,
       started: true, rating, stats: { goals: i === 0 ? 1 : 0 }, source: "simulated", eventCount: 1 } };
   }
-  return { fixtures, matchRatings };
+  return { fixtures, matchRatings, movements: [] };
 }
-function tick(record = alumnus(), matches = ledger(), subject = player(), week = 30) {
+function tick(record = alumnus(), matches = ledger(), subject = player(), week = Math.max(3,
+  Object.keys(matches.matchRatings).filter(id => id.startsWith("match-")).length + 2)) {
   return processAlumniWeek(createRNG("alumni-facts"), [record], { player: subject }, clubs,
     week, 1, [], matches);
 }
@@ -77,25 +78,26 @@ describe("factual alumni milestones", () => {
       const evidence = ledger(1); invalidate(evidence);
       expect(tick(alumnus(), evidence).newMilestones).toEqual([]);
     }
-    const duplicate = ledger(19);
+    const duplicate = ledger(5);
     duplicate.fixtures.alias = duplicate.fixtures["match-0"];
     duplicate.matchRatings.alias = duplicate.matchRatings["match-0"];
     expect(tick(alumnus(), duplicate).newMilestones.some((m) => m.type === "wonderkidStatus")).toBe(false);
   });
 
-  it("keeps absent minutes unknown even if a legacy record says started", () => {
+  it("retains a legacy explicit start as participation without inventing minutes", () => {
     const evidence = ledger(1);
     delete evidence.matchRatings["match-0"].player.minutesPlayed;
-    expect(tick(alumnus(), evidence).newMilestones).toEqual([]);
+    expect(tick(alumnus(), evidence).newMilestones.map(milestone => milestone.type)).toEqual(["firstTeamDebut", "firstGoal"]);
+    expect(evidence.matchRatings["match-0"].player.minutesPlayed).toBeUndefined();
   });
 
   it("recognizes sustained young-player performance, independent of hidden potential", () => {
     const low = { ...player(), currentAbility: 30, potentialAbility: 40 };
-    expect(tick(alumnus(), ledger(19), low).newMilestones.some((m) => m.type === "wonderkidStatus")).toBe(false);
-    expect(tick(alumnus(), ledger(20, 7.49), low).newMilestones.some((m) => m.type === "wonderkidStatus")).toBe(false);
-    const result = tick(alumnus(), ledger(20), low);
+    expect(tick(alumnus(), ledger(5), low).newMilestones.some((m) => m.type === "wonderkidStatus")).toBe(false);
+    expect(tick(alumnus(), ledger(6, 7.4), low).newMilestones.some((m) => m.type === "wonderkidStatus")).toBe(false);
+    const result = tick(alumnus(), ledger(6), low);
     expect(result.newMilestones.map((m) => m.type)).toEqual(["firstTeamDebut", "firstGoal", "wonderkidStatus"]);
-    expect(result.newMilestones[2].description).toContain("20 rated appearances");
+    expect(result.newMilestones[2].description).toContain("6 recorded senior appearances");
     expect(result.newMilestones[2].description).not.toMatch(/potential|ceiling|wonderkid/i);
     expect(result.contactPromotions).toHaveLength(1);
     expect(tick(alumnus(), ledger(20), { ...low, age: 22 }).newMilestones.some((m) => m.type === "wonderkidStatus")).toBe(false);
@@ -142,8 +144,8 @@ describe("factual alumni milestones", () => {
       players: {}, unsignedYouth: {}, reports: {}, observations: {}, contacts: {}, fixtures: {},
       clubs: {}, discoveryRecords: [], alumniRecords: result.updatedAlumni, performanceHistory: [],
       inbox: result.newMessages } as unknown as GameState;
-    const once = processWeeklyPostTickSystems({ beforeWeek: state, state, alumniMilestones: result.newMilestones });
-    const twice = processWeeklyPostTickSystems({ beforeWeek: state, state: once, alumniMilestones: result.newMilestones });
+    const once = processWeeklyPostTickSystems({ beforeWeek: state, state });
+    const twice = processWeeklyPostTickSystems({ beforeWeek: state, state: once });
     expect(once.inbox.filter((m) => m.body === result.newMilestones[0].description)).toHaveLength(1);
     expect(twice.inbox.filter((m) => m.body === result.newMilestones[0].description)).toHaveLength(1);
   });

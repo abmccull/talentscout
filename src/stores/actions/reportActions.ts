@@ -41,6 +41,7 @@ import {
 } from "@/engine/reports/scoutingCases";
 import {
   attachReportEvidence,
+  isPrivateScoutingDecision,
   getFreshReportObservationIds,
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
@@ -50,6 +51,7 @@ import {
 } from "@/engine/reports/structuredYouthReport";
 import { getRemainingTablePounds } from "@/engine/reports/conviction";
 import { updateReputation } from "@/engine/career/progression";
+import { shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
 import { recordDiscovery } from "@/engine/career/index";
 import {
   evaluateReportAgainstDirectives,
@@ -109,14 +111,8 @@ function recordRetainerReportDelivery(
 export function createReportActions(get: GetState, set: SetState) {
   return {
     startReport: (playerId: string) => {
-      const current = get();
-      const nextState = current.gameState
-        ? revealGamePortraits(current.gameState, [playerId], "report")
-        : null;
-      set({ selectedPlayerId: playerId, currentScreen: "reportWriter", gameState: nextState });
-      if (nextState && nextState !== current.gameState) {
-        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
-      }
+      get().selectPlayer(playerId);
+      set({ currentScreen: "reportWriter" });
       // Use the more detailed firstReportWriting tutorial for first-timers
       useTutorialStore.getState().startSequence("firstReportWriting");
     },
@@ -281,6 +277,13 @@ export function createReportActions(get: GetState, set: SetState) {
         canonicalPlayerId,
         structured?.briefId,
       );
+      // Private decisions consume evidence but do not replace the last public stance.
+      const previousProfessionalReport = getLatestReportInScope(
+        Object.values(gameState.reports).filter((candidate) => !isPrivateScoutingDecision(candidate)),
+        gameState.scout.id,
+        canonicalPlayerId,
+        structured?.briefId,
+      );
       const analystReview = gameState.finances
         ? getApplicableAnalystReview(
             gameState.finances.analystReviews ?? [],
@@ -288,7 +291,12 @@ export function createReportActions(get: GetState, set: SetState) {
             previousReport,
           )
         : undefined;
-      const freshObservationIds = getFreshReportObservationIds(observations, previousReport);
+      const freshObservationIds = getFreshReportObservationIds(
+        observations, previousReport, Object.values(gameState.reports),
+      );
+      const hasPrivateDecision = Object.values(gameState.reports).some((candidate) =>
+        candidate.scoutId === gameState.scout.id && candidate.playerId === canonicalPlayerId
+        && isPrivateScoutingDecision(candidate));
       const preparedWorkItem = Object.values(gameState.reportWorkItems ?? {})
         .filter((item) =>
           item.status === "ready"
@@ -416,6 +424,7 @@ export function createReportActions(get: GetState, set: SetState) {
         set({
           currentScreen: isOpeningRetry ? "dashboard" : "reportHistory",
           ...(isOpeningRetry || isPass || gameState.scout.careerPath !== "independent"
+            || !shouldPromptReportListing(gameState.reports[report.id])
             ? {}
             : { pendingListingReportId: report.id }),
         });
@@ -434,8 +443,11 @@ export function createReportActions(get: GetState, set: SetState) {
                   week: gameState.currentWeek,
                   season: gameState.currentSeason,
                   type: "feedback",
-                  title: previousReport ? "Report revision needs new evidence" : "Observe before reporting",
-                  body: previousReport
+                  title: previousReport ? "Report revision needs new evidence"
+                    : hasPrivateDecision ? "Reconsideration needs new evidence" : "Observe before reporting",
+                  body: hasPrivateDecision && !previousReport
+                    ? "Your private pass already records this evidence. Observe the player again before reconsidering; changing recruitment briefs does not create new evidence."
+                    : previousReport
                     ? "This case has no unreported evidence. Observe the player again in a meaningful context before filing a revision; rewriting the same evidence cannot create reputation, client credit, or assignment progress."
                     : "A professional report needs at least one first-hand observation. Schedule a match, training visit, video review, or another valid observation context first.",
                   read: false,
@@ -459,7 +471,7 @@ export function createReportActions(get: GetState, set: SetState) {
         candidate.scoutId === report.scoutId
         && candidate.playerId === report.playerId
         && candidate.briefId === report.briefId
-        && candidate.recommendedAction !== "pass",
+        && !isPrivateScoutingDecision(candidate),
       );
 
       const qualityDetailed = prepared.quality;
@@ -470,6 +482,9 @@ export function createReportActions(get: GetState, set: SetState) {
         ? updateReputation(gameState.scout, {
             type: "reportSubmitted",
             quality,
+            hasSupportedFinding: evidenceAssessment
+              ? evidenceAssessment.claims.some((claim) => claim.support === "supported")
+              : undefined,
         })
         : gameState.scout;
       const practicedScout = evidenceAssessment && !isPass
@@ -481,8 +496,8 @@ export function createReportActions(get: GetState, set: SetState) {
       // Difficulty is sign-aware: easier modes improve gains and soften
       // losses, while harder modes do the reverse.
       const repDelta = baseUpdatedScout.reputation - gameState.scout.reputation;
-      const publicRevisionCost = isPass || previousReport?.recommendedAction === "pass" ? 0 : calculatePublicRevisionReputationCost(
-        previousReport,
+      const publicRevisionCost = isPass ? 0 : calculatePublicRevisionReputationCost(
+        previousProfessionalReport,
         report,
         gameState.difficulty,
       );
@@ -513,6 +528,8 @@ export function createReportActions(get: GetState, set: SetState) {
         qualityScore: quality,
         reputationDelta,
         craftBreakdown: qualityDetailed.breakdown,
+        validationStatus: undefined,
+        validationCurrentAbility: player.currentAbility,
         validationSnapshot: Object.fromEntries(
           report.attributeAssessments.map((assessment) => [
             assessment.attribute,
@@ -520,14 +537,12 @@ export function createReportActions(get: GetState, set: SetState) {
           ]),
         ),
       };
+      scoredReport = { ...scoredReport, decisionReceipt: createScoutingDecisionReceipt(scoredReport) };
       const caseLink = ensureScoutingCaseForReport(
         gameState.scoutingCases ?? {},
         scoredReport,
       );
-      scoredReport = {
-        ...caseLink.report,
-        decisionReceipt: createScoutingDecisionReceipt(caseLink.report),
-      };
+      scoredReport = caseLink.report;
 
       // Record discovery if this player has not been tracked before
       const alreadyDiscovered = gameState.discoveryRecords.some(
@@ -731,6 +746,7 @@ export function createReportActions(get: GetState, set: SetState) {
       );
       // The first report returns to its booked follow-up in Planner; listing stays optional.
       const shouldOfferMarketplaceListing = isFirstProfessionalReport
+        && shouldPromptReportListing(scoredReport)
         && gameState.scout.careerPath === "independent"
         && !isOpeningReport;
       const revisionCostMessage: InboxMessage | null = publicRevisionCost > 0
@@ -790,17 +806,19 @@ export function createReportActions(get: GetState, set: SetState) {
           }] : []),
         ],
       }));
-      const nextState = isOpeningReport
-        ? isPass
-          ? reconcileOpeningReportStage(committedState)
-          : bookOpeningFollowUp(reconcileOpeningReportStage(committedState))
-        : committedState;
+      const activeWeek = get().weekSimulation;
+      const reconciledState = isOpeningReport ? reconcileOpeningReportStage(committedState) : committedState;
+      // An itinerary remains authoritative through its pending world tick.
+      // Filing during that itinerary must not insert work into elapsed days.
+      const nextState = isOpeningReport && !isPass && !activeWeek
+        ? bookOpeningFollowUp(reconciledState)
+        : reconciledState;
       set({
         gameState: nextState,
-        currentScreen: isOpeningReport && !isPass ? "calendar" : "reportHistory",
+        currentScreen: activeWeek && isOpeningReport ? "weekSimulation" : isOpeningReport && !isPass ? "calendar" : "reportHistory",
         ...(isPass ? { pendingListingReportId: null } : shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),
       });
-      queueGameplayAutosave(snapshotPersistedGameState(nextState), set);
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, activeWeek), set);
       const tutorialAfterReport = useTutorialStore.getState();
       if (isNewCase) {
         // Tutorial auto-advance: step expects the first accountable case filing.

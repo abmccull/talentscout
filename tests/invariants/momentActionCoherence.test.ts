@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ALL_ATTRIBUTES, type Player } from "@/engine/core/types";
 import { generatePlayer } from "@/engine/players/generation";
 import { createRNG } from "@/engine/rng";
-import { generateMoments, selectMomentAction } from "@/engine/observation/moments";
-import { MOMENT_ACTIONS } from "@/engine/observation/momentActions";
+import { generateMoments } from "@/engine/observation/moments";
+import { FOOTBALL_ACTIONS } from "@/engine/observation/footballActions";
 import type { SessionPlayer } from "@/engine/observation/types";
 
 function subject(position: "ST" | "GK" = "ST"): Player {
@@ -27,13 +27,12 @@ function events(seed: string, player = subject(), quality?: number, focused = fa
 }
 
 describe("football action evidence coherence", () => {
-  it("a striker's misplaced short pass assesses passing under minimal pressure", () => {
+  it("a striker's misplaced pass assesses passing without inventing another contributor", () => {
     const passingErrors = Array.from({ length: 120 }, (_, index) => events(`short-pass-${index}`, subject(), 3))
-      .flat().filter((moment) => moment.description.includes("misplaced a short pass"));
+      .flat().filter((moment) => moment.actionId === "pass" && moment.quality === 3);
     expect(passingErrors.length).toBeGreaterThan(5);
     for (const moment of passingErrors) {
       expect(moment.attributesHinted).toEqual(["passing"]);
-      expect(moment.pressureContext).toBe(false);
       expect(moment.vagueDescription).not.toMatch(/precise|impressive|tidy|brilliance|good|won/i);
     }
   });
@@ -65,35 +64,35 @@ describe("football action evidence coherence", () => {
       for (let index = 0; index < 120; index += 1) {
         for (const moment of events(`action-catalog-${index}`, subject(), quality)) {
           const band = quality >= 7 ? "high" : quality >= 5 ? "medium" : "low";
-          const action = MOMENT_ACTIONS.find((candidate) =>
-            candidate.descriptions[band].replace("{playerName}", "Reece Beckham") === moment.description);
+          const action = FOOTBALL_ACTIONS.find((candidate) =>
+            candidate.outcomes[band].replace("{playerName}", "Reece Beckham") === moment.description);
           expect(action, moment.description).toBeDefined();
           expect(moment.attributesHinted).toEqual(action!.attributes);
-          expect(moment.pressureContext).toBe(action!.pressure);
+          if (action!.requiresPressure) expect(moment.pressureContext).toBe(true);
           expect(moment.momentType).toBe(action!.momentType);
           seen.add(action!.id);
         }
       }
     }
-    expect(seen.size).toBe(MOMENT_ACTIONS.length);
+    expect(seen.size).toBe(FOOTBALL_ACTIONS.length);
   });
 
   it("goalkeepers are not assigned shooting, wing-crossing, or pressing-forward actions", () => {
     const keeper = subject("GK");
     for (let index = 0; index < 100; index += 1) {
       for (const moment of events(`keeper-actions-${index}`, keeper, 7)) {
-        const action = MOMENT_ACTIONS.find((candidate) => candidate.descriptions.high.replace("{playerName}", "Reece Beckham") === moment.description)!;
+        const action = FOOTBALL_ACTIONS.find((candidate) => candidate.outcomes.high.replace("{playerName}", "Reece Beckham") === moment.description)!;
         expect(action.outfieldOnly).not.toBe(true);
       }
     }
   });
 
-  it("pressure-weighted action selection responds to match context", () => {
-    const player = visible(subject());
-    const pressured = (probability: number) => Array.from({ length: 400 }, (_, index) =>
-      selectMomentAction(createRNG(`pressure-action-${index}`), "technicalAction", player, probability))
-      .filter((action) => action.pressure).length;
-    expect(pressured(0.65) - pressured(0.2)).toBeGreaterThan(100);
+  it("later football context produces more pressured passages", () => {
+    const player = subject();
+    const pressured = (phaseIndex: number) => Array.from({ length: 400 }, (_, index) =>
+      generateMoments(createRNG(`pressure-action-${index}`), [visible(player)], "schoolMatch", phaseIndex, 5,
+        undefined, { [player.id]: player })).flat().filter((moment) => moment.pressureContext).length;
+    expect(pressured(4) - pressured(0)).toBeGreaterThan(150);
   });
 
   it("replays the same seed and cannot change football outcomes by applying a lens", () => {

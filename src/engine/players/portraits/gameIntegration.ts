@@ -22,9 +22,14 @@ export function revealGamePortraits(
   ))];
   // Loaded/domain-owned bindings are already validated and immutable. Revisiting
   // a photographed player should not clone a lifetime of retained reservations.
+  // Exhausted packs cannot fill waiting reservations either. Inspect the current
+  // catalog each time so installing more assets immediately enables allocation.
+  const hasUnclaimedFace = [...catalog.values()].some((entry) =>
+    entry.allocationAllowed !== false
+      && !state.playerPortraits?.faceOwners[entry.canonicalFaceSha256]);
   if (playerIds.every((id) => {
     const reservation = state.playerPortraits?.reservations["person:v1:" + id];
-    if (!reservation?.binding) return false;
+    if (!reservation || (!reservation.binding && hasUnclaimedFace)) return false;
     if (reservation.displayName) return true;
     const player = state.players?.[id] ?? state.retiredPlayers?.[id]
       ?? state.unsignedYouth?.[id]?.player

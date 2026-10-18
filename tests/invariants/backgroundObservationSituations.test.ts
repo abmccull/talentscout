@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
 import { describe, expect, it, vi } from "vitest";
 
 import { addActivity, createWeekSchedule } from "@/engine/core/calendar";
@@ -172,13 +173,13 @@ describe("background observation situation authority", () => {
       observation.attributeReadings.reduce((sum, reading) => sum + reading.confidence, 0)
       / observation.attributeReadings.length;
 
-    expect(deep.situation?.travelPosture).toBe("deepDive");
-    expect(blitz.situation?.travelPosture).toBe("opportunityBlitz");
-    expect(deep.situation?.uncertaintyMultiplier)
-      .toBeLessThan(blitz.situation?.uncertaintyMultiplier ?? 0);
+    expect(expandObservationSituationSnapshot(deep.situation)?.travelPosture).toBe("deepDive");
+    expect(expandObservationSituationSnapshot(blitz.situation)?.travelPosture).toBe("opportunityBlitz");
+    expect(expandObservationSituationSnapshot(deep.situation)?.uncertaintyMultiplier)
+      .toBeLessThan(expandObservationSituationSnapshot(blitz.situation)?.uncertaintyMultiplier ?? 0);
     expect(averageConfidence(deep)).toBeGreaterThan(averageConfidence(blitz));
     expect(deep.activityInstanceId).toBeTruthy();
-    expect(deep.situation?.repetitionKey).toBeTruthy();
+    expect(expandObservationSituationSnapshot(deep.situation)?.repetitionKey).toBeTruthy();
   }, 30_000);
 
   it("keeps background observation ordinals equivalent when player-local counts are supplied", async () => {

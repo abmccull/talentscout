@@ -1,3 +1,4 @@
+import type { PlayerMovementEvent } from "@/engine/core/types";
 import { describe, expect, it } from "vitest";
 import type {
   DiscoveryRecord,
@@ -204,7 +205,7 @@ describe("career consequence cinema model", () => {
   });
 
   it("does not turn the engine-only wonderkid flag into discovery copy", () => {
-    const movement: ConsequenceCinemaSource["playerMovementHistory"][number] = {
+    const movement: PlayerMovementEvent = {
       id: "move-truth-boundary",
       playerId: "player-1",
       type: "permanentTransfer",

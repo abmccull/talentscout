@@ -1,0 +1,666 @@
+{
+  "schema": "installed-braces-regression-cases-v1",
+  "selectionScope": "32 candidate-only normal-stack persistent regressions selected unchanged from the original pre-code 96-case corpus; not full matrix replacement",
+  "sourceCorpus": {
+    "path": "braces-integration-71c6e904/cases.json",
+    "sha256": "c0888ff641cd4afb433dd2ee36fc25fe603f3583a5cc1819669460171f4ae232"
+  },
+  "closedBaselineReport": {
+    "path": "braces-integration-71c6e904/run-643edabb-54af-4d58-861d-53a2b089bc93/report.json",
+    "bytes": 3743874,
+    "sha256": "53117ab7c1b866d49e8af5cd9ad4b644236389a7c193c5121dee3e84c78921c7"
+  },
+  "ceiling": 100,
+  "childDeadlineMs": 5000,
+  "childOldSpaceMiB": 128,
+  "projectionLimits": {
+    "maxObjects": 32768,
+    "maxProperties": 262144,
+    "maxStringCharacters": 16384,
+    "maxEncodedBytes": 16777216
+  },
+  "nextSources": {
+    "internal": "const x = <a href=\"/about\">About</a>;",
+    "external": "const x = <a href=\"https://example.invalid/about\">About</a>;"
+  },
+  "installedIdentity": {
+    "name": "@talentscout/braces-depth-guard",
+    "version": "3.0.3-ts.2",
+    "files": [
+      {
+        "path": "index.js",
+        "bytes": 4380,
+        "sha256": "332ea07c7b006361aad12aa994ca75dc1db8e8382b884909e2f38f10b85c88a4"
+      },
+      {
+        "path": "lib/compile.js",
+        "bytes": 1637,
+        "sha256": "519dd6417a5d2ed26359a3814fe476749c3347769925b62618c40453d1308aaf"
+      },
+      {
+        "path": "lib/constants.js",
+        "bytes": 1589,
+        "sha256": "c18ac5adb57308f1ce42a28552da3a31f5d83709743ebd9a636336813a744d4b"
+      },
+      {
+        "path": "lib/expand.js",
+        "bytes": 3221,
+        "sha256": "dd88fc7c23a6c4538b5535bce2492ebf26cde351c3ea6a3783f0cacd503f6d5c"
+      },
+      {
+        "path": "lib/parse.js",
+        "bytes": 6999,
+        "sha256": "a166c5e93ba1b250a3858f997a43de706d76113f5bbbbb21a8b27c8cabd3029f"
+      },
+      {
+        "path": "lib/stringify.js",
+        "bytes": 990,
+        "sha256": "722ddf931d4f9959c716d34208ed3b9cb9fa388d19b2e514e055a683ff931766"
+      },
+      {
+        "path": "lib/utils.js",
+        "bytes": 2518,
+        "sha256": "b5a7596aa67730412b3c029ef09e84e6b67b8e445cffd35d1d295549c89066c7"
+      },
+      {
+        "path": "package.json",
+        "bytes": 1717,
+        "sha256": "e13c68c1576797fcd8a9951a6901abae08fdaa726900c304ecc194cccdc52b46"
+      },
+      {
+        "path": "LICENSE",
+        "bytes": 1091,
+        "sha256": "35bdd8a44339719441900fb50fbefc5e2dca1ca662cbaed7a687de842c8b70f2"
+      },
+      {
+        "path": "README.md",
+        "bytes": 21505,
+        "sha256": "947b0fc3cc12eaaa070207126213fbdf9ab2bf8cd13dcc6e4007b36b79309866"
+      },
+      {
+        "path": "lib/guard.js",
+        "bytes": 1411,
+        "sha256": "e0cbf9d89217d9cc9c8e3441fbc2295b5cc39b46a122e1a41cae1d3db017c6ed"
+      },
+      {
+        "path": "UPSTREAM.json",
+        "bytes": 5517,
+        "sha256": "9a275cca605cd97fa05722e678bb3697d6d6fc68f1313df04a9f0908040e3b0e"
+      }
+    ],
+    "archive": {
+      "path": "vendor/talentscout-braces-depth-guard-3.0.3-ts.2.tgz",
+      "bytes": 17299,
+      "sha256": "71fdb5731ab2d66bf9242886ea0a58f4e6ebad8f689e468105fb6ff2a78b54de"
+    }
+  },
+  "cases": [
+    {
+      "id": "O01",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "literal",
+        "value": "a/{b,c}/d"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": "a/(b|c)/d"
+      }
+    },
+    {
+      "id": "O02",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "literal",
+        "value": "a/{b,c}/d"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": [
+          "a/b/d",
+          "a/c/d"
+        ]
+      }
+    },
+    {
+      "id": "O08",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "literal",
+        "value": "x/{01..03}"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": [
+          "x/01",
+          "x/02",
+          "x/03"
+        ]
+      }
+    },
+    {
+      "id": "O13",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "literal",
+        "value": "{b,a,b}"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": [
+          "b",
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "O17",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "literal",
+        "value": "a\\{b,c}d"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": "a{b,c}d"
+      }
+    },
+    {
+      "id": "O19",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "literal",
+        "value": "\"{a,b}\""
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": "{a,b}"
+      }
+    },
+    {
+      "id": "O21",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "literal",
+        "value": "[{a,b}]"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": "[{a,b}]"
+      }
+    },
+    {
+      "id": "O25",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "literal",
+        "value": "a{b,{c,d}}e"
+      },
+      "options": {
+        "maxDepth": 1
+      },
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "ea6d2afdab5147c9d6e2748842e79a8a04168f2f08dcae3f8f1e9f5dd659a3fa",
+        "child": {
+          "path": "b-O25-normal/child-result.json",
+          "bytes": 475,
+          "sha256": "f4b026141268c805a4a97db98a3e4aeaaeae88ad0bf40f6cfde518bf5e4b572e"
+        }
+      }
+    },
+    {
+      "id": "B25",
+      "consumer": "braces",
+      "api": "parse",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 99
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "fbfd5434d46da0894f83d9d5c2878b8ccf5b219660bd655768e7c89bf1ffc223",
+        "child": {
+          "path": "b-B25-normal/child-result.json",
+          "bytes": 1639,
+          "sha256": "a5bf25acee7f2cd1f5f9d2134f1ba850ac01d96c03c29f38bc0317b3c2df3b43"
+        }
+      }
+    },
+    {
+      "id": "B26",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 99
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "3b8802e2578b8780b18e0701030d72d6f80f9c4725105807408136950bef6ecc",
+        "child": {
+          "path": "b-B26-normal/child-result.json",
+          "bytes": 476,
+          "sha256": "fcff88c05d1d885ff7037e7dd372698e4b72710fe2720fed12211a9908188399"
+        }
+      }
+    },
+    {
+      "id": "B27",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 99
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "34a8eae813d5dfb05dec0c76054728a934d6ad2392c8cccea1f7d8b6fda5239e",
+        "child": {
+          "path": "b-B27-normal/child-result.json",
+          "bytes": 915,
+          "sha256": "6147c0202646f449b8f700d5f983ec32c1c18ce6b914855d1c8d3eb46a212a55"
+        }
+      }
+    },
+    {
+      "id": "B28",
+      "consumer": "braces",
+      "api": "stringify",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 99
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "3b8802e2578b8780b18e0701030d72d6f80f9c4725105807408136950bef6ecc",
+        "child": {
+          "path": "b-B28-normal/child-result.json",
+          "bytes": 463,
+          "sha256": "9f0a4987a2d2f76c338750b72a7bbe4a20ae369211af799874514fbc8ed79e74"
+        }
+      }
+    },
+    {
+      "id": "B29",
+      "consumer": "braces",
+      "api": "parse",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 100
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "916a7f254837d42cfa285d262161e91cbb400d2d28d1cd785dacd974b5fda954",
+        "child": {
+          "path": "b-B29-normal/child-result.json",
+          "bytes": 1641,
+          "sha256": "d081cdec4241fbe8ed169f37321376fcd5ad2f108bf45cd47d1e994870e3f487"
+        }
+      }
+    },
+    {
+      "id": "B30",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 100
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "8dbc5cf47ee0ff0ba745d4df295126a78a100985d35a410750d0ce97fdde2ae7",
+        "child": {
+          "path": "b-B30-normal/child-result.json",
+          "bytes": 476,
+          "sha256": "8765b538f92031d4a843c01f2ab3e33ea7c12c8eb13f0557e10b88015042bbc4"
+        }
+      }
+    },
+    {
+      "id": "B31",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 100
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "cc0d0737c9fe5cdedb31c78743b6ea914746a5bc47f97f01f3abebb3d50245e1",
+        "child": {
+          "path": "b-B31-normal/child-result.json",
+          "bytes": 918,
+          "sha256": "5680c5ac9017b23dbf39cd7a86dda4509ea47f5885696a2325130b2378ca4c1f"
+        }
+      }
+    },
+    {
+      "id": "B32",
+      "consumer": "braces",
+      "api": "stringify",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 100
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity"
+      },
+      "baselineNormalProjection": {
+        "sha256": "8dbc5cf47ee0ff0ba745d4df295126a78a100985d35a410750d0ce97fdde2ae7",
+        "child": {
+          "path": "b-B32-normal/child-result.json",
+          "bytes": 476,
+          "sha256": "85936563275e2b238bc284da1f18ebf39cf1eb663d443945a111e707e40f856d"
+        }
+      }
+    },
+    {
+      "id": "B33",
+      "consumer": "braces",
+      "api": "parse",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "SyntaxError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "B34",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "SyntaxError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "B35",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "SyntaxError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "B36",
+      "consumer": "braces",
+      "api": "stringify",
+      "input": {
+        "kind": "nested-string",
+        "shape": "mixed",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "SyntaxError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "A07",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "ast-chain",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "RangeError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "A08",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "ast-chain",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "RangeError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "A09",
+      "consumer": "braces",
+      "api": "stringify",
+      "input": {
+        "kind": "ast-chain",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "RangeError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "C01",
+      "consumer": "braces",
+      "api": "compile",
+      "input": {
+        "kind": "ast-child-cycle"
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "RangeError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "stack-overflow-or-deadline"
+      }
+    },
+    {
+      "id": "C02",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "ast-child-cycle"
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "RangeError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "stack-overflow-or-deadline"
+      }
+    },
+    {
+      "id": "C03",
+      "consumer": "braces",
+      "api": "stringify",
+      "input": {
+        "kind": "ast-child-cycle"
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "RangeError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "stack-overflow-or-deadline"
+      }
+    },
+    {
+      "id": "P01",
+      "consumer": "braces",
+      "api": "expand",
+      "input": {
+        "kind": "ast-parent",
+        "cycle": "self"
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "RangeError",
+        "code": "ERR_BRACES_INVALID_AST",
+        "baselineControl": "deadline"
+      }
+    },
+    {
+      "id": "M01",
+      "consumer": "micromatch",
+      "api": "braces",
+      "input": {
+        "kind": "literal",
+        "value": "a/{b,c}/d"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": [
+          "a/(b|c)/d"
+        ]
+      }
+    },
+    {
+      "id": "M02",
+      "consumer": "micromatch",
+      "api": "braceExpand",
+      "input": {
+        "kind": "literal",
+        "value": "a/{b,c}/d"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "value": [
+          "a/b/d",
+          "a/c/d"
+        ]
+      }
+    },
+    {
+      "id": "M04",
+      "consumer": "micromatch",
+      "api": "braces",
+      "input": {
+        "kind": "nested-string",
+        "shape": "brace",
+        "depth": 101
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "SyntaxError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    },
+    {
+      "id": "N01",
+      "consumer": "next",
+      "api": "verify-pair",
+      "input": {
+        "kind": "next-root",
+        "mode": "brace"
+      },
+      "options": {},
+      "expect": {
+        "kind": "parity",
+        "lintRule": "@next/next/no-html-link-for-pages",
+        "internalCount": 1,
+        "externalCount": 0
+      }
+    },
+    {
+      "id": "N04",
+      "consumer": "next",
+      "api": "verify-pair",
+      "input": {
+        "kind": "next-root",
+        "mode": "deep"
+      },
+      "options": {},
+      "expect": {
+        "kind": "guard",
+        "name": "SyntaxError",
+        "code": "ERR_BRACES_DEPTH",
+        "baselineControl": "value"
+      }
+    }
+  ]
+}

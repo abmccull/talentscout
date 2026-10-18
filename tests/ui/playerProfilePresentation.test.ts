@@ -2,11 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   evidenceOpportunityLabel,
+  getLatestPlayerReport,
   selectMostRelevantScoutingCase,
   summarizeUnknownAttributes,
 } from "@/components/game/player-profile/playerProfilePresentation";
 
 describe("playerProfilePresentation", () => {
+  it("uses the latest dated revision when a scout changes a recommendation to monitoring", () => {
+    const reports = [
+      { id: "previous-season", submittedSeason: 1, submittedWeek: 45, revision: 9, recommendedAction: "sign" },
+      { id: "monitor", submittedSeason: 2, submittedWeek: 2, revision: 2, recommendedAction: "monitor" },
+      { id: "earlier-revision", submittedSeason: 2, submittedWeek: 2, revision: 1, recommendedAction: "sign" },
+    ];
+    const originalOrder = reports.map((report) => report.id);
+    expect(getLatestPlayerReport(reports as never)?.recommendedAction).toBe("monitor");
+    expect(reports.map((report) => report.id)).toEqual(originalOrder);
+    expect(getLatestPlayerReport([])).toBeUndefined();
+  });
+
   it("prefers the scouting case with the strongest active professional trail", () => {
     const selected = selectMostRelevantScoutingCase({
       scoutingCases: {

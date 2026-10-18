@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "modes": ["baseline", "candidate"],
+  "defaultMaxOutputBytes": 67108864,
+  "differentMaxOutputBytes": 67108865,
+  "safeCeilingText": "9007199254740991",
+  "diagnosticChildTimeoutMs": 10000,
+  "diagnosticTestTimeoutMs": 30000,
+  "rawBytesPerStream": 65536,
+  "invalidText": [
+    ["empty", ""], ["space", " "], ["plus", "+1"], ["negative", "-1"],
+    ["zero", "0"], ["leading-zero", "01"], ["fraction", "1.5"], ["exponent", "1e3"],
+    ["suffix", "1byte"], ["infinity", "Infinity"], ["nan", "NaN"],
+    ["unsafe", "9007199254740992"], ["newline", "1\n"], ["null-text", "null"]
+  ],
+  "evidenceInvalidValues": ["missing", 0, 0.5, 9007199254740992],
+  "sourceBaselineCommit": "8052387962cc165588dbb1cb5ceaa678a8692583",
+  "productionGrantImplemented": false,
+  "executed": false,
+  "capacityAccepted": false,
+  "fullCareerAccepted": false,
+  "releaseAccepted": false
+}

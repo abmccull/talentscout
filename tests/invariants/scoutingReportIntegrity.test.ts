@@ -1,4 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { queueGameplayAutosave } from "@/stores/actions/persistGameplayAutosave";
+
+vi.mock("@/stores/actions/persistGameplayAutosave", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/stores/actions/persistGameplayAutosave")>(),
+  queueGameplayAutosave: vi.fn(),
+}));
 import type {
   GameState,
   MatchPhase,
@@ -429,7 +435,8 @@ describe("scouting evidence invariants", () => {
   });
 });
 describe("report submission invariants", () => {
-  it("persists the same craft score prepared for preview and applies side effects once", () => {
+  it.each([null, 2, 7])("files the opening report once and preserves week progress at day %s", (currentDay) => {
+    vi.mocked(queueGameplayAutosave).mockClear();
     const player = makePlayer();
     const scout = makeScout();
     const observation = withDate(observePlayerLight(
@@ -487,7 +494,15 @@ describe("report submission invariants", () => {
       selectedPlayerId: player.id,
       currentScreen: "reportWriter",
       pendingListingReportId: null,
+      activeSession: null,
+      weekSimulation: currentDay === null ? null : {
+        currentDay, dayResults: [], pendingWorldTick: currentDay === 7,
+      },
     } as unknown as GameStoreState;
+    gameState.openingCase = { id: "opening-report", playerId: player.id, stage: "report" } as GameState["openingCase"];
+    gameState.schedule = { week: 1, season: 1, activities: Array.from({ length: 7 }, () => null), completed: false };
+    const originalSchedule = structuredClone(gameState.schedule);
+    const originalWeek = structuredClone(store.weekSimulation);
     const get = (() => store) as GetState;
     const set = ((partial) => {
       const update = typeof partial === "function" ? partial(store) : partial;
@@ -498,6 +513,17 @@ describe("report submission invariants", () => {
     actions.submitReport("recommend", summary, strengths, weaknesses);
     const afterFirst = store.gameState!;
     const storedReport = Object.values(afterFirst.reports)[0];
+
+    expect(afterFirst.openingCase?.stage).toBe("complete");
+    expect(store.currentScreen).toBe(currentDay === null ? "calendar" : "weekSimulation");
+    expect(store.weekSimulation).toEqual(originalWeek);
+    if (currentDay !== null) expect(afterFirst.schedule).toEqual(originalSchedule);
+    else expect(afterFirst.schedule.activities.filter(Boolean)).toHaveLength(1);
+    const saved = vi.mocked(queueGameplayAutosave).mock.calls.at(-1)![0];
+    expect(saved.pendingWeekRecovery).toEqual(originalWeek ? {
+      week: 1, season: 1, simulation: originalWeek,
+    } : null);
+    expect(saved.activeObservationSession).toBeNull();
 
     expect(storedReport.qualityScore).toBe(expected.quality.score);
     expect(storedReport.craftBreakdown).toEqual(expected.quality.breakdown);

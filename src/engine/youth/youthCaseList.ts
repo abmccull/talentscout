@@ -1,10 +1,13 @@
+import { getFreshReportObservationIds, indexLatestPlayerReports, isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type {
   GameState,
   Observation,
+  ReflectionHypothesisRecord,
   ReflectionJournalEntry,
   UnsignedYouth,
 } from "@/engine/core/types";
-import { getFreshReportObservationIds } from "@/engine/reports/reportAccountability";
+import { buildYouthDeskEvidenceIndex } from "@/lib/youthDeskEvidence";
+import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
 import { collectYouthCasePlayerIds } from "./youthCaseFocus";
 
 export type YouthRivalHeat = "quiet" | "watching" | "contested" | "imminent";
@@ -16,7 +19,7 @@ export interface YouthCaseListItem {
   position: string;
   age: number;
   lastLookLabel: string;
-  questionLabel: string;
+  questionLabel?: string;
   openQuestion: string;
   nextTest: string;
   rivalHeat: YouthRivalHeat;
@@ -35,15 +38,16 @@ function latestObservation(
     )[0];
 }
 
-function latestJournal(
+function playerJournalHistory(
   journal: Record<string, ReflectionJournalEntry> | undefined,
   playerId: string,
-): ReflectionJournalEntry | undefined {
+): ReflectionJournalEntry[] {
   return Object.values(journal ?? {})
     .filter((entry) => entry.playerIds.includes(playerId))
     .sort((left, right) =>
-      (right.season ?? 0) - (left.season ?? 0) || (right.week ?? 0) - (left.week ?? 0),
-    )[0];
+      (right.season ?? 0) - (left.season ?? 0) || (right.week ?? 0) - (left.week ?? 0)
+      || right.createdAt - left.createdAt || right.id.localeCompare(left.id),
+    );
 }
 
 export function rivalHeatFromYouth(
@@ -70,22 +74,34 @@ const HEAT_LABEL: Record<YouthRivalHeat, string> = {
 
 export function buildYouthCaseListItem(
   youth: UnsignedYouth,
-  state: Pick<GameState, "observations" | "reflectionJournal" | "rivalActivities" | "currentWeek" | "currentSeason"> & Partial<Pick<GameState, "reports" | "scout">>,
+  state: Pick<GameState, "scout" | "observations" | "reflectionJournal" | "rivalActivities" | "currentWeek" | "currentSeason"> & Partial<Pick<GameState, "reports">>,
+  evidenceIndex = buildYouthDeskEvidenceIndex(state),
 ): YouthCaseListItem {
-  const observations = Object.values(state.observations ?? {})
-    .filter((observation) => !state.scout || observation.scoutId === state.scout.id);
+  const observations = evidenceIndex.get(youth.player.id)?.liveObservations ?? [];
   const last = latestObservation(observations, youth.player.id);
-  const journal = latestJournal(state.reflectionJournal, youth.player.id);
-  const hypothesis = journal?.hypotheses?.find((entry) => entry.playerId === youth.player.id);
-  const report = Object.values(state.reports ?? {})
-    .filter((entry) => entry.playerId === youth.player.id
-      && (!state.scout || entry.scoutId === state.scout.id))
-    .sort((left, right) => right.submittedSeason - left.submittedSeason
-      || right.submittedWeek - left.submittedWeek || (right.revision ?? 0) - (left.revision ?? 0))[0];
+  const eligibleJournal = Object.fromEntries(Object.entries(state.reflectionJournal ?? {}).filter(([, entry]) =>
+    entry.season < state.currentSeason || (entry.season === state.currentSeason && entry.week <= state.currentWeek)));
+  const history = playerJournalHistory(eligibleJournal, youth.player.id);
+  const journal = history[0];
+  // A visit without a new hypothesis does not close an earlier question. Resolve
+  // revisions before filtering open states, so closed questions cannot reappear.
+  const latestHypotheses = new Map<string, ReflectionHypothesisRecord>();
+  for (const entry of history) {
+    for (const hypothesis of entry.hypotheses ?? []) {
+      if (hypothesis.playerId === youth.player.id && !latestHypotheses.has(hypothesis.id)) {
+        latestHypotheses.set(hypothesis.id, hypothesis);
+      }
+    }
+  }
+  const hypothesis = [...latestHypotheses.values()].find((entry) =>
+    entry.state !== "confirmed" && entry.state !== "debunked");
+  const question = SCOUTING_QUESTIONS.find((entry) => entry.id === journal?.scoutingQuestionId);
+  const eligibleReports = Object.values(state.reports ?? {}).filter((report) =>
+    report.submittedSeason < state.currentSeason
+    || (report.submittedSeason === state.currentSeason && report.submittedWeek <= state.currentWeek));
+  const report = indexLatestPlayerReports(eligibleReports, state.scout.id).get(youth.player.id);
   const assessment = report?.evidenceAssessment;
-  const passedForNow = (report?.recommendedAction ?? assessment?.recommendation) === "pass";
-  // Report evidence IDs distinguish a genuinely new same-week observation
-  // from simply reopening the existing journal or another scout's evidence.
+  const passedForNow = Boolean(report && isPrivateScoutingDecision(report));
   const canReconsider = Boolean(passedForNow && report
     && getFreshReportObservationIds(observations, report).length > 0);
   const preservedPass = report?.summary?.trim() || assessment?.generatedSummary?.trim()
@@ -93,10 +109,7 @@ export function buildYouthCaseListItem(
   const reportIsLatest = report && (!journal || report.submittedSeason > journal.season
     || (report.submittedSeason === journal.season && report.submittedWeek >= journal.week));
   const unknown = reportIsLatest ? assessment?.unknowns[0]?.statement : undefined;
-  // These are saved scout judgments, never a claim inferred from hidden ability.
-  const reflectionNote = journal?.notes?.find((note) => note.trim());
-  const lastCue = last?.notes?.find((note) => note.trim());
-  const observationCount = observations.filter((observation) => observation.playerId === youth.player.id).length;
+  const witnessedNote = last?.notes?.find((note) => note.trim().length > 0)?.trim();
   const heat = rivalHeatFromYouth(youth, state.rivalActivities);
   return {
     playerId: youth.player.id,
@@ -109,21 +122,26 @@ export function buildYouthCaseListItem(
       : "No look yet",
     questionLabel: passedForNow ? canReconsider ? "Reconsideration available" : "Passed for now"
       : unknown ? "Still to test" : hypothesis ? "Working hypothesis"
-      : reflectionNote ? "Last reflection" : lastCue ? "Latest evidence" : "The open question",
+      : question ? "The open question" : witnessedNote ? "Latest evidence" : "The open question",
     openQuestion: passedForNow ? `Passed for now. ${preservedPass}`
-      : unknown ?? hypothesis?.text ?? reflectionNote ?? lastCue
-        ?? (observationCount ? "Which part of this read needs another context?" : "What will a first look reveal?"),
+      : unknown ?? hypothesis?.text
+      ?? question?.label
+      ?? witnessedNote
+      ?? "What still needs another context?",
     nextTest: passedForNow
       ? canReconsider ? "Optional: reconsider this pass against the new first-hand evidence."
         : "No next look planned; spend attention elsewhere."
       : reportIsLatest && assessment ? assessment.nextTest.label
-      : hypothesis ? "Test that hypothesis in a new context."
-      : observationCount > 1 ? "Revisit the evidence and choose the next test."
-      : observationCount === 1 ? "Book a second look in a different context."
-      : "Plan a first observation.",
+      : observations.length === 0
+      ? "Arrange a first live observation before judging the player."
+      : hypothesis
+      ? "Test that hypothesis in a new context."
+      : observations.length === 1
+      ? "Book a second look in a different context."
+      : "Test the open question against different opposition or a different role.",
     rivalHeat: heat,
     rivalHeatLabel: HEAT_LABEL[heat],
-    observationCount,
+    observationCount: observations.filter((observation) => observation.playerId === youth.player.id).length,
   };
 }
 
@@ -143,10 +161,11 @@ export function listYouthCases(
     | "currentWeek"
     | "currentSeason"
   >,
+  evidenceIndex = buildYouthDeskEvidenceIndex(state),
 ): YouthCaseListItem[] {
   const caseIds = collectYouthCasePlayerIds(state);
   return Object.values(state.unsignedYouth)
     .filter((youth) => !youth.retired && !youth.placed && caseIds.has(youth.player.id))
-    .map((youth) => buildYouthCaseListItem(youth, state))
+    .map((youth) => buildYouthCaseListItem(youth, state, evidenceIndex))
     .sort((left, right) => right.observationCount - left.observationCount || left.name.localeCompare(right.name));
 }

@@ -1,25 +1,6 @@
-import type { GamePage } from "../fixtures";
 import { test, expect } from "../fixtures";
+import { createSubmittedSupportedYouthReportFixture } from "../helpers/supported-youth-report";
 
-async function createSubmittedYouthReport(gamePage: GamePage) {
-  await gamePage.goto();
-  await gamePage.injectState({
-    currentWeek: 1,
-    scout: {
-      firstName: "Career",
-      lastName: "Tester",
-      primarySpecialization: "youth",
-    },
-  });
-  await gamePage.navigateTo("calendar");
-  await gamePage.scheduleActivityByLabel("School Match", "Mon");
-  await gamePage.advanceCanonicalWeek({ launchLiveSession: true });
-  await gamePage.openFirstYouthPlayerProfile();
-  await gamePage.page.getByRole("button", { name: "Write the report", exact: true }).click();
-  await gamePage.waitForScreen("reportWriter");
-  await gamePage.submitCurrentReportViaUI("recommend");
-  await gamePage.waitForScreen("reportHistory");
-}
 
 test.describe("Career Paths", () => {
   test("career hub explains the seed-locked world conditions", async ({ gamePage }) => {
@@ -81,8 +62,10 @@ test.describe("Career Paths", () => {
     gamePage.expectNoConsoleErrors();
   });
 
-  test("independent youth reports expose the marketplace prompt and stats", async ({ gamePage }) => {
-    await createSubmittedYouthReport(gamePage);
+  test("independent youth reports expose the marketplace prompt and stats", async ({ gamePage }, testInfo) => {
+    await createSubmittedSupportedYouthReportFixture(gamePage, testInfo, {
+      firstName: "Career", conviction: "recommend",
+    });
 
     await expect(
       gamePage.page.locator('[data-tutorial-id="report-marketplace-prompt"]'),

@@ -1,3 +1,4 @@
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import { addActivity, canScheduleActivity, getAvailableActivities } from "@/engine/core/calendar";
 import type { Activity, GameState } from "@/engine/core/types";
 
@@ -20,7 +21,7 @@ export function bookOpeningFollowUp(state: GameState): GameState {
       || right.submittedWeek - left.submittedWeek
       || (right.revision ?? 1) - (left.revision ?? 1)
       || right.id.localeCompare(left.id))[0];
-  if (report?.recommendedAction === "pass" || report?.evidenceAssessment?.recommendation === "pass") return state;
+  if (report && isPrivateScoutingDecision(report)) return state;
   if (openingFollowUpDayIndex(state) >= 0) return state;
 
   const youth = opening.youthId
@@ -37,7 +38,11 @@ export function bookOpeningFollowUp(state: GameState): GameState {
     state.scout, state.currentWeek, Object.values(state.fixtures ?? {}), Object.values(state.contacts ?? {}),
     state.subRegions, state.observations, state.unsignedYouth, state.players,
     undefined, state.youthTournaments, state.reports,
-    { currentSeason: state.currentSeason, consequenceState: state.consequenceState },
+    {
+      currentSeason: state.currentSeason, consequenceState: state.consequenceState,
+      scoutingCases: state.scoutingCases, alumniRecords: state.alumniRecords, retiredPlayers: state.retiredPlayers,
+      openingCase: state.openingCase,
+    },
   ).find((candidate) => candidate.type === nextTest.activityType
     && (!candidate.targetId || candidate.targetId === opening.playerId)
     && (!candidate.targetPool || candidate.targetPool.some((target) => target.id === opening.playerId))) : undefined;

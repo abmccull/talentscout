@@ -1,3 +1,4 @@
+import { expandClubSeasonHistory } from "./clubSeasonArchive";
 import type {
   ClubLeagueMovement,
   PlayerCareerStatus,
@@ -243,7 +244,7 @@ export function buildClubArchiveTimelines(
   const rows = new Map<string, ClubArchiveSeason[]>();
 
   for (const season of [...(history?.seasons ?? [])].sort((a, b) => a.season - b.season)) {
-    for (const club of season.clubs) {
+    for (const club of season.clubs.map(expandClubSeasonHistory)) {
       const clubRows = rows.get(club.clubId) ?? [];
       clubRows.push({
         season: season.season,
@@ -319,7 +320,7 @@ export function buildManagerArchiveTimelines(
   const names = new Map<string, string>();
 
   for (const season of [...(history?.seasons ?? [])].sort((a, b) => a.season - b.season)) {
-    for (const club of season.clubs) {
+    for (const club of season.clubs.map(expandClubSeasonHistory)) {
       if (!club.manager) continue;
       const managerRows = rows.get(club.manager.managerId) ?? [];
       managerRows.push({

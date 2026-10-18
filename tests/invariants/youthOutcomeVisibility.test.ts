@@ -17,6 +17,23 @@ function career(): GameState {
 }
 
 describe("Youth career outcome feedback", () => {
+  it("distinguishes an unfinished season from a completed empty season", () => {
+    const state = career();
+    state.currentWeek = 2;
+    expect(deriveYouthSeasonCaseReview(state, 2).headline).toContain("is underway");
+    expect(deriveYouthSeasonCaseReview(state, 2, { completed: true }).headline).toContain("ended without");
+    expect(deriveYouthSeasonCaseReview(state, 1).headline).toContain("ended without");
+  });
+
+  it("counts a named discovery before a formal observation or report exists", () => {
+    const state = career();
+    state.discoveryRecords = [{ playerId: "lead", discoveredSeason: 2, discoveredWeek: 1 }] as GameState["discoveryRecords"];
+    state.players = { lead: { id: "lead", firstName: "Jude", lastName: "Rooney" } } as unknown as GameState["players"];
+    const review = deriveYouthSeasonCaseReview(state, 2);
+    expect(review.headline).toContain("1 name");
+    expect(review.caseLines[0].name).toBe("Jude Rooney");
+  });
+
   it.each([
     ["consulting:contract:failed", "financial", "Consulting Deadline Missed"],
     ["retainer-renewal:contract:s2w38", "financial", "Retainer Not Renewed"],

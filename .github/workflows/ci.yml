@@ -25,10 +25,91 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Use pinned npm toolchain
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund
+
       - run: npm ci
+
+      - name: Real child and file worker output checks
+        id: worker-output
+        run: npm run test:worker-output-relay
+
+      - name: Upload worker output evidence
+        if: ${{ always() && (steps.worker-output.outcome == 'success' || steps.worker-output.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: worker-output-relay-evidence
+          path: artifacts/release/generated/worker-output-relay-e2e-*/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Production runner finite output grant regression
+        id: production-output-grant
+        env:
+          TALENTSCOUT_OUTPUT_GRANT_MODE: candidate
+          TALENTSCOUT_OUTPUT_GRANT_EVIDENCE: ${{ runner.temp }}/production-output-grant-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          TALENTSCOUT_OUTPUT_GRANT_FIXTURE_ROOT: ${{ runner.temp }}
+        run: npm run test:production-output-grant
+
+      - name: Upload production output grant evidence
+        if: ${{ always() && (steps.production-output-grant.outcome == 'success' || steps.production-output-grant.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-output-grant-evidence
+          path: ${{ runner.temp }}/production-output-grant-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Actual worker calendar publication guard regression
+        id: calendar-worker-guard
+        env:
+          TALENTSCOUT_CALENDAR_GUARD_MODE: candidate
+          TALENTSCOUT_CALENDAR_GUARD_EVIDENCE: ${{ runner.temp }}/calendar-worker-guard-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          TALENTSCOUT_CALENDAR_GUARD_FIXTURE_ROOT: ${{ runner.temp }}
+        run: npm run test:calendar-worker-guard
+
+      - name: Upload calendar worker guard evidence
+        if: ${{ always() && (steps.calendar-worker-guard.outcome == 'success' || steps.calendar-worker-guard.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: calendar-worker-guard-evidence
+          path: ${{ runner.temp }}/calendar-worker-guard-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Installed reviewed Braces regression
+        id: braces-depth-guard
+        run: npm run test:braces-depth-guard
+
+      - name: Upload Braces regression evidence
+        if: ${{ always() && (steps.braces-depth-guard.outcome == 'success' || steps.braces-depth-guard.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: braces-depth-guard-evidence
+          path: artifacts/release/generated/braces-depth-guard-e2e-*/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Installed HTTP cache policy real-consumer regression
+        id: http-cache-policy
+        run: npm run test:http-cache-policy
+
+      - name: Upload HTTP cache policy regression evidence
+        if: ${{ always() && (steps.http-cache-policy.outcome == 'success' || steps.http-cache-policy.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: http-cache-policy-evidence
+          path: artifacts/release/generated/http-cache-policy-e2e-*/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=moderate
+
+      - name: Desktop import memory admission regression
+        run: npm run test:electron-import-admission
+
+      - name: Formatter precision and real consumer regression
+        run: npm run test:sprintf-precision-guard
 
       - name: Type check
         run: npx tsc --noEmit
@@ -38,6 +119,17 @@ jobs:
 
       - name: Architecture dependency gate
         run: npm run test:architecture
+
+      - name: Accepted-source soak staging contract
+        run: npm run test:accepted-soak-staging
+
+      - name: Canonical campaign transport and staging contracts
+        run: |
+          node --test tests/release/canonicalSoakStaging.test.mjs tests/release/canonicalSoakWorkflowPolicy.test.cjs
+          python3 tests/release/canonicalSoakTransport.test.py
+
+      - name: Windows installer input contract
+        run: npm run test:windows-installer-inputs
 
       - name: Critical simulation and persistence coverage gate
         run: npm run test:coverage:critical

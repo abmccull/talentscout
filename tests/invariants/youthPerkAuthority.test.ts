@@ -11,7 +11,7 @@ import type {
   TournamentEvent,
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
-import type { ObservationSession } from "@/engine/observation/types";
+import type { ObservationSession, PlayerMoment } from "@/engine/observation/types";
 import { getAvailableActivities } from "@/engine/core/calendar";
 import { maybeGenerateYouthTip } from "@/engine/core/gameLoop";
 import { checkGutFeelingTrigger } from "@/engine/observation/reflection";
@@ -201,6 +201,18 @@ function makeYouthTipState(level: number): GameState {
 }
 
 function makeReflectionSession(): ObservationSession {
+  const moment: PlayerMoment = {
+    id: "technical-moment",
+    playerId: "player-1",
+    actionId: "receive",
+    momentType: "technicalAction",
+    quality: 8,
+    attributesHinted: ["firstTouch"],
+    description: "Milo Prospect controlled the arriving ball within reach.",
+    vagueDescription: "Milo Prospect received the ball.",
+    pressureContext: false,
+    isStandout: true,
+  };
   return {
     id: "session-1",
     activityType: "schoolMatch",
@@ -209,7 +221,7 @@ function makeReflectionSession(): ObservationSession {
     startedAtWeek: 1,
     startedAtSeason: 1,
     currentPhaseIndex: 0,
-    phases: [{}],
+    phases: [{ index: 0, minute: 12, description: "The ball reaches midfield.", moments: [moment] }],
     players: [{
       playerId: "player-1",
       name: "Milo Prospect",
@@ -218,13 +230,17 @@ function makeReflectionSession(): ObservationSession {
       isFocused: true,
     }],
     flaggedMoments: [{
+      id: "technical-flag",
+      phaseIndex: 0,
+      minute: 12,
       reaction: "promising",
-      moment: {
-        playerId: "player-1",
-        momentType: "technicalAction",
-        quality: 8,
-        isStandout: true,
-      },
+      moment,
+    }],
+    cueReadings: [{
+      id: "technical-cue", momentId: "technical-moment", playerId: "player-1",
+      actionId: "receive", phaseIndex: 0, pressureContext: false,
+      clarity: "strong", score: 0.8, confidence: 0.8, attributesHinted: ["firstTouch"],
+      detail: "Milo Prospect controlled the arriving ball within reach.",
     }],
     hypotheses: [],
   } as unknown as ObservationSession;

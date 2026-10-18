@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameState, WeekSimulationState } from "@/engine/core/types";
 import type { GameStoreState, SetState } from "@/stores/actions/types";
 const mocks = vi.hoisted(() => ({ run: vi.fn(), save: vi.fn(), tutorial: vi.fn() }));
-vi.mock("@/lib/weeklySimulationWorkerClient", () => ({ runWeeklyWorkerTransaction: mocks.run }));
+vi.mock("@/lib/weeklySimulationWorkerClient", () => ({ runWeeklyWorkerTransaction: mocks.run, getWeeklySimulationGeneration: () => 0 }));
 vi.mock("@/stores/actions/weeklyActions", () => ({ queueWeeklyAutosave: mocks.save }));
 vi.mock("@/stores/actions/weeklyTutorialBridge", () => ({ applyWeeklyTutorialCommands: mocks.tutorial }));
 vi.mock("@/stores/actions/weeklyHeadlessTransaction", () => ({ materializeWeeklyWorkerCommit: () => { throw new Error("unexpected delta path"); } }));

@@ -47,12 +47,14 @@ export function wouldBreachCompetitiveRosterFloor(
   players: Record<string, Player>,
   removingPlayerId: string,
   minimumRegistered: number = COMPETITIVE_REGISTERED_FLOOR,
+  pendingDepartures: ReadonlySet<string> = new Set(),
 ): boolean {
-  const registered = listRegisteredAtClub(club, players);
+  const registered = listRegisteredAtClub(club, players)
+    .filter(player => player.age >= 16 && !pendingDepartures.has(player.id));
   const remaining = registered.filter((player) => player.id !== removingPlayerId);
-  if (remaining.length < minimumRegistered) return true;
+  if (remaining.length < minimumRegistered || remaining.filter(player => player.position !== "GK").length < 10) return true;
   const keepers = remaining.filter((player) => player.position === "GK").length;
-  return keepers === 0 && registered.some((player) => player.id === removingPlayerId && player.position === "GK");
+  return keepers === 0;
 }
 
 /** Seller / mid-season outflow guard with buffer above the hard XI floor. */
@@ -60,12 +62,14 @@ export function wouldBreachCompetitiveOutflowGuard(
   club: Club,
   players: Record<string, Player>,
   removingPlayerId: string,
+  pendingDepartures?: ReadonlySet<string>,
 ): boolean {
   return wouldBreachCompetitiveRosterFloor(
     club,
     players,
     removingPlayerId,
     COMPETITIVE_ROSTER_OUTFLOW_FLOOR,
+    pendingDepartures,
   );
 }
 
@@ -81,11 +85,12 @@ export function getEligibleMatchRoster(
       && player.clubId === club.id && !player.injured
       && (discipline[player.id]?.suspensionWeeksRemaining ?? 0) <= 0);
   const seniors = eligible([...club.playerIds, ...(club.loanedInPlayerIds ?? [])]);
-  const needsCover = seniors.length < COMPETITIVE_REGISTERED_FLOOR;
+  const needsCover = seniors.filter(player => player.position !== "GK").length < 10;
   const needsKeeper = !seniors.some((player) => player.position === "GK");
   if (!needsCover && !needsKeeper) return seniors;
   const selected = new Set(seniors.map((player) => player.id));
   const academy = eligible(club.academyPlayerIds ?? []).filter((player) =>
-    !selected.has(player.id) && (needsCover || player.position === "GK"));
+    !selected.has(player.id) && player.age >= 16
+    && (player.position === "GK" ? needsKeeper : needsCover));
   return [...seniors, ...academy];
 }

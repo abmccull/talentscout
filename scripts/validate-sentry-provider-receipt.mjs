@@ -1,18 +1,13 @@
-import { createHash } from "node:crypto";
-import { lstat, readFile, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
 
 const hashPattern = /^[a-f0-9]{64}$/;
 const eventPattern = /^[a-f0-9]{32}$/;
 const privateMessage = "Renderer exception (message omitted for privacy)";
 const standardErrors = new Set(["Error", "TypeError", "RangeError", "ReferenceError", "SyntaxError", "URIError", "EvalError", "AggregateError"]);
 const requiredControls = ["installedExactPackage", "intentionalRendererError", "providerEventReadBack", "payloadPrivacyReviewed"];
-const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const empty = (value) => value == null || value === "" || (typeof value === "object" && Object.values(value).every(empty));
-const inside = (root, path) => {
-  const part = relative(root, path);
-  return part && part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part);
-};
+const ordinaryRelativePath = (path) => typeof path === "string" && path.length > 0
+  && !/[\\:\x00-\x1f\x7f]/.test(path) && !path.startsWith("/")
+  && path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 
 // The project-event API normalizes SDK snake_case frame names to camelCase.
 // Only documented null metadata and exact sent locations are permitted; no
@@ -46,10 +41,71 @@ function safeProviderContexts(contexts) {
     && (context.version == null || (typeof context.version === "string" && /^[0-9][A-Za-z0-9 ._-]{0,63}$/.test(context.version))));
 }
 
+// Provider response shape: https://docs.sentry.io/api/events/retrieve-an-event-for-a-project/
+// Retain ordinary server IDs/normalization, but never allow arbitrary payloads in
+// presentation fields merely because the exception itself was sanitized.
+function safeProviderPresentation(received, sent) {
+  const allowed = new Set(["groupID", "eventID", "dist", "userReport", "previousEventID", "message", "title", "id", "size", "errors",
+    "platform", "nextEventID", "type", "metadata", "tags", "dateCreated", "dateReceived", "user", "entries", "packages", "sdk",
+    "_meta", "contexts", "context", "extra", "request", "fingerprints", "release"]);
+  if (Object.keys(received).some((key) => !allowed.has(key))) return false;
+  const exceptions = sent?.exception?.values ?? [];
+  const types = exceptions.map((entry) => entry?.type).filter((type) => standardErrors.has(type));
+  const frames = exceptions.flatMap((entry) => entry?.stacktrace?.frames ?? []);
+  if (!empty(received.title) && received.title !== privateMessage && !types.some((type) => received.title === `${type}: ${privateMessage}`)) return false;
+  const metadata = received.metadata ?? {};
+  if (typeof metadata !== "object" || Array.isArray(metadata) || Object.keys(metadata).some((key) => !["type", "value", "filename", "function"].includes(key))
+    || (!empty(metadata.type) && !types.includes(metadata.type))
+    || (!empty(metadata.value) && metadata.value !== privateMessage)
+    || (!empty(metadata.filename) && !frames.some((frame) => frame.filename === metadata.filename))
+    || (!empty(metadata.function) && !frames.some((frame) => frame.function === metadata.function))) return false;
+  if (received.release != null && (typeof received.release !== "object" || Array.isArray(received.release)
+    || Object.keys(received.release).some((key) => key !== "version" && !empty(received.release[key])))) return false;
+  const expectedTags = new Map([["runtime", "renderer"], ["environment", "production"], ["release", sent?.release], ["level", "error"], ["mechanism", "generic"]]);
+  for (const key of ["browser", "os"]) {
+    const context = received.contexts?.[key];
+    if (context) {
+      expectedTags.set(`${key}.name`, context.name);
+      if (context.version) expectedTags.set(`${key}.version`, context.version);
+      expectedTags.set(key, [context.name, context.version].filter(Boolean).join(" "));
+    }
+  }
+  const tags = Array.isArray(received.tags) ? received.tags : [];
+  const seen = new Set();
+  for (const tag of tags) {
+    if (!tag || Object.keys(tag).some((key) => !["key", "value"].includes(key)) || seen.has(tag.key)) return false;
+    seen.add(tag.key);
+    if (tag.key === "handled") {
+      if (!["yes", "no"].includes(tag.value)) return false;
+    } else if (!expectedTags.has(tag.key) || tag.value !== expectedTags.get(tag.key)) return false;
+  }
+  for (const entry of Array.isArray(received.entries) ? received.entries : []) {
+    if (!entry || Object.keys(entry).some((key) => !["type", "data"].includes(key)) || !entry.data || typeof entry.data !== "object") return false;
+    if (entry.type === "exception") {
+      if (Object.keys(entry.data).some((key) => !["values", "excOmitted", "hasSystemFrames"].includes(key))
+        || !empty(entry.data.excOmitted) || (entry.data.hasSystemFrames != null && entry.data.hasSystemFrames !== false)) return false;
+    } else if (entry.type !== "breadcrumbs" || Object.keys(entry.data).some((key) => key !== "values") || !empty(entry.data.values)) return false;
+  }
+  for (const key of ["errors", "dist", "packages", "_meta"]) if (!empty(received[key])) return false;
+  if (received.sdk != null && (typeof received.sdk !== "object" || Object.keys(received.sdk).some((key) => !["name", "version"].includes(key))
+    || !/^sentry\.javascript\.[a-z.-]{1,64}$/.test(received.sdk.name ?? "") || !/^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?$/.test(received.sdk.version ?? ""))) return false;
+  for (const key of ["id", "previousEventID", "nextEventID"]) if (!empty(received[key]) && !eventPattern.test(received[key])) return false;
+  if (!empty(received.groupID) && !/^\d{1,32}$/.test(String(received.groupID))) return false;
+  if (received.size != null && (!Number.isSafeInteger(received.size) || received.size < 0)) return false;
+  if (received.dateCreated != null && !Number.isFinite(Date.parse(received.dateCreated))) return false;
+  if (received.fingerprints != null && (!Array.isArray(received.fingerprints) || received.fingerprints.length > 5
+    || received.fingerprints.some((value) => !/^[a-f0-9]{32,64}$/.test(value)))) return false;
+  return true;
+}
+
 // This verifies retained provider read-backs. It never sends a probe or calls
 // Sentry. An accountable operator must collect the real event from the package.
-export async function validateSentryProviderReceipt({ root, evidence, candidateSha, candidateTreeSha, candidateTag, packageManifest, packageManifestPath }) {
+export async function validateSentryProviderReceipt({ evidence, candidateSha, candidateTreeSha, candidateTag, packageManifest, packageManifestSha256, readBoundJson }) {
   const failures = [];
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return ["Sentry receipt must be an object"];
+  // The checker supplies its existing, nonreset bounded descriptor reader.
+  // No fallback readFile, extra artifact context, or reset admission allowance.
+  if (typeof readBoundJson !== "function") return ["Sentry receipt requires the shared bounded evidence reader"];
   const check = (condition, message) => { if (!condition) failures.push(message); };
   check(evidence.schemaVersion === 1 && evidence.evidenceKind === "sentry-provider-receipt", "Sentry receipt schema/kind is invalid");
   check(evidence.candidateCommitSha === candidateSha && evidence.candidateTreeSha === candidateTreeSha, "Sentry receipt does not describe the exact candidate commit/tree");
@@ -59,11 +115,10 @@ export async function validateSentryProviderReceipt({ root, evidence, candidateS
   check(Number.isFinite(completedAt) && completedAt <= Date.now(), "Sentry receipt completion timestamp is invalid or in the future");
   for (const key of requiredControls) check(evidence.controls?.[key]?.status === "Passed", `Sentry receipt control ${key} did not pass`);
   check(Object.values(evidence.controls ?? {}).every((control) => control?.status === "Passed"), "Sentry receipt contains non-passing controls");
-  try {
-    check(packageManifestPath && evidence.packageManifestSha256 === hash(await readFile(packageManifestPath)), "Sentry receipt is not bound to the exact package manifest");
-  } catch { failures.push("Sentry receipt package manifest cannot be read"); }
+  check(hashPattern.test(packageManifestSha256 ?? "") && evidence.packageManifestSha256 === packageManifestSha256,
+    "Sentry receipt is not bound to the exact package manifest");
   const testedPackage = evidence.testedPackage;
-  const manifestPackage = packageManifest?.packages?.find((entry) => entry.kind === testedPackage?.kind);
+  const manifestPackage = (Array.isArray(packageManifest?.packages) ? packageManifest.packages : []).find((entry) => entry.kind === testedPackage?.kind);
   check(manifestPackage && testedPackage.sha256 === manifestPackage.sha256 && testedPackage.bytes === manifestPackage.bytes, "Sentry receipt is not bound to an exact manifest package hash/length");
 
   const provider = evidence.provider ?? {};
@@ -79,18 +134,16 @@ export async function validateSentryProviderReceipt({ root, evidence, candidateS
     "Sentry receipt API URL does not bind the declared project and event");
   } catch { failures.push("Sentry receipt API URL is invalid"); }
 
-  const resolvedRoot = await realpath(root);
   const usedPaths = new Set();
   async function boundJson(entry, label) {
     try {
-      if (!entry || typeof entry.path !== "string" || isAbsolute(entry.path) || !hashPattern.test(entry.sha256 ?? "")) throw new Error("invalid file binding");
-      const path = resolve(resolvedRoot, entry.path);
-      const real = await realpath(path);
-      if (!inside(resolvedRoot, real) || (await lstat(path)).isSymbolicLink() || usedPaths.has(real)) throw new Error("unsafe or reused evidence path");
-      usedPaths.add(real);
-      const bytes = await readFile(real);
-      if (hash(bytes) !== entry.sha256) throw new Error("hash does not match");
-      return JSON.parse(bytes.toString("utf8"));
+      if (!ordinaryRelativePath(entry?.path) || !hashPattern.test(entry?.sha256 ?? "")) throw new Error("invalid file binding");
+      const key = entry.path.toLowerCase();
+      if (usedPaths.has(key)) throw new Error("unsafe or reused evidence path");
+      usedPaths.add(key);
+      const admitted = await readBoundJson(entry.path, entry.sha256);
+      if (admitted.sha256 !== entry.sha256) throw new Error("hash does not match");
+      return admitted.value;
     } catch (error) {
       failures.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
@@ -127,6 +180,7 @@ export async function validateSentryProviderReceipt({ root, evidence, candidateS
     }
   }
   if (received) {
+    check(safeProviderPresentation(received, sent), "Sentry provider presentation contains fields outside the sanitized allowlist");
     const tags = Array.isArray(received.tags) ? received.tags : [];
     const tag = (key) => tags.filter((entry) => entry.key === key);
     const release = received.release?.version ?? tag("release")[0]?.value;

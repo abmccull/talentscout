@@ -7,6 +7,21 @@ are no longer the same build you tested. This process keeps the source
 candidate immutable and later reuses the original workflow artifacts
 byte-for-byte.
 
+## Dependency toolchain
+
+Use Node 22 (at least 22.12.0) and npm 11.21.0 for candidate dependency resolution
+and clean installs. CI pins npm explicitly before every `npm ci`; the
+`packageManager` declaration documents the intended version but does not itself
+select npm. Keep the committed lock intact and use `npm ci`, not `npm install`,
+for candidate validation. Record both Node and npm versions with the candidate
+evidence. A lock produced by npm 11 can fail older npm 10 validation even when
+the same lock passes npm 11, so do not interpret a different toolchain's lock
+error as permission to silently regenerate the candidate.
+
+Local tooling should use a pinned task-local npm CLI or a verified npm 11.21.0
+installation; global installation is not required on the developer's machine.
+The CI installation is scoped to its disposable runner.
+
 ## Stage 1: Construct an immutable candidate
 
 1. Record the accepted gameplay candidate's full commit SHA, tree SHA, and the
@@ -117,8 +132,7 @@ npm run release:validate-candidate -- --candidate-root="<prepared candidate chec
 
 The wrapper re-proves the candidate commit/tree and control revision, fixes the
 strict policy and package-manifest paths, and validates the intended label without
-creating a Git tag. It launches only the strict evidence checker. The checker may
-write local reports and a temporary soak reduction under `artifacts/release/`;
+creating a Git tag. It launches only the strict evidence checker. The checker writes a new owned local report under `artifacts/release/`;
 it performs no downloads, uploads, workflow dispatch, tag binding, or publication.
 Missing human, provider, package, or source evidence still fails. Successful local
 validation is a review result, not an external certification or promotion receipt.

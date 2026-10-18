@@ -1,8 +1,7 @@
 import { pendingVisualDNA, portraitCheckpoint, sameDNA, withVisualIdentity } from "./identity";
 import { canonicalPlayers, portraitDisplayName, validatePortraitState } from "./state";
-import type { CatalogEntry, GameDate, PlayerPortraitState, PlayerVisualIdentity, PortraitCatalog, PortraitPlayer, PortraitReservation, PortraitResolution, PortraitWorld, VisibilityReason } from "./types";
-function affinity(identity: PlayerVisualIdentity, entry: CatalogEntry): number {
-  const dna = pendingVisualDNA(identity);
+import type { CatalogEntry, GameDate, PlayerPortraitState, PlayerVisualIdentity, PortraitCatalog, PortraitPlayer, PortraitReservation, PortraitResolution, PortraitWorld, VisibilityReason, VisualDNA } from "./types";
+function affinity(dna: VisualDNA, entry: CatalogEntry): number {
   // Preference only. Authored catalog adoption is not exact generated DNA fidelity.
   return Number(dna.skinTone === entry.anchors.skinTone) * 8
     + Number(dna.hairTexture === entry.anchors.hairTexture) * 4
@@ -11,18 +10,28 @@ function affinity(identity: PlayerVisualIdentity, entry: CatalogEntry): number {
 }
 function choose(reservation: PortraitReservation, ledger: PlayerPortraitState, catalog: PortraitCatalog): CatalogEntry | undefined {
   const identity = reservation.identity;
-  return [...catalog.values()].filter((entry) => {
-    if (entry.allocationAllowed === false) return false;
-    if (ledger.faceOwners[entry.canonicalFaceSha256]) return false;
+  const dna = pendingVisualDNA(identity);
+  let best: CatalogEntry | undefined;
+  let bestTargeted = -1, bestPriority = -Infinity, bestAffinity = -1;
+  // A large offline library should not be copied and sorted for every reveal.
+  for (const entry of catalog.values()) {
+    if (entry.allocationAllowed === false || ledger.faceOwners[entry.canonicalFaceSha256]) continue;
     if (entry.provenance === "identity-generated") {
-      return entry.targetIdentityId === identity.identityId && entry.targetSeed === identity.seed
-        && sameDNA(entry.anchors, pendingVisualDNA(identity));
+      if (entry.targetIdentityId !== identity.identityId || entry.targetSeed !== identity.seed
+        || !sameDNA(entry.anchors, dna)) continue;
     }
-    return true;
-  }).sort((left, right) => {
-    const targeted = Number(right.provenance === "identity-generated") - Number(left.provenance === "identity-generated");
-    return targeted || affinity(identity, right) - affinity(identity, left) || left.lineageId.localeCompare(right.lineageId);
-  })[0];
+    const targeted = Number(entry.provenance === "identity-generated");
+    const priority = entry.allocationPriority ?? 0;
+    const score = affinity(dna, entry);
+    if (!best || targeted > bestTargeted || (targeted === bestTargeted && (
+      priority > bestPriority || (priority === bestPriority && (
+        score > bestAffinity || (score === bestAffinity && entry.lineageId.localeCompare(best.lineageId) < 0)
+      ))
+    ))) {
+      best = entry; bestTargeted = targeted; bestPriority = priority; bestAffinity = score;
+    }
+  }
+  return best;
 }
 function bind(ledger: PlayerPortraitState, reservation: PortraitReservation, catalog: PortraitCatalog): void {
   if (reservation.binding) return;

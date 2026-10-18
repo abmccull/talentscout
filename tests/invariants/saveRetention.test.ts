@@ -1,4 +1,14 @@
+import { expandObservationSituationSnapshot } from "@/engine/observation/situationArchive";
+import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
+import { expandDevelopmentHistoryEntry } from "@/engine/players/developmentHistoryArchive";
+import { expandPlayerMovementSummary } from "@/engine/world/worldHistoryTypes";
+import { expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { expandPlayerInjuryHistory } from "@/engine/players/playerStateArchive";
+import { getPlayerDevelopmentHistoryOutcome } from "@/engine/world/developmentEnvironment";
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { expandMatchFormEntry } from "@/engine/players/matchFormArchive";
 import { describe, expect, it } from "vitest";
+import { getPlayerDisciplinaryRecord } from "@/engine/match/disciplineRecords";
 import type {
   FinancialRecord,
   Fixture,
@@ -21,6 +31,7 @@ import {
   WORLD_HISTORY_PLAYER_LIMIT,
 } from "@/engine/world/saveRetention";
 import type { PlayerSeasonHistory } from "@/engine/world/worldHistory";
+import { getPlayerDevelopmentHistorySummary, getPlayerDevelopmentHistoryId } from "@/engine/world/developmentEnvironment";
 
 function fixture(id: string, season: number): Fixture {
   return {
@@ -71,6 +82,22 @@ function state(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("long-career save retention", () => {
+  it("uses the central discipline ledger after resets and removes only the obsolete player cache", () => {
+    const old = { playerId: "player", season: 12, yellowCards: 6, redCards: 1,
+      suspensionWeeksRemaining: 3, cardHistory: [] };
+    const player = { id: "player", recentMatchRatings: [], disciplinaryRecord: old } as unknown as Player;
+    const current = { ...old, season: 13, yellowCards: 0, redCards: 0, suspensionWeeksRemaining: 2 };
+    const canonical = state({ currentSeason: 13, players: { player }, disciplinaryRecords: { player: current } });
+    const compacted = compactLongCareerHistory(canonical);
+    expect(compacted.players.player.disciplinaryRecord).toBeUndefined();
+    expect(compacted.disciplinaryRecords).toEqual(canonical.disciplinaryRecords);
+    expect(getPlayerDisciplinaryRecord(player, canonical.disciplinaryRecords)).toBe(current);
+    expect(getPlayerDisciplinaryRecord(player, {})).toBeUndefined();
+    expect(getPlayerDisciplinaryRecord(player, undefined)).toBe(old);
+    const legacy = compactLongCareerHistory({ ...canonical, disciplinaryRecords: undefined } as unknown as GameState);
+    expect(legacy.players.player.disciplinaryRecord).toEqual(old);
+    expect(player.disciplinaryRecord).toBe(old);
+  });
   it("does not mistake background world traffic for permanent scout causality", () => {
     const players = Object.fromEntries(
       ["background-loan", "scout-loan", "old-news", "recent-action"].map((id) => [
@@ -193,11 +220,11 @@ describe("long-career save retention", () => {
 
     const compacted = compactLongCareerHistory(legacy);
 
-    expect(compacted.playerMovementHistory.map((movement) => movement.id)).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id)).toEqual([
       "recent-renewal",
     ]);
     expect(compacted.worldHistory?.seasons[0].players[0].movementEventIds).toEqual(["transfer"]);
-    expect(compacted.worldHistory?.seasons[0].playerMovementSummaries).toEqual([{
+    expect(expandPlayerMovementSummaries(compacted.worldHistory?.seasons[0].playerMovementSummaries ?? []).map(expandPlayerMovementSummary)).toEqual([{
       id: "transfer",
       playerId: "player",
       type: "permanentTransfer",
@@ -259,7 +286,7 @@ describe("long-career save retention", () => {
     const compacted = compactLongCareerHistory(legacy);
     const archive = compacted.worldHistory!.seasons[0];
 
-    expect(archive.playerMovementSummaries).toEqual([
+    expect(expandPlayerMovementSummaries(archive.playerMovementSummaries ?? []).map(expandPlayerMovementSummary)).toEqual([
       {
         id: "archived-causal",
         playerId: "causal-player",
@@ -269,7 +296,7 @@ describe("long-career save retention", () => {
         toClubId: "loan-club",
       },
     ]);
-    expect(compacted.playerMovementHistory.map((movement) => movement.id).sort()).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id).sort()).toEqual([
       "archived-causal",
       "unarchived-old",
     ]);
@@ -327,10 +354,10 @@ describe("long-career save retention", () => {
 
     const compacted = compactLongCareerHistory(legacy);
 
-    expect(compacted.worldHistory?.seasons[0].playerMovementSummaries?.map(
-      (summary) => summary.id,
+    expect(expandPlayerMovementSummaries(compacted.worldHistory?.seasons[0].playerMovementSummaries ?? []).map(
+      (summary) => expandPlayerMovementSummary(summary).id,
     )).toEqual(["causal-transfer"]);
-    expect(compacted.playerMovementHistory.map((movement) => movement.id)).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id)).toEqual([
       "causal-transfer",
     ]);
     expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
@@ -487,12 +514,15 @@ describe("long-career save retention", () => {
     expect(Object.keys(compacted.retiredPlayers).sort()).toEqual(["causal", "recent"]);
     expect(compacted.retiredPlayerIds.sort()).toEqual(["causal", "recent"]);
     expect(compacted.retiredPlayers.recent.recentMatchRatings).toEqual([]);
-    expect(compacted.retiredPlayers.recent.seasonRatings?.map((rating) => rating.season)).toEqual([4, 5, 6]);
+    expect(compacted.retiredPlayers.recent.seasonRatings?.map((rating) => expandSeasonRating(rating).season)).toEqual([4, 5, 6]);
     expect(compacted.retiredPlayers.recent.currentInjury).toBeUndefined();
     expect(compacted.retiredPlayers.recent.injured).toBe(false);
     expect(compacted.retiredPlayers.recent.injuryWeeksRemaining).toBe(0);
     expect(compacted.retiredPlayers.recent.disciplinaryRecord).toBeUndefined();
-    expect(compacted.retiredPlayers.causal).toEqual(legacy.retiredPlayers.causal);
+    expect({ ...compacted.retiredPlayers.causal,
+      seasonRatings: compacted.retiredPlayers.causal.seasonRatings.map(expandSeasonRating),
+      recentMatchRatings: compacted.retiredPlayers.causal.recentMatchRatings.map(expandMatchFormEntry),
+    }).toEqual(legacy.retiredPlayers.causal);
   });
 
   it("compacts completed observation calculations without erasing scouting evidence", () => {
@@ -606,22 +636,22 @@ describe("long-career save retention", () => {
       ...historical.regionalContext,
       explanation: "Historical regional context.",
     });
-    expect(retained.situation).toMatchObject({
-      id: historical.situation!.id,
-      competitionLevel: historical.situation!.competitionLevel,
-      stakes: historical.situation!.stakes,
-      tacticalFrame: historical.situation!.tacticalFrame,
-      repetitionKey: historical.situation!.repetitionKey,
-      contextTags: historical.situation!.contextTags,
-      reasons: historical.situation!.reasons,
-      biasWarnings: historical.situation!.biasWarnings,
+    expect(expandObservationSituationSnapshot(retained.situation)).toMatchObject({
+      id: expandObservationSituationSnapshot(historical.situation)!.id,
+      competitionLevel: expandObservationSituationSnapshot(historical.situation)!.competitionLevel,
+      stakes: expandObservationSituationSnapshot(historical.situation)!.stakes,
+      tacticalFrame: expandObservationSituationSnapshot(historical.situation)!.tacticalFrame,
+      repetitionKey: expandObservationSituationSnapshot(historical.situation)!.repetitionKey,
+      contextTags: expandObservationSituationSnapshot(historical.situation)!.contextTags,
+      reasons: expandObservationSituationSnapshot(historical.situation)!.reasons,
+      biasWarnings: expandObservationSituationSnapshot(historical.situation)!.biasWarnings,
       atmosphereEventIds: [],
       signalByDomain: {},
       signalByAttribute: {},
       culturalInsightIds: [],
     });
-    expect(retained.situation?.culturalCalendarWindowIds).toBeUndefined();
-    expect(compacted.observations[recent.id]).toEqual(recent);
+    expect(expandObservationSituationSnapshot(retained.situation)?.culturalCalendarWindowIds).toBeUndefined();
+    expect({ ...compacted.observations[recent.id], situation: expandObservationSituationSnapshot(compacted.observations[recent.id].situation) }).toEqual(recent);
     expect(after.collections.observations).toBeLessThan(before.collections.observations * 0.9);
     expect(before.collections.observations - after.collections.observations).toBeGreaterThan(
       50 * 1024,
@@ -750,12 +780,12 @@ describe("long-career save retention", () => {
       active.id,
       causal.id,
     ].sort());
-    expect(compacted.playerMovementHistory.map((movement) => movement.id).sort()).toEqual([
+    expect(expandPlayerMovementHistory(compacted.playerMovementHistory).map((movement) => movement.id).sort()).toEqual([
       "sign-causal",
       "sign-recent",
     ]);
     for (const record of Object.values(compacted.unsignedYouth).filter((entry) => entry.placed)) {
-      expect(compacted.playerMovementHistory.some(
+      expect(expandPlayerMovementHistory(compacted.playerMovementHistory).some(
         (movement) => movement.playerId === record.player.id && movement.type === "youthSigning",
       )).toBe(true);
     }
@@ -923,12 +953,12 @@ describe("long-career save retention", () => {
     expect(compacted.fixtures.unreferenced).toBeUndefined();
     expect(compacted.fixtures.observed).toBeDefined();
     expect(compacted.fixtures.rated).toBeUndefined();
-    expect(compacted.players.player.recentMatchRatings).toEqual([
+    expect(compacted.players.player.recentMatchRatings.map(expandMatchFormEntry)).toEqual([
       { fixtureId: "rated", week: 1, season: 2, rating: 7 },
     ]);
     expect(compacted.fixtures["retired-rated"]).toBeUndefined();
-    expect(compacted.retiredPlayers.retired.recentMatchRatings).toEqual(
-      retiredPlayer.recentMatchRatings,
+    expect(compacted.retiredPlayers.retired.recentMatchRatings.map(expandMatchFormEntry)).toEqual(
+      retiredPlayer.recentMatchRatings.map(expandMatchFormEntry),
     );
     expect(JSON.stringify(compacted.retiredPlayers.retired.developmentHistory)).not.toContain(
       '"factors"',
@@ -991,7 +1021,9 @@ describe("long-career save retention", () => {
       expect(samples[0].collectionDeltas.fixtures).toBeGreaterThan(0);
       expect(samples[0].collectionDeltas.matchRatings).toBeGreaterThan(0);
       expect(samples[0].collectionDeltas.players).toBeGreaterThan(0);
-      expect(compacted.players.player.developmentHistory).toEqual([visibleDevelopmentTurn]);
+      expect(compacted.players.player.developmentHistory?.map((entry) => ({
+        ...expandDevelopmentHistoryEntry(entry), outcome: getPlayerDevelopmentHistoryOutcome(entry), id: getPlayerDevelopmentHistoryId(entry, "player"), summary: getPlayerDevelopmentHistorySummary(entry),
+      }))).toEqual([visibleDevelopmentTurn]);
       expect("saveRetentionTelemetry" in compacted).toBe(false);
     } finally {
       stopObserving();
@@ -1057,7 +1089,7 @@ describe("long-career save retention", () => {
     const after = measureSaveRetentionFootprint(compacted);
     const sampleHistory = compacted.players["synthetic-0"].developmentHistory ?? [];
 
-    expect(sampleHistory).toEqual(
+    expect(sampleHistory.map((entry) => ({ ...expandDevelopmentHistoryEntry(entry), outcome: getPlayerDevelopmentHistoryOutcome(entry), id: getPlayerDevelopmentHistoryId(entry, "synthetic-0"), summary: getPlayerDevelopmentHistorySummary(entry) }))).toEqual(
       expectedVisibleHistory.map((turn) => ({
         ...turn,
         id: turn.id.replace("synthetic", "synthetic-0"),
@@ -1114,15 +1146,16 @@ describe("long-career save retention", () => {
     });
 
     const compacted = compactLongCareerHistory(legacy);
-    const retained = compacted.players.player.injuryHistory!;
+    const retained = expandPlayerInjuryHistory(compacted.players.player.injuryHistory!, compacted.players.player.id);
 
-    expect(retained.injuries.map((entry) => entry.id)).toEqual([
+    expect(retained.injuries.map((entry) => expandHistoricalInjury(entry, retained.playerId).id)).toEqual([
       "active-historical",
       "recent-a",
       "recent-b",
       "current",
     ]);
     expect(retained.totalWeeksMissed).toBe(20);
+    expect(compacted.players.player.currentInjury).toEqual(activeHistoricalInjury);
     expect(retained.injuryProneness).toBe(0.12);
     expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
   });

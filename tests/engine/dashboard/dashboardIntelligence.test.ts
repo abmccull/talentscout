@@ -46,6 +46,7 @@ function state(): GameState {
       currentClubId: "club-2",
       milestones: [{
         type: "internationalCallUp",
+        sourceId: "selection-portugal-s1-w9-player-1",
         week: 9,
         season: 1,
         description: "Called into the Portugal squad.",

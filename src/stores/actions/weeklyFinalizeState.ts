@@ -1,4 +1,5 @@
 import type { GameState, InboxMessage, NarrativeEvent } from "@/engine/core/types";
+import { projectAlumniLegacyScore } from "@/engine/youth/alumni";
 import { getSeasonLength } from "@/engine/core/gameLoop";
 import {
   compactCompletedSeasonHistory,
@@ -69,7 +70,8 @@ function repairAndPruneWeeklyInbox(state: GameState): GameState {
   if (nextState.inbox.length > 200) {
     const priority = nextState.inbox.filter((message) => message.actionRequired && !message.read);
     const rest = nextState.inbox.filter((message) => !(message.actionRequired && !message.read));
-    const trimmedRest = rest.slice(-Math.max(0, 200 - priority.length));
+    const ordinaryAllocation = Math.max(0, 200 - priority.length);
+    const trimmedRest = ordinaryAllocation === 0 ? [] : rest.slice(-ordinaryAllocation);
     nextState = { ...nextState, inbox: [...trimmedRest, ...priority] };
   }
   return nextState;
@@ -98,7 +100,7 @@ function updateLegacyHighWater(state: GameState): GameState {
   return {
     ...state,
     legacyScore: {
-      ...state.legacyScore,
+      ...projectAlumniLegacyScore(state.legacyScore, state.alumniRecords),
       careerHighTier: Math.max(state.legacyScore.careerHighTier, state.scout.careerTier),
       totalSeasons: Math.max(
         state.legacyScore.totalSeasons,

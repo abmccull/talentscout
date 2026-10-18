@@ -469,7 +469,6 @@ export function PitchCanvas({
         base,
         phase.type,
         involvedSet.has(player.id),
-        player.id === focusedPlayerId,
       );
     };
 
@@ -485,7 +484,6 @@ export function PitchCanvas({
         mirroredBase,
         phase.type,
         involvedSet.has(player.id),
-        player.id === focusedPlayerId,
       );
     };
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { GameState } from "@/engine/core/types";
 import { portraitCoverage } from "@/engine/players/portraits/allocation";
@@ -101,6 +101,7 @@ export async function retainStorageCheckpoint(input: {
   }
   const file = `completed-season-${input.completedSeason}.json`;
   const payload = JSON.stringify(input.state);
+  if (Buffer.byteLength(payload, "utf8") > 80 * 1024 * 1024) throw new Error("Retained storage input exceeds unchanged 80 MiB save budget");
   const receipt: RetainedCheckpointReceipt = {
     schemaVersion: 1, evidenceKind: "long-career-storage-input",
     candidateCommitSha: input.candidateCommitSha, candidateTreeSha: input.candidateTreeSha,
@@ -114,8 +115,9 @@ export async function retainStorageCheckpoint(input: {
   if (receipt.portrait.violations.length) throw new Error(`Invalid checkpoint portrait ownership: ${receipt.portrait.violations.join(", ")}`);
   await mkdir(input.directory, { recursive: true });
   const path = resolve(input.directory, file);
-  await writeFile(`${path}.partial`, payload, "utf8");
-  await rename(`${path}.partial`, path);
-  await writeFile(`${path}.receipt.json`, JSON.stringify(receipt, null, 2), "utf8");
+  // These files live in a new supporting run directory. A partial/failed write
+  // remains visible, and a retry may never overwrite an earlier input or receipt.
+  await writeFile(path, payload, { encoding: "utf8", flag: "wx" });
+  await writeFile(`${path}.receipt.json`, JSON.stringify(receipt, null, 2), { encoding: "utf8", flag: "wx" });
   return receipt;
 }

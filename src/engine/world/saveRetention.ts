@@ -1,3 +1,10 @@
+import { expandObservationSituationSnapshot, compactObservationSituationSnapshot } from "@/engine/observation/situationArchive";
+import { expandPlayerMovementHistory, compactPlayerMovementHistory, expandPlayerMovementSummaries, compactPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
+import { packDevelopmentHistoryEntry } from "../players/developmentHistoryArchive";
+import { compactMatchFormEntry } from "@/engine/players/matchFormArchive";
+import { compactSeasonRating } from "@/engine/players/seasonRatingArchive";
+import { compactClubSeasonHistory } from "./clubSeasonArchive";
+import { compactClubFinancialObligation, compactLoanDealForStorage, expandLoanDeal } from "../finance/terminalRecordArchive";
 import type {
   FinancialRecord,
   Fixture,
@@ -8,7 +15,13 @@ import type {
 } from "@/engine/core/types";
 import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
 import { compactPlayerDevelopmentHistory } from "@/engine/world/developmentEnvironment";
+import { compactInjuryArchive, expandHistoricalInjury } from "@/engine/players/injuryArchive";
+import { compactPlayerInjuryHistory, compactPlayerPersonalityProfile, expandPlayerInjuryHistory } from "../players/playerStateArchive";
+import { compactVisualIdentity } from "@/engine/players/portraits/identity";
+import { withoutDisciplineMirror } from "@/engine/match/disciplineRecords";
 import {
+  compactPlayerMovementSummary,
+  expandPlayerMovementSummary,
   sortPlayerMovementArchiveSummaries,
   summarizePlayerMovement,
 } from "@/engine/world/worldHistoryTypes";
@@ -200,7 +213,8 @@ function projectWorldHistoryMovementSummaries(
 
   const migrateSeason = (season: WorldSeasonHistory): WorldSeasonHistory => {
     const summariesById = new Map<string, PlayerMovementArchiveSummary>();
-    for (const summary of season.playerMovementSummaries ?? []) {
+    for (const stored of expandPlayerMovementSummaries(season.playerMovementSummaries ?? [])) {
+      const summary = expandPlayerMovementSummary(stored);
       if (!summary.id || !summary.playerId || !isMaterialMovementSummary(summary)) continue;
       summariesById.set(summary.id, summary);
     }
@@ -261,22 +275,31 @@ function compactPlayerRecord(
   currentSeason: number,
   preserveFullDossierHistory = false,
 ): Player {
+  const visualIdentity = compactVisualIdentity(player.visualIdentity, player.id);
   const compactedDevelopmentHistory = player.developmentHistory
-    ? compactPlayerDevelopmentHistory(player.developmentHistory)
+    ? compactPlayerDevelopmentHistory(player.developmentHistory, player.id)
     : undefined;
-  const developmentHistory = compactedDevelopmentHistory
+  const retainedDevelopmentHistory = compactedDevelopmentHistory
     && !preserveFullDossierHistory
     && compactedDevelopmentHistory.length > BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT
     ? compactedDevelopmentHistory.slice(-BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT)
     : compactedDevelopmentHistory;
-  const injuryHistory = player.injuryHistory;
+  const developmentHistory = retainedDevelopmentHistory?.map(packDevelopmentHistoryEntry);
+  const compactedForm = (player.recentMatchRatings ?? []).map(compactMatchFormEntry);
+  const compactedSeasons = (player.seasonRatings ?? []).map(compactSeasonRating);
+  const seasonRatings = compactedSeasons.every((entry, index) => entry === player.seasonRatings?.[index])
+    ? player.seasonRatings : compactedSeasons;
+  const recentMatchRatings = compactedForm.every((entry, index) => entry === player.recentMatchRatings?.[index])
+    ? player.recentMatchRatings : compactedForm;
+  const injuryHistory = expandPlayerInjuryHistory(player.injuryHistory, player.id);
   const injuryCutoff = Math.max(
     1,
     currentSeason - PLAYER_INJURY_DETAIL_RETENTION_SEASONS + 1,
   );
-  const injuriesInConsequenceWindow = injuryHistory?.injuries.filter((injury) =>
-    injury.occurredSeason >= injuryCutoff || injury.id === player.currentInjury?.id
-  );
+  const injuriesInConsequenceWindow = injuryHistory?.injuries.filter((entry) => {
+    const injury = expandHistoricalInjury(entry, player.id);
+    return injury.occurredSeason >= injuryCutoff || injury.id === player.currentInjury?.id;
+  });
   const recentBackgroundInjuries = injuriesInConsequenceWindow
     && !preserveFullDossierHistory
     && injuriesInConsequenceWindow.length > BACKGROUND_PLAYER_INJURY_HISTORY_LIMIT
@@ -285,25 +308,39 @@ function compactPlayerRecord(
   const activeInjury = player.currentInjury;
   const retainedInjuries = activeInjury
     && recentBackgroundInjuries
-    && !recentBackgroundInjuries.some((injury) => injury.id === activeInjury.id)
+    && !recentBackgroundInjuries.some((injury) => expandHistoricalInjury(injury, player.id).id === activeInjury.id)
     ? [activeInjury, ...recentBackgroundInjuries]
     : recentBackgroundInjuries;
-  const compactedInjuryHistory = injuryHistory && retainedInjuries
+  const retainedInjuryHistory = injuryHistory && retainedInjuries
     ? retainedInjuries.length === injuryHistory.injuries.length
       ? injuryHistory
       : { ...injuryHistory, injuries: retainedInjuries }
     : injuryHistory;
+  const compactedIncidents = retainedInjuryHistory
+    ? compactInjuryArchive(retainedInjuryHistory) : undefined;
+  const compactedInjuryHistory = Array.isArray(player.injuryHistory) && compactedIncidents === injuryHistory
+    ? player.injuryHistory
+    : compactPlayerInjuryHistory(compactedIncidents, player.id);
+  const personalityProfile = compactPlayerPersonalityProfile(player.personalityProfile);
 
   if (
-    developmentHistory === player.developmentHistory
+    visualIdentity === player.visualIdentity
+    && recentMatchRatings === player.recentMatchRatings
+    && seasonRatings === player.seasonRatings
+    && developmentHistory === player.developmentHistory
     && compactedInjuryHistory === player.injuryHistory
+    && personalityProfile === player.personalityProfile
   ) {
     return player;
   }
   return {
     ...player,
+    ...(visualIdentity ? { visualIdentity } : {}),
+    recentMatchRatings,
+    seasonRatings,
     ...(developmentHistory ? { developmentHistory } : {}),
     ...(compactedInjuryHistory ? { injuryHistory: compactedInjuryHistory } : {}),
+    ...(personalityProfile ? { personalityProfile } : {}),
   };
 }
 
@@ -349,7 +386,11 @@ function compactHistoricalObservation(
     1,
     currentSeason - OBSERVATION_DETAIL_RETENTION_SEASONS + 1,
   );
-  if (observation.season >= detailCutoff) return observation;
+  if (observation.season >= detailCutoff) {
+    if (!observation.situation) return observation;
+    const situation = compactObservationSituationSnapshot(observation.situation);
+    return situation === observation.situation ? observation : { ...observation, situation };
+  }
 
   const {
     updatedPersonalityProfile: _appliedPersonalitySnapshot,
@@ -375,7 +416,7 @@ function compactHistoricalObservation(
   const {
     culturalCalendarWindowIds: _sourceCalendarWindowIds,
     ...visibleSituation
-  } = observation.situation;
+  } = expandObservationSituationSnapshot(observation.situation);
   const situation: ObservationSituationSnapshot = {
     ...visibleSituation,
     atmosphereEventIds: [],
@@ -386,7 +427,7 @@ function compactHistoricalObservation(
 
   return {
     ...observationArchive,
-    situation,
+    situation: compactObservationSituationSnapshot(situation),
   };
 }
 
@@ -499,6 +540,7 @@ export function collectCausallyReferencedPlayerIds(state: GameState): Set<string
     .filter((record) => record.scoutId !== undefined)
     .forEach((record) => add(record.playerId));
   (state.loanHistory ?? [])
+    .map((deal) => expandLoanDeal(deal))
     .filter((record) => record.scoutId !== undefined)
     .forEach((record) => add(record.playerId));
   (state.loanRecommendations ?? []).forEach((record) => add(record.playerId));
@@ -756,7 +798,7 @@ export function findSaveRetentionReferenceViolations(state: GameState): string[]
   const failures: string[] = [];
   const fixtureIds = new Set(Object.keys(state.fixtures ?? {}));
   const movementsById = new Map(
-    (state.playerMovementHistory ?? []).map((movement) => [movement.id, movement]),
+    expandPlayerMovementHistory(state.playerMovementHistory ?? []).map((movement) => [movement.id, movement]),
   );
   const requireFixture = (fixtureId: string | undefined, source: string): void => {
     if (fixtureId && !fixtureIds.has(fixtureId)) {
@@ -783,7 +825,8 @@ export function findSaveRetentionReferenceViolations(state: GameState): string[]
 
   for (const season of state.worldHistory?.seasons ?? []) {
     const summaryById = new Map<string, PlayerMovementArchiveSummary>();
-    for (const summary of season.playerMovementSummaries ?? []) {
+    for (const stored of expandPlayerMovementSummaries(season.playerMovementSummaries ?? [])) {
+      const summary = expandPlayerMovementSummary(stored);
       if (summaryById.has(summary.id)) {
         failures.push(
           `worldHistory:${season.season}:duplicate-movement-summary:${summary.id}`,
@@ -942,25 +985,20 @@ export function compactLongCareerHistory(state: GameState): GameState {
         // later migration cannot silently erase the only remaining identity.
         return referencedYouthIds.has(youthId) || causalPlayerIds.has(youth.player.id);
       })
-      .map(([youthId, youth]) => [
-        youthId,
-        youth.player.developmentHistory
-          ? {
-              ...youth,
-              player: compactPlayerRecord(
-                youth.player,
-                state.currentSeason,
-                causalPlayerIds.has(youth.player.id),
-              ),
-            }
-          : youth,
-      ]),
+      .map(([youthId, youth]) => {
+        const player = compactPlayerRecord(
+          youth.player,
+          state.currentSeason,
+          causalPlayerIds.has(youth.player.id),
+        );
+        return [youthId, player === youth.player ? youth : { ...youth, player }];
+      }),
   );
   const players = Object.fromEntries(
     Object.entries(state.players ?? {}).map(([playerId, player]) => [
       playerId,
       compactPlayerRecord(
-        player,
+        state.disciplinaryRecords === undefined ? player : withoutDisciplineMirror(player),
         state.currentSeason,
         causalPlayerIds.has(playerId),
       ),
@@ -977,16 +1015,17 @@ export function compactLongCareerHistory(state: GameState): GameState {
       .filter(([youthId]) => !unsignedYouth[youthId])
       .map(([, youth]) => youth.player.id),
   );
+  const expandedMovementHistory = expandPlayerMovementHistory(state.playerMovementHistory ?? []);
   let worldHistory = projectWorldHistoryMovementSummaries(
     state.worldHistory,
-    state.playerMovementHistory ?? [],
+    expandedMovementHistory,
   );
   // Record projection coverage before tiering the public archive. This lets a
   // closed, non-causal background move age out of both the raw ledger and the
   // old public summary without weakening the legacy-save safety rule below.
   const projectedArchivedMovementIds = new Set(
     worldHistory?.seasons.flatMap((season) =>
-      season.playerMovementSummaries?.map((summary) => summary.id) ?? [],
+      expandPlayerMovementSummaries(season.playerMovementSummaries ?? []).map((summary) => expandPlayerMovementSummary(summary).id),
     ) ?? [],
   );
   worldHistory = worldHistory
@@ -994,6 +1033,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
         ...worldHistory,
         seasons: worldHistory.seasons.map((season) => ({
           ...season,
+          clubs: season.clubs.map(compactClubSeasonHistory),
           players: season.players
             .map((player) => {
               const identity = players[player.playerId] ?? state.retiredPlayers[player.playerId];
@@ -1032,7 +1072,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
             : WORLD_HISTORY_ARCHIVE_PLAYER_LIMIT,
         );
         const retainedPlayerIds = new Set(players.map((player) => player.playerId));
-        const playerMovementSummaries = season.playerMovementSummaries?.filter(
+        const playerMovementSummaries = expandPlayerMovementSummaries(season.playerMovementSummaries ?? []).map(expandPlayerMovementSummary).filter(
           (summary) =>
             keepsFullMovementDetail
             || retainedPlayerIds.has(summary.playerId)
@@ -1042,13 +1082,13 @@ export function compactLongCareerHistory(state: GameState): GameState {
           ...season,
           players,
           ...(playerMovementSummaries && playerMovementSummaries.length > 0
-            ? { playerMovementSummaries }
+            ? { playerMovementSummaries: compactPlayerMovementSummaries(playerMovementSummaries.map(compactPlayerMovementSummary)) }
             : { playerMovementSummaries: undefined }),
         };
       }),
     };
   }
-  const playerMovementHistory = (state.playerMovementHistory ?? []).filter(
+  const playerMovementHistory = expandedMovementHistory.filter(
     (movement) => {
       // Renewals do not enter the permanent archive. Their active-contract
       // meaning remains useful only for the current and immediately previous
@@ -1077,7 +1117,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
   );
 
   const retainedRetiredPlayerIds = new Set(causalPlayerIds);
-  for (const movement of state.playerMovementHistory ?? []) {
+  for (const movement of expandedMovementHistory) {
     if (
       (movement.type === "retirement" || movement.type === "footballExit")
       && movement.season >= renewalDetailCutoff
@@ -1103,10 +1143,20 @@ export function compactLongCareerHistory(state: GameState): GameState {
 
   const compacted: GameState = {
     ...state,
+    ...(state.loanHistory != null ? { loanHistory: state.loanHistory.map((deal) => compactLoanDealForStorage(deal)) } : {}),
+    ...(state.clubs != null ? {
+      clubs: Object.fromEntries(Object.entries(state.clubs).map(([clubId, club]) => [
+        clubId,
+        club.financialObligations == null ? club : {
+          ...club,
+          financialObligations: club.financialObligations.map((obligation) => compactClubFinancialObligation(obligation)),
+        },
+      ])),
+    } : {}),
     players,
     observations,
     finances,
-    playerMovementHistory,
+    playerMovementHistory: compactPlayerMovementHistory(playerMovementHistory),
     worldHistory,
     retiredPlayers,
     retiredPlayerIds,

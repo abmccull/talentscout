@@ -1,5 +1,7 @@
 import type { Contact } from "../core/types";
 import type { DialogueChoiceResolution, ObservationSession } from "./types";
+import { getRecordedInquiryQuestion } from "./inquiryQuestion";
+import { SCOUTING_QUESTIONS } from "../scout/evidenceModel";
 
 function sameInquiryWeek(contact: Contact, session: ObservationSession): boolean {
   return contact.inquiryDecisions?.occurredAt.week === session.startedAtWeek
@@ -27,10 +29,17 @@ export function restoreInquiryDecisions(
       if (phase.dialogueChoiceResolutions?.[node.id] || phase.selectedDialogueOptionIds?.[node.id]) continue;
       const resolution = resolutions[decisionKey(session, phase.index, node.id)];
       if (!resolution || resolution.sourceContactId !== contact.id) continue;
+      if (resolution.inquiry && !session.players.some((player) => player.playerId === resolution.inquiry?.playerId)) continue;
       restored = true;
       restoredInsight += resolution.insightPointsAwarded;
       updated = {
         ...updated,
+        dialogueNodes: updated.dialogueNodes?.map((candidate) => candidate.id === node.id ? {
+          ...candidate,
+          text: resolution.promptText ?? (resolution.inquiry
+            ? `Recorded inquiry: ${SCOUTING_QUESTIONS.find((question) => question.id === resolution.inquiry?.questionId)?.label ?? resolution.inquiry.questionId}`
+            : candidate.text),
+        } : candidate),
         selectedDialogueOptionIds: { ...updated.selectedDialogueOptionIds, [node.id]: resolution.optionId },
         dialogueChoiceResolutions: { ...updated.dialogueChoiceResolutions, [node.id]: resolution },
       };
@@ -41,6 +50,7 @@ export function restoreInquiryDecisions(
   return {
     ...session,
     phases,
+    scoutingQuestionId: getRecordedInquiryQuestion({ ...session, phases }) ?? session.scoutingQuestionId,
     insightPointsEarned: session.insightPointsEarned + restoredInsight,
     sourceRelationshipScore: contact.relationship,
   };

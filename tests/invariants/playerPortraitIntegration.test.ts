@@ -7,12 +7,13 @@ import { processPlacementOutcome } from "@/engine/youth/placement";
 import { resolvePlayerMovements, type LifecycleWorldState } from "@/engine/world/playerLifecycle";
 import { migrateSaveState } from "@/lib/db";
 import { createPortraitCatalog } from "@/engine/players/portraits/catalog";
-import { createVisualIdentity } from "@/engine/players/portraits/identity";
+import { createVisualIdentity, withVisualIdentity } from "@/engine/players/portraits/identity";
 import { revealGamePortraits, revealKnownGamePortraits, isPortraitOnlyStateChange, preparePortraitWeekCommit } from "@/engine/players/portraits/gameIntegration";
 import { snapshotPersistedGameState } from "@/stores/actions/persistGameplayAutosave";
 import * as portraitAllocation from "@/engine/players/portraits/allocation";
+import { bundledPortraitCatalog } from "@/engine/players/portraits/bundledCatalog";
 
-function player(id = "prospect"): Player {
+function player(id = "prospect"): Player & { visualIdentity: ReturnType<typeof createVisualIdentity> } {
   return { ...generatePlayer(createRNG("portrait-integration"), {
     position: "CM", ageRange: [17,17], abilityRange: [45,45], nationality: "England",
     clubId: "", firstName: "Ari", lastName: "Prospect",
@@ -30,6 +31,20 @@ function club(id: string): Club {
 const emptyCatalog = createPortraitCatalog([]);
 
 describe("persistent portraits integrated with football domains", () => {
+  it("does not rebuild an exhausted ledger on revisits and allocates when a pack arrives", () => {
+    const p = player();
+    const source = { currentSeason: 1, currentWeek: 1, players: { [p.id]: p }, unsignedYouth: {} } as unknown as GameState;
+    const waiting = revealGamePortraits(source, [p.id], "selected", [], emptyCatalog);
+    expect(waiting.playerPortraits!.reservations[p.visualIdentity!.identityId]!.binding).toBeUndefined();
+    const allocator = vi.spyOn(portraitAllocation, "revealPortraits");
+    try {
+      expect(revealGamePortraits(waiting, [p.id], "selected", [], emptyCatalog)).toBe(waiting);
+      expect(allocator).not.toHaveBeenCalled();
+      const filled = revealGamePortraits(waiting, [p.id], "selected", [], bundledPortraitCatalog);
+      expect(filled.playerPortraits!.reservations[p.visualIdentity!.identityId]!.binding).toBeDefined();
+      expect(waiting.playerPortraits!.reservations[p.visualIdentity!.identityId]!.binding).toBeUndefined();
+    } finally { allocator.mockRestore(); }
+  });
   it("does not revisit allocation for an already bound, nameless, pruned legacy person", () => {
     const p = player();
     const source = { currentSeason: 1, currentWeek: 1, players: { [p.id]: p }, unsignedYouth: {} } as unknown as GameState;
@@ -73,13 +88,13 @@ describe("persistent portraits integrated with football domains", () => {
 
   it("the real portable save migration restores identities and serializes reservations", () => {
     const fixture = JSON.parse(readFileSync(new URL("../fixtures/saves/v0-save-record.json", import.meta.url), "utf8"));
-    const legacyPlayer = player(); delete legacyPlayer.visualIdentity;
+    const legacyPlayer: Player = player(); delete legacyPlayer.visualIdentity;
     const legacy = { ...fixture.state, players: { [legacyPlayer.id]: legacyPlayer },
       unsignedYouth: { [legacyPlayer.id]: youth(legacyPlayer) }, watchlist: [legacyPlayer.id] };
     const original = structuredClone(legacy);
     const migrated = migrateSaveState(legacy);
     expect(legacy).toEqual(original);
-    expect(migrated.players[legacyPlayer.id]!.visualIdentity).toEqual(createVisualIdentity(legacyPlayer.id));
+    expect(withVisualIdentity(migrated.players[legacyPlayer.id]!).visualIdentity).toEqual(createVisualIdentity(legacyPlayer.id));
     expect(migrated.playerPortraits!.reservations["person:v1:" + legacyPlayer.id]).toBeUndefined();
     const live = revealKnownGamePortraits(migrated);
     expect(live.playerPortraits!.reservations["person:v1:" + legacyPlayer.id]).toBeDefined();

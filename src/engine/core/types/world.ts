@@ -40,6 +40,30 @@ export interface ClubFinancialObligation {
   lastTriggerEvaluationSeason?: number;
 }
 
+/** Presence-mask archive retains optional null values before normalization. */
+export interface CompactTerminalObligationV1 {
+  id: string;
+  obligationArchiveV1: [presenceMask: number, ...values: (string | number | null)[]];
+}
+/** Undefined bits consume no payload column and restore ordinary own data fields. */
+export interface CompactTerminalObligationV2 {
+  id: string;
+  obligationArchiveV2: [presenceMask: number, undefinedMask: number, ...values: (string | number | null)[]];
+}
+/** Literal ID or exact prefix + same-leaf playerId + suffix; stored leaves only. */
+export type StableFinancialIdentity = string | [prefix: string, suffix: string];
+export interface CompactTerminalObligationV31 {
+  id: StableFinancialIdentity;
+  obligationArchiveV31: [presenceMask: number, ...values: (string | number | null)[]];
+}
+export interface CompactTerminalObligationV32 {
+  id: StableFinancialIdentity;
+  obligationArchiveV32: [presenceMask: number, undefinedMask: number, ...values: (string | number | null)[]];
+}
+export type StoredClubFinancialObligation = ClubFinancialObligation | CompactTerminalObligationV1 | CompactTerminalObligationV2
+  | CompactTerminalObligationV31 | CompactTerminalObligationV32;
+export type FinancialObligationsStored = StoredClubFinancialObligation[];
+
 export interface Club {
   id: string;
   name: string;
@@ -47,21 +71,13 @@ export interface Club {
   leagueId: string;
   reputation: number;
   budget: number;
-  /** Board-approved annual recruitment funding, separate from wage capacity. */
-  annualRecruitmentBudget?: number;
-  /** Completed season of the latest applied division transition. */
+  /** Latest annual board transfer allocation; also prevents duplicate awards. */
+  recruitmentAllocation?: { season: number; amount: number; budgetBefore: number; budgetAfter: number };
+  /** Completed-season league transition already applied to this club. */
   lastLeagueTransitionSeason?: number;
-  /** The latest allocation is also the idempotency key for season funding. */
-  lastRecruitmentAllocation?: {
-    season: number;
-    grant: number;
-    carryover: number;
-    returned: number;
-    previousBalance: number;
-  };
   weeklyWageBudget?: number;
   scoutingBudget?: number;
-  financialObligations?: ClubFinancialObligation[];
+  financialObligations?: FinancialObligationsStored;
   scoutingPhilosophy: ScoutingPhilosophy;
   managerId: string;
   playerIds: string[];

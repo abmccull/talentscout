@@ -1,18 +1,41 @@
 import { describe, expect, it } from "vitest";
 import fullPack from "@/data/portraits/documentary-v1.json";
+import humgenPack from "@/data/portraits/humgen-v1.json";
+import curatedPack from "@/data/portraits/humgen-v2-curated.json";
 import { createPortraitCatalog } from "@/engine/players/portraits/catalog";
 import { bundledPortraitCatalog } from "@/engine/players/portraits/bundledCatalog";
 import { revealPortraits, resolvePortrait } from "@/engine/players/portraits/allocation";
 import { AGE_CHECKPOINTS } from "@/engine/players/portraits/types";
 
 describe("portrait runtime index integrity", () => {
-  const fullCatalog = createPortraitCatalog([fullPack]);
+  const fullCatalog = createPortraitCatalog([fullPack, humgenPack, curatedPack]);
+
+  it("fills waiting people from the curated expansion without changing existing faces", () => {
+    const beforeCatalog = new Map([...bundledPortraitCatalog].filter(([, entry]) => entry.packId !== curatedPack.packId));
+    const ids = Array.from({ length: 58 }, (_, index) => `review-person-${index}`);
+    const world = { players: Object.fromEntries(ids.map(id => [id, { id, age: 22 }])) };
+    const before = revealPortraits(world, ids, { season: 1, week: 1 }, "observed", beforeCatalog);
+    const after = revealPortraits(before, ids, { season: 1, week: 2 }, "observed", bundledPortraitCatalog);
+    let filled = 0;
+    for (const [id, reservation] of Object.entries(before.playerPortraits.reservations)) {
+      const next = after.playerPortraits.reservations[id]!;
+      if (reservation.binding) expect(next).toEqual(reservation);
+      else {
+        expect(next.binding?.packId).toBe(curatedPack.packId);
+        expect(next.firstSeen).toEqual(reservation.firstSeen);
+        filled++;
+      }
+    }
+    expect(filled).toBe(4);
+    expect(Object.keys(after.playerPortraits.faceOwners)).toHaveLength(58);
+  });
 
   it("retains every identity and image field except offline delivery digests", () => {
     expect(bundledPortraitCatalog.size).toBe(fullCatalog.size);
     for (const [id, source] of fullCatalog) {
       const runtime = bundledPortraitCatalog.get(id)!;
-      const { allocationAllowed, ...actual } = runtime;
+      const { allocationAllowed, allocationPriority, ...actual } = runtime;
+      expect(allocationPriority).toBe(source.packId.startsWith("humgen-") ? 100 : 0);
       expect(actual).toEqual({
         ...source,
         assets: source.assets.map((asset) => {
@@ -29,6 +52,7 @@ describe("portrait runtime index integrity", () => {
   it("preserves the full pack's saved bindings and all eight age resolutions", () => {
     const reviewedFullCatalog = new Map([...fullCatalog].map(([id, entry]) => [id, {
       ...entry, allocationAllowed: bundledPortraitCatalog.get(id)?.allocationAllowed,
+      allocationPriority: bundledPortraitCatalog.get(id)?.allocationPriority,
     }]));
     const world = { players: {
       a: { id: "a", age: 15 }, b: { id: "b", age: 27 }, c: { id: "c", age: 35 },

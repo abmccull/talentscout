@@ -300,40 +300,40 @@ export const VENUE_DESCRIPTIONS: Record<
  */
 const GENERIC_MATCH_DESCRIPTIONS: Record<number, string[]> = {
   0: [
-    "Kick-off. Use the opening exchanges to find a player or action worth following.",
-    "The match starts briskly. Decide which physical action or decision to watch through the early exchanges.",
+    "Kick-off. Both sides feel each other out with probing passes and high defensive lines. The opening moves are revealing in their own careful way.",
+    "The match starts briskly. High press from both teams in the first minutes — the physical and mental signals are unusually clear this early.",
     "Opening exchanges. The tempo is high from the first whistle. Early ball movement patterns suggest which side has prepared for this specific opponent.",
     "Kick-off and the game is immediately competitive. Both managers have set up to be difficult rather than expressive — the opening phase is attritional.",
   ],
   15: [
-    "Quarter of the game complete. Compare another passage with the picture you began building at kick-off.",
+    "Quarter of the game complete. The pressing traps have settled and both teams are beginning to play through the lines. The picture is clarifying.",
     "Fifteen minutes in. The first phase of sustained possession for either side has established which midfield is controlling the tempo.",
     "The match has passed its cautious opening. Players are now competing for the ball with conviction rather than consideration.",
     "After a tentative start, the game has found its pace. A cleaner phase now — the transitions are sharp and the individual battles are being decided.",
   ],
   30: [
-    "The game approaches the half-hour. Watch how a player carries out a tactical task rather than assuming the plan is fully understood.",
-    "Half-hour in. Another passage offers a chance to check whether an earlier pattern repeats.",
+    "The game's tactical spine is now visible. Both managers are operating the shapes they drilled in the week — the test is whether the players execute them under pressure.",
+    "Half-hour in. The match is in its deepest phase of structure before the half-time adjustments. Patterns are reliable and readable from the touchline.",
     "Thirty minutes. One side is beginning to control possession more consistently. The better-organised unit is starting to squeeze the space.",
-    "The game approaches the final stretch of the first half. Keep individual observations in the context of the surrounding play.",
+    "The game is approaching the final stretch of the first half. Both sides are still competitive but the balance of quality is starting to tilt one way.",
   ],
   45: [
     "Second half begins. Both managers have spoken — formations tightened or released based on what the first half showed. The new phase is starting with visible intent.",
     "The restart after half-time brings a change in tempo. Fresh legs are making more ground than tired ones did in the dying minutes of the first half.",
-    "Second-half kick-off. Use the restart to test whether an earlier observation holds in the next passage.",
+    "Second half kick-off. One substitution from each bench has changed the shape slightly. The early second-half period reveals which team has the more adaptable plan.",
     "The match continues into its second half. One team's approach has adjusted sharply from the break — it will be interesting to see how long the new structure holds.",
   ],
   60: [
-    "An hour of football. Decision-making and recovery offer different questions to follow at this stage.",
-    "Sixty minutes in. Keep the match situation in mind when interpreting an attacking risk.",
-    "The game continues into its later stages. Watch changes in execution without assuming fatigue explains every action.",
+    "An hour of football. The physical peaks have passed and tactical intelligence is carrying the teams forward. Decision-making speed is the metric now.",
+    "Sixty minutes in. The scoreline matters here — the team that needs a goal is taking risks. Those risks are creating the most legible attacking moments of the match.",
+    "The game enters its most interpretively rich phase. Tiredness is bringing honesty to every action — the technically sound players are maintaining their level while others decline.",
     "One hour gone. The substitutes are having their impact across the pitch. The tactical adjustments are reshaping the game into something different from its first-half form.",
   ],
   75: [
-    "Final fifteen minutes. Follow a closing effort or decision before deciding what still needs another look.",
+    "Final fifteen minutes. The result is approaching its conclusion. The players who are still pressing, still defending with sharpness — they are answering the biggest question of the evening.",
     "With time running out, the game is being decided by individual moments. The space that is appearing on both flanks is being exploited by whoever has the fastest reading.",
-    "Late in the match. A further observation may strengthen an impression or leave another question unresolved.",
-    "Closing stages. Compare the remaining passages with earlier evidence without assuming that a pattern is already established.",
+    "Late in the match. Fatigue is tangible on both sides but a handful of players are still driving the tempo. Those are the ones worth the journey to see.",
+    "Closing stages. The game is in its final phase. The players who've maintained their level — technical quality, pressing intensity, positional discipline — all the way through are standing out.",
   ],
 };
 
@@ -370,6 +370,12 @@ function getMinuteBracket(minute: number): number {
  * @param minute      - Match minute or step counter assigned to this phase.
  * @param rng         - Seeded RNG instance for variant selection.
  */
+const CONTINUING_OPENING_DESCRIPTIONS = [
+  "Play continues through the early exchanges. Follow the next action and the response that comes after it.",
+  "The session is underway. Keep the current question in mind while watching the next passage.",
+  "Another passage develops. Look for a repeat of the earlier cue before treating it as a pattern.",
+];
+
 export function generatePhaseDescription(
   venueType: string,
   phaseIndex: number,
@@ -381,13 +387,16 @@ export function generatePhaseDescription(
 
   if (venueBank) {
     const segment = getPhaseSegment(phaseIndex, totalPhases);
-    const pool = venueBank[segment];
+    const pool = segment === "early" && phaseIndex > 0
+      ? CONTINUING_OPENING_DESCRIPTIONS : venueBank[segment];
     return rng.pick(pool);
   }
 
   // Fallback: minute-bracket generic match descriptions.
   const bracket = getMinuteBracket(minute);
-  const pool = GENERIC_MATCH_DESCRIPTIONS[bracket] ?? GENERIC_MATCH_DESCRIPTIONS[0];
+  const pool = bracket === 0 && phaseIndex > 0
+    ? CONTINUING_OPENING_DESCRIPTIONS
+    : GENERIC_MATCH_DESCRIPTIONS[bracket] ?? GENERIC_MATCH_DESCRIPTIONS[0];
   return rng.pick(pool);
 }
 
@@ -458,7 +467,7 @@ export function populateFullObservationPhases(
 
   // Resolve the effective venue type. Prefer the venueAtmosphere's venueType
   // when already set (e.g. pre-populated by caller), otherwise use activityType.
-  const venueType = session.venueAtmosphere?.venueType ?? session.activityType;
+  const venueType = session.venueAtmosphere?.venueType ?? session.situation?.venueType ?? session.activityType;
 
   // Create venue atmosphere if one does not already exist on the session.
   const atmosphere =
@@ -469,8 +478,8 @@ export function populateFullObservationPhases(
     ...player,
     naturalRole: player.naturalRole ?? playerProfiles?.[player.playerId]?.naturalRole,
   }));
-  const performanceOffsets = sampleSessionPerformance(rng, contextualPlayers, playerProfiles);
 
+  const performanceOffsets = session.performanceOffsets ?? sampleSessionPerformance(rng, contextualPlayers, playerProfiles);
   const populatedPhases: SessionPhase[] = session.phases.map((phase) => {
     // 1. Generate player moments for this phase.
     const moments = generateMoments(
@@ -525,8 +534,8 @@ export function populateFullObservationPhases(
   return {
     ...session,
     phases: populatedPhases,
-    players: contextualPlayers,
     performanceOffsets,
+    players: contextualPlayers,
     venueAtmosphere: atmosphere,
     situation,
     questionOptions: targetPlayer

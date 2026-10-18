@@ -1,4 +1,7 @@
-import { migratePlayerChronology } from "@/lib/migrations/playerChronology";
+import { assertSaveOperationOwned, type SaveOperationOwnership } from "./saveOperationOwnership";
+import { assertCareerCanResume } from "./careerDisposition";
+import { assertStoredHistoryArchives } from "./storedHistoryValidation";
+import { assertStoredFinancialArchives } from "./storedFinancialValidation";
 /**
  * IndexedDB persistence layer using Dexie.js.
  *
@@ -7,6 +10,7 @@ import { migratePlayerChronology } from "@/lib/migrations/playerChronology";
  */
 
 import Dexie, { type EntityTable } from "dexie";
+import { reconcileJournalFlagReactions } from "./reflectionJournalMigration";
 import type {
   GameState,
   FreeAgent,
@@ -40,6 +44,8 @@ import {
   createLegacySaveRunManifest,
   migrateSaveEnvelope,
   SaveMigrationError,
+  assertSupportedSaveSchema,
+  isFutureSaveMigrationError,
   type SaveEnvelope,
 } from "@/lib/saveEnvelope";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
@@ -134,7 +140,7 @@ export interface SaveRecoveryNotice {
 }
 
 export interface SaveUnavailableNotice {
-  reason: "unrecoverable-corruption";
+  reason: "unrecoverable-corruption" | "future-version";
   message: string;
 }
 
@@ -247,8 +253,8 @@ db.version(4).stores({
   mods: "countryKey",
 });
 
-// Version 5 keeps the portable save-envelope schema at version 4. Only the
-// local journal changes: upload intents are revision pointers and archives
+// Database version 5 changed only the local journal; the portable envelope was
+// schema 4 at introduction. Upload intents are revision pointers and archives
 // carry lazily populated retention metadata.
 db.version(5).stores({
   saves: "slot",
@@ -446,11 +452,14 @@ async function pruneArchives(slot: number): Promise<void> {
   const retainedCandidates: RetentionArchive[] = [];
 
   for (const archive of stored) {
+    // A prior verification flag cannot authorize deleting a format we cannot read.
+    assertSupportedSaveSchema(archive.record);
     let migrated: SaveRecord | null = null;
     if (archive.verified !== true) {
       try {
         migrated = migrateSaveRecord(archive.record);
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         invalidIds.push(archive.id);
         continue;
       }
@@ -606,7 +615,8 @@ export async function saveGameWithResult(
     if (rawCurrent) {
       try {
         current = migrateSaveRecord(rawCurrent);
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         // A corrupt head must never displace the last known-valid generation.
         // It is intentionally not copied into the recoverable archive.
       }
@@ -691,15 +701,17 @@ export async function loadGame(slot: number): Promise<GameState | null> {
  */
 export async function loadGameWithRecovery(
   slot: number,
+  options?: { publishPlayerExperience?: boolean },
 ): Promise<LocalSaveLoadResult | null> {
   const rawRecord: unknown = await db.saves.get(slot);
   if (!rawRecord) return null;
 
   try {
     const record = migrateSaveRecord(rawRecord);
-    mergePersistedPlayerExperience(record.playerExperience);
+    if (options?.publishPlayerExperience !== false) mergePersistedPlayerExperience(record.playerExperience);
     return { state: record.state, record };
   } catch (headError) {
+    if (isFutureSaveMigrationError(headError)) throw headError;
     const archives = await db.saveArchives
       .where("[slot+kind]")
       .equals([slot, "previous-generation"])
@@ -711,7 +723,7 @@ export async function loadGameWithRecovery(
     for (const archive of archives) {
       try {
         const record = migrateSaveRecord(archive.record);
-        mergePersistedPlayerExperience(record.playerExperience);
+        if (options?.publishPlayerExperience !== false) mergePersistedPlayerExperience(record.playerExperience);
         return {
           state: record.state,
           record,
@@ -724,7 +736,8 @@ export async function loadGameWithRecovery(
               "The newest local save was damaged. A verified earlier generation is available and was selected for this load.",
           },
         };
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         // Continue to the next immutable generation.
       }
     }
@@ -742,7 +755,7 @@ export type SaveListEntry = Omit<SaveRecord, "state"> & {
   unavailable?: SaveUnavailableNotice;
 };
 
-function unavailableSaveEntry(
+export function unavailableSaveEntry(
   raw: unknown,
   error: unknown,
 ): SaveListEntry | null {
@@ -751,6 +764,7 @@ function unavailableSaveEntry(
   const slot = Number.isInteger(record.slot) ? record.slot as number : -1;
   if (slot < 0 || slot > MAX_MANUAL_SLOTS) return null;
   const message = error instanceof Error ? error.message : String(error);
+  const future = isFutureSaveMigrationError(error);
   const specialization = typeof record.specialization === "string"
     ? record.specialization
     : "unknown";
@@ -762,7 +776,7 @@ function unavailableSaveEntry(
       ? record.savedAt
       : 0,
     slot,
-    name: typeof record.name === "string" ? record.name : "Damaged save",
+    name: typeof record.name === "string" ? record.name : future ? "Newer-version save" : "Damaged save",
     season: Number.isInteger(record.season) && (record.season as number) > 0
       ? record.season as number
       : 1,
@@ -777,8 +791,10 @@ function unavailableSaveEntry(
       ? record.reputation
       : 0,
     unavailable: {
-      reason: "unrecoverable-corruption",
-      message: `This save is damaged and no verified recovery generation is available. ${message}`,
+      reason: future ? "future-version" : "unrecoverable-corruption",
+      message: future
+        ? `This save requires a newer version of TalentScout. Update the game to load it. ${message}`
+        : `This save is damaged and no verified recovery generation is available. ${message}`,
     },
   };
 }
@@ -793,7 +809,7 @@ export async function listSaves(): Promise<SaveListEntry[]> {
       entries.push(meta);
     } catch {
       try {
-        const recovered = await loadGameWithRecovery(raw.slot);
+        const recovered = await loadGameWithRecovery(raw.slot, { publishPlayerExperience: false });
         if (!recovered) continue;
         const { state: _state, ...meta } = recovered.record;
         entries.push({ ...meta, recovery: recovered.recovery });
@@ -877,15 +893,20 @@ export interface ConflictResolutionCommitResult {
  */
 export async function commitConflictResolution(
   input: ConflictResolutionCommit,
+  ownership?: SaveOperationOwnership,
 ): Promise<ConflictResolutionCommitResult> {
+  assertSaveOperationOwned(ownership);
   const archiveId = `conflict:${input.conflictId}`;
   const selected = migrateSaveRecord({ ...input.selected, slot: input.slot });
   const losing = migrateSaveRecord({ ...input.losing, slot: input.slot });
 
   return db.transaction("rw", db.saves, db.saveArchives, async () => {
     const priorArchive = await db.saveArchives.get(archiveId);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(selected.state);
     if (priorArchive) {
       const currentRaw: unknown = await db.saves.get(input.slot);
+      assertSaveOperationOwned(ownership);
       if (!currentRaw) {
         throw new Error("Resolved conflict archive exists but the selected save is missing.");
       }
@@ -897,6 +918,7 @@ export async function commitConflictResolution(
     }
 
     const currentRaw: unknown = await db.saves.get(input.slot);
+    assertSaveOperationOwned(ownership);
     if (!currentRaw) throw new Error("The local save disappeared before conflict resolution.");
     const current = migrateSaveRecord(currentRaw);
     if (current.savedAt !== input.expectedLocalTimestamp) {
@@ -920,9 +942,13 @@ export async function commitConflictResolution(
       ...selected,
       storageRevision: await nextStorageRevision(input.slot, current),
     };
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(selected.state);
     await db.saveArchives.put(archive);
     await db.saves.put(promoted);
     await pruneArchives(input.slot);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(selected.state);
 
     return {
       applied: true,
@@ -933,17 +959,23 @@ export async function commitConflictResolution(
 }
 
 /** Restore a recovery generation while preserving the displaced current row. */
-export async function restoreSaveArchive(id: string): Promise<SaveRecord> {
+export async function restoreSaveArchive(id: string, ownership?: SaveOperationOwnership): Promise<SaveRecord> {
+  assertSaveOperationOwned(ownership);
   return db.transaction("rw", db.saves, db.saveArchives, async () => {
     const archive = await db.saveArchives.get(id);
+    assertSaveOperationOwned(ownership);
     if (!archive) throw new Error("That recovery copy is no longer available.");
     const recovered = migrateSaveRecord(archive.record);
+    assertCareerCanResume(recovered.state);
     const currentRaw: unknown = await db.saves.get(archive.slot);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(recovered.state);
     let current: SaveRecord | undefined;
     if (currentRaw) {
       try {
         current = migrateSaveRecord(currentRaw);
-      } catch {
+      } catch (error) {
+        if (isFutureSaveMigrationError(error)) throw error;
         // Replacing a corrupt head is safe; the corrupt bytes are not copied.
       }
     }
@@ -963,8 +995,12 @@ export async function restoreSaveArchive(id: string): Promise<SaveRecord> {
       playerExperience: recovered.playerExperience,
       storageRevision: await nextStorageRevision(archive.slot, current),
     };
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(recovered.state);
     await db.saves.put(restored);
     await pruneArchives(archive.slot);
+    assertSaveOperationOwned(ownership);
+    assertCareerCanResume(recovered.state);
     return restored;
   });
 }
@@ -1063,7 +1099,9 @@ async function normalizeLegacyUpload(
 export async function enqueueSaveSync(
   record: SaveRecord,
   target: SaveSyncTarget,
+  ownership?: SaveOperationOwnership,
 ): Promise<SaveSyncQueueRecord> {
+  assertSaveOperationOwned(ownership);
   const slot = record.slot;
   if (!Number.isInteger(slot) || slot < 0 || slot > MAX_MANUAL_SLOTS) {
     throw new Error("A cloud upload must reference a valid local save slot.");
@@ -1076,10 +1114,12 @@ export async function enqueueSaveSync(
     db.saveSyncQueue,
     async () => {
       const head = await authoritativeHeadWithRevision(slot);
+      assertSaveOperationOwned(ownership);
       persistenceFaultInjector?.("after-sync-head-normalization-before-intent");
       const now = Date.now();
       const id = syncTaskId(target, slot);
       const existing = await db.saveSyncQueue.get(id);
+      assertSaveOperationOwned(ownership);
       const task: SaveUploadSyncQueueRecord = {
         id,
         slot,
@@ -1096,6 +1136,7 @@ export async function enqueueSaveSync(
         sourceSavedAt: head.savedAt,
       };
       await db.saveSyncQueue.put(task);
+      assertSaveOperationOwned(ownership);
       return task;
     },
   );
@@ -1518,6 +1559,11 @@ export function migrateSaveState(raw: unknown): GameState {
     );
   }
 
+  // Clone can invoke getters or erase descriptor flags. Validate recognized
+  // financial archives on the original input before any compatibility repair.
+  assertStoredFinancialArchives(candidate);
+  assertStoredHistoryArchives(candidate);
+
   let state: GameState;
   try {
     // GameState is a JSON persistence contract. Clone before applying any
@@ -1674,6 +1720,7 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.placementReports) state.placementReports = {};
   if (!state.gutFeelings) state.gutFeelings = [];
   if (!state.reflectionJournal) state.reflectionJournal = {};
+  state.reflectionJournal = reconcileJournalFlagReactions(state.reflectionJournal);
   if (!state.youthRecruitmentBriefs) state.youthRecruitmentBriefs = {};
   if (!state.recommendationReviews) state.recommendationReviews = {};
   if (!state.alumniRecords) state.alumniRecords = [];
@@ -1731,7 +1778,7 @@ export function migrateSaveState(raw: unknown): GameState {
     state.finances = reconcileFinancialLedger(state.finances);
   }
 
-  const migrated = applyGameplaySaveMigrations(migratePlayerChronology(state));
+  const migrated = applyGameplaySaveMigrations(state);
   migrated.dashboardState = cleanupDashboardState(
     migrateDashboardState(migrated.dashboardState),
   );

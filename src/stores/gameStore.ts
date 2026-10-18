@@ -1,5 +1,7 @@
-import { reportRendererError } from "@/lib/reportRendererError";
-import { revealGamePortraits, revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
+import { SaveOperationCancelledError } from "@/lib/saveOperationOwnership";
+import { assertCareerCanResume } from "@/lib/careerDisposition";
+import { captureException } from "@/lib/deferredErrorReporting";
+import { revealKnownGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { create } from "zustand";
 import { createNavigationActions } from "./actions/navigationActions";
 import { createObservationActions } from "./actions/observationActions";
@@ -7,11 +9,10 @@ import { createReportActions } from "./actions/reportActions";
 import { createProgressionActions } from "./actions/progressionActions";
 import { createFinanceActions } from "./actions/financeActions";
 import { createDurableGameplaySetter } from "./actions/durableGameplayCommit";
-import { runOwnedSaveLoad } from "./actions/saveLoadOwnership";
 import { createWeeklyActions } from "./actions/weeklyActions";
 import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
 import { createDashboardActions } from "./actions/dashboardActions";
-import { terminateWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
+import { terminateWeeklySimulationWorker, warmWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
 import type {
   GameState,
   NewGameConfig,
@@ -336,6 +337,33 @@ type GameStore = GameStoreState;
 // single-flight so double activation cannot race two careers into one store.
 let newGameStartInFlight = false;
 
+// All asynchronous career replacements share one owner. Source references also
+// protect ordinary unsaved play while a provider read is pending.
+let replacementOwner: symbol | null = null;
+let replacementGeneration = 0;
+function beginCareerReplacement(source: GameStoreState, get: () => GameStoreState) {
+  const token = Symbol("career-replacement");
+  replacementOwner = token;
+  replacementGeneration += 1;
+  let accepted: { state: GameState; generation: number } | null = null;
+  const canCommit = () => replacementOwner === token
+    && get().gameState === source.gameState
+    && get().activeSession === source.activeSession
+    && get().weekSimulation === source.weekSimulation;
+  return {
+    isCurrent: () => replacementOwner === token,
+    canCommit,
+    canMirror: () => accepted
+      ? accepted.generation === replacementGeneration && get().gameState === accepted.state
+      : canCommit(),
+    acceptCurrentCareer: () => {
+      // loadGame clears this request synchronously; never steal a newer owner.
+      const state = get().gameState;
+      if (replacementOwner === null && state) accepted = { state, generation: replacementGeneration };
+    },
+  };
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   // Navigation
   currentScreen: "mainMenu",
@@ -374,6 +402,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   activeSaveLoadId: null,
   saveConflict: null,
   isResolvingSaveConflict: false,
+  autosaveStatus: "idle",
   autosaveError: null,
 
   // Scenario transient state
@@ -394,6 +423,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Cross-screen calendar pre-fill
   pendingCalendarActivity: null,
   pendingNetworkContactId: null,
+  pendingInboxMessageId: null,
   pendingRivalOpportunityId: null,
   pendingInternationalCountry: null,
 
@@ -413,9 +443,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Start new game
   startNewGame: async (config) => {
     if (newGameStartInFlight) return;
+    get().dismissSaveConflict();
+    const request = beginCareerReplacement(get(), get);
     resetGameplayAutosaveWatermark();
     terminateWeeklySimulationWorker();
     set({
+      autosaveStatus: "idle",
+      autosaveError: null,
       isAdvancingWeek: false,
       activeWeeklyTransactionId: null,
       activeSaveLoadId: null,
@@ -499,6 +533,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rng,
       selectedCountries,
     );
+    if (!request.canCommit()) return;
     let scout = createScout(effectiveConfig, rng);
     // `countries` is the map/travel surface, not a static data catalogue. It
     // must only contain countries actually generated into this world. All
@@ -628,6 +663,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Build a temporary state object so Phase 2 generators can read world data
     const tempState: GameState = {
       seed: effectiveConfig.worldSeed,
+      careerInstanceId: globalThis.crypto.randomUUID(),
       runManifest,
       currentWeek: 1,
       currentSeason: 1,
@@ -940,6 +976,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           recentTemplateIds: readPlayerExperience().recentVeteranPrologueTemplateIds,
         })
       : null;
+    if (!request.canCommit()) return;
     if (veteranPrologue) {
       recordVeteranPrologueTemplate(veteranPrologue.templateId);
     }
@@ -948,17 +985,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       : veteranPrologue?.openingCase ?? null;
     let finalGameState: GameState = {
       ...scenarioState,
-      // Guide choice belongs to this career, independently of another save's tutorial cache.
+      // This choice belongs to this career; a different browser's tutorial
+      // cache must never turn an explicitly unguided assignment into a tour.
       guidedSessionRequested: effectiveConfig.specialization === "youth"
-        ? shouldStartYouthGuidedHour({ openingMode, guideFirstHour: effectiveConfig.guideFirstHour }) && Boolean(openingCase)
+        ? shouldStartYouthGuidedHour({
+            openingMode,
+            guideFirstHour: effectiveConfig.guideFirstHour,
+          }) && Boolean(openingCase)
         : !scenario,
       ...(openingCase ? { openingCase } : {}),
       ...(veteranPrologue ? { veteranPrologue } : {}),
     };
-    if (openingCase?.playerId) {
-      finalGameState = revealGamePortraits(finalGameState, [openingCase.playerId], "opening");
-    }
 
+    finalGameState = revealKnownGamePortraits(finalGameState);
     set({
       gameState: finalGameState,
       isLoaded: true,
@@ -968,6 +1007,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       scenarioProgress: null,
       scenarioOutcome: null,
     });
+    // Prime immediately after publication, before the player plans their first week.
+    warmWeeklySimulationWorker();
 
     // Teaching and career variety are separate: the authored case teaches the
     // loop once, while generated veteran prologues never reactivate mentor UI.
@@ -991,6 +1032,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         { careerId: finalGameState.scout.id },
       );
     } else {
+      // A new unguided career must not inherit a previous career's guide.
       useTutorialStore.getState().skipGuidedSession();
     }
     if (openingCase) {
@@ -1027,20 +1069,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
         set,
       );
     }
+    return get().gameState ?? undefined;
     } finally {
+      if (request.isCurrent()) replacementOwner = null;
       newGameStartInFlight = false;
     }
   },
 
   loadGame: (rawState) => {
-    terminateWeeklySimulationWorker();
     // Every runtime entrypoint, including direct test/import loads, passes
     // through the same pure and idempotent migration used by save providers.
     const migratedState = reconcileOpeningReportStage(migrateSaveState(rawState));
     const scenarioSafeState = revealKnownGamePortraits(migratedState);
-    const allocatedPortraitsOnLoad = scenarioSafeState !== migratedState;
     assertEarlyAccessSaveCompatibility(scenarioSafeState);
+    assertCareerCanResume(scenarioSafeState);
+    get().dismissSaveConflict();
+    // Rejected imports leave the active career's simulation and saves intact.
+    terminateWeeklySimulationWorker();
     const resumableSession = scenarioSafeState.activeObservationSession ?? null;
+    const recovery = scenarioSafeState.pendingWeekRecovery;
+    const resumableWeek = recovery && recovery.week === scenarioSafeState.currentWeek
+      && recovery.season === scenarioSafeState.currentSeason
+      ? recovery.simulation : null;
     const resumedReflection = resumableSession?.state === "reflection"
       ? createSessionReflectionResult(scenarioSafeState, resumableSession)
       : null;
@@ -1049,6 +1099,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const openingStage = scenarioSafeState.openingCase?.stage;
     const restoreScreen = resumableSession
       ? "observation"
+      : resumableWeek ? "weekSimulation"
       : openingStage === "decision"
         ? "openingDiscovery"
         : openingStage === "report"
@@ -1056,6 +1107,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           : "dashboard";
     set({
       gameState: scenarioSafeState,
+      autosaveStatus: "idle",
+      autosaveError: null,
       isLoaded: true,
       currentScreen: resolveGameScreenForBuild(restoreScreen, true),
       selectedPlayerId: scenarioSafeState.openingCase?.playerId ?? null,
@@ -1066,9 +1119,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeSession: resumableSession,
       lastReflectionResult: resumedReflection,
       sessionReturnScreen: resumableSession
-        ? resolveGameScreenForBuild("dashboard", true)
+        ? resolveGameScreenForBuild(resumableWeek ? "weekSimulation" : "dashboard", true)
         : null,
-      weekSimulation: null,
+      weekSimulation: resumableWeek,
       lastWeekSummary: null,
       batchSummary: null,
       saveConflict: null,
@@ -1081,9 +1134,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastWeeklyWorkerTelemetry: null,
       weeklyTransactionError: null,
     });
+    // Successful same-career loads also replace the worker; scout.id may be unchanged.
+    warmWeeklySimulationWorker();
 
-    if (hadPendingAutosave || allocatedPortraitsOnLoad) {
-      // Newly visible legacy/pack bindings must persist with the same live ledger.
+    if (hadPendingAutosave || scenarioSafeState.playerPortraits !== migratedState.playerPortraits) {
       // An already-started old write cannot be cancelled. Commit the loaded
       // career behind it so that old I/O can never become the final autosave.
       queueGameplayAutosave(
@@ -1096,36 +1150,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   saveGame: () => {
-    const { gameState, activeSession } = get();
+    const { gameState, activeSession, weekSimulation } = get();
     if (!gameState) return null;
-    const saved = snapshotPersistedGameState(gameState, activeSession);
+    const saved = snapshotPersistedGameState(gameState, activeSession, weekSimulation);
     set({ gameState: saved });
     void flushGameplayAutosave(saved, set).catch((err) => {
       console.warn("saveGame: provider persist failed:", err);
-      void reportRendererError(err);
+      captureException(err);
     });
     return saved;
   },
 
   flushGameplaySave: async () => {
-    const { gameState, activeSession } = get();
+    const { gameState, activeSession, weekSimulation } = get();
     if (!gameState) return;
-    const saved = snapshotPersistedGameState(gameState, activeSession);
+    const saved = snapshotPersistedGameState(gameState, activeSession, weekSimulation);
     set({ gameState: saved });
     await flushGameplayAutosave(saved, set);
   },
 
   // Persistence (save provider)
   saveToSlot: async (slot, name) => {
-    const { gameState, activeSession } = get();
+    const { gameState, activeSession, weekSimulation } = get();
     if (!gameState) return;
     set({ isSaving: true, saveConflict: null });
     try {
-      const saved = {
-        ...gameState,
-        activeObservationSession: activeSession,
-        lastSaved: Date.now(),
-      };
+      const saved = snapshotPersistedGameState(gameState, activeSession, weekSimulation);
       const provider = await getActiveSaveProvider();
       const commit = await persistGameState(
         provider,
@@ -1150,13 +1200,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadFromSlot: async (slot) => {
-    if (newGameStartInFlight) return;
-    await runOwnedSaveLoad(get, set, "load", async (isCurrent) => {
+    const request = beginCareerReplacement(get(), get);
+    set({ isLoadingSave: true, isResolvingSaveConflict: false, saveConflict: null });
+    try {
       const provider = await getActiveSaveProvider();
-      if (!isCurrent()) return;
       const slotName = slotNumberToSaveName(slot);
-      const conflict = await provider.checkConflict(slotName);
-      if (!isCurrent()) return;
+      if (!request.canCommit()) return;
+      const conflict = await provider.checkConflict(slotName, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!request.canCommit()) return;
       if (conflict) {
         set({
           saveConflict: {
@@ -1168,11 +1219,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       set({ saveConflict: null });
-      const loaded = await provider.load(slotName);
-      if (!isCurrent() || !loaded) return;
+      const loaded = await provider.load(slotName, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!loaded || !request.canCommit()) return;
 
       get().loadGame(loadResultGameState(loaded));
-    });
+    } catch (error) {
+      if (error instanceof SaveOperationCancelledError || !request.canCommit()) return;
+      throw error;
+    } finally {
+      if (request.isCurrent()) {
+        replacementOwner = null;
+        set({ isLoadingSave: false });
+      }
+    }
   },
 
   deleteSlot: async (slot) => {
@@ -1193,10 +1252,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     for (const group of bySlot.values()) {
-      const entry = group.find((candidate) => !candidate.unavailable) ?? group[0];
+      const entry = group.find((candidate) => candidate.unavailable?.reason === "future-version")
+        ?? group.find((candidate) => !candidate.unavailable) ?? group[0];
       if (!entry) continue;
       const damagedLocal = group.find(
-        (candidate) => candidate.source === "local" && candidate.unavailable,
+        (candidate) => candidate.source === "local"
+          && candidate.unavailable?.reason === "unrecoverable-corruption",
       );
       slots.push({
         slot: entry.slot,
@@ -1223,15 +1284,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   restoreSaveRecoveryCopy: async (archiveId) => {
-    if (newGameStartInFlight) return;
-    await runOwnedSaveLoad(get, set, "load", async (isCurrent) => {
+    const request = beginCareerReplacement(get(), get);
+    set({ isLoadingSave: true, isResolvingSaveConflict: false, saveConflict: null });
+    try {
       const provider = await getActiveSaveProvider();
-      if (!isCurrent()) return;
-      const restored = await provider.restoreRecoveryCopy(archiveId);
-      if (!isCurrent()) return;
+      if (!request.canCommit()) return;
+      const restored = await provider.restoreRecoveryCopy(archiveId, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!request.canCommit()) return;
       get().loadGame(loadResultGameState(restored));
+      request.acceptCurrentCareer();
       await get().refreshSaveSlots();
-    });
+    } catch (error) {
+      if (error instanceof SaveOperationCancelledError || !request.canCommit()) return;
+      throw error;
+    } finally {
+      if (request.isCurrent()) {
+        replacementOwner = null;
+        set({ isLoadingSave: false });
+      }
+    }
   },
 
   refreshSaveSyncStatus: async () => {
@@ -1247,21 +1318,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   dismissSaveConflict: () => {
-    set({ saveConflict: null });
+    replacementOwner = null;
+    replacementGeneration += 1;
+    set({ saveConflict: null, isLoadingSave: false, isResolvingSaveConflict: false });
   },
 
   resolveSaveConflict: async (slot, preferredSource) => {
-    if (newGameStartInFlight) return;
-    await runOwnedSaveLoad(get, set, "conflict", async (isCurrent) => {
+    const request = beginCareerReplacement(get(), get);
+    set({ isResolvingSaveConflict: true, isLoadingSave: false });
+    try {
       const provider = await getActiveSaveProvider();
-      if (!isCurrent()) return;
       const slotName = slotNumberToSaveName(slot);
-      const resolved = await provider.resolveConflict(slotName, preferredSource);
-      if (!isCurrent()) return;
+      if (!request.canCommit()) return;
+      const resolved = await provider.resolveConflict(slotName, preferredSource, { canCommit: request.canCommit, canMirror: request.canMirror });
+      if (!request.canCommit()) return;
+
       get().loadGame(loadResultGameState(resolved));
+      request.acceptCurrentCareer();
       set({ saveConflict: null });
       await get().refreshSaveSlots();
-    });
+    } catch (error) {
+      if (error instanceof SaveOperationCancelledError || !request.canCommit()) return;
+      throw error;
+    } finally {
+      if (request.isCurrent()) {
+        replacementOwner = null;
+        set({ isResolvingSaveConflict: false });
+      }
+    }
   },
 
   // Weekly cycle actions (extracted to actions/weeklyActions.ts)
@@ -1502,6 +1586,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       {
         currentSeason: gameState.currentSeason,
         consequenceState: gameState.consequenceState,
+        scoutingCases: gameState.scoutingCases,
+        alumniRecords: gameState.alumniRecords,
+        retiredPlayers: gameState.retiredPlayers,
+        openingCase: gameState.openingCase,
       },
     );
   },
@@ -1579,11 +1667,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const signatureSummary = getLatestCareerSignatureSummary(profile);
 
     // Start the game with perk-only carryover using the existing startNewGame flow.
-    await get().startNewGame(perkResult.config);
+    const createdState = await get().startNewGame(perkResult.config);
 
-    // Now apply post-generation bonuses that can't be expressed in NewGameConfig
+    // Apply perks only to the exact career returned by this generation request.
+    // A load/import can replace it before this outer async continuation runs.
     const { gameState } = get();
-    if (!gameState) return;
+    if (!createdState || gameState !== createdState) return;
 
     let updatedState = { ...gameState };
     let updatedScout = { ...updatedState.scout };

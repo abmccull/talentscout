@@ -139,6 +139,7 @@ export class AudioEngine {
   private musicDuckTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSfxAt = new Map<string, number>();
   private scheduledStops = new WeakMap<HowlType, ReturnType<typeof setTimeout>>();
+  private pendingPlayback = new WeakMap<HowlType, () => void>();
 
   private listeners = new Set<ChangeListener>();
 
@@ -383,12 +384,38 @@ export class AudioEngine {
     this.cancelScheduledStop(toHowl);
     toHowl.volume(0);
     if (!toHowl.playing()) {
-      toHowl.play();
+      this.startStreamPlayback(toHowl, channel);
     }
     toHowl.fade(0, targetVol, durationMs);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
+
+  private startStreamPlayback(howl: HowlType, channel: "music" | "ambience"): void {
+    this.pendingPlayback.get(howl)?.();
+    const cleanup = () => {
+      howl.off("playerror", blocked);
+      howl.off("unlock", unlocked);
+      howl.off("play", started);
+      if (this.pendingPlayback.get(howl) === cleanup) this.pendingPlayback.delete(howl);
+    };
+    const started = () => {
+      if (this.pendingPlayback.get(howl) === cleanup) cleanup();
+    };
+    const unlocked = () => {
+      if (this.pendingPlayback.get(howl) !== cleanup) return;
+      cleanup();
+      howl.volume(this.effectiveVolume(channel));
+      this.startStreamPlayback(howl, channel);
+    };
+    const blocked = () => {
+      if (this.pendingPlayback.get(howl) === cleanup) howl.once("unlock", unlocked);
+    };
+    this.pendingPlayback.set(howl, cleanup);
+    howl.once("playerror", blocked);
+    howl.once("play", started);
+    howl.play();
+  }
 
   private fadeOut(howl: HowlType, durationMs = CROSSFADE_DURATION_MS): void {
     howl.fade(howl.volume(), 0, durationMs);
@@ -397,9 +424,12 @@ export class AudioEngine {
 
   private scheduleStop(howl: HowlType, durationMs: number): void {
     this.cancelScheduledStop(howl);
+    // A browser gesture must not restart a screen the player already left.
+    this.pendingPlayback.get(howl)?.();
     const timer = setTimeout(() => {
       this.scheduledStops.delete(howl);
       howl.stop();
+      this._releaseStreamFn?.(howl);
     }, durationMs);
     this.scheduledStops.set(howl, timer);
   }
@@ -491,6 +521,7 @@ export class AudioEngine {
   private _getHowlFn: ((id: string, channel: "music" | "sfx" | "ambience") => HowlType) | null = null;
   private _pickMusicVariantFn: ((assetId: string, excludeSrc?: string | null) => { howl: HowlType; src: string; isPlaylist: boolean }) | null = null;
   private _assetsLoading: Promise<void> | null = null;
+  private _releaseStreamFn: ((howl: HowlType) => void) | null = null;
 
   private getAssets(): {
     getHowl: (id: string, channel: "music" | "sfx" | "ambience") => HowlType;
@@ -504,6 +535,7 @@ export class AudioEngine {
       this._assetsLoading = import("./audioAssets").then((mod) => {
         this._getHowlFn = mod.getHowl;
         this._pickMusicVariantFn = mod.pickMusicVariant;
+        this._releaseStreamFn = mod.releaseStream;
       });
     }
     return null; // Not ready yet — callers silently skip

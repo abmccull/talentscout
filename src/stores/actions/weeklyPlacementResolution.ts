@@ -41,7 +41,7 @@ import {
 import { scheduleAcademyRecommendationReviews } from "@/engine/youth/recommendationReviews";
 import { resolveUnsignedYouth } from "@/lib/playerResolution";
 import { normalizeCountryKey } from "@/lib/country";
-import { indexLatestPlayerReports } from "@/engine/reports/reportAccountability";
+import { indexLatestPlayerReports, isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import {
   ensureScoutingCaseForReport,
   isGameDateDue,
@@ -51,6 +51,7 @@ import {
 } from "@/engine/reports/scoutingCases";
 import { updateReputation } from "@/engine/career";
 import { scaleReputationChange } from "@/engine/core/difficulty";
+import { createPlacementSupportCommitment, describePlacementSupport } from "@/engine/youth/placementSupport";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 
@@ -127,14 +128,14 @@ export function processWeeklyPlacementResolution(
       if (youthObservations.length === 0) continue;
 
       const sourceReport = latestReportByPlayerId.get(youth.player.id);
-      if (!sourceReport || sourceReport.recommendedAction === "pass") {
+      if (!sourceReport || isPrivateScoutingDecision(sourceReport)) {
         submissionMessages.push({
           id: `placement-report-required-${youth.id}-${stateWithScheduleApplied.currentSeason}-${stateWithScheduleApplied.currentWeek}`,
           week: stateWithScheduleApplied.currentWeek,
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback",
-          title: sourceReport?.recommendedAction === "pass" ? "Reconsider before pitching" : "Authored Report Required",
-          body: sourceReport?.recommendedAction === "pass"
+          title: (sourceReport ? isPrivateScoutingDecision(sourceReport) : false) ? "Reconsider before pitching" : "Authored Report Required",
+          body: (sourceReport ? isPrivateScoutingDecision(sourceReport) : false)
             ? `You passed on ${youth.player.firstName} ${youth.player.lastName}. Gather fresh evidence and file a revised recruitment judgment before pitching a club.`
             : `Write and submit a scouting report for ${youth.player.firstName} ${youth.player.lastName} before pitching a club. A placement must stand behind a preserved opinion, not just raw observations.`,
           read: false,
@@ -204,6 +205,7 @@ export function processWeeklyPlacementResolution(
           : undefined,
         pitchPosture: placementActivity.placementPitchPosture ?? "evidenceLed",
         supportCondition: placementActivity.placementSupportCondition ?? "none",
+        supportTermsVersion: 1 as const,
       };
       const linked = ensureScoutingCaseForReport(preparedScoutingCases, sourceReport);
       const recorded = recordDirectPlacementDelivery({
@@ -429,6 +431,12 @@ export function processWeeklyPlacementResolution(
             clubResponse: "accepted" as const,
             placementType: outcome.placementType ?? undefined,
             decisionId: resolved.decision?.id,
+            supportCommitment: createPlacementSupportCommitment(
+              report.supportTermsVersion === 1 ? report.supportCondition ?? "none" : "none", signedPlayerId,
+              { week: stateWithScheduleApplied.currentWeek, season: stateWithScheduleApplied.currentSeason },
+              seasonLength,
+              observationsByPlayerId.get(signedPlayerId) ?? [],
+            ),
           };
           updatedPlacementReports[report.id] = acceptedPlacement;
 
@@ -552,7 +560,7 @@ export function processWeeklyPlacementResolution(
             season: stateWithScheduleApplied.currentSeason,
             type: "event" as const,
             title: `Placement Accepted: ${youth.player.firstName} ${youth.player.lastName}`,
-            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. Your standing increased by ${scaledReputationGain.toFixed(1)} reputation. ${commercialOutcome} You can track their career progress in your alumni records.`,
+            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. Your standing increased by ${scaledReputationGain.toFixed(1)} reputation. ${commercialOutcome} You can track their career progress in your alumni records.${acceptedPlacement.supportCommitment ? `\n\n${describePlacementSupport(acceptedPlacement.supportCommitment)}` : ""}`,
             read: false,
             actionRequired: false,
             relatedId: signedPlayerId,

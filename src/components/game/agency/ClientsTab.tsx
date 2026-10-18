@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Users, Send } from "lucide-react";
 import type { ClientRelationship, Club } from "@/engine/core/types";
+import { getClientPitchEligibility } from "@/engine/finance/clientRelationships";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,8 +31,8 @@ const STATUS_LABELS: Record<ClientRelationship["status"], string> = {
 
 const PITCH_OPTIONS: Array<{ value: PitchType; label: string; desc: string; rate: string }> = [
   { value: "coldCall", label: "Cold Call", desc: "Reach out to a club with no prior relationship.", rate: "~12% base" },
-  { value: "referral", label: "Referral", desc: "Leverage your network — someone vouches for you.", rate: "~35% base" },
-  { value: "showcase", label: "Showcase", desc: "Present your best reports as proof of quality.", rate: "~25% base" },
+  { value: "referral", label: "Referral", desc: "Requires an active contact at this club with relationship 50+.", rate: "~35% base" },
+  { value: "showcase", label: "Showcase", desc: "Requires one of your completed reports with quality 65+.", rate: "~25% base" },
 ];
 
 function getSatisfactionColor(sat: number): string {
@@ -49,6 +50,7 @@ interface ClientsTabProps {
 
 export function ClientsTab({ clientRelationships, clubs }: ClientsTabProps) {
   const pitchToClient = useGameStore((s) => s.pitchToClient);
+  const gameState = useGameStore((s) => s.gameState);
   const pendingRetainerOffers = useGameStore(
     (s) => s.gameState?.finances?.pendingRetainerOffers ?? [],
   );
@@ -57,23 +59,25 @@ export function ClientsTab({ clientRelationships, clubs }: ClientsTabProps) {
   const [pitchType, setPitchType] = useState<PitchType>("coldCall");
   const [lastPitchResult, setLastPitchResult] = useState<string | null>(null);
 
-  // Clubs that are not already in a client relationship
-  const existingClubIds = new Set(clientRelationships.map((cr) => cr.clubId));
-  const availableClubs = Object.values(clubs).filter((c) => !existingClubIds.has(c.id));
+  // Past prospects and lost clients remain discoverable; exact eligibility explains their gate.
+  const retainedClubIds = new Set([
+    ...(gameState?.finances?.retainerContracts ?? []).filter(contract => contract.status === "active").map(contract => contract.clubId),
+    ...pendingRetainerOffers.map(contract => contract.clubId),
+  ]);
+  const availableClubs = Object.values(clubs).filter((c) => !retainedClubIds.has(c.id));
+  const eligibility = gameState && pitchClubId
+    ? getClientPitchEligibility(gameState, pitchClubId, pitchType) : undefined;
+  const recentPitch = gameState?.finances?.clientPitchHistory?.at(-1);
 
   function handlePitch() {
     if (!pitchClubId) return;
-    const club = clubs[pitchClubId];
-    const pendingBefore = pendingRetainerOffers.length;
+    const before = useGameStore.getState().gameState;
+    if (!before) return;
+    const gate = getClientPitchEligibility(before, pitchClubId, pitchType);
+    if (!gate.eligible) { setLastPitchResult(gate.reason); return; }
     pitchToClient(pitchClubId, pitchType);
-    const pendingAfter =
-      useGameStore.getState().gameState?.finances?.pendingRetainerOffers?.length ?? pendingBefore;
-    setLastPitchResult(
-      pendingAfter > pendingBefore
-        ? `${club?.name ?? pitchClubId} made a retainer offer. Review it from your agency finances.`
-        : `Pitch logged with ${club?.name ?? pitchClubId}. Successful responses show up as pending retainer offers, not inbox messages.`,
-    );
-    setPitchClubId("");
+    const outcome = useGameStore.getState().gameState?.finances?.clientPitchHistory?.at(-1);
+    setLastPitchResult(outcome?.message ?? "The pitch could not be completed. Check the requirements below.");
   }
 
   const activeClients = clientRelationships.filter((cr) => cr.status !== "lost");
@@ -172,15 +176,16 @@ export function ClientsTab({ clientRelationships, clubs }: ClientsTabProps) {
               {pendingRetainerOffers.length} pending retainer offer{pendingRetainerOffers.length !== 1 ? "s" : ""} waiting in your agency finances.
             </div>
           )}
-          {lastPitchResult && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-emerald-400">
-              {lastPitchResult}
+          {(lastPitchResult || recentPitch) && (
+            <div role="status" className="rounded-lg border border-zinc-700 p-2 text-xs text-zinc-200">
+              {lastPitchResult ?? recentPitch?.message}
+              {recentPitch && <p className="mt-1 text-zinc-400">Last outreach: £{recentPitch.cost} spent · season {recentPitch.occurredAt.season}, week {recentPitch.occurredAt.week}.</p>}
             </div>
           )}
 
           {availableClubs.length === 0 ? (
             <p className="text-sm text-zinc-500 text-center py-4">
-              All clubs are already in your client list.
+              All clubs already have an active contract or pending offer.
             </p>
           ) : (
             <>
@@ -235,13 +240,18 @@ export function ClientsTab({ clientRelationships, clubs }: ClientsTabProps) {
                 </div>
               </div>
 
+              <p id="pitch-requirements" className="text-xs text-zinc-300" role="status">
+                {eligibility?.reason ?? "One outreach attempt per week. Cold calls and referrals cost £50; showcases cost £100. Each adds 3 fatigue. Declined clubs wait 4 weeks."}
+                {eligibility?.evidenceLabel && <span className="mt-1 block text-emerald-300">{eligibility.evidenceLabel}</span>}
+              </p>
               <Button
                 size="sm"
                 onClick={handlePitch}
-                disabled={!pitchClubId}
+                disabled={!eligibility?.eligible}
+                aria-describedby="pitch-requirements"
                 className="w-full"
               >
-                Make Pitch
+                {eligibility?.eligible ? `Make Pitch · £${eligibility.cost}` : "Make Pitch"}
               </Button>
             </>
           )}

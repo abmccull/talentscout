@@ -8,9 +8,18 @@
 
 ## Constraint
 
-Candidate `6fa7297c13ad6058a2e1c157fb9541677d0195c4` has no newly-added crash
-telemetry. Treat player narrative, reproducible steps, package identity, save
-artifacts, and OS or Steam evidence as the primary truth for that candidate.
+Bind each incident to the immutable candidate and exact package manifest and
+hash recorded at release. Do not infer the affected candidate from a workspace
+path or a previous review.
+
+Offline Youth Early Access screen recovery must work without network access
+or optional error reporting. A configured reporting client can attempt a
+sanitized report; confirm provider acceptance separately before treating it
+as received. Do not assume hosted reporting is configured or available.
+
+Treat player narrative, reproducible steps, exact package identity, minimal
+consented save artifacts, and OS or Steam evidence as the primary incident
+evidence for the identified candidate.
 
 ## Intake record
 

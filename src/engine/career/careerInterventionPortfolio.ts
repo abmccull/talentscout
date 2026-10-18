@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type { GameState, Player } from "@/engine/core/types";
 import type { GameDate, JsonValue } from "@/engine/consequences";
 import {
@@ -42,7 +43,7 @@ export interface CareerInterventionPortfolio {
   summary: string;
 }
 
-type PlayerMovementRecord = NonNullable<GameState["playerMovementHistory"]>[number];
+type PlayerMovementRecord = ReturnType<typeof expandPlayerMovementHistory>[number];
 type CareerInterventionPlayerFilter = string | ReadonlySet<string>;
 export type CareerInterventionEnvironmentStrategy = "adaptive" | "direct" | "indexed";
 
@@ -139,7 +140,7 @@ function createCareerInterventionIndexes(
   }
 
   const movementsByPlayer = new Map<string, PlayerMovementRecord[]>();
-  for (const movement of state.playerMovementHistory ?? []) {
+  for (const movement of expandPlayerMovementHistory(state.playerMovementHistory ?? [])) {
     if (!matchesPlayerFilter(playerFilter, movement.playerId)) continue;
     let movements = movementsByPlayer.get(movement.playerId);
     if (!movements) {

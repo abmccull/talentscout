@@ -103,9 +103,11 @@ export function getResolvedContactIntel(
 
   return [...deduped.values()];
 }
-
-/** Historical naming never invents a replacement person after record pruning. */
-export function resolvePlayerDisplayName(state: GameState, entityId: string): string {
+/** Historical naming retains the recorded person after football records are pruned. */
+export function resolvePlayerDisplayName(
+  state: Parameters<typeof resolvePlayerEntity>[0] & Pick<GameState, "playerPortraits">,
+  entityId: string,
+): string {
   const player = resolvePlayerEntity(state, entityId)?.player;
   return player ? `${player.firstName} ${player.lastName}`
     : state.playerPortraits?.reservations["person:v1:" + entityId]?.displayName ?? "Unknown Player";

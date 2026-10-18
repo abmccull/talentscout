@@ -18,7 +18,7 @@ import {
   type PlayerExperienceRecord,
 } from "@/lib/playerExperience";
 
-export const CURRENT_SAVE_SCHEMA_VERSION = 4;
+export const CURRENT_SAVE_SCHEMA_VERSION = 10;
 export const CURRENT_RULES_VERSION = RUN_RULES_VERSION;
 export const CURRENT_BUILD_VERSION =
   process.env.NEXT_PUBLIC_BUILD_VERSION ?? "development";
@@ -48,6 +48,11 @@ export class SaveMigrationError extends Error {
   }
 }
 
+/** Unsupported future formats are preserved, never classified as corruption. */
+export function isFutureSaveMigrationError(error: unknown): error is SaveMigrationError {
+  return error instanceof SaveMigrationError && error.code === "FUTURE_VERSION";
+}
+
 export interface SaveEnvelope<TState = unknown> {
   schemaVersion: number;
   rulesVersion: string;
@@ -63,6 +68,19 @@ type SaveMigration = (envelope: MutableEnvelope) => MutableEnvelope;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Check only version compatibility, without decoding or rewriting opaque payloads. */
+export function assertSupportedSaveSchema(raw: unknown): void {
+  if (!isRecord(raw)) return;
+  const version = raw.schemaVersion;
+  if (typeof version === "number" && Number.isInteger(version)
+    && version > CURRENT_SAVE_SCHEMA_VERSION) {
+    throw new SaveMigrationError(
+      "FUTURE_VERSION",
+      `Save schema ${version} is newer than supported schema ${CURRENT_SAVE_SCHEMA_VERSION}`,
+    );
+  }
 }
 
 /** Legacy records had metadata and state, but no explicit schema fields. */
@@ -235,12 +253,54 @@ const migrateV3ToV4: SaveMigration = (legacy) => ({
   playerExperience: migratePlayerExperience(legacy.playerExperience),
 });
 
+/** Allows compact stored identities and fixture references without changing rules. */
+const migrateV4ToV5: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 5,
+});
+
+/** Adds durable communication proof without changing simulation rules or metadata. */
+const migrateV5ToV6: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 6,
+});
+
+/** Allows lossless player and terminal financial archives without changing rules. */
+const migrateV6ToV7: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 7,
+});
+
+/** Adds exact optional ownership to terminal archives without changing rules. */
+const migrateV7ToV8: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 8,
+});
+
+/** Adds lossless stored history formats without changing simulation rules. */
+const migrateV8ToV9: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 9,
+});
+
+/** Allows ordered terminal-loan optional tails without changing rules or facts. */
+const migrateV9ToV10: SaveMigration = (legacy) => ({
+  ...legacy,
+  schemaVersion: 10,
+});
+
 /** Ordered by the version they consume. Never mutate an existing migration. */
 const SAVE_MIGRATIONS: Readonly<Record<number, SaveMigration>> = Object.freeze({
   0: migrateV0ToV1,
   1: migrateV1ToV2,
   2: migrateV2ToV3,
   3: migrateV3ToV4,
+  4: migrateV4ToV5,
+  5: migrateV5ToV6,
+  6: migrateV6ToV7,
+  7: migrateV7ToV8,
+  8: migrateV8ToV9,
+  9: migrateV9ToV10,
 });
 
 function assertEnvelopeShape(raw: Record<string, unknown>): asserts raw is MutableEnvelope {
@@ -303,12 +363,7 @@ export function migrateSaveEnvelope(raw: unknown): SaveEnvelope<unknown> & Recor
     );
   }
 
-  if (suppliedVersion > CURRENT_SAVE_SCHEMA_VERSION) {
-    throw new SaveMigrationError(
-      "FUTURE_VERSION",
-      `Save schema ${suppliedVersion} is newer than supported schema ${CURRENT_SAVE_SCHEMA_VERSION}`,
-    );
-  }
+  assertSupportedSaveSchema(raw);
 
   let working = { ...raw, schemaVersion: suppliedVersion } as MutableEnvelope;
   while (working.schemaVersion < CURRENT_SAVE_SCHEMA_VERSION) {
@@ -330,7 +385,7 @@ export function migrateSaveEnvelope(raw: unknown): SaveEnvelope<unknown> & Recor
     }
   }
 
-  // Player experience has its own version lifecycle inside schema 4. Normalize
+  // Player experience, introduced in schema 4, has its own version lifecycle. Normalize
   // it even when the outer envelope is already current.
   working = {
     ...working,

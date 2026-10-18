@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import type {
   Club,
   GameState,
@@ -89,7 +90,7 @@ function sourceCountryCounts(
   club: Club,
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const movement of state.playerMovementHistory ?? []) {
+  for (const movement of expandPlayerMovementHistory(state.playerMovementHistory ?? [])) {
     if (!RECRUITMENT_TYPES.has(movement.type) || movement.toClubId !== club.id) continue;
     const sourceCountry = movement.fromClubId
       ? canonicalCountry(state.leagues[state.clubs[movement.fromClubId]?.leagueId]?.country)

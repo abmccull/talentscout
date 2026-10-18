@@ -1,6 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { test, expect } from "../fixtures";
+import { expandLoanDeal } from "@/engine/finance/terminalRecordArchive";
+import type { StoredLoanDeal } from "@/engine/core/types";
 
 const timingOutputPath = resolve(
   process.env.LONG_CAREER_TIMING_OUTPUT
@@ -271,11 +273,6 @@ test.describe("Long-career world invariants", () => {
         if (!state.retiredPlayers?.[playerId]) lifecycleErrors.push(`retired-not-archived:${playerId}`);
         if (poolPlayerIds.has(playerId)) lifecycleErrors.push(`retired-in-pool:${playerId}`);
       }
-      const loanHistoryIds = (state.loanHistory ?? []).map((deal: any) => deal.id);
-      if (new Set(loanHistoryIds).size !== loanHistoryIds.length) {
-        lifecycleErrors.push("duplicate-loan-history");
-      }
-
       const academyCaseErrors: string[] = [];
       const briefs = Object.values(state.youthRecruitmentBriefs ?? {}) as any[];
       const openBriefs = briefs.filter((brief) => brief.status === "open");
@@ -408,6 +405,7 @@ test.describe("Long-career world invariants", () => {
         rosterErrors,
         unsignedYouthErrors,
         lifecycleErrors,
+        storedLoanHistory: state.loanHistory ?? [],
         academyCaseErrors,
         consequenceErrors,
         consequenceBytes,
@@ -435,6 +433,12 @@ test.describe("Long-career world invariants", () => {
           })),
       };
     }, { seasonCount: requestedSeasonCount });
+
+    const loanHistoryIds = (result.storedLoanHistory as StoredLoanDeal[])
+      .map(deal => expandLoanDeal(deal).id);
+    if (new Set(loanHistoryIds).size !== loanHistoryIds.length) {
+      result.lifecycleErrors.push("duplicate-loan-history");
+    }
 
     const timingEvidence = {
       schemaVersion: 1,

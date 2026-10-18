@@ -1,3 +1,4 @@
+import { isSourcedAlumniEvent } from "../youth/alumniEvidence";
 import type {
   AlumniRecord,
   AlumniMilestone,
@@ -137,7 +138,7 @@ function countSuccessfulPlacements(
 }
 
 function isCareerImpactMilestone(milestone: AlumniMilestone): boolean {
-  return milestone.type !== "transfer";
+  return milestone.type !== "transfer" && isSourcedAlumniEvent(milestone);
 }
 
 function countSeasonAlumniMilestones(

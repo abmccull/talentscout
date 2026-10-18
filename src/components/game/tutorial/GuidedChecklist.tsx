@@ -17,7 +17,7 @@ import {
   ChevronDown,
   ArrowRight,
 } from "lucide-react";
-import { useTutorialStore } from "@/stores/tutorialStore";
+import { isUnavailableOpeningMilestone, useTutorialStore } from "@/stores/tutorialStore";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
 import {
   GUIDED_MILESTONES,
@@ -37,6 +37,7 @@ export function GuidedChecklist() {
   const guidedSessionActive = useTutorialStore((s) => s.guidedSessionActive);
   const guidedMilestones = useTutorialStore((s) => s.guidedMilestones);
   const currentGuidedTask = useTutorialStore((s) => s.currentGuidedTask);
+  const guidedSessionKind = useTutorialStore((s) => s.guidedSessionKind);
   const skipGuidedSession = useTutorialStore((s) => s.skipGuidedSession);
 
   const currentScreen = useGameStore((s) => s.currentScreen);
@@ -162,6 +163,7 @@ export function GuidedChecklist() {
       <ul role="list" className="divide-y divide-zinc-800 px-2 py-1">
         {GUIDED_MILESTONES.map((milestone) => {
           const done = guidedMilestones[milestone.id] === true;
+          const skipped = isUnavailableOpeningMilestone(milestone.id, guidedMilestones, guidedSessionKind);
           const targetScreen = milestone.screen as GameScreen;
 
           return (
@@ -191,6 +193,7 @@ export function GuidedChecklist() {
                 >
                   {milestone.title}
                 </span>
+                {skipped && <span className="mt-1 block text-xs text-quiet">Skipped this watch — try it on your next look.</span>}
                 {!done && milestone.id === currentGuidedTask && (
                   <span className="mt-1 block text-[11px] leading-4 text-zinc-500">
                     {getGuidedMilestoneInstruction({

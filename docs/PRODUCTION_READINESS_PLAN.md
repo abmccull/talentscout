@@ -1,3 +1,5 @@
+> Historical readiness snapshot. Results and scores below describe their recorded source revision, not the reconciled release candidate. Current certification is governed by `docs/release/release-evidence-status.json`; missing current campaign, package, provider, hardware, and human evidence remains a release blocker.
+
 # TalentScout production readiness plan
 
 Created 2026-09-04 after the four-branch initial audit. Objective: a reliable, understandable Youth Scout career with validated local shipping behavior and explicit remaining release gates.
@@ -23,15 +25,17 @@ Initial baseline patch and per-file fingerprints are preserved in `../readiness-
 - [x] Execute bounded source audits and baseline checks; play new-career opening.
 - [x] Reduce four valid audit results with required evidence anchors.
 - [x] Write initial audit and ordered plan before product repairs.
-- [ ] M1 persistence and recovery.
+- [x] M1 persistence and recovery: concurrency regressions, actual save failure/retry, browser refresh and normal Electron close/reopen pass.
 - [x] M2 game integrity: budget, buyer/report history, and inquiry replay regressions pass.
-- [ ] M3 player outcomes and UI.
-- [ ] M4 dependencies and operations.
-- [ ] M5 fresh validation and final report.
+- [x] M3 player outcomes and UI: outcome records, responsive choices/progress, native radio selection, mentor placement and guided/unguided recovery are verified. UX-9 remains an explicit P2 quality item.
+- [x] M4 local dependencies and operations: clean install/audit, crash transport/privacy, static preview, CI evidence path and README. Real crash-provider receipt remains in M6.
+- [x] M5 local validation and final report: 1,557 units, full core/organic flows, opening/save/accessibility/perception, both builds, source Electron and emulation checks pass. Ten-season diagnostic passes; report and 12-dimension design audit finalized.
 - [ ] M6 exact release certification (external gates must be reported individually).
 
-Walkthrough additions: SAVE-5 delayed-close edits, SAVE-6 snapshot ordering, SAVE-7 observation/guide/reflection refresh, UX-5 mentor overlap, and UX-6 restored opening assessment. These repair the requested core journey and do not add product scope. Final validation must cover the integrated source after these changes. Historical failed/interrupted runs remain in the evidence directory.
+Walkthrough additions: SAVE-5 delayed-close edits, SAVE-6 snapshot ordering, SAVE-7 observation/guide/reflection refresh, SAVE-8 completed-opening restoration, UX-5 mentor overlap, UX-6 restored opening assessment, GAME-4 perceived reflection text, UX-7 choice width/display labels, UX-8 assessment progress, UX-10 native radio grouping, and UX-11 no-guide/legacy navigation recovery. These repair the requested core journey and do not add product scope. Final validation must cover the integrated source after these changes. Historical failed/interrupted runs remain in the evidence directory. UX-9 Desk hierarchy remains an explicit quality issue; the separately requested visual overhaul has its own checkout and evidence.
 
 ## Deferred scope
 
 Keep disabled optional account cloud saves and online rankings disabled. Account-bound cloud queue ownership and server-verifiable scores are prerequisites to enabling them. Do not add game modes, subscriptions, AI services or a server-backed rewrite. Scouting judgment, uncertainty, relationships, rivals and long-term consequences remain the product identity.
+
+Final local outcome: repairs verified, baseline preserved with no removed Git-visible files, and no database migration required. The working tree is intentionally still a reviewable diagnostic candidate; exact clean-source/package certification in M6 is not complete. The report ends NO-GO FOR PRODUCTION and names each remaining gate.

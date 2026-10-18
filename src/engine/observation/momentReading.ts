@@ -1,9 +1,9 @@
-import type { ObservationSession, SessionFlaggedMoment } from "./types";
-import { getPerceivedFlaggedMomentDescription } from "./reflection";
+import type { SessionFlaggedMoment } from "./types";
+import { getPerceivedFlaggedMomentDescription, type FlaggedMomentView } from "./reflection";
 
 /** Reflection preserves the scout's cue, never upgrades it to the underlying event. */
 export function describeFlaggedMoment(
-  session: Pick<ObservationSession, "mode" | "cueReadings">,
+  session: FlaggedMomentView,
   flagged: SessionFlaggedMoment,
 ): string {
   if (session.mode !== "fullObservation") return flagged.moment.description;

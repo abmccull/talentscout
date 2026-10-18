@@ -20,6 +20,7 @@ import {
   cp,
   mkdir,
   readFile,
+  realpath,
   readdir,
   rm,
   stat,
@@ -33,12 +34,12 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const ROOT = process.cwd();
+const rawArgs = process.argv.slice(2);
 const DIST_DIR = path.resolve(ROOT, "dist");
 const APP_DIR = path.resolve(DIST_DIR, "win-unpacked");
 const APP_EXE = path.resolve(APP_DIR, "TalentScout.exe");
 const APP_ASAR = path.resolve(APP_DIR, "resources", "app.asar");
-const INSTALLER = path.resolve(DIST_DIR, "TalentScout-Setup-1.0.0.exe");
-const rawArgs = process.argv.slice(2);
+const INSTALLER = resolveInstallerPath(ROOT, rawArgs);
 const args = new Set(rawArgs);
 const keepProfile = args.has("--keep-profile");
 const strict = args.has("--strict") || process.env.npm_config_strict === "true";
@@ -51,6 +52,29 @@ const manifestPath = path.resolve(
   manifestArgument?.slice("--manifest=".length)
     ?? "artifacts/release/candidate-package-manifest.json",
 );
+
+function resolveInstallerPath(root, argv) {
+  const selections = argv.filter((argument) => argument === "--installer"
+    || argument.startsWith("--installer="));
+  if (selections.length > 1) throw new Error("Provide at most one --installer option");
+  const configured = selections.length === 1
+    ? selections[0].slice("--installer=".length)
+    : "dist/TalentScout-Setup-1.0.0.exe";
+  if (!configured || path.isAbsolute(configured) || path.win32.isAbsolute(configured)
+    || path.posix.isAbsolute(configured)) {
+    throw new Error("Installer must be a nonempty repository-relative path");
+  }
+  const installer = path.resolve(root, configured);
+  const relative = path.relative(path.resolve(root), installer);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relative)) {
+    throw new Error("Installer path escapes the repository");
+  }
+  if (path.extname(installer).toLowerCase() !== ".exe") {
+    throw new Error("Installer path must refer to an .exe file");
+  }
+  return installer;
+}
 
 function runGit(argsList) {
   const result = spawnSync("git", argsList, {
@@ -189,6 +213,11 @@ async function artifactMetadata(kind, filePath) {
 async function assertRequiredFiles() {
   for (const filePath of [APP_EXE, APP_ASAR, INSTALLER]) {
     await access(filePath, fsConstants.R_OK);
+  }
+  const actualRoot = await realpath(ROOT);
+  const actualInstaller = await realpath(INSTALLER);
+  if (!isPathInside(actualRoot, actualInstaller)) {
+    throw new Error("Installer resolves outside the repository");
   }
 }
 
@@ -391,15 +420,23 @@ async function createOfflineCareer(page) {
   await page.getByText("Field Investigator", { exact: true }).click();
   await page.getByRole("button", { name: "Take the call", exact: true }).click();
   await page.getByRole("button", { name: "Watch the match", exact: true }).click({ timeout: 60_000 });
-  await page.getByRole("button", { name: /^Use technical lens for / }).click();
-  await page.getByRole("button", { name: /^Remove focus from / }).first().waitFor({ state: "visible" });
+  const inlineLens = page.getByRole("button", { name: /^Use technical lens for / }).first();
+  if (await inlineLens.isVisible()) {
+    await inlineLens.click();
+    await page.getByRole("button", { name: /^Remove focus from / }).first().waitFor({ state: "visible" });
+  } else {
+    await page.getByRole("button", { name: /^Focus targets and lenses/ }).click();
+    const focusSheet = page.getByRole("dialog", { name: "Choose your focus", exact: true });
+    await focusSheet.getByRole("button", { name: /^Use technical lens for / }).click();
+    await focusSheet.getByRole("button", { name: "Close focus controls", exact: true }).click();
+  }
   await page.locator('[data-tutorial-id="observation-advance-to-standout"]:visible').click();
   await page.locator('[data-tutorial-id="observation-flag-moment"]:visible').click();
   await page.locator('[data-tutorial-id="observation-promising-reaction"]:visible').click();
   await page.getByRole("button", { name: /^Confirm the first read\b/ }).click();
   const controls = page.getByTestId("mobile-observation-controls");
   await controls.getByRole("button", { name: "Next phase", exact: true }).click();
-  await controls.getByRole("button", { name: "Reflect on the watch", exact: true }).click();
+  await controls.getByRole("button", { name: /^Reflect(?: on the watch)?$/ }).click();
   await page.getByRole("group", { name: "What did this passage show?" }).getByRole("radio").first().check();
   await page.getByRole("button", { name: "Complete Reflection", exact: true }).click();
   await page.getByRole("button", { name: /Keep the name private/ }).click();
@@ -409,14 +446,18 @@ async function createOfflineCareer(page) {
     await fileTheName.click();
   } else {
     for (const [step, group] of [["Evidence", "Saved evidence"], ["Suggests", "What it suggests"], ["Untested", "What remains untested"], ["Next action", "Next test"]]) {
-      await page.getByRole("button", { name: new RegExp(`^${step}\\b`) }).click();
+      const stepButton = page.getByRole("button", { name: new RegExp(`^${step}\\b`) });
+      if (await stepButton.isVisible()) await stepButton.click();
       await page.getByRole("group", { name: group, exact: true }).getByRole("radio").first().locator("..").click();
     }
     const recommendation = page.getByRole("group", { name: "Recommended action", exact: true }).getByRole("radio", { name: /^Keep private\b/i });
     await recommendation.locator("..").click();
+    // Selecting the recommendation advances the accordion to Confidence.
+    // Reopen its real step before verifying the native radio remains checked.
     await page.getByRole("button", { name: /^Next action\b/ }).click();
     await requireCheckedRadio(recommendation, "Keep private recommendation");
-    await page.getByRole("button", { name: /^Confidence\b/ }).click();
+    const confidenceStep = page.getByRole("button", { name: /^Confidence\b/ });
+    if (await confidenceStep.isVisible()) await confidenceStep.click();
     const confidence = page.getByRole("group", { name: "Confidence", exact: true }).getByRole("radio", { name: /^Tentative\b/i });
     await confidence.locator("..").click();
     await requireCheckedRadio(confidence, "Tentative confidence");

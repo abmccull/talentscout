@@ -24,7 +24,9 @@ function compareDate(aSeason: number, aWeek: number, bSeason: number, bWeek: num
 }
 
 function backsPlayer(report: ScoutReport): boolean {
-  const action = report.evidenceAssessment?.recommendation ?? report.recommendedAction;
+  const action = report.decisionReceipt?.action
+    ?? report.evidenceAssessment?.recommendation
+    ?? report.recommendedAction;
   // New authored actions take precedence over a legacy conviction label. A pass
   // or monitoring note is not a recommendation, even with optimistic estimates.
   return action !== undefined

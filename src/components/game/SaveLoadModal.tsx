@@ -81,7 +81,7 @@ function SlotInfo({ slot }: { slot: SlotMeta }) {
         )}
         {slot.unavailable && (
           <Badge className="shrink-0 border-red-500/40 bg-red-500/10 text-[10px] text-red-300">
-            Damaged
+            {slot.unavailable.reason === "future-version" ? "Update required" : "Damaged"}
           </Badge>
         )}
         {slot.localUnavailable && (
@@ -766,7 +766,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                           )}
                           {autosave.unavailable && (
                             <Badge className="border-red-500/40 bg-red-500/10 text-[10px] text-red-300">
-                              Damaged
+                              {autosave.unavailable.reason === "future-version" ? "Update required" : "Damaged"}
                             </Badge>
                           )}
                           {autosave.localUnavailable && (

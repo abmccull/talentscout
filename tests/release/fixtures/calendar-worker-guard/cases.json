@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "guardMarker": "ERR_RELEASE_CALENDAR",
+  "boundMarker": "TEST_CALENDAR_BOUND_STOP:",
+  "diagnosticCaseTimeoutMs": 240000,
+  "rawOutputAllowanceBytes": 8388608,
+  "workerNodeArguments": ["--max-old-space-size=1440", "--max-semi-space-size=32", "--expose-gc"],
+  "fresh": {"season": 1, "week": 1, "totalWeeksPlayed": 0, "seasonLength": 46, "leagueCount": 20, "clubCount": 282,
+    "englandLeagues": [["league-premier",20],["league-championship",24],["league-one",24],["league-two",24]]},
+  "cases": [
+    {"id":"C00","fault":"none","phase":"post","realDrives":2,
+      "baseline":{"attempts":3,"progress":[["started",1,1,0],["week",1,2,1],["week",1,3,2]]},
+      "candidate":{"attempts":3,"progress":[["started",1,1,0],["week",1,2,1],["week",1,3,2]]}},
+    {"id":"D01","fault":"backwards-week","phase":"post","realDrives":2,
+      "baseline":{"attempts":3,"progress":[["started",1,1,0],["week",1,2,1],["week",1,1,2]]},
+      "candidate":{"attempts":2,"progress":[["started",1,1,0],["week",1,2,1]]}},
+    {"id":"F01","fault":"fixture-week-47","phase":"post","realDrives":1,
+      "baseline":{"attempts":2,"progress":[["started",1,1,0],["week",1,2,1]]},
+      "candidate":{"attempts":1,"progress":[["started",1,1,0]]}},
+    {"id":"A01","fault":"fixture-week-47","phase":"fresh","realDrives":0,
+      "baseline":{"attempts":1,"progress":[["started",1,1,0]]},
+      "candidate":{"attempts":0,"progress":[]}},
+    {"id":"A02","fault":"duplicate-membership","phase":"fresh","realDrives":0,
+      "baseline":{"attempts":1,"progress":[["started",1,1,0]]},
+      "candidate":{"attempts":0,"progress":[]}}
+  ],
+  "capacityAccepted": false,
+  "fullCareerAccepted": false,
+  "releaseAccepted": false
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "http-cache-vary-sie-integration-cases-v1",
+  "status": "frozen-before-policy-fix",
+  "entryWriteWaitMs": 2000,
+  "childWholeDeadlineMs": 10000,
+  "diagnosticOptions": {
+    "retry": {
+      "limit": 0
+    },
+    "followRedirect": false,
+    "maxRedirects": 0,
+    "responseType": "buffer",
+    "throwHttpErrors": true,
+    "cacheOptionsStrictTtlOrMaxTtlOverride": false
+  },
+  "cases": [
+    {
+      "id": "VS01",
+      "purpose": "mismatched-language-must-not-reuse-en-on-503",
+      "shared": true,
+      "firstRequest": {
+        "accept-language": "en"
+      },
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, max-age=0, stale-if-error=300",
+          "age": "120",
+          "etag": "\"A\"",
+          "vary": "accept-language"
+        }
+      },
+      "secondOrigin": {
+        "status": 503,
+        "body": "origin-unavailable",
+        "headers": {
+          "cache-control": "no-store"
+        }
+      },
+      "directives": {
+        "public": true,
+        "max-age": "0",
+        "stale-if-error": "300"
+      },
+      "secondRequest": {
+        "accept-language": "fr"
+      },
+      "secondValidators": {
+        "if-none-match": null,
+        "if-modified-since": null
+      },
+      "expect": {
+        "base": "stale-if-error-A",
+        "candidate": "http-error-503"
+      },
+      "requiredReproduction": true
+    },
+    {
+      "id": "VS02",
+      "purpose": "matching-language-permitted-SIE-control",
+      "shared": true,
+      "firstRequest": {
+        "accept-language": "en"
+      },
+      "first": {
+        "status": 200,
+        "body": "A",
+        "headers": {
+          "cache-control": "public, max-age=0, stale-if-error=300",
+          "age": "120",
+          "etag": "\"A\"",
+          "vary": "accept-language"
+        }
+      },
+      "secondOrigin": {
+        "status": 503,
+        "body": "origin-unavailable",
+        "headers": {
+          "cache-control": "no-store"
+        }
+      },
+      "directives": {
+        "public": true,
+        "max-age": "0",
+        "stale-if-error": "300"
+      },
+      "secondRequest": {
+        "accept-language": "en"
+      },
+      "secondValidators": {
+        "if-none-match": "\"A\"",
+        "if-modified-since": null
+      },
+      "expect": {
+        "base": "stale-if-error-A",
+        "candidate": "stale-if-error-A"
+      },
+      "requiredReproduction": false
+    }
+  ]
+}

@@ -103,11 +103,28 @@ export function getLatestReportInScope(
 export function getFreshReportObservationIds(
   observations: Iterable<Observation>,
   previousReport?: ScoutReport,
+  decisionHistory: Iterable<ScoutReport> = [],
 ): string[] {
+  // A private pass consumes its decision-time evidence across recruitment briefs.
+  // Keep scoped revision identity, but changing briefs cannot undo that judgment.
+  const privateEvidence = new Map<string, Set<string>>();
+  const privateEvidenceWithoutIds: ScoutReport[] = [];
+  for (const report of [...decisionHistory, ...(previousReport ? [previousReport] : [])]) {
+    if (!isPrivateScoutingDecision(report)) continue;
+    const key = `${report.scoutId}:${report.playerId}`;
+    const consumed = privateEvidence.get(key) ?? new Set<string>();
+    const evidenceIds = report.decisionReceipt!.evidenceObservationIds ?? report.evidenceObservationIds;
+    if (evidenceIds === undefined) privateEvidenceWithoutIds.push(report);
+    else for (const id of evidenceIds) consumed.add(id);
+    privateEvidence.set(key, consumed);
+  }
   const ordered = [...observations]
     .filter((observation) =>
       observation.scoutId === (previousReport?.scoutId ?? observation.scoutId)
       && observation.playerId === (previousReport?.playerId ?? observation.playerId)
+      && !privateEvidence.get(`${observation.scoutId}:${observation.playerId}`)?.has(observation.id)
+      && !privateEvidenceWithoutIds.some((report) => report.scoutId === observation.scoutId
+        && report.playerId === observation.playerId && !observationIsAfterReport(observation, report))
     )
     .sort((left, right) =>
       left.season - right.season
@@ -115,6 +132,8 @@ export function getFreshReportObservationIds(
       || left.id.localeCompare(right.id)
     );
   if (!previousReport) return [...new Set(ordered.map((observation) => observation.id))];
+
+  if (isPrivateScoutingDecision(previousReport)) return [...new Set(ordered.map((observation) => observation.id))];
 
   if (previousReport.evidenceObservationIds !== undefined) {
     const consumed = new Set(previousReport.evidenceObservationIds);
@@ -163,8 +182,7 @@ export function selectLatestReportsByCase(
 ): ScoutReport[] {
   const latest = new Map<string, ScoutReport>();
   for (const report of reports) {
-    // A private pass earns no credit and cannot erase an earlier public stake.
-    if (report.recommendedAction === "pass") continue;
+    if (isPrivateScoutingDecision(report)) continue;
     const key = getReportCaseKey(report);
     const current = latest.get(key);
     if (!current || compareReportDate(report, current) > 0) latest.set(key, report);
@@ -185,7 +203,7 @@ export function selectLatestReportsByCaseOpenedInRange(
   const allReports = [...reports];
   const openingByCase = new Map<string, ScoutReport>();
   for (const report of allReports) {
-    if (report.recommendedAction === "pass") continue;
+    if (isPrivateScoutingDecision(report)) continue;
     const key = getReportCaseKey(report);
     const current = openingByCase.get(key);
     if (!current || compareReportDate(report, current) < 0) {
@@ -236,13 +254,21 @@ export function groupReportRevisionsByCase(
     .sort((left, right) => left.caseKey.localeCompare(right.caseKey));
 }
 
+/** A historical assessment needs all of its contemporaneous truth, not a later player's attributes. */
+export function hasCompleteReportSubmissionSnapshot(report: ScoutReport): boolean {
+  return report.attributeAssessments.length > 0 && report.attributeAssessments.every(assessment => {
+    const value = report.validationSnapshot?.[assessment.attribute];
+    return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 20;
+  });
+}
+
 /**
  * A report can support a retrospective outcome review when it contains an
  * evidence-backed assessment. This deliberately includes monitor/no-deal
  * cases: a transfer is an outcome, not a prerequisite for accountability.
  */
 export function isReportOutcomeValidatable(report: ScoutReport): boolean {
-  return report.recommendedAction !== "pass" && report.attributeAssessments.length > 0;
+  return !isPrivateScoutingDecision(report) && report.attributeAssessments.length > 0;
 }
 
 /**
@@ -256,10 +282,11 @@ export function selectMatureReportCasesForValidation(
   scoutId?: string,
 ): ReportRevisionCase[] {
   return groupReportRevisionsByCase(
-    [...reports].filter((report) => report.recommendedAction !== "pass"),
+    [...reports].filter((report) => !isPrivateScoutingDecision(report)),
   ).filter((reportCase) => {
     const report = reportCase.latestReport;
     return report.postTransferRating === undefined
+      && report.validationStatus !== "unverifiable"
       && (scoutId === undefined || report.scoutId === scoutId)
       && isReportOutcomeValidatable(report)
       && completedSeason - report.submittedSeason >= REPORT_VALIDATION_HORIZON_SEASONS;
@@ -321,4 +348,9 @@ export function calculateReportAccountabilityMetrics(
     averageCalibration: round(average(calibration)),
     averageDecisionValue: round(average(decisionValue)),
   };
+}
+
+/** Only an authored receipt establishes a private pass; legacy professional history is unchanged. */
+export function isPrivateScoutingDecision(report: Pick<ScoutReport, "decisionReceipt">): boolean {
+  return report.decisionReceipt?.action === "pass";
 }

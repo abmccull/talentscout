@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shouldShowYouthInboxMessage } from "@/engine/youth/youthCaseFocus";
 import type { GameState, InboxMessage } from "@/engine/core/types";
 import type { DecisionRecord } from "@/engine/consequences/types";
 import {
@@ -64,6 +65,17 @@ function gameState(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("inbox action authority", () => {
+  it("keeps an applied betrayal as unread news rather than an unresolved decision", () => {
+    const notice = inboxMessage("msg_betrayal_123456", {
+      type: "news", relatedEntityType: "contact", relatedId: "contact-1",
+    });
+    const state = gameState({ inbox: [notice] });
+    expect(selectLiveInboxActionMessages(state)).toEqual([]);
+    expect(reconcileInboxActionRequirements(state)[0]).toEqual({ ...notice, actionRequired: false });
+    expect(shouldShowYouthInboxMessage(state, { ...notice, actionRequired: false }, new Set())).toBe(true);
+    expect(notice.actionRequired).toBe(true);
+    expect(notice.read).toBe(false);
+  });
   it("keeps live actions pinned and demotes expired references", () => {
     const active = inboxMessage("active-message", { relatedId: "active-offer" });
     const expired = inboxMessage("expired-message", { relatedId: "missing-offer" });

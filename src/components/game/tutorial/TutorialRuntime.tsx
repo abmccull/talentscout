@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import { GuidedChecklist } from "@/components/game/tutorial/GuidedChecklist";
 import { HintToast } from "@/components/game/tutorial/HintToast";
 import { MentorOverlay } from "@/components/game/tutorial/MentorOverlay";
 import { ScreenGuidePanel } from "@/components/game/tutorial/ScreenGuidePanel";
+import { useGameStore } from "@/stores/gameStore";
 import { useTutorialStore } from "@/stores/tutorialStore";
 
 /**
@@ -17,6 +19,18 @@ export function TutorialRuntime() {
   const currentGuidedTask = useTutorialStore((state) => state.currentGuidedTask);
   const activeScreenGuide = useTutorialStore((state) => state.activeScreenGuide);
   const activeHint = useTutorialStore((state) => state.activeHint);
+  const gameState = useGameStore((state) => state.gameState);
+
+  useEffect(() => {
+    // Also repair already-open careers whose guide predates this fix. Limit
+    // runtime reconciliation to stale observation tasks; report form progress
+    // must remain under the report writer's control while the player works.
+    if (!guidedSessionActive || !gameState || gameState.openingCase?.stage === "observation") return;
+    if (currentGuidedTask === "attendedMatch" || currentGuidedTask === "focusedPlayer"
+      || currentGuidedTask === "flaggedBreakthrough" || currentGuidedTask === "completedMatch") {
+      useTutorialStore.getState().reconcileOpeningObservationProgress(gameState);
+    }
+  }, [currentGuidedTask, gameState, guidedSessionActive]);
 
   const showMentorOverlay = Boolean(
     (tutorialActive && currentSequence) || (guidedSessionActive && currentGuidedTask),

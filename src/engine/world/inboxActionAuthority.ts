@@ -22,6 +22,9 @@ function hasLiveRelatedAction(state: GameState, message: InboxMessage): boolean 
   const relatedId = message.relatedId;
   if (!relatedId) return undefined;
   const kind = message.relatedEntityType;
+  // This notification describes an already-applied loss of access. It has no
+  // reply/choice, including in old saves which incorrectly marked it required.
+  if (kind === "contact" && message.id.startsWith("msg_betrayal_")) return false;
 
   if (kind === "jobOffer" || message.type === "jobOffer") {
     return state.jobOffers.some((offer) => offer.id === relatedId);

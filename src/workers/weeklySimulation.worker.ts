@@ -28,14 +28,16 @@ workerScope.addEventListener(
     }
 
     try {
+      const wireSyncStartedAt = performance.now();
       const input = materializeWeeklyWorkerWireState(cachedGameState, request.state);
+      const wireSyncMs = Math.max(0, performance.now() - wireSyncStartedAt);
       const startedAt = performance.now();
       const fullCommit = runHeadlessWeeklyTransaction(input);
-      const state: WeeklyWorkerCommit = compactWeeklyWorkerCommit(
-        input.gameState,
-        fullCommit,
-        performance.now() - startedAt,
-      );
+      // Preserve computeMs: canonical simulation only, before delta compaction.
+      const computeMs = performance.now() - startedAt;
+      const compactionStartedAt = performance.now();
+      const state: WeeklyWorkerCommit = compactWeeklyWorkerCommit(input.gameState, fullCommit, computeMs);
+      const compactionMs = Math.max(0, performance.now() - compactionStartedAt);
       const nextGameState = fullCommit.patch.gameState;
       if (!nextGameState) {
         throw new Error("Weekly simulation worker completed without an active game state.");
@@ -47,6 +49,7 @@ workerScope.addEventListener(
         jobId: request.job.id,
         source: request.job.source,
         state,
+        timings: { wireSyncMs, compactionMs },
       };
       workerScope.postMessage(response);
     } catch (error) {
@@ -63,5 +66,11 @@ workerScope.addEventListener(
     }
   },
 );
+
+// Loading is observable without making readiness a new prerequisite for dispatch.
+workerScope.postMessage({
+  kind: "weekly-worker-ready",
+  protocolVersion: WEEKLY_TRANSACTION_PROTOCOL_VERSION,
+} satisfies WeeklyWorkerMessage);
 
 export {};

@@ -54,26 +54,29 @@ const autosaveQueue = createAutosaveQueue<AutosaveRequest>({
   schedule: scheduleCoalescedGameplayPersist,
   onRequest: (request) => {
     latestRequest = request;
-    request.set({ autosaveError: null });
+    request.set({ autosaveStatus: "pending", autosaveError: null });
   },
   persist: persistAutosaveSnapshot,
   onSuccess: (request) => {
-    if (request.generation !== generation) return;
-    if (latestRequest === request) latestRequest = null;
-    request.set({ autosaveError: null });
+    // A newer edit can be queued while this write is in flight. Only the
+    // latest request's persistence acknowledgement may clear pending feedback.
+    if (request.generation !== generation || latestRequest !== request) return;
+    latestRequest = null;
+    request.set({ autosaveStatus: "saved", autosaveError: null });
   },
   onError: (error, request) => {
-    if (request.generation !== generation) return;
-    if (latestRequest === request) latestRequest = null;
+    if (request.generation !== generation || latestRequest !== request) return;
+    latestRequest = null;
     const message = error instanceof Error ? error.message : String(error);
     console.warn("Autosave failed:", error);
-    request.set({ autosaveError: message });
+    request.set({ autosaveStatus: "error", autosaveError: message });
   },
 });
 
 export function snapshotPersistedGameState(
   gameState: GameState,
   activeSession?: GameState["activeObservationSession"] | null,
+  weekSimulation?: NonNullable<GameState["pendingWeekRecovery"]>["simulation"] | null,
 ): GameState {
   // Wall time can move backwards after a clock correction. Fresh snapshots
   // must still sort after this career's earlier snapshots and committed save.
@@ -91,6 +94,11 @@ export function snapshotPersistedGameState(
     activeObservationSession: activeSession === undefined
       ? gameState.activeObservationSession ?? null
       : activeSession,
+    pendingWeekRecovery: weekSimulation === undefined
+      ? gameState.pendingWeekRecovery && gameState.pendingWeekRecovery.week === gameState.currentWeek
+        && gameState.pendingWeekRecovery.season === gameState.currentSeason
+          ? gameState.pendingWeekRecovery : null
+      : weekSimulation ? { week: gameState.currentWeek, season: gameState.currentSeason, simulation: weekSimulation } : null,
     lastSaved: lastSnapshotSavedAt,
   };
 }

@@ -7,11 +7,13 @@ import { createInsightState } from "@/engine/insight/insight";
 import type { GameState } from "@/engine/core/types";
 import type { ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import { createObservationActions } from "@/stores/actions/observationActions";
+import { queueGameplayAutosave } from "@/stores/actions/persistGameplayAutosave";
 import type { GameStoreState, SetState } from "@/stores/actions/types";
 import { confirmObservationLeave, LeaveObservationButton, LeaveObservationDialog, observationLeavePolicy } from "@/components/game/observation/LeaveObservationButton";
 
-vi.mock("@/stores/actions/persistGameplayAutosave", () => ({
-  queueGameplayAutosave: vi.fn(), snapshotPersistedGameState: (state: GameState) => state,
+vi.mock("@/stores/actions/persistGameplayAutosave", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/stores/actions/persistGameplayAutosave")>(),
+  queueGameplayAutosave: vi.fn(),
 }));
 
 function watch(): ObservationSession {
@@ -52,7 +54,8 @@ describe("truthful leave-watch confirmation", () => {
       gutFeelings: [], completedInteractiveSessions: [], activeObservationSession: session,
       schedule: { activities: [{ instanceId: session.activityInstanceId }] },
     } as unknown as GameState;
-    let store = { gameState: originalState, activeSession: session, currentScreen: "observation", sessionReturnScreen: "weekSimulation" } as unknown as GameStoreState;
+    const weekSimulation = { currentDay: 2, phase: "awaitingActivity", daySummaries: [] } as unknown as NonNullable<GameStoreState["weekSimulation"]>;
+    let store = { gameState: originalState, activeSession: session, weekSimulation, currentScreen: "observation", sessionReturnScreen: "weekSimulation" } as unknown as GameStoreState;
     const set: SetState = (patch) => { store = { ...store, ...(typeof patch === "function" ? patch(store) : patch) }; };
     const actions = createObservationActions(() => store, set);
     // Opening/cancelling the dialog does not call the completion action.
@@ -66,9 +69,38 @@ describe("truthful leave-watch confirmation", () => {
     expect(store.gameState?.completedInteractiveSessions).toEqual([]);
     expect(store.gameState?.scout.insightState?.points).toBe(0);
     expect(store.gameState?.schedule).toBe(originalState.schedule);
+    expect(store.gameState?.reflectionJournal).toBe(originalState.reflectionJournal);
+    expect(store.gameState?.scout).toBe(originalState.scout);
+    expect(store.gameState?.gutFeelings).toBe(originalState.gutFeelings);
+    expect(store.gameState?.activeObservationSession).toBeNull();
+    expect(store.weekSimulation).toBe(weekSimulation);
+    expect(store.gameState?.pendingWeekRecovery?.simulation).toBe(weekSimulation);
+    expect(queueGameplayAutosave).toHaveBeenLastCalledWith(store.gameState, expect.any(Function));
     const after = store.gameState;
     expect(confirmObservationLeave(session, store.activeSession, actions.endObservationSession)).toBe(false);
     expect(store.gameState).toBe(after);
+  });
+
+  it("keeps no-argument early finishing separate from explicit discard", () => {
+    const session = watch();
+    const gameState = {
+      seed: "leave-watch", currentWeek: 2, currentSeason: 1,
+      scout: { primarySpecialization: "youth", attributes: { intuition: 10 }, fatigue: 0, insightState: createInsightState() },
+      players: {}, unsignedYouth: {}, observations: {}, reflectionJournal: {}, contacts: {},
+    } as unknown as GameState;
+    let store = { gameState, activeSession: session, currentScreen: "observation", sessionReturnScreen: "dashboard" } as unknown as GameStoreState;
+    const set: SetState = (patch) => { store = { ...store, ...(typeof patch === "function" ? patch(store) : patch) }; };
+    const actions = createObservationActions(() => store, set);
+    actions.endObservationSession();
+    expect(store.activeSession?.state).toBe("reflection");
+    expect(store.currentScreen).toBe("observation");
+    expect(store.gameState?.observations).toEqual({});
+    const reflected = store.activeSession;
+    actions.endObservationSession({ discard: true });
+    expect(store.activeSession).toBe(reflected);
+    store = { ...store, activeSession: { ...session, activityInstanceId: "opening-discovery:lead" } };
+    actions.endObservationSession({ discard: true });
+    expect(store.activeSession?.state).toBe("active");
   });
 
   it("cannot use an old confirmation to discard a different or advanced session", () => {

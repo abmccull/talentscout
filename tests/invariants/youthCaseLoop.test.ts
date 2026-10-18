@@ -4,6 +4,7 @@ import type {
   InboxMessage,
   Observation,
   PlacementReport,
+  ReflectionJournalEntry,
   Scout,
   UnsignedYouth,
 } from "@/engine/core/types";
@@ -13,8 +14,8 @@ import {
   shouldShowYouthInboxMessage,
 } from "@/engine/youth/youthCaseFocus";
 import {
-  listYouthCases,
   buildYouthCaseListItem,
+  listYouthCases,
   rivalHeatFromYouth,
 } from "@/engine/youth/youthCaseList";
 import {
@@ -57,6 +58,7 @@ function youth(id: string, playerId: string, overrides: Partial<UnsignedYouth> =
 function observation(playerId: string): Observation {
   return {
     id: `obs-${playerId}`,
+    context: "followUpSession",
     playerId,
     scoutId: "scout-1",
     week: 3,
@@ -79,10 +81,38 @@ function inbox(partial: Partial<InboxMessage>): InboxMessage {
 }
 
 describe("youth case loop", () => {
+  it("keeps unanswered hypotheses across later visits and respects their latest resolution", () => {
+    const question = { id: "h-1", playerId: "p-1", text: "Does his movement work against a deeper defence?",
+      domain: "tactical" as const, state: "open" as const, createdAtWeek: 2 };
+    const first: ReflectionJournalEntry = { id: "first", sessionId: "first", activityType: "followUpSession",
+      week: 2, season: 1, playerIds: ["p-1"], notes: [], hypotheses: [question], createdAt: 10 };
+    const later: ReflectionJournalEntry = { ...first, id: "later", sessionId: "later", week: 3,
+      hypotheses: [], scoutingQuestionId: "decisions", createdAt: 20 };
+    const state = { scout: scout(), currentWeek: 4, currentSeason: 1, rivalActivities: [],
+      observations: { live: observation("p-1") }, reflectionJournal: { later, first } };
+    const item = buildYouthCaseListItem(youth("y-1", "p-1"), state);
+    expect(item.openQuestion).toBe(question.text);
+    expect(item.nextTest).toBe("Test that hypothesis in a new context.");
+    for (const resolution of ["confirmed", "debunked"] as const) {
+      const resolved = { ...later, id: "resolution", createdAt: 21, hypotheses: [{ ...question, state: resolution }] };
+      const closed = buildYouthCaseListItem(youth("y-1", "p-1"), { ...state,
+        reflectionJournal: { resolved, later, first } });
+      expect(closed.openQuestion).toBe("How quickly does the player read danger?");
+      expect(closed.nextTest).toContain("second look");
+    }
+    const future = { ...later, id: "future", week: 5, hypotheses: [{ ...question, state: "confirmed" as const }] };
+    expect(buildYouthCaseListItem(youth("y-1", "p-1"), { ...state,
+      reflectionJournal: { ...state.reflectionJournal, future } }).openQuestion).toBe(question.text);
+    expect(state.reflectionJournal.first.hypotheses[0].state).toBe("open");
+  });
+
   it("keeps a private pass on the case list without reviving its earlier next-test prompt", () => {
     const pass = {
       id: "pass-p1", playerId: "p-1", scoutId: "scout-1", submittedWeek: 3, submittedSeason: 1,
       recommendedAction: "pass", summary: "The first look did not justify another allocation of attention.",
+      decisionReceipt: { id: "scouting_decision_pass-p1", action: "pass", week: 3, season: 1, conviction: "note",
+        evidenceObservationIds: ["obs-p-1"], evidenceCardIds: [],
+        summary: "The first look did not justify another allocation of attention." },
       evidenceObservationIds: ["obs-p-1"],
       evidenceAssessment: { recommendation: "pass", unknowns: [{ statement: "Pressure response remains uncertain." }], nextTest: { label: "Book another look" } },
     };
@@ -112,27 +142,48 @@ describe("youth case loop", () => {
     expect(buildYouthCaseListItem(youth("y-1", "p-1"), { ...state, observations: { ...state.observations, otherScout } }).nextTest).toBe(item.nextTest);
   });
 
-  it("honors a latest pass without structured assessment and restores normal prompts after a fresh-evidence revision", () => {
+  it("honors a latest private receipt without structured assessment and restores normal prompts after a fresh-evidence revision", () => {
     const pass = { id: "pass", playerId: "p-1", scoutId: "scout-1", submittedWeek: 3, submittedSeason: 1,
-      recommendedAction: "pass", revision: 1, evidenceObservationIds: ["obs-p-1"] };
-    const state = { observations: { old: observation("p-1") }, reflectionJournal: {}, rivalActivities: [], currentWeek: 3, currentSeason: 1,
+      recommendedAction: "pass", summary: "No next look planned.",
+      decisionReceipt: { id: "scouting_decision_pass", action: "pass", week: 3, season: 1, conviction: "note",
+        evidenceObservationIds: ["obs-p-1"], evidenceCardIds: [], summary: "No next look planned." },
+      revision: 1, evidenceObservationIds: ["obs-p-1"] };
+    const state = { scout: scout(), observations: { old: observation("p-1") }, reflectionJournal: {}, rivalActivities: [], currentWeek: 3, currentSeason: 1,
       reports: { pass } } as unknown as Parameters<typeof buildYouthCaseListItem>[1];
     expect(buildYouthCaseListItem(youth("y-1", "p-1"), state).questionLabel).toBe("Passed for now");
     const revision = { ...pass, id: "reconsidered", revision: 2, recommendedAction: "monitor",
+      decisionReceipt: { id: "scouting_decision_reconsidered", action: "monitor", week: 3, season: 1, conviction: "recommend",
+        evidenceObservationIds: ["obs-p-1", "fresh-look"], evidenceCardIds: [], summary: "Improved in a fresh context." },
+      evidenceObservationIds: ["obs-p-1", "fresh-look"],
       evidenceAssessment: { unknowns: [{ statement: "Does the improvement persist?" }], nextTest: { label: "Watch against stronger opponents" } } };
-    const revisedState = { ...state, reports: { ...state.reports, revision } } as unknown as Parameters<typeof buildYouthCaseListItem>[1];
+    const revisedState = { ...state, observations: { ...state.observations, fresh: { ...observation("p-1"), id: "fresh-look" } }, reports: { ...state.reports, revision } } as unknown as Parameters<typeof buildYouthCaseListItem>[1];
     const item = buildYouthCaseListItem(youth("y-1", "p-1"), revisedState);
     expect(item.questionLabel).toBe("Still to test");
     expect(item.nextTest).toBe("Watch against stronger opponents");
   });
 
+  it("does not rewrite a receipt-less historical professional pass as a private decision", () => {
+    const legacy = { id: "legacy", playerId: "p-1", scoutId: "scout-1", submittedWeek: 3, submittedSeason: 1,
+      recommendedAction: "pass", evidenceObservationIds: ["obs-p-1"],
+      evidenceAssessment: { unknowns: [{ statement: "Does the improvement persist?" }], nextTest: { label: "Watch against stronger opponents" } } };
+    const state = { scout: scout(), observations: { old: observation("p-1") }, reflectionJournal: {}, rivalActivities: [], currentWeek: 3, currentSeason: 1,
+      reports: { legacy } } as unknown as Parameters<typeof buildYouthCaseListItem>[1];
+    const before = JSON.stringify(state);
+    const item = buildYouthCaseListItem(youth("y-1", "p-1"), state);
+    expect(item.questionLabel).toBe("Still to test");
+    expect(item.openQuestion).toBe("Does the improvement persist?");
+    expect(item.nextTest).toBe("Watch against stronger opponents");
+    expect(state.reports!.legacy.decisionReceipt).toBeUndefined();
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
   it("uses the person's latest saved unknown and next test rather than another case or hidden ability", () => {
     const state = {
-      observations: { o1: observation("p-1") }, reflectionJournal: {}, rivalActivities: [], currentWeek: 4, currentSeason: 2,
+      scout: scout(), observations: { o1: observation("p-1") }, reflectionJournal: {}, rivalActivities: [], currentWeek: 4, currentSeason: 2,
       reports: {
-        old: { playerId: "p-1", submittedWeek: 38, submittedSeason: 1, evidenceAssessment: { unknowns: [{ statement: "Old question" }], nextTest: { label: "Old test" } } },
-        current: { playerId: "p-1", submittedWeek: 3, submittedSeason: 2, evidenceAssessment: { unknowns: [{ statement: "Does the first touch survive pressure?" }], nextTest: { label: "Watch against a stronger midfield" } } },
-        other: { playerId: "p-2", submittedWeek: 4, submittedSeason: 2, evidenceAssessment: { unknowns: [{ statement: "Someone else's question" }], nextTest: { label: "Someone else's test" } } },
+        old: { id: "old", scoutId: "scout-1", playerId: "p-1", submittedWeek: 38, submittedSeason: 1, evidenceAssessment: { unknowns: [{ statement: "Old question" }], nextTest: { label: "Old test" } } },
+        current: { id: "current", scoutId: "scout-1", playerId: "p-1", submittedWeek: 3, submittedSeason: 2, evidenceAssessment: { unknowns: [{ statement: "Does the first touch survive pressure?" }], nextTest: { label: "Watch against a stronger midfield" } } },
+        other: { id: "other", scoutId: "scout-1", playerId: "p-2", submittedWeek: 4, submittedSeason: 2, evidenceAssessment: { unknowns: [{ statement: "Someone else's question" }], nextTest: { label: "Someone else's test" } } },
       },
     } as unknown as Parameters<typeof buildYouthCaseListItem>[1];
     const subject = youth("y-1", "p-1");
@@ -144,8 +195,8 @@ describe("youth case loop", () => {
   });
 
   it("labels a saved witnessed note as evidence and does not call an unwatched person a second look", () => {
-    const state = { observations: {}, reflectionJournal: {}, rivalActivities: [], currentWeek: 3, currentSeason: 1 };
-    expect(buildYouthCaseListItem(youth("y-1", "p-1"), state).nextTest).toBe("Plan a first observation.");
+    const state = { scout: scout(), observations: {}, reflectionJournal: {}, rivalActivities: [], currentWeek: 3, currentSeason: 1 };
+    expect(buildYouthCaseListItem(youth("y-1", "p-1"), state).nextTest).toBe("Arrange a first live observation before judging the player.");
     const item = buildYouthCaseListItem(youth("y-1", "p-1"), { ...state, observations: { o1: { ...observation("p-1"), notes: ["Turned away from the first challenge."] } } });
     expect(item.questionLabel).toBe("Latest evidence");
     expect(item.openQuestion).toBe("Turned away from the first challenge.");
@@ -202,6 +253,42 @@ describe("youth case loop", () => {
       { type: "followUpSession", targetId: "p-1" },
     ], ["p-1"])).toBe(2);
     expect(findYouthCaseWatchDay([{ type: "rest" }], ["p-1"])).toBe(0);
+  });
+
+  it("counts distinct current-scout live looks and keeps the authored question instead of private notes", () => {
+    const live = { ...observation("p-1"), sourceSessionId: "live-session" };
+    const state = {
+      scout: scout(), currentWeek: 4, currentSeason: 1, rivalActivities: [],
+      observations: {
+        live,
+        replay: { ...live, id: "replay" },
+        video: { ...live, id: "video", sourceSessionId: "video", context: "videoAnalysis" as const },
+        meeting: { ...live, id: "meeting", sourceSessionId: "meeting", context: "parentCoachMeeting" as const },
+        otherScout: { ...live, id: "other", sourceSessionId: "other", scoutId: "other" },
+        future: { ...live, id: "future", sourceSessionId: "future", week: 8 },
+      },
+      reflectionJournal: { journal: {
+        id: "journal", sessionId: "live-session", activityType: "followUpSession" as const,
+        season: 1, week: 3, playerIds: ["p-1"], notes: ["Private speculation"],
+        hypotheses: [], scoutingQuestionId: "decisions" as const, createdAt: 1,
+      } },
+    };
+    const item = buildYouthCaseListItem(youth("y-1", "p-1"), state);
+    expect(item.observationCount).toBe(1);
+    expect(item.lastLookLabel).toBe("Week 3, S1");
+    expect(item.openQuestion).toBe("How quickly does the player read danger?");
+    expect(item.nextTest).toContain("second look");
+    const repeated = buildYouthCaseListItem(youth("y-1", "p-1"), { ...state,
+      observations: { ...state.observations, next: { ...live, id: "next", sourceSessionId: "next", week: 4 } },
+    });
+    expect(repeated.observationCount).toBe(2);
+    expect(repeated.nextTest).toContain("different opposition or a different role");
+    const unseen = buildYouthCaseListItem(youth("y-1", "p-1"), { ...state,
+      observations: { video: state.observations.video, meeting: state.observations.meeting },
+    });
+    expect(unseen.observationCount).toBe(0);
+    expect(unseen.lastLookLabel).toBe("No look yet");
+    expect(unseen.nextTest).toContain("first live observation");
   });
 
   it("builds case cards with last look, question, next test, and rival heat", () => {
@@ -286,6 +373,7 @@ describe("youth case loop", () => {
         currentClubId: "club-1",
         milestones: [{
           type: "firstTeamDebut",
+          sourceId: "fixture-s2-w20-p-alum-debut",
           week: 20,
           season: 2,
           description: "Debuted for the first team.",

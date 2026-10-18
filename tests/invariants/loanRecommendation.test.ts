@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Club, GameState, Player } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
-import { COMPETITIVE_ROSTER_OUTFLOW_FLOOR } from "@/engine/match/eligibleRoster";
 import { processAILoanDeals } from "@/engine/world/loans";
 import {
   getLifecycleWorld,
@@ -24,32 +23,6 @@ function club(id: string, reputation: number, budget = 1_000_000): Club {
     loanedOutPlayerIds: [],
     loanedInPlayerIds: [],
   };
-}
-
-function depthPlayers(clubId: string, count = COMPETITIVE_ROSTER_OUTFLOW_FLOOR): Record<string, Player> {
-  return Object.fromEntries(
-    Array.from({ length: count }, (_, index) => {
-      const id = `${clubId}-depth-${index}`;
-      return [
-        id,
-        {
-          id,
-          firstName: "Depth",
-          lastName: `${index}`,
-          age: 24,
-          position: index === 0 ? "GK" : "CM",
-          clubId,
-          contractClubId: clubId,
-          contractExpiry: 5,
-          wage: 800,
-          marketValue: 50_000,
-          // Keep depth above the loan prospect so they remain outside the top-5 CA block.
-          currentAbility: 110,
-          potentialAbility: 120,
-        } as Player,
-      ];
-    }),
-  );
 }
 
 const acceptingRng = {
@@ -77,13 +50,12 @@ describe("scout-recommended loan flow", () => {
       currentAbility: 90,
       potentialAbility: 150,
     } as Player;
-    const depth = depthPlayers("parent");
     const parent = club("parent", 70);
-    parent.playerIds = [prospect.id, ...Object.keys(depth)];
+    parent.playerIds = [prospect.id];
     const host = club("host", 50);
 
     const state = {
-      players: { p1: prospect, ...depth },
+      players: { p1: prospect },
       clubs: { parent, host },
       activeLoans: [],
       loanHistory: [],

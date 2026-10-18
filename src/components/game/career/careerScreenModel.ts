@@ -1,4 +1,5 @@
 "use client";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 
 import { getCoursePlannerStatusModel } from "@/engine/career/courses";
 import type {
@@ -238,11 +239,12 @@ export function buildCareerTimeline(input: {
   playerFacingDiscoveryById: Map<string, { isHighUpsideProjection?: boolean }>;
 }): CareerTimelineEntry[] {
   const { discoveryRecords, discoveredPlayerIds, gameState, playerFacingDiscoveryById } = input;
+  const unsignedPlayers = new Map(Object.values(gameState.unsignedYouth ?? {}).map((youth) => [youth.player.id, youth.player]));
 
   return [
     ...discoveryRecords.map((record) => {
       const player =
-        gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
+        gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId] ?? unsignedPlayers.get(record.playerId);
       const summary = playerFacingDiscoveryById.get(record.playerId);
         return {
           id: `discovery-${record.playerId}`,
@@ -262,7 +264,7 @@ export function buildCareerTimeline(input: {
       .filter((record) => record.placementSeason != null && record.placementWeek != null)
       .map((record) => {
         const player =
-          gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
+          gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId] ?? unsignedPlayers.get(record.playerId);
         const club = record.placementClubId
           ? gameState.clubs[record.placementClubId]
           : undefined;
@@ -284,7 +286,7 @@ export function buildCareerTimeline(input: {
           tone: "blue" as const,
         };
       }),
-    ...(gameState.playerMovementHistory ?? [])
+    ...expandPlayerMovementHistory(gameState.playerMovementHistory ?? [])
       .filter((movement) => discoveredPlayerIds.has(movement.playerId))
       .map((movement) => {
         const player =

@@ -1,5 +1,10 @@
 "use client";
 
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
+
+import { hasReportBuyerEvidence, shouldPromptReportListing } from "@/engine/finance/reportMarketplace";
+import { selectReportFollowUpCases } from "@/lib/reportFollowUpPriority";
+
 import type {
   GameState,
   ReportDelivery,
@@ -8,7 +13,7 @@ import type {
   ScoutingCase,
   TransferRecord,
 } from "@/engine/core/types";
-import { resolvePlayerEntity } from "@/lib/playerResolution";
+import { resolvePlayerEntity, resolvePlayerDisplayName } from "@/lib/playerResolution";
 
 export type ReportWorkspaceAction =
   | { kind: "openReport"; label: string; reportId: string }
@@ -58,10 +63,12 @@ export interface FeaturedReportArtifact {
 
 export interface ReportWorkspaceViewModel {
   featuredArtifact: FeaturedReportArtifact | null;
+  evidenceReview?: { playerName: string; action: ReportWorkspaceAction } | null;
   lanes: ReportWorkspaceLane[];
   comparisonSummary: string;
   comparisonCtaLabel: string;
   comparisonReady: boolean;
+  comparisonCount: number;
   archiveSummary: string;
 }
 
@@ -152,8 +159,7 @@ function confidenceSummary(report: ScoutReport): string {
 }
 
 function getPlayerName(gameState: GameState, playerId: string): string {
-  const player = resolvePlayerEntity(gameState, playerId)?.player;
-  return player ? `${player.firstName} ${player.lastName}` : "Unknown player";
+  return resolvePlayerDisplayName(gameState, playerId);
 }
 
 function getCaseReport(gameState: GameState, scoutingCase: ScoutingCase): ScoutReport | null {
@@ -180,14 +186,26 @@ function getTargetClubName(gameState: GameState, report: ScoutReport): string {
   return "No target club recorded";
 }
 
+export function isPrivateMonitoringNote(
+  input: Pick<BuildReportWorkspaceViewModelInput, "gameState" | "pendingListingReportId" | "listingByReportId">,
+  report: ScoutReport,
+): boolean {
+  return report.recommendedAction === "monitor"
+    && (input.gameState.scout.careerPath === "independent" || (!report.intendedAudience && !report.intendedClubId))
+    && !input.listingByReportId[report.id]
+    && !Object.values(input.gameState.reportDeliveries ?? {}).some((delivery) => delivery.reportId === report.id);
+}
+
 function getFollowUpLabel(
   input: BuildReportWorkspaceViewModelInput,
   report: ScoutReport,
 ): string {
-  if (report.recommendedAction === "pass") {
+  if (isPrivateScoutingDecision(report)) {
     return "Passed for now. New evidence can reopen the judgment; its later outcome stays on record.";
   }
-  if (input.pendingListingReportId === report.id) {
+  if (isPrivateMonitoringNote(input, report)) return "Keep this assessment private. Return to the player dossier and plan the next test before escalating the case.";
+  if (!hasReportBuyerEvidence(report)) return "Keep this note on file and gather a supported finding before offering it for sale.";
+  if (input.pendingListingReportId === report.id && shouldPromptReportListing(report)) {
     return "Set the price and exclusivity before this lead goes cold.";
   }
 
@@ -223,9 +241,10 @@ function getFollowUpLabel(
 function buildFeaturedArtifact(
   input: BuildReportWorkspaceViewModelInput,
 ): FeaturedReportArtifact | null {
-  const pendingReport = input.pendingListingReportId
+  const pendingCandidate = input.pendingListingReportId
     ? input.gameState.reports[input.pendingListingReportId] ?? null
     : null;
+  const pendingReport = pendingCandidate && shouldPromptReportListing(pendingCandidate) ? pendingCandidate : null;
   const priorityReport = pendingReport
     ?? (input.casesNeedingDelivery[0] ? getCaseReport(input.gameState, input.casesNeedingDelivery[0]) : null)
     ?? (input.awaitingDecisionDeliveries[0] ? getDeliveryReport(input.gameState, input.awaitingDecisionDeliveries[0]) : null)
@@ -236,8 +255,11 @@ function buildFeaturedArtifact(
   if (!priorityReport) return null;
 
   const playerName = getPlayerName(input.gameState, priorityReport.playerId);
-  const isPendingListing = input.pendingListingReportId === priorityReport.id;
-  const action = isPendingListing && priorityReport.recommendedAction !== "pass" && input.gameState.scout.careerPath === "independent"
+  const isPendingListing = input.pendingListingReportId === priorityReport.id && shouldPromptReportListing(priorityReport);
+  const privateMonitoring = isPrivateMonitoringNote(input, priorityReport);
+  const action = privateMonitoring
+    ? { kind: "openPlayer", label: "Plan the next look", playerId: priorityReport.playerId } as const
+    : !isPrivateScoutingDecision(priorityReport) && isPendingListing && input.gameState.scout.careerPath === "independent"
     ? { kind: "listReport", label: "Price the report", reportId: priorityReport.id } as const
     : { kind: "openReport", label: "Open full artifact", reportId: priorityReport.id } as const;
 
@@ -245,16 +267,17 @@ function buildFeaturedArtifact(
     reportId: priorityReport.id,
     playerId: priorityReport.playerId,
     playerName,
-    artifactLabel: priorityReport.evidenceAssessment ? "Professional report artifact" : "Legacy report artifact",
+    artifactLabel: isPrivateScoutingDecision(priorityReport) ? "Private scouting decision" : privateMonitoring ? "Private monitoring assessment"
+      : priorityReport.evidenceAssessment ? "Professional report artifact" : "Legacy report artifact",
     summary: priorityReport.summary,
-    audience: priorityReport.intendedAudience
+    audience: isPrivateScoutingDecision(priorityReport) ? "Private scouting record" : priorityReport.intendedAudience
       ? formatLabel(priorityReport.intendedAudience)
-      : "Decision-maker not specified",
+      : privateMonitoring ? "Private scouting record" : "Decision-maker not specified",
     need: priorityReport.recruitmentNeed ?? "No explicit club need was recorded for this case.",
     risk: primaryRiskLabel(priorityReport),
     confidence: confidenceSummary(priorityReport),
     followUp: getFollowUpLabel(input, priorityReport),
-    targetClub: getTargetClubName(input.gameState, priorityReport),
+    targetClub: isPrivateScoutingDecision(priorityReport) ? "Not sent to a club" : getTargetClubName(input.gameState, priorityReport),
     conviction: formatLabel(priorityReport.conviction),
     recommendedAction: priorityReport.recommendedAction === "pass" ? "Pass for now" : priorityReport.recommendedAction
       ? formatLabel(priorityReport.recommendedAction)
@@ -271,7 +294,7 @@ function buildActionRequiredItems(input: BuildReportWorkspaceViewModelInput): Re
 
   if (input.pendingListingReportId) {
     const report = input.gameState.reports[input.pendingListingReportId];
-    if (report && report.recommendedAction !== "pass") {
+    if (report && !isPrivateScoutingDecision(report) && shouldPromptReportListing(report)) {
       items.push({
         id: `pending-listing-${report.id}`,
         eyebrow: "Pricing decision",
@@ -286,12 +309,17 @@ function buildActionRequiredItems(input: BuildReportWorkspaceViewModelInput): Re
 
   for (const scoutingCase of input.casesNeedingDelivery.slice(0, 2)) {
     const report = getCaseReport(input.gameState, scoutingCase);
-    if (!report || report.recommendedAction === "pass") continue;
+    if (!report || isPrivateScoutingDecision(report)) continue;
+    const privateMonitoring = isPrivateMonitoringNote(input, report);
     items.push({
       id: `delivery-${scoutingCase.id}`,
-      eyebrow: "Action required",
+      eyebrow: privateMonitoring ? "Next observation" : "Action required",
       title: getPlayerName(input.gameState, scoutingCase.playerId),
-      body: report.recruitmentNeed
+      body: privateMonitoring
+        ? "You chose to keep this assessment private. Test the open question in another observation before deciding whether to escalate."
+        : !hasReportBuyerEvidence(report)
+        ? "This note preserves uncertainty. Return to the dossier and plan the evidence needed to support a finding."
+        : report.recruitmentNeed
         ? `The case answers "${report.recruitmentNeed}" but still has not reached a club.`
         : "The evidence is filed, but the recommendation still has not reached its audience.",
       meta: `${formatGameDate(report.submittedSeason, report.submittedWeek)} | ${formatLabel(report.conviction)}`,
@@ -385,11 +413,23 @@ function buildLivingConsequenceItems(input: BuildReportWorkspaceViewModelInput):
 export function buildReportWorkspaceViewModel(
   input: BuildReportWorkspaceViewModelInput,
 ): ReportWorkspaceViewModel {
+  input = { ...input, casesNeedingDelivery: selectReportFollowUpCases(input.gameState, input.casesNeedingDelivery) };
   const featuredArtifact = buildFeaturedArtifact(input);
   const selectedCount = input.comparisonReportIds.length;
+  const recentObservation = !featuredArtifact ? Object.values(input.gameState.observations ?? {})
+    .filter((observation) => observation.scoutId === input.gameState.scout?.id
+      && (observation.season < input.gameState.currentSeason
+        || (observation.season === input.gameState.currentSeason && observation.week <= input.gameState.currentWeek))
+      && resolvePlayerEntity(input.gameState, observation.playerId))
+    .sort((a, b) => b.season - a.season || b.week - a.week || a.id.localeCompare(b.id))[0] : undefined;
+  const observedPlayer = recentObservation ? resolvePlayerEntity(input.gameState, recentObservation.playerId)?.player : null;
 
   return {
     featuredArtifact,
+    evidenceReview: observedPlayer && recentObservation ? {
+      playerName: `${observedPlayer.firstName} ${observedPlayer.lastName}`,
+      action: { kind: "openPlayer", label: "Review the evidence", playerId: recentObservation.playerId },
+    } : null,
     comparisonSummary: selectedCount === 0
       ? "Select up to three reports below to compare the case you made, not just the player."
       : selectedCount === 1
@@ -397,6 +437,7 @@ export function buildReportWorkspaceViewModel(
         : `${selectedCount} reports are ready for side-by-side comparison.`,
     comparisonCtaLabel: selectedCount < 2 ? `Compare (${selectedCount})` : `Compare (${selectedCount})`,
     comparisonReady: selectedCount >= 2,
+    comparisonCount: selectedCount,
     archiveSummary: `${input.reports.length} filed report${input.reports.length === 1 ? "" : "s"} | ${input.journalEntryCount} reflection entr${input.journalEntryCount === 1 ? "y" : "ies"} | ${input.activeListingsCount} active listing${input.activeListingsCount === 1 ? "" : "s"} | ${input.pendingBidsCount} pending bid${input.pendingBidsCount === 1 ? "" : "s"}`,
     lanes: [
       {

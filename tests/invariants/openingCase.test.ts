@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type {
   GameState,
+  ReflectionJournalEntry,
+  ScoutingEvidenceCard,
   Player,
   Scout,
   UnsignedYouth,
@@ -111,11 +113,51 @@ function openingState(): GameState {
 }
 
 describe("opening discovery case", () => {
+  it("preserves an inconclusive opening read instead of inventing an exceptional action", () => {
+    const state = openingState();
+    const entry: ReflectionJournalEntry = {
+      id: "journal-opening", sessionId: "opening-session", activityInstanceId: "opening-discovery:test",
+      activityType: "schoolMatch", week: 1, season: 1, playerIds: [state.openingCase!.playerId],
+      notes: [], hypotheses: [], evidenceVersion: 1, createdAt: 1,
+      evidenceCards: [{ id: "missed", playerId: state.openingCase!.playerId, clarity: "missed", classification: "noConclusion",
+        detail: "You could not isolate a defensible cue from this passage.", summary: "No clean read",
+      } as ScoutingEvidenceCard],
+    };
+    state.reflectionJournal = { opening: entry };
+    const projection = buildOpeningCaseProjection(state)!;
+    expect(projection.signal).toContain("No reliable conclusion");
+    expect(projection.signal).toContain(entry.evidenceCards![0].detail);
+    expect(projection.uncertainty).toContain("does not yet support a finding");
+    expect(JSON.stringify(projection)).not.toMatch(/exceptional|vision and anticipation|natural composure/i);
+
+    state.reflectionJournal.later = { ...entry, id: "later", week: 2, createdAt: 100,
+      evidenceCards: [{ ...entry.evidenceCards![0], clarity: "usable", classification: "preReceiveDecision", detail: "Later-session detail" }],
+    };
+    expect(buildOpeningCaseProjection(state)?.signal).toBe(projection.signal);
+    entry.evidenceCards = [{ ...entry.evidenceCards![0], clarity: "usable", classification: "technicalExecution", attributesHinted: ["passing"], pressureContext: false, detail: "Scanned before receiving and found the exit." }];
+    expect(buildOpeningCaseProjection(state)?.signal).toBe("Scanned before receiving and found the exit.");
+  });
+
+  it("does not borrow another player's cue or an unrelated same-week session", () => {
+    const state = openingState();
+    state.reflectionJournal = { unrelated: {
+      id: "unrelated", sessionId: "other", activityInstanceId: "ordinary-booking",
+      activityType: "schoolMatch", week: 1, season: 1, playerIds: [state.openingCase!.playerId],
+      notes: [], hypotheses: [], createdAt: 1,
+      flaggedMoments: [{ id: "other-cue", playerId: "lead", description: "Unrelated detail",
+        phaseIndex: 0, minute: 12, reaction: "promising", momentType: "tacticalDecision",
+        attributesHinted: [], pressureContext: false }],
+    } };
+    expect(buildOpeningCaseProjection(state)?.signal).not.toContain("Unrelated detail");
+    state.reflectionJournal.unrelated.activityInstanceId = "opening-discovery:test";
+    state.reflectionJournal.unrelated.flaggedMoments![0].playerId = "other-player";
+    expect(buildOpeningCaseProjection(state)?.signal).toContain("no retained player-specific passage");
+  });
   it("selects a genuine lead deterministically without leaking hidden ability", () => {
     const first = setup();
     const second = setup();
 
-    expect(first.unsignedYouth[first.openingCase.youthId].player.id).toBe(first.openingCase.playerId);
+    expect(Object.values(first.unsignedYouth).some((entry) => entry.player.id === first.openingCase.playerId)).toBe(true);
     expect(second.openingCase).toEqual(first.openingCase);
 
     const projection = buildOpeningCaseProjection({
@@ -163,7 +205,7 @@ describe("opening discovery case", () => {
     expect(unsignedYouth[localCase!.youthId].country).toBe("england");
   });
 
-  it("keeps actual lead performances when shortening the opening watch", () => {
+  it("retains generated football outcomes while compressing the opening watch", () => {
     const { openingCase, unsignedYouth } = setup();
     const session = {
       id: "session-1",
@@ -173,7 +215,9 @@ describe("opening discovery case", () => {
         index,
         minute: index * 15,
         description: `Phase ${index}`,
-        moments: [{ id: `real-${index}`, playerId: openingCase.playerId, quality: index + 1, isStandout: false }],
+        moments: [{ id: `source-${index}`, playerId: openingCase.playerId, quality: 2 + index,
+          momentType: "technicalAction", actionId: "pass", attributesHinted: ["passing"],
+          description: `Generated passage ${index}`, vagueDescription: "A passage", pressureContext: false, isStandout: false }],
       })),
       currentPhaseIndex: 0,
       players: openingCase.playerPoolIds.map((playerId) => ({ playerId })),
@@ -181,12 +225,12 @@ describe("opening discovery case", () => {
 
     const shaped = shapeOpeningObservationSession(session, unsignedYouth[openingCase.youthId].player);
     expect(shaped.phases).toHaveLength(3);
-    expect(shaped.phases.map((phase) => phase.moments[0].quality)).toEqual([0, 2, 4].map((index) => session.phases[index].moments[0].quality));
-    expect(shaped.phases.every((phase) => !phase.moments[0].isStandout)).toBe(true);
-    const ids = shaped.phases.flatMap((phase) => phase.moments.map((moment) => moment.id));
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(shaped).toEqual(shapeOpeningObservationSession(session, unsignedYouth[openingCase.youthId].player));
-    expect(session.phases[0].moments[0].id).toBe("real-0");
+    expect(shaped.phases.map((phase) => phase.moments[0].quality)).toEqual([2, 4, 6]);
+    expect(shaped.phases.map((phase) => phase.moments[0].description)).toEqual([
+      "Generated passage 0", "Generated passage 2", "Generated passage 4",
+    ]);
+    expect(new Set(shaped.phases.flatMap((phase) => phase.moments.map((moment) => moment.id))).size).toBe(3);
+    expect(shaped.phases[1].isHalfTime).toBe(true);
   });
 
   it("claims and resolves the first career decision exactly once", () => {

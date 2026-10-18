@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Club, Fixture, League, Player } from "@/engine/core/types";
+import type { Club, DisciplinaryRecord, Fixture, League, Player } from "@/engine/core/types";
 import {
   ABSTRACT_COMPETITION_SIMULATION_DETAIL,
   getAbstractLeagueSeasonLength,
@@ -140,6 +140,96 @@ function buildWorld() {
 }
 
 describe("abstract competition simulation", () => {
+  it.each([false, true])("respects injuries and bans with academy cover %s", (withCover) => {
+    const world = buildWorld();
+    const disciplinaryRecords: Record<string, DisciplinaryRecord> = {};
+    const blocked = new Set<string>();
+    const setBan = (id: string, weeks: number) => {
+      disciplinaryRecords[id] = { playerId: id, season: 3, yellowCards: 0,
+        redCards: 1, suspensionWeeksRemaining: weeks, cardHistory: [] };
+      if (weeks > 0) blocked.add(id);
+    };
+    for (const clubId of world.leagues["league-abstract"].clubIds) {
+      const club = world.clubs[clubId];
+      club.playerIds.slice(0, 5).forEach(id => {
+        world.players[id].injured = true;
+        world.players[id].injuryWeeksRemaining = 3;
+        blocked.add(id);
+      });
+      setBan(club.playerIds[5], 2);
+      setBan(club.playerIds[6], 0);
+      if (!withCover) continue;
+      for (const [index, position] of (["GK", "CM", "ST", "GK", "CM", "ST", "CB"] as const).entries()) {
+        const player = makePlayer(`${clubId}-emergency-${index}`, clubId, position, 180 - index, index);
+        player.age = index === 3 ? 15 : 17;
+        if (index === 4) player.injured = true;
+        if (index === 5) setBan(player.id, 1);
+        if (index === 6) player.clubId = "foreign-club";
+        if (index >= 3) blocked.add(player.id);
+        world.players[player.id] = player;
+        club.academyPlayerIds!.push(player.id);
+      }
+    }
+    const before = JSON.stringify({ world, disciplinaryRecords });
+    const result = simulateAbstractCompetitionWeek({
+      ...world, disciplinaryRecords, worldSeed: "availability", season: 3, week: 1,
+    });
+    expect(result.fixturesPlayed).toHaveLength(2);
+    for (const fixture of result.fixturesPlayed) {
+      expect(Object.keys(fixture.playerRatings).every(id => !blocked.has(id))).toBe(true);
+      for (const clubId of [fixture.homeClubId, fixture.awayClubId]) {
+        const entries = Object.entries(fixture.playerRatings).filter(([id]) => world.players[id].clubId === clubId);
+        expect(entries.filter(([, rating]) => rating.started)).toHaveLength(withCover ? 11 : 8);
+        expect(entries.map(([id]) => id)).toContain(world.clubs[clubId].playerIds[6]);
+        if (withCover) {
+          expect(entries.filter(([id]) => id.includes("-emergency-"))).toHaveLength(3);
+          expect(fixture.playerRatings[`${clubId}-emergency-0`]).toMatchObject({ started: true, minutesPlayed: 90 });
+        }
+      }
+    }
+    expect(JSON.stringify({ world, disciplinaryRecords })).toBe(before);
+  });
+
+  it("does not fabricate appearances when every registered player is injured", () => {
+    const world = buildWorld();
+    Object.values(world.players).forEach(player => { player.injured = true; });
+    const result = simulateAbstractCompetitionWeek({ ...world, worldSeed: "all-injured", season: 3, week: 1 });
+    expect(result.fixturesPlayed).toHaveLength(2);
+    expect(result.fixturesPlayed.every(fixture => Object.keys(fixture.playerRatings).length === 0)).toBe(true);
+  });
+
+  it.each([8, 10, 13])("keeps reserve keepers off the field with %i outfield players", (outfieldCount) => {
+    const world = buildWorld();
+    for (const clubId of world.leagues["league-abstract"].clubIds) {
+      const club = world.clubs[clubId];
+      club.playerIds = [];
+      for (let index = 0; index < outfieldCount + 3; index += 1) {
+        const position: Player["position"] = index < 3 ? "GK" : "CM";
+        const player = makePlayer(`${clubId}-coverage-${index}`, clubId, position, 180 - index, index);
+        world.players[player.id] = player;
+        club.playerIds.push(player.id);
+      }
+    }
+    for (let seed = 0; seed < 12; seed += 1) {
+      const result = simulateAbstractCompetitionWeek({
+        ...world, worldSeed: `keeper-coverage-${seed}`, season: 3, week: 1,
+      });
+      expect(result.fixturesPlayed).toHaveLength(2);
+      for (const fixture of result.fixturesPlayed) {
+        for (const clubId of [fixture.homeClubId, fixture.awayClubId]) {
+          const entries = Object.entries(fixture.playerRatings)
+            .filter(([id]) => world.players[id].clubId === clubId);
+          const keepers = entries.filter(([id]) => world.players[id].position === "GK");
+          expect(keepers).toHaveLength(1);
+          expect(keepers[0][1]).toMatchObject({ started: true, minutesPlayed: 90 });
+          expect(entries.filter(([, rating]) => rating.started)).toHaveLength(Math.min(11, outfieldCount + 1));
+          expect(entries.reduce((sum, [, rating]) => sum + (rating.minutesPlayed ?? 0), 0))
+            .toBe(Math.min(11, outfieldCount + 1) * 90);
+        }
+      }
+    }
+  });
+
   it("generates deterministic played fixtures and explicit player participation from real club rosters", () => {
     const world = buildWorld();
     const first = simulateAbstractCompetitionWeek({

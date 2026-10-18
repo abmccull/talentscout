@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
+import { readSupportingJson, writeSupportingJson } from "./supporting-diagnostic-io.mjs";
+import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 
 function parseOptions(args) {
@@ -21,26 +22,29 @@ const profile = options.get("profile") ?? "smoke";
 if (profile !== "smoke" && profile !== "long") throw new Error("--profile must be smoke or long");
 const positive = (key, fallback) => {
   const value = options.get(key) ?? fallback;
-  if (!/^\d+$/.test(String(value)) || Number(value) < 1) throw new Error(`--${key} must be a positive integer`);
+  if (!/^\d+$/.test(String(value)) || (!Number.isSafeInteger(Number(value)) || Number(value) < 1)) throw new Error(`--${key} must be a positive integer`);
   return Number(value);
 };
 const seasonCount = positive("seasons", profile === "smoke" ? 1 : 20);
 const seedCount = positive("seeds", profile === "smoke" ? 1 : 3);
 const seedStart = positive("seed-start", 1);
 const concurrency = positive("concurrency", 1);
-if (concurrency > Math.min(seedCount, 8)) throw new Error("Concurrency cannot exceed seed count or eight workers");
+if (concurrency !== 1) throw new Error("Supporting diagnostics currently require --concurrency=1; the canonical c3 campaign uses its own unchanged entry point");
+if (seedCount > 20 || seasonCount > 30) throw new Error("Supporting diagnostics allow at most 20 seeds and 30 seasons");
+if (!Number.isSafeInteger(seedStart + seedCount - 1)) throw new Error("Seed index range is unsafe");
 const checkpoints = [...new Set(String(options.get("checkpoints") ?? "1,5,10,20,30").split(",").map((entry) => {
-  if (!/^\d+$/.test(entry) || Number(entry) < 1) throw new Error("--checkpoints must be comma-separated positive integers");
+  if (!/^\d+$/.test(entry) || (!Number.isSafeInteger(Number(entry)) || Number(entry) < 1 || Number(entry) > 30)) throw new Error("--checkpoints must be comma-separated positive integers");
   return Number(entry);
 }))].sort((a, b) => a - b);
 for (const flag of ["plan-only", "include-chooser-matrix"]) {
   if (options.has(flag) && options.get(flag) !== true) throw new Error(`--${flag} is a flag without a value`);
 }
-const outputDirectory = resolve(String(options.get("out") ?? `artifacts/release/generated/game-systems/${profile}`));
+if (!options.get("out") || typeof options.get("out") !== "string") throw new Error("--out must name a new owned supporting directory");
+const outputDirectory = resolve(options.get("out"));
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }).trim();
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const commitSha = git("rev-parse", "HEAD");
-const sourcePaths = ["src", "tests", "scripts", "package.json", "package-lock.json", "tsconfig.json", "vitest.config.ts", "vitest.release-soak.config.ts"];
+const sourcePaths = ["src", "tests", "scripts", "package.json", "package-lock.json", "tsconfig.json", "vitest.config.ts", "vitest.release-soak.config.ts", "vitest.supporting-diagnostics.config.ts"];
 async function fingerprintSource() {
   const currentCommit = git("rev-parse", "HEAD");
   const currentTree = git("rev-parse", "HEAD^{tree}");
@@ -62,8 +66,9 @@ const plan = {
   requestedCheckpoints: checkpoints,
   effectiveCheckpoints: [...new Set([0, ...checkpoints.filter((season) => season <= seasonCount), seasonCount])],
   chooserProfiles: options.has("include-chooser-matrix") ? ["commercial", "cautious", "aggressive"] : ["commercial"],
-  persistence: "mocked by canonical soak; provider durability requires separate persistence/browser evidence",
-  authority: "existing canonical release soak; population shapes have no additional balance thresholds",
+  persistence: "mocked; retained inputs require separate persistence/browser evidence",
+  authority: "supporting diagnostics with existing invariants; no release certification or human grade",
+  releaseCertification: false,
   outputDirectory,
 };
 if (options.has("plan-only")) {
@@ -71,52 +76,52 @@ if (options.has("plan-only")) {
   process.exit(0);
 }
 
-await mkdir(outputDirectory, { recursive: true });
+await mkdir(outputDirectory); // New owned directory; preserve every prior run and failure.
 const startedAt = new Date().toISOString();
-const runDirectory = join(outputDirectory, `run-${startedAt.replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`);
-await mkdir(runDirectory, { recursive: true });
-const snapshotDirectory = join(runDirectory, "football-checkpoints");
-const environment = {
-  ...process.env,
-  SOAK_SEASONS: String(seasonCount), SOAK_SEEDS: String(seedCount), SOAK_SEED_START: String(seedStart),
-  SOAK_CONCURRENCY: String(concurrency), SOAK_CANDIDATE_SHA: commitSha,
-  SOAK_OUTPUT: join(runDirectory, "canonical-soak.json"),
-  SOAK_WORKER_DIRECTORY: join(runDirectory, "workers"),
-  SOAK_GAME_SYSTEMS_CHECKPOINTS: checkpoints.join(","),
-  SOAK_GAME_SYSTEMS_DIAGNOSTICS_DIRECTORY: snapshotDirectory,
-  SOAK_PROFILE_MATRIX_OUTPUT: join(runDirectory, "chooser-matrix.json"),
-  SOAK_PROFILE_MATRIX_SEEDS: String(seedCount), SOAK_PROFILE_MATRIX_SEASONS: String(seasonCount),
-  SOAK_PLAN_ONLY: "false", SOAK_RESUME: "false", SOAK_SKIP_DETERMINISM_REPLAY: "false",
-  SOAK_PROFILE_MATRIX_ONLY: "false", SOAK_BALANCE_DIAGNOSTICS_ONLY: "false", SOAK_DIAGNOSTIC_ONLY: "false",
-};
-const commands = ["scripts/run-long-career-release-soak.mjs"];
-if (options.has("include-chooser-matrix")) commands.push("scripts/run-release-chooser-profile-matrix.mjs");
+await writeSupportingJson(join(outputDirectory, "protocol.json"), { ...plan, startedAt });
+const cleanEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+  !key.toUpperCase().startsWith("SOAK_") && !key.toUpperCase().startsWith("DIAGNOSTIC_") && key.toUpperCase() !== "NODE_OPTIONS"));
 const executions = [];
-await writeFile(join(outputDirectory, "diagnostics.json"), JSON.stringify({ ...plan, runDirectory, startedAt, status: "Running" }, null, 2));
-for (const command of commands) {
-  const outcome = await new Promise((resolveRun) => {
-    const child = spawn(process.execPath, [command], { env: environment, stdio: "inherit" });
-    child.once("error", (error) => resolveRun({ command, exitCode: null, error: error.message }));
-    child.once("exit", (exitCode, signal) => resolveRun({ command, exitCode, signal }));
-  });
-  executions.push(outcome);
-  if (outcome.exitCode !== 0) break;
-}
-const snapshots = [];
-try {
-  for (const name of (await readdir(snapshotDirectory)).filter((name) => name.endsWith(".json")).sort()) {
-    snapshots.push(JSON.parse(await readFile(join(snapshotDirectory, name), "utf8")));
+let sourceUnchanged = true;
+for (let index = 0; index < seedCount && sourceUnchanged; index += 1) {
+  for (const chooserProfile of plan.chooserProfiles) {
+    const seed = `release-soak-${String(seedStart + index).padStart(2, "0")}`;
+    const runDirectory = join(outputDirectory, `${seed}--${chooserProfile}`);
+    await mkdir(runDirectory);
+    const output = join(runDirectory, "diagnostic.json");
+    const outcome = await new Promise((resolveRun) => {
+      const child = spawn(process.execPath, [resolve("node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.supporting-diagnostics.config.ts"], {
+        env: { ...cleanEnvironment, DIAGNOSTIC_SEED: seed, DIAGNOSTIC_PROFILE: chooserProfile,
+          DIAGNOSTIC_SEASONS: String(seasonCount), DIAGNOSTIC_OUTPUT: output, DIAGNOSTIC_CHECKPOINTS: checkpoints.join(","),
+          DIAGNOSTIC_SOURCE_SHA: source.commitSha, DIAGNOSTIC_SOURCE_TREE: source.treeSha,
+          DIAGNOSTIC_SOURCE_CLEAN: String(source.sourceTreeClean), DIAGNOSTIC_SOURCE_FINGERPRINT: source.fingerprint },
+        stdio: "inherit", shell: false,
+      });
+      child.once("error", (error) => resolveRun({ exitCode: null, error: error.message }));
+      child.once("exit", (exitCode, signal) => resolveRun({ exitCode, signal }));
+    });
+    let receipt = null;
+    let artifactError = null;
+    try {
+      const admitted = await readSupportingJson(output);
+      const artifact = admitted.value;
+      if (artifact.evidenceKind !== "supporting-game-systems-run" || artifact.seed !== seed || artifact.profile !== chooserProfile
+        || artifact.seasons !== seasonCount || artifact.sourceFingerprint !== source.fingerprint
+        || artifact.passed !== true || artifact.authority?.releaseCertificationEligible !== false
+        || artifact.snapshots?.length !== plan.effectiveCheckpoints.length) throw new Error("Incomplete or mismatched supporting diagnostic");
+      receipt = { path: output, sha256: admitted.sha256, passed: true, snapshots: artifact.snapshots.length, retainedInputs: artifact.retainedInputs };
+    } catch (error) { artifactError = String(error); }
+    sourceUnchanged = (await fingerprintSource()).fingerprint === source.fingerprint;
+    executions.push({ seed, chooserProfile, ...outcome, receipt, artifactError, sourceUnchanged });
+    await writeSupportingJson(join(outputDirectory, `progress-${String(executions.length).padStart(2, "0")}.json`), { executions });
+    if (!sourceUnchanged) break;
   }
-} catch (error) {
-  if (error.code !== "ENOENT") throw error;
 }
-const completedSource = await fingerprintSource();
-const sourceUnchanged = completedSource.fingerprint === source.fingerprint;
-const passed = sourceUnchanged && executions.length === commands.length && executions.every((execution) => execution.exitCode === 0);
-await writeFile(join(outputDirectory, "diagnostics.json"), JSON.stringify({
-  ...plan, runDirectory, startedAt, completedAt: new Date().toISOString(),
-  status: passed ? "Passed supporting diagnostics" : "Failed", executions, snapshots, sourceUnchanged, completedSource,
-  releaseCertification: false,
-}, null, 2));
+const passed = sourceUnchanged && executions.length === seedCount * plan.chooserProfiles.length
+  && executions.every((execution) => execution.exitCode === 0 && execution.receipt?.passed && !execution.artifactError);
+await writeSupportingJson(join(outputDirectory, "diagnostics.json"), {
+  ...plan, startedAt, completedAt: new Date().toISOString(),
+  status: passed ? "Passed supporting diagnostics" : "Failed", executions, sourceUnchanged,
+});
 console.info(`GAME_SYSTEMS_DIAGNOSTICS ${join(outputDirectory, "diagnostics.json")}`);
 process.exitCode = passed ? 0 : 1;

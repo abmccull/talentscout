@@ -6,8 +6,8 @@ import type { ObservationSession, PlayerMoment, SessionPhase } from "@/engine/ob
 import { createSession } from "@/engine/observation/session";
 import { createRNG } from "@/engine/rng";
 import { migrateStructuredScoutingEvidence } from "@/engine/scout/evidenceMigration";
-import type { ScoutReport } from "@/engine/core/types";
-import { migrateSaveRecord } from "@/lib/db";
+import type { ScoutReport, ReflectionJournalEntry } from "@/engine/core/types";
+import { migrateSaveRecord, migrateSaveState } from "@/lib/db";
 
 const goldenV0Path = fileURLToPath(
   new URL("../fixtures/saves/v0-save-record.json", import.meta.url),
@@ -80,6 +80,25 @@ function legacyReport(scoutId: string): ScoutReport {
 }
 
 describe("structured evidence save migration", () => {
+  it("preserves exact cue links and neutralizes withdrawn flags through the real save migration", () => {
+    const baseline = migrateSaveRecord(JSON.parse(readFileSync(goldenV0Path, "utf8"))).state;
+    const entry = {
+      id: "journal", sessionId: "session", activityType: "schoolMatch", sessionMode: "fullObservation",
+      week: 1, season: 1, playerIds: ["legacy-player"], notes: [], hypotheses: [], createdAt: 1,
+      flaggedMoments: [{ id: "flag", momentId: "moment", playerId: "legacy-player", phaseIndex: 0,
+        minute: 10, description: "Initial impression", reaction: "promising", momentType: "technicalAction",
+        attributesHinted: ["firstTouch"], pressureContext: false }],
+      evidenceCards: [{ id: "cue", momentId: "moment", playerId: "legacy-player", phaseIndex: 0,
+        minute: 10, clarity: "clear", classification: "noConclusion", sourceType: "liveObservation", version: 1 }],
+    } as unknown as ReflectionJournalEntry;
+    const migrated = migrateSaveState({ ...baseline, reflectionJournal: { journal: entry } });
+    expect(migrated.reflectionJournal.journal.flaggedMoments![0]).toMatchObject({
+      momentId: "moment", reaction: "needs_more_data", description: "Initial impression",
+    });
+    const reloaded = migrateSaveState(JSON.parse(JSON.stringify(migrated)));
+    expect(reloaded.reflectionJournal).toEqual(migrated.reflectionJournal);
+  });
+
   it("reconstructs only deterministic in-progress cues and is idempotent", () => {
     const legacyRecord = JSON.parse(readFileSync(goldenV0Path, "utf8")) as unknown;
     const baseline = migrateSaveRecord(legacyRecord).state;

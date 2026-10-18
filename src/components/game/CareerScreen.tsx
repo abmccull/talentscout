@@ -1,5 +1,7 @@
 "use client";
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 
+import { calculateCashRunway } from "@/engine/finance/cashRunway";
 import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
@@ -458,7 +460,7 @@ export function CareerScreen() {
     reports: gameState.reports,
     recommendationReviews: gameState.recommendationReviews,
     discoveryRecords: gameState.discoveryRecords,
-    playerMovementHistory: gameState.playerMovementHistory,
+    playerMovementHistory: expandPlayerMovementHistory(gameState.playerMovementHistory),
     consequenceState: gameState.consequenceState,
     careerStoryArchive: gameState.careerStoryArchive,
     careerMoments: gameState.careerMoments?.history
@@ -513,6 +515,7 @@ export function CareerScreen() {
   ).length;
   const latestPerformanceReview = performanceReviews.at(-1);
   const rolePackage = deriveCareerRolePackage({
+    cashRunwayMonths: calculateCashRunway(finances, scout),
     scout,
     finances: finances ?? undefined,
     club: currentClub,

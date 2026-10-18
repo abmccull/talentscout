@@ -1,6 +1,6 @@
-import type { GetState, SetState } from "./types";
 import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration";
 import { queueGameplayAutosave, snapshotPersistedGameState } from "./persistGameplayAutosave";
+import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
   Activity,
@@ -184,7 +184,7 @@ export function createMatchActions(get: GetState, set: SetState) {
       const nextState = revealGamePortraits(current.gameState, [playerId], "observed");
       if (nextState !== current.gameState) {
         set({ gameState: nextState });
-        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession), set);
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, current.activeSession, current.weekSimulation), set);
       }
     }
     // Tutorial auto-advance: step expects "playerFocused"

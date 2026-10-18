@@ -33,11 +33,11 @@ export function getGuidedMilestoneInstruction(
       return "Choose who hears the name: keep it private, call a club, or ask your source to verify.";
     case "wroteReport":
       return input.isYouthDiscoveryHook
-        ? "Complete the five assessment decisions: evidence, what it suggests, what is untested, the next test, and confidence."
+        ? "Complete the six assessment decisions: evidence, what it suggests, what is untested, the next test, your recommendation, and confidence."
         : "Record the judgment you can defend and set the conviction behind it.";
     case "submittedReport":
       return input.isYouthDiscoveryHook
-        ? "Select File initial assessment once the five decisions are ready."
+        ? "Select File initial assessment once the six decisions are ready."
         : "Submit the report from the conviction panel once the judgment is ready.";
     case "checkedInbox":
       return "List the report from Reports so the market can answer back.";

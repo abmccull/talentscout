@@ -1,0 +1,126 @@
+{
+  "schema": "talentscout-braces-upstream-v1",
+  "derivative": {
+    "name": "@talentscout/braces-depth-guard",
+    "version": "3.0.3-ts.2",
+    "private": true,
+    "published": false,
+    "status": "Corrected threaded proposal-only candidate; no syntax, execution, compatibility, scanner or adoption result"
+  },
+  "upstream": {
+    "name": "braces",
+    "version": "3.0.3",
+    "repository": "https://github.com/micromatch/braces",
+    "gitCommit": "74b2db2938fad48a2ea54a9c8bf27a37a62c350d",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2014-present, Jon Schlinkert.",
+    "originalArchive": {
+      "file": "original-archive.body",
+      "bytes": 13972,
+      "sha256": "1cd18e862c8640b4568b1425a7df4ee030ff201d45b2da8f9f222d2987494ffc",
+      "sha1": "490332f40919452272d55a8480adc0c441358789",
+      "integrity": "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="
+    },
+    "acquisitionOwner": "braces-artifact-acquisition-8107df5a1efe474a859d48a065679e74",
+    "acquisitionReport": {
+      "bytes": 134956,
+      "sha256": "e977aff568f6eddf05b9affb75d9abaaea3e69eb60247b107ba93f5bdbc0b1c3"
+    },
+    "originalFiles": [
+      {
+        "path": "index.js",
+        "bytes": 4380,
+        "sha256": "332ea07c7b006361aad12aa994ca75dc1db8e8382b884909e2f38f10b85c88a4"
+      },
+      {
+        "path": "lib/compile.js",
+        "bytes": 1501,
+        "sha256": "dc98f22eee3d511785d92a00758d5f0d48efed5f5813bdecc2de430c529b5c9f"
+      },
+      {
+        "path": "lib/constants.js",
+        "bytes": 1589,
+        "sha256": "c18ac5adb57308f1ce42a28552da3a31f5d83709743ebd9a636336813a744d4b"
+      },
+      {
+        "path": "lib/expand.js",
+        "bytes": 2797,
+        "sha256": "41ccc196ebfa7b7781a634e721eb744e4e7bcb54cba427a7e3d6806a1b9e58f7"
+      },
+      {
+        "path": "lib/parse.js",
+        "bytes": 6899,
+        "sha256": "e572166565f15fa6ad9865ae49d678218e32aabfd1b3720f6d0d43d39800d310"
+      },
+      {
+        "path": "lib/stringify.js",
+        "bytes": 708,
+        "sha256": "379f22d77bfa1478341ccd49c5e4267464aabcbba03558bab332aac23fc6f23a"
+      },
+      {
+        "path": "lib/utils.js",
+        "bytes": 2518,
+        "sha256": "b5a7596aa67730412b3c029ef09e84e6b67b8e445cffd35d1d295549c89066c7"
+      },
+      {
+        "path": "package.json",
+        "bytes": 1647,
+        "sha256": "56f08b888a4f30dc7cf8a7dbb36ffe92b737912ba36abe9d069d32167c957ac7"
+      },
+      {
+        "path": "LICENSE",
+        "bytes": 1091,
+        "sha256": "35bdd8a44339719441900fb50fbefc5e2dca1ca662cbaed7a687de842c8b70f2"
+      },
+      {
+        "path": "README.md",
+        "bytes": 21505,
+        "sha256": "947b0fc3cc12eaaa070207126213fbdf9ab2bf8cd13dcc6e4007b36b79309866"
+      }
+    ],
+    "retainedAttribution": "Original LICENSE and README are byte-identical; original author/contributor/repository fields remain upstream attribution, not a claim of upstream maintenance of this derivative."
+  },
+  "changes": [
+    "Private derivative manifest name/version/private flag and UPSTREAM.json file inclusion.",
+    "New lib/guard.js: fixed internal100, parser SyntaxError/ERR_BRACES_DEPTH, threaded visited-container RangeError/ERR_BRACES_DEPTH, bounded parent prefix/cycle errors.",
+    "lib/parse.js checks stack.length before either brace/paren push; original curly-only depth/AST metadata unchanged.",
+    "lib/compile.js, lib/expand.js and lib/stringify.js thread local child depth through the existing traversal, preserving original shortcuts/iterator consumption.",
+    "Both private expand-to-stringify fallback calls propagate incoming ancestor depth and initial-root state; public Braces exports/options stay unchanged.",
+    "Both lib/expand.js upward parent loops gain separate identity sets/counters without changing stop/queue logic."
+  ],
+  "preImplementationFixtures": {
+    "originalControl": {
+      "path": "braces-integration-71c6e904/acceptance.mjs",
+      "sha256": "d01c6120f908325be6ceb859d687a77df3ef7f8185fce96c4f4e312810abd230"
+    },
+    "originalCases": {
+      "path": "braces-integration-71c6e904/cases.json",
+      "sha256": "c0888ff641cd4afb433dd2ee36fc25fe603f3583a5cc1819669460171f4ae232"
+    },
+    "structuralControl": {
+      "path": "braces-structural-supplement-a805bd42/acceptance.mjs",
+      "sha256": "b5b5bd5b32280c856da182aa292cd9d232488e8a7823b1bd0234a81959e3c0b4"
+    },
+    "structuralCases": {
+      "path": "braces-structural-supplement-a805bd42/cases.json",
+      "sha256": "e10365e217d7c79a07d85252d9f33f0a472eb64d26be1a135f5551087a223634"
+    },
+    "preflightRegressionControl": {
+      "path": "braces-preflight-regressions-e619ac38/acceptance.mjs",
+      "sha256": "c3555248dda3a27d0fef3ae410e1618d2d8bbc985888a0e227678dbe9255ec35"
+    },
+    "preflightRegressionCases": {
+      "path": "braces-preflight-regressions-e619ac38/cases.json",
+      "sha256": "6c8fe27728a867bd3d5be895d520aeb96b5771e19bfcc11e6de9c448c62b1441"
+    }
+  },
+  "noInstallLifecycleIntroduced": true,
+  "noConfigurableMaxDepth": true,
+  "failedStaticPredecessor": {
+    "directory": "braces-depth-guard-candidate-4e91bc72",
+    "version": "3.0.3-ts.1",
+    "guardSha256": "bf71c8a72797b31c65c67baecf990cde0bff2d6de541487d93dcf074778b1e3c",
+    "minimalDiffSha256": "959353660ee9e6bc241c71bfa30d4a1296281f5c83ed49be17432821bfd92f93",
+    "reason": "Unconditional preflight consumes one-shot nodes iterators and can revisit compact shared DAGs exponentially; bytes preserved and no execution/adoption occurred."
+  }
+}

@@ -1,3 +1,6 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
+import { isSourcedAlumniEvent } from "../youth/alumniEvidence";
+import { expandSeasonRating } from "@/engine/players/seasonRatingArchive";
 import type {
   GameDate,
   GameState,
@@ -8,7 +11,7 @@ import type {
   ScoutReport,
   TournamentEvent,
 } from "@/engine/core/types";
-import { gameWeeksBetween, getSeasonLength } from "@/engine/core/gameDate";
+import { createGameCalendarIndex, gameWeeksBetweenWithCalendar, getSeasonLengthFromCalendar, type GameCalendarIndex } from "@/engine/core/gameDate";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
 /** Player-facing context proven by the same record that supports a claim. */
@@ -106,9 +109,9 @@ function callbackPlayerName(state: GameState, playerId: string): string {
   return player ? `${player.firstName} ${player.lastName}`.trim() : "the prospect";
 }
 
-function callbackIsRecent(state: GameState, occurredAt: GameDate): boolean {
-  const age = gameWeeksBetween(
-    state.fixtures ?? {},
+function callbackIsRecent(state: GameState, occurredAt: GameDate, calendar: GameCalendarIndex): boolean {
+  const age = gameWeeksBetweenWithCalendar(
+    calendar,
     occurredAt,
     { season: state.currentSeason, week: state.currentWeek },
   );
@@ -130,7 +133,7 @@ function callbackAlreadyShown(
     || (state.storyDirectorV2?.callbackFingerprints ?? []).includes(id);
 }
 
-function recommendationCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+function recommendationCallbackSignals(state: GameState, calendar: GameCalendarIndex): NarrativeCallbackSignal[] {
   return Object.values(state.recommendationReviews ?? {}).flatMap((review) => {
     if (
       review.status !== "complete"
@@ -139,7 +142,7 @@ function recommendationCallbackSignals(state: GameState): NarrativeCallbackSigna
       || review.completedSeason === undefined
     ) return [];
     const occurredAt = { week: review.completedWeek, season: review.completedSeason };
-    if (!callbackIsRecent(state, occurredAt)) return [];
+    if (!callbackIsRecent(state, occurredAt, calendar)) return [];
     const name = callbackPlayerName(state, review.playerId);
     const scoredDimensions = review.playerFacingDimensions ?? [];
     const positive = scoredDimensions.filter((dimension) => dimension.status === "positive").length;
@@ -169,17 +172,20 @@ function recommendationCallbackSignals(state: GameState): NarrativeCallbackSigna
   });
 }
 
-function performanceCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+function performanceCallbackSignals(state: GameState, calendar: GameCalendarIndex): NarrativeCallbackSignal[] {
   return (state.scout.performancePulses ?? []).flatMap((pulse) => {
     const occurredAt = {
       season: pulse.season,
       week: Math.max(1, Math.min(
         pulse.period * 4,
-        getSeasonLength(state.fixtures ?? {}, pulse.season),
+        getSeasonLengthFromCalendar(calendar, pulse.season),
       )),
     };
-    if (!callbackIsRecent(state, occurredAt)) return [];
+    if (!callbackIsRecent(state, occurredAt, calendar)) return [];
     const reportLabel = pulse.reportsSubmitted === 1 ? "report" : "reports";
+    const accuracy = Number.isFinite(pulse.accuracySampleSize) && (pulse.accuracySampleSize ?? 0) > 0
+      ? `${pulse.accuracyRate}% recorded accuracy`
+      : "accuracy awaiting verified assessments";
     const development = pulse.professionalDevelopment
       ? " Formal study also counted toward the period's professional development."
       : "";
@@ -187,7 +193,7 @@ function performanceCallbackSignals(state: GameState): NarrativeCallbackSignal[]
       domain: "career" as const,
       fingerprint: `performance-pulse:${state.scout.id}:${pulse.season}:${pulse.period}`,
       title: `Your latest professional review: Grade ${pulse.grade}`,
-      summary: `Your form is ${pulse.trend}. The review covers ${pulse.reportsSubmitted} ${reportLabel}, ${pulse.reportQualityAvg}% average report quality, and ${pulse.accuracyRate}% recorded accuracy.${development}`,
+      summary: `Your form is ${pulse.trend}. The review covers ${pulse.reportsSubmitted} ${reportLabel}, ${pulse.reportQualityAvg}% average report quality, and ${accuracy}.${development}`,
       occurredAt,
       evidence: {
         source: "performance-pulse" as const,
@@ -200,7 +206,7 @@ function performanceCallbackSignals(state: GameState): NarrativeCallbackSignal[]
   });
 }
 
-function clubDecisionCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+function clubDecisionCallbackSignals(state: GameState, calendar: GameCalendarIndex): NarrativeCallbackSignal[] {
   const outcomeText = {
     accepted: "accepted your recommendation",
     rejected: "declined your recommendation",
@@ -209,7 +215,7 @@ function clubDecisionCallbackSignals(state: GameState): NarrativeCallbackSignal[
   } as const;
   return Object.values(state.clubDecisions ?? {}).flatMap((decision) => {
     const occurredAt = { week: decision.decidedWeek, season: decision.decidedSeason };
-    if (!callbackIsRecent(state, occurredAt)) return [];
+    if (!callbackIsRecent(state, occurredAt, calendar)) return [];
     const playerId = (decision.reportId
       ? state.reports?.[decision.reportId]?.playerId
       : undefined)
@@ -235,7 +241,7 @@ function clubDecisionCallbackSignals(state: GameState): NarrativeCallbackSignal[
   });
 }
 
-function rivalCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+function rivalCallbackSignals(state: GameState, calendar: GameCalendarIndex): NarrativeCallbackSignal[] {
   const descriptions = {
     spotted: "has been seen watching",
     targetAcquired: "has added",
@@ -244,7 +250,7 @@ function rivalCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
   } as const;
   return (state.rivalActivities ?? []).flatMap((activity) => {
     const occurredAt = { week: activity.week, season: activity.season };
-    if (!callbackIsRecent(state, occurredAt)) return [];
+    if (!callbackIsRecent(state, occurredAt, calendar)) return [];
     const rival = state.rivalScouts?.[activity.rivalId];
     const rivalName = rival?.name ?? "A rival scout";
     const playerId = activity.playerId;
@@ -276,11 +282,12 @@ function rivalCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
 
 /** Return unseen, receipt-backed callbacks in deterministic priority order. */
 export function getNarrativeCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+  const calendar = createGameCalendarIndex(state.fixtures ?? {});
   return [
-    ...recommendationCallbackSignals(state),
-    ...clubDecisionCallbackSignals(state),
-    ...rivalCallbackSignals(state),
-    ...performanceCallbackSignals(state),
+    ...recommendationCallbackSignals(state, calendar),
+    ...clubDecisionCallbackSignals(state, calendar),
+    ...rivalCallbackSignals(state, calendar),
+    ...performanceCallbackSignals(state, calendar),
   ]
     .filter((signal) => !callbackAlreadyShown(state, signal))
     .sort((left, right) =>
@@ -340,7 +347,7 @@ function reportIsBeforeMovement(
 }
 
 function recordedAppearances(player: Player): number {
-  return (player.seasonRatings ?? []).reduce(
+  return (player.seasonRatings ?? []).map(expandSeasonRating).reduce(
     (total, season) => total + season.appearances,
     0,
   );
@@ -419,7 +426,7 @@ function findReportedMovement(
     "freeAgentSigning",
     "youthSigning",
   ]);
-  const movements = [...(state.playerMovementHistory ?? [])]
+  const movements = [...expandPlayerMovementHistory(state.playerMovementHistory ?? [])]
     .filter((movement) => movementTypes.has(movement.type) && Boolean(movement.toClubId))
     .sort((left, right) =>
       right.season - left.season
@@ -458,7 +465,7 @@ function findAlumniDebut(
 ): NarrativeEvidenceReference | null {
   for (const alumni of state.alumniRecords ?? []) {
     const milestone = (alumni.milestones ?? []).find(
-      (item) => item.type === "firstTeamDebut",
+      (item) => item.type === "firstTeamDebut" && isSourcedAlumniEvent(item),
     );
     if (!milestone) continue;
     const player = state.players?.[alumni.playerId]
@@ -467,8 +474,8 @@ function findAlumniDebut(
 
     return {
       source: "alumni-milestone",
-      sourceId: `${alumni.id}:firstTeamDebut:${milestone.season}:${milestone.week}`,
-      relatedIds: [player.id, alumni.id],
+      sourceId: `${alumni.id}:firstTeamDebut:${milestone.sourceId}`,
+      relatedIds: [player.id, alumni.id, milestone.sourceId!],
       context: { playerName: playerName(player) },
     };
   }

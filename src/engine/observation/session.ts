@@ -1,3 +1,4 @@
+import { getSupportedCueClassifications } from "@/engine/scout/cueSemantics";
 /**
  * Observation Session State Machine
  *
@@ -9,6 +10,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
+import { getRecordedInquiryQuestion } from "./inquiryQuestion";
 import type {
   ObservationSession,
   ObservationMode,
@@ -33,7 +35,6 @@ import type {
 import { ACTIVITY_MODE_MAP, VENUE_PHASE_RANGES } from "@/engine/observation/types";
 import { getStrategicChoiceResolutions } from "@/engine/observation/quickInteraction";
 import { createObservationSituation } from "@/engine/observation/situations";
-import { getSupportedCueClassifications } from "@/engine/scout/cueSemantics";
 import {
   buildContextualScoutingQuestions,
   resolveObservationSignalAssessment,
@@ -221,7 +222,9 @@ export function createSession(
   rng: RNG,
 ): ObservationSession {
   const mode: ObservationMode =
-    ACTIVITY_MODE_MAP[config.activityType] ?? "fullObservation";
+    config.activityType === "followUpSession" && config.followUpFormat === "observation"
+      ? "fullObservation"
+      : ACTIVITY_MODE_MAP[config.activityType] ?? "fullObservation";
 
   const phaseCount = resolvePhaseCount(config.activityType, rng);
   const emptyPhases = buildEmptyPhases(phaseCount, mode, config.seed);
@@ -268,6 +271,7 @@ export function createSession(
       available: tokensPerHalf,
       total: tokensPerHalf,
       allocations: [],
+      warmupPhases: {},
     },
     flaggedMoments: [],
     hypotheses: (config.initialHypotheses ?? []).map((hypothesis) => ({
@@ -360,6 +364,21 @@ export function startSession(
  * - If this was the final phase, transitions to 'reflection'.
  * - Returns the updated session as a new object.
  */
+export function finishObservationEarly(session: ObservationSession): ObservationSession {
+  if (session.state !== "active" || session.mode !== "fullObservation" || !session.scoutingQuestionId) return session;
+  const phases = session.phases.slice(0, session.currentPhaseIndex + 1);
+  if (phases.length === 0) return session;
+  const observedMomentIds = new Set(phases.flatMap(phase => phase.moments.map(moment => moment.id)));
+  return {
+    ...session,
+    state: "reflection",
+    plannedPhaseCount: session.plannedPhaseCount ?? session.phases.length,
+    phases,
+    flaggedMoments: session.flaggedMoments.filter(flag => observedMomentIds.has(flag.moment.id)),
+    cueReadings: session.cueReadings?.filter(cue => observedMomentIds.has(cue.momentId)),
+  };
+}
+
 export function advanceSessionPhase(
   session: ObservationSession,
 ): ObservationSession {
@@ -389,9 +408,17 @@ export function advanceSessionPhase(
     (alloc) => ({ ...alloc, phasesActive: alloc.phasesActive + 1 }),
   );
 
+  // Increment warmupPhases counters for all active lens+player keys.
+  const updatedWarmup: Record<string, number> = { ...session.focusTokens.warmupPhases };
+  for (const alloc of updatedAllocations) {
+    const key = `${alloc.playerId}:${alloc.lens}`;
+    updatedWarmup[key] = (updatedWarmup[key] ?? 0) + 1;
+  }
+
   let updatedFocusTokens = {
     ...session.focusTokens,
     allocations: updatedAllocations,
+    warmupPhases: updatedWarmup,
   };
 
   // Refresh tokens when the upcoming phase is a halftime phase.
@@ -402,6 +429,7 @@ export function advanceSessionPhase(
       ...updatedFocusTokens,
       available: session.focusTokens.total,
       allocations: [],
+      warmupPhases: {},
     };
   }
 
@@ -461,6 +489,7 @@ export function setSessionScoutingQuestion(
   cueReadings: ScoutCueReading[],
 ): ObservationSession {
   if (session.state !== "setup") return session;
+  if (getRecordedInquiryQuestion(session)) return session;
   return {
     ...session,
     scoutingQuestionId: questionId,
@@ -569,10 +598,18 @@ export function allocateFocus(
     phasesActive: 0,
   };
 
+  // Initialise warmup for this player+lens combination (0 = first phase of use).
+  const warmupKey = `${playerId}:${lens}`;
+  const updatedWarmup: Record<string, number> = {
+    ...session.focusTokens.warmupPhases,
+    [warmupKey]: 0,
+  };
+
   const updatedFocusTokens = {
     ...session.focusTokens,
     available: session.focusTokens.available - 1,
     allocations: [...session.focusTokens.allocations, newAllocation],
+    warmupPhases: updatedWarmup,
   };
 
   const updatedPlayers = session.players.map((p) =>
@@ -616,6 +653,11 @@ export function removeFocus(
       : p,
   );
 
+  const updatedWarmup = { ...session.focusTokens.warmupPhases };
+  for (const key of Object.keys(updatedWarmup)) {
+    if (key.startsWith(`${playerId}:`)) delete updatedWarmup[key];
+  }
+
   return {
     ...session,
     focusTokens: {
@@ -623,6 +665,7 @@ export function removeFocus(
       allocations: session.focusTokens.allocations.filter(
         (allocation) => allocation.playerId !== playerId,
       ),
+      warmupPhases: updatedWarmup,
     },
     players: updatedPlayers,
   };

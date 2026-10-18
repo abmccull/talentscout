@@ -114,7 +114,7 @@ describe("durable gameplay decision commits", () => {
 
   it("cannot list or settle stale bids for a private pass receipt", async () => {
     const state = useGameStore.getState().gameState!;
-    const report = { id: "private-pass", scoutId: state.scout.id, playerId: "player", recommendedAction: "pass" } as unknown as ScoutReport;
+    const report = { id: "private-pass", scoutId: state.scout.id, playerId: "player", recommendedAction: "pass", decisionReceipt: { action: "pass" } } as unknown as ScoutReport;
     const withPass = { ...state, reports: { [report.id]: report }, finances: { ...state.finances!, reportListings: [{ id: "stale-pass-listing", reportId: report.id, bids: [{ id: "pass-bid", status: "pending", isExclusiveUpgrade: true }] }] } } as GameState;
     useGameStore.setState({ gameState: withPass });
     useGameStore.getState().listReportForSale(report.id, 100, false);

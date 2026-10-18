@@ -267,11 +267,10 @@ export function buildStructuredReportInput({
   }, {} as StructuredReportInput["categoryVerdicts"]);
 
   const evidenceIds = [
-    ...new Set(
-      Object.values(categoryVerdicts).flatMap(
-        (verdict) => verdict.evidenceIds ?? [],
-      ),
-    ),
+    ...new Set([
+      ...Object.values(categoryVerdicts).flatMap(verdict => verdict.evidenceIds ?? []),
+      ...selectedRiskAssessments.flatMap(risk => risk.evidenceIds),
+    ]),
   ];
 
   return {
@@ -364,7 +363,7 @@ export function buildSectionNavigatorItems({
         label: "Build the case",
         detail:
           caseRemaining === 0
-            ? `${completedJudgmentCount}/${JUDGMENT_CATEGORIES.length} defended`
+            ? `${completedJudgmentCount}/${JUDGMENT_CATEGORIES.length} decisions completed`
             : reportStatus.blockers.find((blocker) => blocker.stepId === "case")?.message
               ?? `${caseRemaining} decision${caseRemaining === 1 ? " still needs" : "s still need"} support`,
         complete: caseRemaining === 0,

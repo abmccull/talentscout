@@ -68,6 +68,29 @@ const hypothesis: ReflectionHypothesisRecord = {
 };
 
 describe("evidence board model", () => {
+  it("keeps inquiry questions visible without inventing sources, claims or corroboration", () => {
+    const decision = {
+      phaseIndex: 1, nodeId: "question", optionId: "recall-account", optionText: "Compare the account",
+      narrativeText: "The question remains open.", insightPointsAwarded: 0, relationshipDeltaApplied: 0,
+      inquiry: { playerId: "player-1", questionId: "pressure" as const, sourceName: "Maya",
+        status: "unanswered" as const },
+    };
+    const model = buildEvidenceBoardModel({ observations: [],
+      conversationDecisions: [decision, { ...decision, nodeId: "repeated-question" }],
+      unknowns: Array.from({ length: 10 }, (_, index) => `Unknown attribute ${index}`),
+    });
+    expect(model.metrics.openQuestions).toBe(1);
+    expect(model.unknowns[0]).toContain("What changes when pressure arrives?");
+    expect(model.sources).toEqual([]);
+    expect(model.claims).toEqual([]);
+    expect(model.hypotheses).toEqual([]);
+    expect(model.metrics.contextCount).toBe(0);
+    const recalled = buildEvidenceBoardModel({ observations: [], conversationDecisions: [{ ...decision,
+      inquiry: { ...decision.inquiry, status: "recalledAccount", statement: "Usually handles pressure." },
+    }] });
+    expect(recalled.metrics.openQuestions).toBe(1);
+    expect(recalled.metrics.sourceCount).toBe(0);
+  });
   it("builds a visible evidence chain without exposing player truth", () => {
     const intel: HiddenIntel[] = [{
       playerId: "player-1",

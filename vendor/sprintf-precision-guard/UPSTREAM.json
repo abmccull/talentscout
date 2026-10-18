@@ -1,0 +1,152 @@
+{
+  "name": "sprintf-js",
+  "version": "1.1.3",
+  "privateDerivative": {
+    "name": "@talentscout/sprintf-js-precision-guard",
+    "version": "1.1.3-ts.1"
+  },
+  "gitHeadFromRegistry": "3a0d8c26d291b5bd9f1974877ecc50739921d6f5",
+  "gitHeadBodyCorrespondenceNotClaimed": true,
+  "officialArchive": {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\production-ready-20260930\\proposals\\dependency-security-20261016\\sprintf-artifact-acquisition-43798b7f9c7d4efa8815df2906a08726\\sprintf-js-1.1.3.tgz",
+    "bytes": 10968,
+    "sha256": "9a8537928cdd2e987055f5cf38ae19db4a2d4b71c46648a51f15698a48deaeb6",
+    "sha1": "4914b903a2f8b685d17fdf78a70e917e872e444a",
+    "integrity": "sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA=="
+  },
+  "license": "BSD-3-Clause",
+  "licenseSha256": "f8287e4dd9480be58c56aca4a55c23b782c43a86e69aabad78fff4df0d29edef",
+  "readmeAndContributorsUnchanged": true,
+  "baselineProof": {
+    "path": "C:/Users/hands/OneDrive/Pictures/TalentScout/production-ready-20260930/proposals/dependency-security-20261016/ROOT-sprintf-baselines-local-da3e4c49454540e9ade4d07132916c93/ROOT-VERIFICATION.json",
+    "bytes": 22232,
+    "sha256": "713156fb3e872e30dc0bb421146736e286d7fc0c41dd12b606524fba66061de6"
+  },
+  "originalData": {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\production-ready-20260930\\improvement-20261018\\proposals\\security\\proof\\sprintf-generator\\ORIGINAL-DATA.json",
+    "bytes": 3161,
+    "sha256": "8ef1e30c748fed7e088b4d5a1776496420cfd3399e31df20f0163a8e9ceb7376"
+  },
+  "tool": {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\production-ready-20260930\\improvement-20261018\\proposals\\security\\proof\\sprintf-generator\\generate.mjs",
+    "bytes": 21118,
+    "sha256": "a1710438ed600c28af5107214ba25ec9fa7e645d2eea8374700d189dd74081a0"
+  },
+  "input": {
+    "path": "C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\production-ready-20260930\\improvement-20261018\\proposals\\security\\proof\\sprintf-generator\\input.json",
+    "bytes": 1133,
+    "sha256": "10608b2c1394a35a5fbdc00a21715c86f78e63c43d83a6149fb7299175568d7c"
+  },
+  "changedFiles": [
+    "dist/sprintf.min.js",
+    "dist/sprintf.min.js.map",
+    "package.json",
+    "src/sprintf.js"
+  ],
+  "validRawPrecisionStringsPreserved": true,
+  "originalGReceiverPreserved": true,
+  "noParserCacheMutation": true,
+  "noInstallPostinstallReleaseScriptsAdded": true,
+  "sourceMutated": false,
+  "packageExecuted": false,
+  "pairedAcceptancePassed": false,
+  "sourceAdoptionAccepted": false,
+  "auditRemediationAccepted": false,
+  "releaseAccepted": false,
+  "rootCompletion": null,
+  "candidateArchive": {
+    "path": "talentscout-sprintf-js-precision-guard-1.1.3-ts.1.tgz",
+    "sha256": "a8e35066b51fd67b699529fb6155d91d0ea2a82ae451f5477144d29d658d6fe4",
+    "bytes": 10991
+  },
+  "packageFilePins": [
+    {
+      "path": "CONTRIBUTORS.md",
+      "bytes": 1333,
+      "sha256": "63258da288e3a6e6a3698da014604a9559cdaf1526e8033aa14287881abe4ff0",
+      "upstreamBytes": 1333,
+      "upstreamSha256": "63258da288e3a6e6a3698da014604a9559cdaf1526e8033aa14287881abe4ff0",
+      "changed": false
+    },
+    {
+      "path": "dist/.gitattributes",
+      "bytes": 106,
+      "sha256": "5fe8be92b049e572e3f758d827c449428d5d0f4ca5dd0e01ba11de9825535b03",
+      "upstreamBytes": 106,
+      "upstreamSha256": "5fe8be92b049e572e3f758d827c449428d5d0f4ca5dd0e01ba11de9825535b03",
+      "changed": false
+    },
+    {
+      "path": "dist/angular-sprintf.min.js",
+      "bytes": 498,
+      "sha256": "5523439b6fe5f56589dc6699d8b4a11693f43c95df70d834c74f6d1a81fc2be8",
+      "upstreamBytes": 498,
+      "upstreamSha256": "5523439b6fe5f56589dc6699d8b4a11693f43c95df70d834c74f6d1a81fc2be8",
+      "changed": false
+    },
+    {
+      "path": "dist/angular-sprintf.min.js.map",
+      "bytes": 1163,
+      "sha256": "82bf338159a9a886a7812557119a0fe0aac7a6bc4c5e14d0597ce617d5e7f9ee",
+      "upstreamBytes": 1163,
+      "upstreamSha256": "82bf338159a9a886a7812557119a0fe0aac7a6bc4c5e14d0597ce617d5e7f9ee",
+      "changed": false
+    },
+    {
+      "path": "dist/sprintf.min.js",
+      "bytes": 3751,
+      "sha256": "2528217bbe7d68508dcb15f978b3854732c8641ca293db31533afa4350601e39",
+      "upstreamBytes": 3675,
+      "upstreamSha256": "bcb857eed98349cb9713aea1cdf05561eca5ec7ffed0aa04985ade0af1765980",
+      "changed": true
+    },
+    {
+      "path": "dist/sprintf.min.js.map",
+      "bytes": 14749,
+      "sha256": "f3c0edd41b293c3ef7b0f1bf7a966225295c362bb48a32905236df202662e7fb",
+      "upstreamBytes": 14469,
+      "upstreamSha256": "cffb6e85a53dd2fbeaee6e32b38a142ecf3e99ed3841a639a4695ebb1f41b726",
+      "changed": true
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1513,
+      "sha256": "f8287e4dd9480be58c56aca4a55c23b782c43a86e69aabad78fff4df0d29edef",
+      "upstreamBytes": 1513,
+      "upstreamSha256": "f8287e4dd9480be58c56aca4a55c23b782c43a86e69aabad78fff4df0d29edef",
+      "changed": false
+    },
+    {
+      "path": "package.json",
+      "bytes": 922,
+      "sha256": "9926bff6eddef1988bbcd047f5e06ddc0ac84a0c79188d936e6c88c61569941e",
+      "upstreamBytes": 869,
+      "upstreamSha256": "c97349295cae4e40a6f16a26096330997257c00be67bd8fd0ac3391719e4ee5f",
+      "changed": true
+    },
+    {
+      "path": "README.md",
+      "bytes": 6340,
+      "sha256": "7ad0f2cd7d75197c892c08dfa0321d7340197e5b6d090aafef791db3dc2f275b",
+      "upstreamBytes": 6340,
+      "upstreamSha256": "7ad0f2cd7d75197c892c08dfa0321d7340197e5b6d090aafef791db3dc2f275b",
+      "changed": false
+    },
+    {
+      "path": "src/angular-sprintf.js",
+      "bytes": 663,
+      "sha256": "3757c85856985cfaf6692a66e78fc838f8f70d59108be186cfd64173460b0c9c",
+      "upstreamBytes": 663,
+      "upstreamSha256": "3757c85856985cfaf6692a66e78fc838f8f70d59108be186cfd64173460b0c9c",
+      "changed": false
+    },
+    {
+      "path": "src/sprintf.js",
+      "bytes": 9354,
+      "sha256": "4f399f2ff99de08a4438ff39c2363d80adfdbef902fc4f4a4b14340817b31d31",
+      "upstreamBytes": 9250,
+      "upstreamSha256": "95add43f116385be221745307fae02d06751b01d4f939df1debb17dbe2ebf4eb",
+      "changed": true
+    }
+  ]
+}

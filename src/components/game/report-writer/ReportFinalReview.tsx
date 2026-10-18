@@ -176,7 +176,7 @@ function CardLike({
                 </dd>
               </div>
               <div className="border-b border-[var(--border)] py-3">
-                <dt className="text-zinc-400">Defended judgments</dt>
+                <dt className="text-zinc-400">Judgment decisions completed</dt>
                 <dd className="mt-1 font-semibold text-white">
                   {completedJudgmentCount}/{JUDGMENT_CATEGORIES.length}
                 </dd>

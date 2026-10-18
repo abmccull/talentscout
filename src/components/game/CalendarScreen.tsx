@@ -9,6 +9,7 @@ import {
 } from "./settings/useGuardedWeekAdvance";
 import { GameLayout } from "./GameLayout";
 import { isYouthOpeningShell } from "@/lib/youthFirstHour";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { openingFollowUpDayIndex } from "@/engine/youth/openingFollowUp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -107,7 +108,6 @@ export function CalendarScreen() {
     dismissWeekSummary,
     getAvailableCalendarActivities,
     pendingCalendarActivity,
-    setPendingCalendarActivity,
     autoSchedule,
     setWeeklyIntent,
     setDelegationPolicy,
@@ -123,7 +123,6 @@ export function CalendarScreen() {
     dismissWeekSummary: state.dismissWeekSummary,
     getAvailableCalendarActivities: state.getAvailableCalendarActivities,
     pendingCalendarActivity: state.pendingCalendarActivity,
-    setPendingCalendarActivity: state.setPendingCalendarActivity,
     autoSchedule: state.autoSchedule,
     setWeeklyIntent: state.setWeeklyIntent,
     setDelegationPolicy: state.setDelegationPolicy,
@@ -143,13 +142,8 @@ export function CalendarScreen() {
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
 
-  // When navigating from PlayerProfile quick actions, clear pending on unmount
-  // so it doesn't persist if the user navigates away without scheduling.
-  // The pending activity is surfaced in the ActivityPanel as a highlighted suggestion.
-  useEffect(() => {
-    return () => { setPendingCalendarActivity(null); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Navigation clears planner focus when leaving this screen. Effect cleanup
+  // also runs during Strict Mode mounting and must not discard incoming focus.
 
   // Week preview panel collapsed state
   const [previewCollapsed, setPreviewCollapsed] = useState(true);
@@ -327,11 +321,9 @@ export function CalendarScreen() {
   const bookedPlayerNames: Record<string, string> = {};
   for (const activity of activities) {
     if (!activity?.targetId) continue;
-    const youth = Object.values(gameState.unsignedYouth).find(
-      (item) => item.player.id === activity.targetId,
-    );
-    if (youth) {
-      bookedPlayerNames[activity.targetId] = `${youth.player.firstName} ${youth.player.lastName}`;
+    const player = resolvePlayerEntity(gameState, activity.targetId)?.player;
+    if (player) {
+      bookedPlayerNames[activity.targetId] = `${player.firstName} ${player.lastName}`;
     }
   }
   const slotsUsed = activities.filter(Boolean).length;
@@ -651,11 +643,11 @@ export function CalendarScreen() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
-                    <span className="text-zinc-500">Matches</span>
-                    <span className="text-white font-semibold">{lastWeekSummary.matchesAttended}</span>
+                    <span className="text-zinc-500">{lastWeekSummary.scoutingSessions === undefined ? "Matches" : "Scouting sessions"}</span>
+                    <span className="text-white font-semibold">{lastWeekSummary.scoutingSessions ?? lastWeekSummary.matchesAttended}</span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
-                    <span className="text-zinc-500">Reports</span>
+                    <span className="text-zinc-500">Reports filed</span>
                     <span className="text-white font-semibold">{lastWeekSummary.reportsWritten}</span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
@@ -757,7 +749,9 @@ export function CalendarScreen() {
             </p>
             <p className="mt-1 max-w-2xl text-sm text-zinc-300">
               {openingShell
-                ? "Choose work for your open days, or begin the week with your current plan."
+                ? slotsUsed > 0
+                  ? "Your work is booked. Add another source of evidence or begin the week."
+                  : "Choose work for your first week. A live observation can test what you have heard about the player."
                 : "Spend seven finite days on the evidence, access, and recovery that matter most."}
             </p>
 
@@ -796,6 +790,11 @@ export function CalendarScreen() {
                 Advance Week
               </Button>
             </Tooltip>
+            {openingShell && (
+              <p className="mt-2 max-w-xs text-right text-xs leading-5 text-zinc-400 sm:ml-auto">
+                Choose an open day to add work. Advance Week begins your itinerary.
+              </p>
+            )}
           </div>
         </div>
 
@@ -838,6 +837,32 @@ export function CalendarScreen() {
           </div>
         )}
 
+        {pendingCalendarActivity && !selectedActivity && !activities.some(activity =>
+          activity?.type === pendingCalendarActivity.type && activity.targetId === pendingCalendarActivity.targetId
+        ) && (
+          <section aria-label="Requested scouting work" className="mb-4 flex flex-col gap-3 border-l-2 border-emerald-400 bg-emerald-400/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-white">{pendingCalendarActivity.label}</p>
+              <p className="text-sm text-zinc-300">
+                {pendingFeaturedActivity
+                  ? "Your target is carried over. Choose an open day to book this work."
+                  : "This specific work is no longer available. Review the current opportunities below."}
+              </p>
+            </div>
+            {pendingFeaturedActivity && (
+              <Button className="min-h-11 shrink-0" onClick={() => handleSelectActivity({
+                ...pendingFeaturedActivity,
+                targetId: pendingCalendarActivity.targetId,
+                // Placement still needs the club decision after choosing youth.
+                targetPool: pendingFeaturedActivity.type === "writePlacementReport"
+                  ? pendingFeaturedActivity.targetPool?.filter(target => target.id === pendingCalendarActivity.targetId)
+                  : undefined,
+                description: pendingCalendarActivity.label,
+              })}>Choose a day for this work</Button>
+            )}
+          </section>
+        )}
+
         <PlannerWeekStrip
           dayKeys={DAY_KEYS}
           activities={activities}
@@ -871,6 +896,7 @@ export function CalendarScreen() {
                   onLeagueFilterChange={setSelectedLeagueId}
                   resolveClubName={resolveClubName}
                   highlightTargetId={pendingCalendarActivity?.targetId}
+                  highlightActivityType={pendingCalendarActivity?.type}
                   selectedActivity={selectedActivity}
                   openDayCount={openDayCount}
                   onSelectActivity={handleSelectActivity}
@@ -925,6 +951,7 @@ export function CalendarScreen() {
                 onLeagueFilterChange={setSelectedLeagueId}
                 resolveClubName={resolveClubName}
                 highlightTargetId={pendingCalendarActivity?.targetId}
+                highlightActivityType={pendingCalendarActivity?.type}
                 selectedActivity={selectedActivity}
                 openDayCount={openDayCount}
                 onSelectActivity={handleSelectActivity}
@@ -1226,8 +1253,9 @@ export function CalendarScreen() {
               <span className="font-semibold text-amber-400">
                 {openDayCount}
               </span>{" "}
-              unplanned day(s). Empty days recover a small amount of fatigue but
-              scheduled activities earn XP and progress. Scheduled work will resolve and the football world will move forward. This cannot be undone. Advance anyway?
+              open {openDayCount === 1 ? "day" : "days"}. Empty days provide light recovery.
+              Your booked work will begin and the football world will move forward.
+              This cannot be undone. Advance this week?
             </p>
             <div className="flex justify-end gap-3">
               <Button
@@ -1335,13 +1363,19 @@ export function CalendarScreen() {
                     onChange={(event) => setPlacementSupportCondition(event.target.value as PlacementSupportCondition)}
                     className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white"
                   >
-                    <option value="none">No extra condition</option>
-                    <option value="educationPlan">Protect the education plan</option>
-                    <option value="playingPathway">Require a credible playing pathway</option>
-                    <option value="familySupport">Require family and settlement support</option>
+                    <option value="none">No extra commitment</option>
+                    <option value="educationPlan">Education check-in</option>
+                    <option value="playingPathway">Playing-pathway review</option>
+                    <option value="familySupport">Family and settlement check-in</option>
                   </select>
                 </label>
               </div>
+
+              {placementSupportCondition !== "none" && (
+                <p className="mt-3 text-xs leading-relaxed text-zinc-300">
+                  If accepted, complete a {placementSupportCondition === "playingPathway" ? "Follow-up Session" : "Parent/Coach Meeting"} for this player within 6 weeks. The review uses one planner slot and normal activity fatigue. Follow-through earns +1 reputation and +3 relationship with club contacts; missing the review costs 2 reputation and 8 relationship. Unsupported promises can weaken the pitch. A review checks the support plan; it does not guarantee the player&apos;s outcomes.
+                </p>
+              )}
 
               <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 {placementClubShortlist.map((option) => (

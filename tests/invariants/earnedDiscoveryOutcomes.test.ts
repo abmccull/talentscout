@@ -133,6 +133,12 @@ describe("earned discovery outcomes", () => {
     expect(countWonderkidDiscoveries(state)).toBe(1); // Dated legacy backing still qualifies.
     report.conviction = "note";
     expect(countWonderkidDiscoveries(state)).toBe(0);
+    report.conviction = "tablePound";
+    report.decisionReceipt = { id: "private-pass-receipt", action: "pass", week: 2, season: 1,
+      conviction: "tablePound", evidenceObservationIds: [], evidenceCardIds: [], summary: "Filed private pass" };
+    report.recommendedAction = "offerAcademyPlace";
+    expect(countWonderkidDiscoveries(state)).toBe(0); // Mutable fields cannot rewrite the filed private decision.
+    expect(countWonderkidDiscoveries(JSON.parse(JSON.stringify(state)))).toBe(0);
     state.reports = {};
     expect(countWonderkidDiscoveries(state)).toBe(0);
   });

@@ -1,3 +1,4 @@
+import { readYouthConsequenceEvidence, validateYouthConsequenceReviewEvidence } from "./youthConsequenceEvidence";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -218,23 +219,8 @@ export async function runYouthConsequenceScenario(seed: string, outputPath: stri
         expect(review.categoryScores).toBeUndefined();
         expect(review.confidenceCalibration).toBeUndefined();
       }
-      for (const evidence of review.evidence ?? []) {
-        if (evidence.source === "movement") {
-          const movement = state.playerMovementHistory.find((entry) => entry.id === evidence.sourceId);
-          expect(movement, `Unresolvable review movement ${evidence.sourceId}`).toBeDefined();
-          expect(movement!.playerId).toBe(review.playerId);
-          expect(order(movement!, due)).toBeLessThanOrEqual(0);
-        } else if (evidence.source === "seasonRating") {
-          const season = Number(evidence.sourceId?.match(/_s(\d+)$/)?.[1]);
-          expect(season).toBeLessThan(review.dueSeason);
-          expect(resolvePlayerEntity(state, review.playerId)?.player.seasonRatings?.some((rating) => rating.season === season)).toBe(true);
-        } else if (evidence.source === "injury") {
-          const injury = resolvePlayerEntity(state, review.playerId)?.player.injuryHistory?.injuries
-            .find((entry) => entry.id === evidence.sourceId);
-          expect(injury, `Unresolvable review injury ${evidence.sourceId}`).toBeDefined();
-          expect(order({ week: injury!.occurredWeek, season: injury!.occurredSeason }, due)).toBeLessThanOrEqual(0);
-        }
-      }
+      expect(validateYouthConsequenceReviewEvidence(state, review),
+        `Review ${review.id} must resolve dated, player-bound archive evidence`).toEqual([]);
     }
     return relevant;
   };
@@ -256,8 +242,7 @@ export async function runYouthConsequenceScenario(seed: string, outputPath: stri
         expect(placement.decisionId).toBeTruthy();
         const decision = state.clubDecisions[placement.decisionId!];
         expect(decision).toBeDefined();
-        const movement = state.playerMovementHistory.find((entry) => entry.playerId === attempt.playerId
-          && entry.type === "youthSigning" && entry.toClubId === attempt.destinationClubId
+        const movement = readYouthConsequenceEvidence(state, attempt.playerId).movements.find((entry) => entry.type === "youthSigning" && entry.toClubId === attempt.destinationClubId
           && order(entry, attempt.scheduledAt) >= 0);
         expect(movement, "Accepted pitch has no canonical signing").toBeDefined();
         const player = state.players[attempt.playerId];
@@ -410,13 +395,7 @@ export async function runYouthConsequenceScenario(seed: string, outputPath: stri
     const sourceStable = source.fingerprint === sourceAfter.fingerprint && source.commit === sourceAfter.commit;
     const final = useGameStore.getState().gameState;
     const relevantPlayerIds = new Set([...(pass ? [pass.report.playerId] : []), ...attempts.map((attempt) => attempt.playerId)]);
-    const observableOutcomes = final ? [...relevantPlayerIds].map((id) => {
-      const entity = resolvePlayerEntity(final, id);
-      return { playerId: id, resolved: !!entity, retired: entity?.isRetired,
-        clubId: entity?.player.clubId, contractClubId: entity?.player.contractClubId,
-        seasonRatings: entity?.player.seasonRatings, injuries: entity?.player.injuryHistory?.injuries,
-        movements: final.playerMovementHistory.filter((entry) => entry.playerId === id) };
-    }) : [];
+    const observableOutcomes = final ? [...relevantPlayerIds].map((id) => readYouthConsequenceEvidence(final, id)) : [];
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, JSON.stringify({ schemaVersion: 1, kind: "bounded-youth-consequences", seed,
       source, sourceAfter, sourceStable, status: error ? "failed" : sourceStable && replayChecked ? "passed" : "partial",

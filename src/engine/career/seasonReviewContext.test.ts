@@ -122,6 +122,7 @@ test("deriveSeasonReviewMetrics uses season activity instead of global country s
         milestones: [
           {
             type: "firstTeamDebut",
+            sourceId: "fixture-s2-youth-player-1-debut",
             season: 2,
           },
           {

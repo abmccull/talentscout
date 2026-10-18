@@ -26,6 +26,24 @@ export function approvedCheckpointMigration(input: GameState): GameState {
     assert.ok(!player.injured || player.currentInjury,
       `Current producer omitted active injury: ${player.id}`);
   }
+  // Schema 10 stores canonical identities as the exact {version: 1}
+  // marker. Reconstruct only its two deterministic leaves independently of
+  // the product decoder; authored extensions and the ownership ledger must
+  // survive unchanged under the full-state comparison below.
+  for (const player of [
+    ...Object.values(expected.players),
+    ...Object.values(expected.retiredPlayers ?? {}),
+    ...Object.values(expected.unsignedYouth ?? {}).map((youth) => youth.player),
+  ]) {
+    assert.ok(player.visualIdentity, `Current producer omitted visual identity: ${player.id}`);
+    const identity = player.visualIdentity;
+    if (identity.version === 1 && Object.keys(identity).length === 1) {
+      assert.ok(player.id && player.id.length <= 1024, "Invalid canonical player identity");
+      player.visualIdentity = {
+        version: 1, identityId: `person:v1:${player.id}`, seed: `face:v1:${player.id}`,
+      };
+    }
+  }
   for (const contract of [
     ...(expected.finances?.retainerContracts ?? []),
     ...(expected.finances?.pendingRetainerOffers ?? []),

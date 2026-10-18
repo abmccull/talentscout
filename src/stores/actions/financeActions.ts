@@ -9,6 +9,12 @@ import { revealGamePortraits } from "@/engine/players/portraits/gameIntegration"
  * transfer negotiations, free agent negotiations, and player loan management.
  */
 import type { GetState, SetState } from "./types";
+import { hasReportBuyerEvidence } from "@/engine/finance/reportMarketplace";
+import { attemptClientPitch } from "@/engine/finance/clientRelationships";
+import {
+  queueGameplayAutosave,
+  snapshotPersistedGameState,
+} from "./persistGameplayAutosave";
 import type { GameScreen } from "../gameStoreTypes";
 import type {
   InboxMessage,
@@ -49,7 +55,6 @@ import {
   repayLoanEarly,
   acceptConsulting,
   completeConsulting,
-  pitchToClub,
   ensureClientRelationship,
   resolveEmployeeEvent as resolveEmployeeEventEngine,
   openSatelliteOffice,
@@ -412,6 +417,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
           }],
       }, [product.playerId], "tracked");
       set({ gameState: nextState });
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
     },
 
     rejectStaffWorkProduct: (workProductId: string) => {
@@ -474,7 +480,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!gameState || !gameState.finances) return;
       const report = gameState.reports[reportId];
       if (!report || report.scoutId !== gameState.scout.id) return;
-      if ((report.recommendedAction as string | undefined) === "pass") return;
+      if (!hasReportBuyerEvidence(report)) return;
       const linked = ensureScoutingCaseForReport(gameState.scoutingCases ?? {}, report);
       const existingListingIds = new Set(
         gameState.finances.reportListings.map((listing) => listing.id),
@@ -524,7 +530,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       );
       if (!listing) return;
       const listedReport = gameState.reports[listing.reportId];
-      if (!listedReport || (listedReport.recommendedAction as string | undefined) === "pass") return;
+      if (!listedReport || !hasReportBuyerEvidence(listedReport)) return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending") return;
       const buyer = gameState.clubs[bid.clubId];
@@ -627,7 +633,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       );
       if (!listing) return;
       const listedReport = gameState.reports[listing.reportId];
-      if (!listedReport || (listedReport.recommendedAction as string | undefined) === "pass") return;
+      if (!listedReport || !hasReportBuyerEvidence(listedReport)) return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return;
       const buyer = gameState.clubs[bid.clubId];
@@ -736,6 +742,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
           finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
         };
         set({ gameState: nextState });
+        queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
       }
     },
 
@@ -855,43 +862,14 @@ export function createFinanceActions(get: GetState, set: SetState) {
     pitchToClient: (clubId: string, pitchType: "coldCall" | "referral" | "showcase") => {
       const { gameState } = get();
       if (!gameState?.finances) return;
-      const club = gameState.clubs[clubId];
-      if (!club) return;
       const actionSequence = (gameState.finances.actionSequence ?? 0) + 1;
       const rng = createRNG(
         `${gameState.runManifest.rootSeed}-pitch-s${gameState.currentSeason}w${gameState.currentWeek}-a${actionSequence}`,
       );
-      const sequencedFinances = {
-        ...gameState.finances,
-        actionSequence,
-      };
-      const result = pitchToClub(
-        rng,
-        gameState.scout,
-        gameState.finances,
-        club,
-        pitchType,
-        actionSequence,
-        gameState.players,
-      );
-      if (result.success && result.offeredContract) {
-        const financesWithRelationship = ensureClientRelationship(
-          sequencedFinances, clubId, gameState.currentWeek, gameState.currentSeason,
-        );
-        set({
-          gameState: {
-            ...gameState,
-            finances: {
-              ...financesWithRelationship,
-              pendingRetainerOffers: [...financesWithRelationship.pendingRetainerOffers, result.offeredContract],
-            },
-          },
-        });
-      } else {
-        // Failed pitches still consume their deterministic action ordinal, so
-        // reload/retry cannot replay the same roll or later reuse its ID.
-        set({ gameState: { ...gameState, finances: sequencedFinances } });
-      }
+      const nextState = attemptClientPitch(gameState, clubId, pitchType, rng);
+      if (nextState === gameState) return;
+      set({ gameState: nextState });
+      queueGameplayAutosave(snapshotPersistedGameState(nextState, get().activeSession, get().weekSimulation), set);
     },
 
     resolveAgencyEmployeeEvent: (eventId: string, optionIndex: number) => {

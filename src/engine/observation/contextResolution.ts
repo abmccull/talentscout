@@ -1,3 +1,4 @@
+import { expandObservationSituationSnapshot } from "./situationArchive";
 import type {
   AttributeDomain,
   Observation,
@@ -274,7 +275,7 @@ function countSameSituation(
   if (!repetitionKey) return 0;
   return observations.filter(
     (observation) =>
-      observation.situation?.repetitionKey === repetitionKey,
+      expandObservationSituationSnapshot(observation.situation)?.repetitionKey === repetitionKey,
   ).length;
 }
 

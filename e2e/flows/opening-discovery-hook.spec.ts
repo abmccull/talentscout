@@ -214,10 +214,19 @@ test.describe("guided opening discovery hook", () => {
 
     const evidenceInterpretation = page.getByRole("group", { name: "What did this passage show?" });
     await expect(evidenceInterpretation).toBeVisible();
-    await evidenceInterpretation.getByRole("radio").first().check();
+    // Exercise an explicitly withheld first judgment. A classification
+    // choice must survive reflection without becoming a supported trait claim.
+    const withhold = evidenceInterpretation.getByRole("radio", { name: /^No reliable conclusion/ });
+    await withhold.check();
+    await expect(withhold).toBeChecked();
 
     const completeReflection = page.getByRole("button", { name: "Complete Reflection" });
     await expect(completeReflection).toBeVisible();
+    await expect(completeReflection).toBeEnabled();
+    // Choosing a radio can reveal that interpretation in the scrollable page.
+    // Exercise the user's scroll to completion before checking its hit area.
+    await completeReflection.scrollIntoViewIfNeeded();
+    await expect(withhold).toBeChecked();
     await expect.poll(async () => completeReflection.evaluate((button) => {
       const rect = button.getBoundingClientRect();
       return rect.top >= 12 && rect.bottom <= window.innerHeight - 12;
@@ -243,6 +252,11 @@ test.describe("guided opening discovery hook", () => {
       );
       return overlapWidth * overlapHeight === 0;
     })).toBe(true);
+    await expect.poll(async () => completeReflection.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return hit !== null && button.contains(hit);
+    })).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath("tutorial-complete-reflection-desktop.png"),
     });
@@ -251,8 +265,24 @@ test.describe("guided opening discovery hook", () => {
     await gamePage.waitForScreen("openingDiscovery");
     const openingDecision = page.getByTestId("opening-discovery");
     await expect(openingDecision).toBeVisible();
-    await expect(page.getByText("Write the name down", { exact: true })).toBeVisible();
-    await expect(page.getByText(/The watch is evidence, not a verdict/i)).toBeVisible();
+    await expect(page.getByText("Write the name down")).toBeVisible();
+    const openingRead = await page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      const targetId = state.openingCase.playerId;
+      const journals = Object.values(state.reflectionJournal ?? {}) as any[];
+      const cards = journals.flatMap((entry) => entry.evidenceCards ?? [])
+        .filter((card) => card.playerId === targetId);
+      return { playerId: targetId, cards };
+    });
+    expect(openingRead.cards).toHaveLength(1);
+    expect(openingRead.cards[0].classification).toBe("noConclusion");
+    await expect(openingDecision.getByText("The name is worth checking. Your read is still open.", { exact: true })).toBeVisible();
+    await expect(openingDecision.getByText(/Your saved evidence does not yet support a finding\./)).toBeVisible();
+    await expect(openingDecision.getByText(/No reliable conclusion from this watch\./)).toBeVisible();
+    await expect(openingDecision.getByText("What would you need to see or verify before making a claim about this player?", { exact: true })).toBeVisible();
+    await testInfo.attach("opening-withheld-evidence.json", {
+      body: JSON.stringify(openingRead, null, 2), contentType: "application/json",
+    });
     await expect(page.getByText("Your next move", { exact: true })).toBeVisible();
     await expect(page.getByText(/Your choice affects access, discretion, and trust\./i)).toBeVisible();
     await expect(page.getByRole("heading", { name: "The open question", exact: true })).toBeVisible();
@@ -374,11 +404,48 @@ test.describe("guided opening discovery hook", () => {
     });
     expect(latestReport).not.toBeNull();
     expect(latestReport.evidenceAssessment?.kind).toBe("initial");
+    expect(latestReport.evidenceAssessment?.claims).toHaveLength(1);
+    expect(latestReport.evidenceAssessment.claims[0]).toMatchObject({
+      classification: "noConclusion", support: "withheld", confidence: "tentative",
+    });
+    expect(latestReport.evidenceAssessment.recommendation).toBe("monitor");
+    await testInfo.attach("opening-authored-assessment.json", {
+      body: JSON.stringify({ persisted, latestReport }, null, 2), contentType: "application/json",
+    });
     expect(latestReport.evidenceAssessment?.evidenceIds.length).toBeGreaterThan(0);
     expect(latestReport.evidenceAssessment?.unknowns.length).toBeGreaterThan(0);
     expect(latestReport.summary).toContain("At ");
     expect(latestReport.summary).not.toMatch(/\bthe game\b/i);
     expect(latestReport.briefId ?? null).toBeNull();
+    // The choice, withheld report, and pending consequences must come back
+    // from the real autosave. Reloading must not replay discovery or rewards.
+    // JSON save projections omit optional undefined keys. Preserve every
+    // defined field in the exact expected durable representation.
+    const expectedPersistedReport = JSON.parse(JSON.stringify(latestReport));
+    await expect.poll(() => readUnguidedCheckpoint(page), { timeout: 15_000 }).toMatchObject({
+      openingCase: { stage: "complete", selectedChoiceId: "protect" },
+      reports: { [latestReport.id]: expectedPersistedReport },
+    });
+    expect((await readUnguidedCheckpoint(page)).reports[latestReport.id]).toEqual(expectedPersistedReport);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Continue Career", exact: true }).click();
+    await gamePage.waitForScreen("dashboard");
+    const reloadedOpening = await page.evaluate((reportId) => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      return {
+        report: state.reports[reportId],
+        openingCase: state.openingCase,
+        discoveryCount: state.discoveryRecords.filter((record: any) => record.playerId === state.openingCase.playerId).length,
+        selectedOptionId: state.consequenceState.decisions[state.openingCase.decisionId]?.selectedOptionId,
+      };
+    }, latestReport.id);
+    expect(reloadedOpening.report).toEqual(latestReport);
+    expect(reloadedOpening.openingCase.stage).toBe("complete");
+    expect(reloadedOpening.discoveryCount).toBe(1);
+    expect(reloadedOpening.selectedOptionId).toBe("protect");
+    await testInfo.attach("opening-autosave-reload.json", {
+      body: JSON.stringify(reloadedOpening, null, 2), contentType: "application/json",
+    });
     expect(missingResources, "The opening flow requested missing production assets").toEqual([]);
     await telemetry.finish();
     gamePage.expectNoConsoleErrors();
@@ -403,6 +470,7 @@ async function readUnguidedCheckpoint(page: GamePage['page']) {
           schedule: state?.schedule,
           reports: state?.reports,
           session: state?.activeObservationSession,
+          openingCase: state?.openingCase,
         })));
       };
     };
@@ -493,7 +561,7 @@ async function openAssessmentStep(page: GamePage['page'], step: string) {
 }
 
 async function expectAssessmentProgress(page: GamePage['page'], completed: number) {
-  await expect(page.getByText(`${completed} / 5 decisions`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`${completed} / 6 decisions`, { exact: true })).toBeVisible();
   const native = await page.evaluate(() => {
     const names = ['Saved evidence', 'What it suggests', 'What remains untested', 'Next test', 'Recommended action', 'Confidence'];
     const groups = Array.from(document.querySelectorAll('fieldset')).filter((field) =>
@@ -503,16 +571,16 @@ async function expectAssessmentProgress(page: GamePage['page'], completed: numbe
       field.querySelector('legend')?.textContent?.trim() === name
       && field.querySelector<HTMLInputElement>('input[type="radio"]:checked') !== null,
     ));
-    const count = [checked[0], checked[1], checked[2], checked[3] && checked[4], checked[5]].filter(Boolean).length;
-    return { groups: groups.length, completed: count, remaining: 5 - count };
+    const count = checked.filter(Boolean).length;
+    return { groups: groups.length, completed: count, remaining: 6 - count };
   });
-  expect(native).toEqual({ groups: 6, completed, remaining: 5 - completed });
+  expect(native).toEqual({ groups: 6, completed, remaining: 6 - completed });
   const filingStatus = page.locator('#initial-assessment-filing-status');
   await expect(filingStatus).toBeVisible();
   await expect(filingStatus).not.toHaveText('');
   const submit = page.getByRole('button', { name: 'File initial assessment', exact: true });
   await expect(submit).toHaveAttribute('aria-describedby', 'initial-assessment-filing-status');
-  if (completed === 5) {
+  if (completed === 6) {
     await expect(filingStatus).toHaveText('Ready to file and open the case.');
     await expect(submit).toBeEnabled();
   } else {
@@ -609,7 +677,7 @@ test('assessment selection survives desktop and phone layouts through a real fir
   await page.screenshot({ path: testInfo.outputPath('report-mobile-recommended-long-choice.png'), fullPage: true });
   await recommendedUnknown.click();
   await expectAssessmentProgress(page, 3);
-  await page.screenshot({ path: testInfo.outputPath('report-mobile-progress-3-of-5.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('report-mobile-progress-3-of-6.png'), fullPage: true });
   await openAssessmentStep(page, 'Next action');
   await page.getByRole('group', { name: 'Next test' }).getByRole('radio').first().locator('..').click();
   await page.getByRole('group', { name: 'Recommended action' }).getByRole('radio', { name: /^Keep private/ }).locator('..').click();
@@ -619,7 +687,7 @@ test('assessment selection survives desktop and phone layouts through a real fir
   await openAssessmentStep(page, 'Confidence');
   await page.getByRole('group', { name: 'Confidence', exact: true }).getByRole('radio', { name: /^Tentative/ }).locator('..').click();
   await expect(page.getByRole('group', { name: 'Confidence', exact: true }).getByRole('radio', { name: /^Tentative/ })).toBeChecked();
-  await expectAssessmentProgress(page, 5);
+  await expectAssessmentProgress(page, 6);
 
   // Native checked state survives phone -> desktop -> phone, including edits.
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -649,13 +717,13 @@ test('assessment selection survives desktop and phone layouts through a real fir
   await openAssessmentStep(page, 'Confidence');
   await expect(page.getByRole('group', { name: 'Confidence', exact: true }).getByRole('radio', { name: /^Tentative/ })).toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expectAssessmentProgress(page, 5);
+  await expectAssessmentProgress(page, 6);
   const submit = page.getByRole('button', { name: 'File initial assessment', exact: true });
   await expect(submit).toBeEnabled();
-  await page.screenshot({ path: testInfo.outputPath('report-mobile-progress-5-of-5.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('report-mobile-progress-6-of-6.png'), fullPage: true });
   // Reopening a completed step must not reset decisions or readiness.
   await openAssessmentStep(page, 'Untested');
-  await expectAssessmentProgress(page, 5);
+  await expectAssessmentProgress(page, 6);
   await openAssessmentStep(page, 'Confidence');
   await submit.click();
   await gamePage.waitForScreen('calendar');

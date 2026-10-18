@@ -3,6 +3,7 @@ import type { Club, GameState, LoanDeal, Player } from "@/engine/core/types";
 import { generatePlayer } from "@/engine/players/generation";
 import { RNG } from "@/engine/rng";
 import { processLoanReturns } from "@/engine/world/loans";
+import { expandLoanDeal } from "@/engine/finance/terminalRecordArchive";
 import { resolvePlayerMovements, type LifecycleWorldState, type PlayerMovementIntent } from "@/engine/world/playerLifecycle";
 
 function loanWorld(count = 1): LifecycleWorldState {
@@ -35,7 +36,7 @@ describe("mature loan settlement", () => {
     const result = resolvePlayerMovements(source, [buy(0), buy(1)], 10, 2);
     expect(result.applied.map((event) => event.type).sort()).toEqual(["loanBuyOption", "loanReturn"]);
     expect(result.state.activeLoans).toHaveLength(0);
-    expect(result.state.loanHistory.filter((deal) => deal.outcome === "buy-option-exercised")).toHaveLength(1);
+    expect(result.state.loanHistory.map(deal => expandLoanDeal(deal)).filter((deal) => deal.outcome === "buy-option-exercised")).toHaveLength(1);
     const returned = Object.values(result.state.players).find((player) => player.clubId === "parent")!;
     expect(returned.onLoan).toBeUndefined();
     expect(result.state.clubs.parent.playerIds).toContain(returned.id);

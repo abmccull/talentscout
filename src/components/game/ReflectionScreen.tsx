@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import { MODE_FLAGGED_LABEL } from "@/engine/observation/types";
-import { formatObservationActivityLabel, type ReflectionResult } from "@/engine/observation/reflection";
+import { formatObservationActivityLabel, getPerceivedFlaggedMomentDescription, type ReflectionResult } from "@/engine/observation/reflection";
 import type { EvidenceClassificationId, ScoutCueReading } from "@/engine/core/types";
 import { resolveObservationSignalAssessment } from "@/engine/observation/questions";
 import { describeFlaggedMoment } from "@/engine/observation/momentReading";
@@ -50,7 +50,7 @@ function DomainBadge({ domain }: { domain: string }) {
   const colorClass = DOMAIN_COLORS[domain] ?? DOMAIN_COLORS.hidden;
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${colorClass}`}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-eyebrow font-semibold uppercase tracking-wide ${colorClass}`}
     >
       {domain}
     </span>
@@ -79,6 +79,7 @@ const CLASSIFICATION_COPY: Record<EvidenceClassificationId, { label: string; des
   technicalExecution: { label: "Technical execution", description: "Body shape, touch, pass, strike, or control." },
   decisionMaking: { label: "Decision-making", description: "The player selected an option; timing before reception has not been established." },
   preReceiveDecision: { label: "Decision before receiving", description: "Scanning and option selection happened before the ball arrived." },
+  defensiveReading: { label: "Reading defensive danger", description: "Tracking runners, covering space, or choosing a pressing angle shaped the defensive action." },
   offBallMovement: { label: "Off-ball movement", description: "Timing, movement, or positioning away from the ball." },
   pressureResponse: { label: "Response to pressure", description: "A response to actual opponent pressure, contact, or a setback." },
   physicalExecution: { label: "Physical execution", description: "A physical action tested pace, strength, balance, agility, or jumping; repeatability remains open." },
@@ -119,7 +120,7 @@ function EvidenceSynthesisPanel({
           <h2 id="evidence-synthesis-heading" className="text-xs font-semibold uppercase tracking-widest text-[var(--primary)]">
             Interpret what you kept
           </h2>
-          <p className="mt-1 text-xs leading-5 text-zinc-400">
+          <p className="text-meta mt-1 leading-5 text-zinc-300">
             Classify at least one passage. This choice becomes report evidence; your private notes do not.
           </p>
         </div>
@@ -133,17 +134,17 @@ function EvidenceSynthesisPanel({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-white">{cue.minute}&apos; · {cue.summary}</p>
-                  <p className="mt-1 text-xs leading-5 text-zinc-300">{cue.detail}</p>
+                  <p className="text-meta mt-1 leading-5 text-zinc-300">{cue.detail}</p>
                 </div>
-                <span className="rounded-full border border-cyan-300/25 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">
+                <span className="text-eyebrow rounded-full border border-cyan-300/25 px-2 py-1 font-semibold uppercase tracking-wide text-cyan-200">
                   {cue.clarity} read
                 </span>
               </div>
-              <p className="mt-2 text-xs leading-4 text-zinc-400">{cueReason(cue)}</p>
+              <p className="text-meta mt-2 leading-5 text-zinc-300">{cueReason(cue)}</p>
               <fieldset className="mt-3">
-                <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">What did this passage show?</legend>
+                <legend className="text-eyebrow font-semibold uppercase tracking-[0.14em] text-zinc-300">What did this passage show?</legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {cue.suggestedClassifications.map((classification) => {
+                  {[...new Set([...cue.suggestedClassifications, "noConclusion" as const])].map((classification) => {
                     const copy = CLASSIFICATION_COPY[classification];
                     return (
                       <label
@@ -159,7 +160,7 @@ function EvidenceSynthesisPanel({
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         />
                         <span className="flex items-center justify-between gap-2 text-sm font-semibold">{copy.label}{selected === classification && <Check size={16} className="shrink-0" aria-hidden="true" />}</span>
-                        <span className="mt-1 block text-xs leading-4 text-zinc-400">{copy.description}</span>
+                        <span className="mt-1 block text-meta leading-5 text-zinc-300">{copy.description}</span>
                       </label>
                     );
                   })}
@@ -198,7 +199,7 @@ function MomentTimeline({ session }: { session: ObservationSession }) {
             {/* Minute marker */}
             <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-full border border-[#27272a] bg-[#1a1a1a]">
-                <span className="text-[9px] font-bold text-zinc-400">{fm.minute}&apos;</span>
+                <span className="text-eyebrow font-bold text-zinc-400">{fm.minute}&apos;</span>
               </div>
               <div className="w-px flex-1 bg-[#27272a]" aria-hidden="true" />
             </div>
@@ -208,13 +209,13 @@ function MomentTimeline({ session }: { session: ObservationSession }) {
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-quiet">Your reaction</span>
                 <span
-                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${reactionColor}`}
+                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-eyebrow font-semibold uppercase tracking-wide ${reactionColor}`}
                 >
                   {reactionLabel}
                 </span>
-                <span className="text-xs text-quiet">Phase {fm.phaseIndex + 1}</span>
+                <span className="text-eyebrow text-quiet">Phase {fm.phaseIndex + 1}</span>
               </div>
-              <p className="text-sm text-zinc-300 leading-snug">{describeFlaggedMoment(session, fm)}</p>
+              <p className="text-sm text-zinc-300 leading-snug">{getPerceivedFlaggedMomentDescription(session, fm)}</p>
               {fm.note && (
                 <p className="text-xs text-quiet italic">Note: {fm.note}</p>
               )}
@@ -329,7 +330,7 @@ export function ReflectionScreen({
                         : "No reliable signal today"}
                   </p>
                   {signalAssessment.comparisonReady && (
-                    <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-1 text-xs text-cyan-100">
+                    <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-1 text-eyebrow text-cyan-100">
                       New comparison available
                     </span>
                   )}
@@ -406,7 +407,7 @@ export function ReflectionScreen({
                 value={gutFeelingCandidate.reliability * 100}
                 className="h-1.5 bg-amber-950/60"
                 indicatorClassName="bg-amber-400"
-                aria-label={`Gut feeling reliability: ${Math.round(gutFeelingCandidate.reliability * 100)}%`}
+                aria-label="Gut feeling reliability"
               />
               <p className="text-xs text-quiet">{gutFeelingCandidate.triggerReason}</p>
             </div>
@@ -418,7 +419,7 @@ export function ReflectionScreen({
               >
                 <div className="flex items-center gap-2">
                   <Brain size={14} className="shrink-0 text-amber-500/70" aria-hidden="true" />
-                  <span className="text-xs font-semibold uppercase tracking-widest text-amber-500/70">
+                  <span className="text-eyebrow font-semibold uppercase tracking-widest text-amber-200">
                     Projection signal
                   </span>
                 </div>
@@ -469,6 +470,24 @@ export function ReflectionScreen({
       )}
 
       {/* ── Flagged Moments Review ── */}
+      {session.mode === "investigation" && (
+        <section aria-labelledby="conversation-record-heading">
+          <h2 id="conversation-record-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-quiet">
+            Conversation record
+          </h2>
+          <p className="mb-3 text-sm text-zinc-400">Keep these accounts in context. They can guide your next observation, but do not establish a trait on their own.</p>
+          <ol className="divide-y divide-zinc-800">
+            {session.phases.flatMap((phase) => Object.values(phase.dialogueChoiceResolutions ?? {}).map((decision) => (
+              <li key={`${phase.index}:${decision.nodeId}`} className="py-3">
+                <p className="text-xs text-zinc-400">{phase.dialogueNodes?.find((node) => node.id === decision.nodeId)?.speaker}</p>
+                <p className="mt-1 text-sm font-medium text-zinc-100">{decision.optionText}</p>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-300">{decision.narrativeText}</p>
+              </li>
+            )))}
+          </ol>
+        </section>
+      )}
+      {(session.mode !== "investigation" || session.flaggedMoments.length > 0) && (
       <section aria-labelledby="flagged-moments-heading">
         <div className="mb-3 flex items-center gap-2">
           <Flag size={13} className="text-quiet" aria-hidden="true" />
@@ -490,6 +509,7 @@ export function ReflectionScreen({
           </CardContent>
         </Card>
       </section>
+      )}
 
       {/* ── Notes ── */}
       <section aria-labelledby="notes-heading">
@@ -529,7 +549,7 @@ export function ReflectionScreen({
             onKeyDown={handleNoteKeyDown}
             placeholder="Optional private note — this is not scored or parsed (Ctrl+Enter to save)"
             rows={3}
-            className="w-full resize-none rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full resize-none rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 text-sm text-zinc-200 placeholder:text-[var(--muted-foreground)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]"
             aria-describedby="reflection-note-hint"
           />
           <div className="flex items-center justify-between gap-2">
@@ -555,7 +575,8 @@ export function ReflectionScreen({
         <Button
           ref={completeButtonRef}
           size="lg"
-          className="w-full"
+          variant="success"
+          className="min-h-11 w-full shadow-md"
           onClick={onComplete}
           disabled={requiresEvidenceInterpretation}
           data-tutorial-id="observation-complete-reflection"

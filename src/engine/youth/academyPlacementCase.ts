@@ -1,3 +1,4 @@
+import { isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 import type { RNG } from "@/engine/rng";
 import type {
   Club,
@@ -27,6 +28,7 @@ import {
 import type { ClubRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
 import { resolveScoutPerkModifiers } from "@/engine/specializations/perks";
 import type { YouthMobilityAssessment } from "./youthMobility";
+import { scorePlacementSupport } from "./placementSupport";
 
 const ROLE_BY_POSITION: Record<Player["position"], PlayerRole> = {
   GK: "sweeper",
@@ -363,9 +365,9 @@ export function scoreAcademyClubDecision(input: {
     || player.secondaryPositions.some((position) => brief.requiredPositions.includes(position));
   const roleMatch = !brief.preferredRole || brief.preferredRole === report.projectedRole;
   const ageMatch = player.age <= brief.maxAge;
-  const actionFit = brief.developmentPriority === "earlyReadiness"
+  const actionFit = !isPrivateScoutingDecision(report) && (brief.developmentPriority === "earlyReadiness"
     ? report.recommendedAction === "offerAcademyPlace"
-    : report.recommendedAction !== "monitor" && report.recommendedAction !== "pass";
+    : report.recommendedAction !== "monitor");
   let briefFit = clamp(
     (positionMatch ? 45 : 0)
     + (roleMatch ? 25 : 8)
@@ -473,16 +475,12 @@ export function scoreAcademyClubDecision(input: {
       ? (briefFit >= 70 ? 4 : 1)
       : (relationship >= 60 ? 4 : 1);
   const mobilityDimensions = input.mobilityAssessment?.dimensions;
-  const supportAdjustment = supportCondition === "educationPlan"
-    ? ((mobilityDimensions?.familyEducation.riskScore ?? 0) >= 35 ? 3 : 1)
+  const relevantSupportRisk = supportCondition === "educationPlan"
+    ? (mobilityDimensions?.familyEducation.riskScore ?? 0)
     : supportCondition === "playingPathway"
-      ? ((mobilityDimensions?.pathwaySupport.riskScore ?? 0) >= 35 ? 3 : 1)
-      : supportCondition === "familySupport"
-        ? (Math.max(
-            mobilityDimensions?.familyEducation.riskScore ?? 0,
-            mobilityDimensions?.adaptation.riskScore ?? 0,
-          ) >= 35 ? 3 : 1)
-        : 0;
+      ? (mobilityDimensions?.pathwaySupport.riskScore ?? 0)
+      : Math.max(mobilityDimensions?.familyEducation.riskScore ?? 0, mobilityDimensions?.adaptation.riskScore ?? 0);
+  const supportAdjustment = scorePlacementSupport(supportCondition, observations, relevantSupportRisk);
   const placementStrategyAdjustment = Math.min(7, postureAdjustment + supportAdjustment);
   const total = clamp(
     evidence * 0.25
@@ -578,15 +576,15 @@ export function scoreAcademyClubDecision(input: {
       : []),
     ...(!placementStrategyProvided || supportCondition === "none"
       ? []
-      : [supportCondition === "educationPlan"
-          ? "The proposal includes an education plan matched to the move."
-          : supportCondition === "playingPathway"
-            ? "The proposal asks the club to define a credible playing pathway."
-            : "The proposal includes practical family and settlement support."]),
+      : [supportAdjustment > 0
+          ? `The ${supportCondition === "familySupport" ? "family and settlement support" : supportCondition === "educationPlan" ? "education" : "playing-pathway"} review addresses a recorded need and is backed by relevant evidence. Acceptance commits you to a follow-up within six weeks.`
+          : supportAdjustment < 0
+            ? "The support condition lacks a relevant prior meeting or follow-up. The club treats the unsupported promise as a credibility concern."
+            : "The support review has no demonstrated risk to mitigate, so it adds no pitch advantage. Acceptance still commits you to a follow-up within six weeks."]),
   ];
 
   let outcome: ClubDecisionOutcome;
-  if (report.recommendedAction === "pass") {
+  if (isPrivateScoutingDecision(report)) {
     outcome = "rejected";
     reasons.unshift("The scout passed for now; this judgment does not authorize recruitment.");
   } else if (input.mobilityAssessment?.status === "blocked") {

@@ -1,3 +1,4 @@
+import { describeAlumniHistory } from "./alumniEvidence";
 import type { GameState } from "@/engine/core/types";
 import { deriveYouthFileMoney } from "./youthDeskStakes";
 import { listYouthCases } from "./youthCaseList";
@@ -51,13 +52,18 @@ export function deriveYouthSeasonCaseReview(
     | "finances"
   >,
   season: number,
+  options: { completed?: boolean } = {},
 ): YouthSeasonCaseReview {
+  const ongoing = !options.completed && season === state.currentSeason;
   const cases = listYouthCases(state);
   const namedThisSeason = new Set(
     Object.values(state.observations ?? {})
       .filter((observation) => observation.season === season && observation.scoutId === state.scout.id)
       .map((observation) => observation.playerId),
   );
+  for (const discovery of state.discoveryRecords ?? []) {
+    if (discovery.discoveredSeason === season) namedThisSeason.add(discovery.playerId);
+  }
   for (const report of Object.values(state.reports ?? {})) {
     if (report.submittedSeason === season && report.scoutId === state.scout.id) {
       namedThisSeason.add(report.playerId);
@@ -108,18 +114,20 @@ export function deriveYouthSeasonCaseReview(
     if (hits.length === 0) return [];
     const latest = [...hits].sort((left, right) => left.week - right.week).at(-1);
     if (!latest) return [];
-    return [`${playerName(state, record.playerId)} — ${sanitizeAlumniDescription(latest.description)}`];
+    return [`${playerName(state, record.playerId)} — ${describeAlumniHistory({ ...latest, description: sanitizeAlumniDescription(latest.description) })}`];
   });
   const alumniLine = alumniThisSeason.length > 0
     ? alumniThisSeason.slice(0, 4).join(" ")
-    : "None of your alumni moved the story this season.";
+    : ongoing ? "No alumni milestones recorded yet this season." : "No alumni milestones recorded this season.";
 
   const money = deriveYouthFileMoney(state);
   const moneyLine = `Career totals: ${money.label}`;
 
   const headline = namedThisSeason.size > 0
-    ? `Season ${season} lived on ${namedThisSeason.size} name${namedThisSeason.size === 1 ? "" : "s"}.`
-    : `Season ${season} did not leave a named case.`;
+    ? `Season ${season}${ongoing ? " so far" : ""}: ${namedThisSeason.size} name${namedThisSeason.size === 1 ? "" : "s"} in your scouting record.`
+    : ongoing
+      ? `Season ${season} is underway. Your first case is still to come.`
+      : `Season ${season} ended without a named case.`;
 
   return {
     season,

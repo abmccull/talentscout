@@ -6,7 +6,7 @@
 import { withVisualIdentity } from "./portraits/identity";
 import type { RNG } from "@/engine/rng";
 import { getSeasonBirthYear } from "@/engine/core/seasonDate";
-import { calculatePlayerWeeklyWage } from "@/engine/finance/wages";
+import { estimatePlayerWeeklyWage } from "./wages";
 import type {
   Player,
   Position,
@@ -452,7 +452,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     clubId,
     contractClubId: clubId || undefined,
     contractExpiry: clubId ? currentSeason + rng.nextInt(1, 5) : 0,
-    wage: calculatePlayerWeeklyWage(currentAbility, clubReputation),
+    wage: estimatePlayerWeeklyWage(currentAbility, clubReputation),
     marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position, clubReputation),
     attributes,
     currentAbility,

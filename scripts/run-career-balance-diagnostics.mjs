@@ -1,6 +1,7 @@
+import { readSupportingJson, writeSupportingJson } from "./supporting-diagnostic-io.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const argumentsMap = Object.fromEntries(process.argv.slice(2).map((argument) => {
@@ -16,7 +17,7 @@ await mkdir(output); // Never overwrite a previous run or its failures.
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 const paths = [...new Set(git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--",
-  "src", "tests/release", "scripts", "vitest.release-soak.config.ts", "package.json", "package-lock.json")
+  "src", "tests/release", "scripts", "vitest.supporting-diagnostics.config.ts", "package.json", "package-lock.json")
   .split("\0").filter(Boolean))].sort();
 const sourceFiles = [];
 for (const path of paths) sourceFiles.push({ path, sha256: hash(await readFile(path)) });
@@ -33,7 +34,7 @@ const seasons = mode === "full" ? 6 : 1;
 // Start the diagnostic with the unchanged defaults, regardless of a caller's
 // previous soak flags, relaxed caps, outputs, candidate variables or replay mode.
 const cleanChildEnvironment = Object.fromEntries(Object.entries(process.env)
-  .filter(([key]) => !key.toUpperCase().startsWith("SOAK_")));
+  .filter(([key]) => !key.toUpperCase().startsWith("SOAK_") && key.toUpperCase() !== "NODE_OPTIONS"));
 const protocol = {
   schemaVersion: 1, evidenceKind: "matched-policy-balance-diagnostic", mode,
   createdAt: new Date().toISOString(), seasons, profiles, seeds,
@@ -50,12 +51,12 @@ const protocol = {
     "No human engagement, full release soak, provider save, or hardware performance claim follows from this diagnostic.",
   ],
 };
-await writeFile(resolve(output, "protocol.json"), `${JSON.stringify(protocol, null, 2)}\n`);
+await writeSupportingJson(resolve(output, "protocol.json"), protocol);
 const runs = [];
 async function currentSourceFingerprint() {
   try {
     const currentPaths = [...new Set(git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--",
-      "src", "tests/release", "scripts", "vitest.release-soak.config.ts", "package.json", "package-lock.json")
+      "src", "tests/release", "scripts", "vitest.supporting-diagnostics.config.ts", "package.json", "package-lock.json")
       .split("\0").filter(Boolean))].sort();
     if (JSON.stringify(currentPaths) !== JSON.stringify(paths)) return "source-file-set-changed";
     const values = [];
@@ -73,7 +74,7 @@ for (const { cohort, seed } of seeds) {
     }
     const runPath = resolve(output, `${seed}--${profile}.json`);
     const startedAt = new Date().toISOString();
-    const child = spawn(process.execPath, [resolve("node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.release-soak.config.ts"], {
+    const child = spawn(process.execPath, [resolve("node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.supporting-diagnostics.config.ts"], {
       cwd: process.cwd(), stdio: "inherit", env: { ...cleanChildEnvironment,
         SOAK_BALANCE_DIAGNOSTICS_ONLY: "true", SOAK_BALANCE_DIAGNOSTICS_OUTPUT: runPath,
         SOAK_BALANCE_SEED: seed, SOAK_BALANCE_PROFILE: profile, SOAK_BALANCE_COHORT: cohort,
@@ -81,7 +82,6 @@ for (const { cohort, seed } of seeds) {
         SOAK_BALANCE_SOURCE_FINGERPRINT: protocol.source.fingerprint,
         SOAK_TEST_TIMEOUT_MS: String((mode === "full" ? 60 : 10) * 60 * 1000),
         SOAK_PROFILE_MATRIX_ONLY: "false", SOAK_WORKER_MODE: "false", SOAK_DIAGNOSTIC_ONLY: "false",
-        SOAK_STORAGE_CHECKPOINT_DIRECTORY: "", SOAK_DIAGNOSTIC_CHECKPOINT_PATH: "",
       },
     });
     const outcome = await new Promise((resolveExit) => {
@@ -92,10 +92,11 @@ for (const { cohort, seed } of seeds) {
     let artifactSha256 = null;
     let artifactError = null;
     try {
-      const bytes = await readFile(runPath);
-      artifact = JSON.parse(bytes.toString("utf8"));
-      artifactSha256 = hash(bytes);
-      if (artifact.seed !== seed || artifact.profile !== profile || artifact.cohort !== cohort ||
+      const admitted = await readSupportingJson(runPath);
+      artifact = admitted.value;
+      artifactSha256 = admitted.sha256;
+      if (artifact.evidenceKind !== "supporting-policy-balance-run" || artifact.authority?.releaseCertificationEligible !== false
+          || artifact.seed !== seed || artifact.profile !== profile || artifact.cohort !== cohort ||
           artifact.sourceFingerprint !== protocol.source.fingerprint || artifact.seasons !== seasons) {
         throw new Error("Run artifact identity does not match the frozen protocol");
       }
@@ -107,7 +108,7 @@ for (const { cohort, seed } of seeds) {
     runs.push({ seed, cohort, profile, startedAt, completedAt: new Date().toISOString(), ...outcome,
       artifactPath: runPath, artifactSha256, artifactError, artifact });
     // Persist every completion/failure before starting the next independent process.
-    await writeFile(resolve(output, "progress.json"), `${JSON.stringify({ protocol, runs }, null, 2)}\n`);
+    await writeSupportingJson(resolve(output, `progress-${String(runs.length).padStart(2, "0")}.json`), { protocol, runs: runs.map(({ artifact, ...receipt }) => receipt) });
     if (sourceChanged) break matrix;
   }
 }
@@ -157,6 +158,6 @@ const summary = { schemaVersion: 1, evidenceKind: "matched-policy-balance-diagno
       finalCareer: run.artifact?.diagnostics?.finalCareer ?? null })) })),
   runs: runs.map(({ artifact, ...receipt }) => ({ ...receipt, failures: artifact?.failures ?? [] })),
 };
-await writeFile(resolve(output, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
+await writeSupportingJson(resolve(output, "summary.json"), summary);
 console.info(`CAREER_BALANCE_DIAGNOSTIC ${JSON.stringify({ mode, runs: runs.length, failures: failures.length, output })}`);
 process.exitCode = summary.passed ? 0 : 1;

@@ -285,6 +285,7 @@ export function GameLayout({
     currentScreen,
     setScreen,
     autosaveError,
+    autosaveStatus,
     hasGame,
     currentWeek,
     currentSeason,
@@ -311,6 +312,7 @@ export function GameLayout({
       currentScreen: state.currentScreen,
       setScreen: state.setScreen,
       autosaveError: state.autosaveError,
+      autosaveStatus: state.autosaveStatus,
       hasGame: gameState !== null,
       currentWeek: gameState?.currentWeek ?? 0,
       currentSeason: gameState?.currentSeason ?? 0,
@@ -539,11 +541,25 @@ export function GameLayout({
       </a>
 
       {watchChrome && (
-        <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center justify-center border-b border-white/10 bg-[#0b0e12]/90 px-3 backdrop-blur">
-          <p className="text-sm font-semibold text-white">Watch</p>
-          <p className="ml-3 text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted-foreground)]">
-            Week {currentWeek} · Season {currentSeason}
-          </p>
+        <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-white/10 bg-[#0b0e12]/90 px-3 backdrop-blur">
+          <div className="flex min-w-0 flex-col justify-center">
+            <div className="flex items-baseline gap-2 max-[359px]:gap-1">
+              <p className="text-sm font-semibold text-white">Watch</p>
+              {(autosaveStatus === "pending" || autosaveStatus === "saved") && (
+                <span
+                  data-testid="watch-save-status"
+                  data-save-status={autosaveStatus}
+                  aria-live="off"
+                  className="shrink-0 text-xs text-[color:var(--muted-foreground)]"
+                >
+                  {autosaveStatus === "pending" ? "Saving…" : "Saved locally"}
+                </span>
+              )}
+            </div>
+            <p className="text-xs font-medium uppercase text-[color:var(--muted-foreground)]">
+              Week {currentWeek} · Season {currentSeason}
+            </p>
+          </div>
         </header>
       )}
 
@@ -619,6 +635,7 @@ export function GameLayout({
             <h1 className="font-editorial text-2xl tracking-tight">
               Talent<span className="text-[var(--primary)]">Scout</span>
             </h1>
+            {!guidedSessionActive && <ScreenHelpButton placement="sidebar" />}
             {/* Close button visible only on mobile */}
             <button
               ref={sidebarCloseRef}
@@ -817,7 +834,7 @@ export function GameLayout({
         id="game-main"
         ref={mainRef}
         tabIndex={-1}
-        className={`relative min-w-0 flex-1 overflow-x-clip lg:overflow-auto bg-[var(--background)] focus:outline-none ${
+        className={`relative min-w-0 flex-1 overflow-auto bg-[var(--background)] focus:outline-none ${
           watchChrome
             ? "pt-12"
             : `game-mobile-safe-scroll pt-14 md:pt-0 ${useYouthEarlyAccessNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`
@@ -841,7 +858,7 @@ export function GameLayout({
             </button>
           </div>
         )}
-        {!guidedSessionActive && <ScreenHelpButton />}
+        {watchChrome && !guidedSessionActive && <ScreenHelpButton />}
         {children}
       </main>
     </div>

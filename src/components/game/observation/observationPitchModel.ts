@@ -126,7 +126,6 @@ export function buildObservationPitchMarkers(
       base,
       phaseType,
       moments.length > 0,
-      player.isFocused,
     );
 
     // PitchCanvas uses a portrait coordinate system. Rotate it to a landscape
@@ -149,4 +148,21 @@ export function buildObservationPitchMarkers(
       isFocused: player.isFocused,
     };
   });
+}
+
+/** Describe the observed passages without inventing a match phase from an
+ * evidence category (a character reaction is not necessarily a set piece).
+ */
+export function observationPassageLabel(phase: Pick<SessionPhase, "moments">): string {
+  const types = new Set(phase.moments.map(moment => moment.momentType));
+  if (types.size === 0) return "Watching play";
+  if (types.size > 1) return "Mixed passages";
+  const labels: Record<PlayerMoment["momentType"], string> = {
+    technicalAction: "Technical actions",
+    physicalTest: "Physical contests",
+    mentalResponse: "Player responses",
+    tacticalDecision: "Tactical decisions",
+    characterReveal: "Player reactions",
+  };
+  return labels[[...types][0]];
 }

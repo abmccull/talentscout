@@ -21,6 +21,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -94,6 +95,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -167,6 +169,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -240,6 +243,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -313,6 +317,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -386,6 +391,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -459,6 +465,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -532,6 +539,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -605,6 +613,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -678,6 +687,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -751,6 +761,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -824,6 +835,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -897,6 +909,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -970,6 +983,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1043,6 +1057,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1116,6 +1131,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1189,6 +1205,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1262,6 +1279,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1335,6 +1353,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1408,6 +1427,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1481,6 +1501,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1554,6 +1575,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1627,6 +1649,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1700,6 +1723,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1773,6 +1797,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1846,6 +1871,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1919,6 +1945,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -1992,6 +2019,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2065,6 +2093,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2138,6 +2167,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2211,6 +2241,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2284,6 +2315,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2357,6 +2389,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2430,6 +2463,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2503,6 +2537,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2576,6 +2611,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2649,6 +2685,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2722,6 +2759,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2795,6 +2833,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2868,6 +2907,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -2941,6 +2981,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3014,6 +3055,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3087,6 +3129,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3160,6 +3203,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3233,6 +3277,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3306,6 +3351,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3379,6 +3425,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3452,6 +3499,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3525,6 +3573,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3598,6 +3647,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3671,6 +3721,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3744,6 +3795,7 @@
     },
     "provenance": "authored-catalog",
     "packId": "documentary-v1",
+    "allocationPriority": 0,
     "assets": [
       {
         "age": 15,
@@ -3792,6 +3844,894 @@
         "path": "/images/portraits/documentary-v1/yarrow/age-45.webp",
         "width": 218,
         "height": 217
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00000",
+    "revision": 1,
+    "canonicalFaceSha256": "6a280fc6a559233b5164f257b8dadfd4d6d6070dcecd5cf02260b3c53e58f48b",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "hazel",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00000/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00001",
+    "revision": 1,
+    "canonicalFaceSha256": "78611a500456011e458d6a3abb03bdde5b50f573acce7e34fceaacea12e23891",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "hazel",
+      "noseStructure": "broad",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "curly",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00001/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00003",
+    "revision": 1,
+    "canonicalFaceSha256": "a9c322ca94836f79b012f7c91a0a1bfebc36297ee9a23225460d81adddc3fb49",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "hazel",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00003/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00004",
+    "revision": 1,
+    "canonicalFaceSha256": "47fddb63ef7c174e5f6b3b16b2f3556d1c31e91077eed98d6171681036f40e16",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "blue",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "blond",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00004/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00005",
+    "revision": 1,
+    "canonicalFaceSha256": "fe0a2f4b2eb50f55bfbcd706ad8897fac8294d3d1719d0f010a75ace2289e2f3",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "blue",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "blond",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00005/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00007",
+    "revision": 1,
+    "canonicalFaceSha256": "3ddb5edd23580659bcb9cfd63dc476cd5a9eac5ae221a109f997c367c03a8a62",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "green",
+      "noseStructure": "broad",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00007/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00010",
+    "revision": 1,
+    "canonicalFaceSha256": "073e02bdd0c0af2e163f5eb35b7284aa353c5eb5a4ab898f204f2b1ffefe2fea",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "brown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00010/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v1-00011",
+    "revision": 1,
+    "canonicalFaceSha256": "ab578e65c10cd24f969eed3c0d86a0acd90296389c17a1dece282b38541bba1e",
+    "anchors": {
+      "skinTone": "medium",
+      "faceShape": "oval",
+      "eyeShape": "almond",
+      "eyeColor": "darkBrown",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v1",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v1/humgen-v1-00011/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v2-curated-000001",
+    "revision": 1,
+    "canonicalFaceSha256": "dd6f6a42c86f2a8b99f9c560fcbe5a2ce87a2ca54beb4a593c5b383aeefa87bb",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "round",
+      "eyeShape": "almond",
+      "eyeColor": "green",
+      "noseStructure": "softBridge",
+      "mouthStructure": "balanced",
+      "jawStructure": "soft",
+      "hairColor": "darkBrown",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v2-curated",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000001/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v2-curated-000006",
+    "revision": 1,
+    "canonicalFaceSha256": "a0bbec93e52f35c2bb65141d9d049f956f0701a3b8854e9e2c10bf70f22a07dd",
+    "anchors": {
+      "skinTone": "brown",
+      "faceShape": "oval",
+      "eyeShape": "round",
+      "eyeColor": "darkBrown",
+      "noseStructure": "broad",
+      "mouthStructure": "full",
+      "jawStructure": "tapered",
+      "hairColor": "darkBrown",
+      "hairTexture": "coily",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v2-curated",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000006/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v2-curated-000011",
+    "revision": 1,
+    "canonicalFaceSha256": "c4e1f99d88a9479ad695f3df1830df65efdc8eaf76960432e2837bf04b7aa612",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "square",
+      "eyeShape": "hooded",
+      "eyeColor": "blue",
+      "noseStructure": "straight",
+      "mouthStructure": "narrow",
+      "jawStructure": "angular",
+      "hairColor": "auburn",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "light",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v2-curated",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000011/age-45.webp",
+        "width": 320,
+        "height": 400
+      }
+    ]
+  },
+  {
+    "lineageId": "humgen-v2-curated-000015",
+    "revision": 1,
+    "canonicalFaceSha256": "0fdfdf829fdf2ce0c3bf6dd7bcc8e378cc9c0ed3e97c5e1d7ef4bd718d45c18f",
+    "anchors": {
+      "skinTone": "light",
+      "faceShape": "oval",
+      "eyeShape": "deepSet",
+      "eyeColor": "hazel",
+      "noseStructure": "straight",
+      "mouthStructure": "balanced",
+      "jawStructure": "angular",
+      "hairColor": "brown",
+      "hairTexture": "straight",
+      "baselineHairline": "even",
+      "facialHairTendency": "medium",
+      "build": "average",
+      "distinctiveFeature": "none",
+      "cameraAngle": "front"
+    },
+    "provenance": "authored-catalog",
+    "packId": "humgen-v2-curated",
+    "allocationPriority": 100,
+    "assets": [
+      {
+        "age": 15,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-15.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 18,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-18.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 22,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-22.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 27,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-27.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 31,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-31.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 35,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-35.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 39,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-39.webp",
+        "width": 320,
+        "height": 400
+      },
+      {
+        "age": 45,
+        "path": "/images/portraits/humgen-v2-curated/humgen-v2-curated-000015/age-45.webp",
+        "width": 320,
+        "height": 400
       }
     ]
   }

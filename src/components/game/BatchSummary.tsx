@@ -181,10 +181,10 @@ export function BatchSummary({ result, onDismiss }: BatchSummaryProps) {
                           {ws.keyEvents.length !== 1 ? "s" : ""}
                         </span>
                       )}
-                      {ws.matchesAttended > 0 && (
+                      {(ws.scoutingSessions ?? ws.matchesAttended) > 0 && (
                         <span className="flex items-center gap-0.5 text-blue-400">
                           <Users size={10} />
-                          {ws.matchesAttended}
+                          {ws.scoutingSessions ?? ws.matchesAttended}
                         </span>
                       )}
                       {ws.reportsWritten > 0 && (
@@ -217,9 +217,9 @@ export function BatchSummary({ result, onDismiss }: BatchSummaryProps) {
                           </span>
                         </div>
                         <div>
-                          <span className="text-zinc-500">Matches: </span>
+                          <span className="text-zinc-500">{ws.scoutingSessions === undefined ? "Matches" : "Scouting sessions"}: </span>
                           <span className="text-white">
-                            {ws.matchesAttended}
+                            {ws.scoutingSessions ?? ws.matchesAttended}
                           </span>
                         </div>
                         <div>

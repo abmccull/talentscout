@@ -32,6 +32,7 @@ import type {
   ScoutReport,
   GameState,
 } from "@/engine/core/types";
+import { selectActionableProspects } from "@/engine/youth/actionableProspects";
 import { RNG } from "@/engine/rng";
 import {
   rollActivityQuality,
@@ -48,7 +49,7 @@ import {
   resolveScoutPerkModifiers,
 } from "@/engine/specializations/perks";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
-import { indexLatestPlayerReports } from "@/engine/reports/reportAccountability";
+import { indexLatestPlayerReports, isPrivateScoutingDecision } from "@/engine/reports/reportAccountability";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -779,20 +780,6 @@ function topObservedPlayers(
     .map(([playerId, observations]) => ({ playerId, observations }));
 }
 
-function observedUnsignedYouth(
-  observedCounts: Map<string, number>,
-  unsignedYouth?: Record<string, UnsignedYouth>,
-): Array<{ youth: UnsignedYouth; observations: number }> {
-  return Object.values(unsignedYouth ?? {})
-    .filter((y) => !y.placed && !y.retired)
-    .map((y) => ({
-      youth: y,
-      observations: observedCounts.get(y.player.id) ?? 0,
-    }))
-    .filter((entry) => entry.observations > 0)
-    .sort((a, b) => b.observations - a.observations);
-}
-
 /**
  * Build the list of activities the scout can currently schedule.
  *
@@ -833,6 +820,10 @@ export function getAvailableActivities(
   opportunityContext?: {
     currentSeason: number;
     consequenceState?: GameState["consequenceState"];
+    scoutingCases?: GameState["scoutingCases"];
+    alumniRecords?: GameState["alumniRecords"];
+    retiredPlayers?: GameState["retiredPlayers"];
+    openingCase?: GameState["openingCase"];
   },
 ): Activity[] {
   const activities: Activity[] = [];
@@ -1056,7 +1047,7 @@ export function getAvailableActivities(
   }
 
   // followUpSession / parentCoachMeeting / writePlacementReport:
-  // requires at least 1 observation of an unsigned (unplaced) youth player
+  // observed unsigned prospects and signed alumni/live cases share follow-up access
   // Deduplicated — one card per activity type, target picker selects player
   const activeProfessionalCaseOpportunities = opportunityContext
     ? getActiveProfessionalCaseOpportunities({
@@ -1065,13 +1056,24 @@ export function getAvailableActivities(
         currentSeason: opportunityContext.currentSeason,
       })
     : [];
-  // This is the searchable picker's complete source, not a top-five preview.
-  const targetedYouth = observedUnsignedYouth(observedCounts, unsignedYouth);
+  // Targeted follow-ups must remain available for every observed prospect,
+  // including a dossier opened beyond the first five suggested names.
+  const actionableProspects = selectActionableProspects({
+    players: players ?? {}, unsignedYouth: unsignedYouth ?? {},
+    scoutingCases: opportunityContext?.scoutingCases,
+    alumniRecords: opportunityContext?.alumniRecords,
+    retiredPlayers: opportunityContext?.retiredPlayers,
+  });
+  const opportunityPlayerIds = new Set(activeProfessionalCaseOpportunities.map(opportunity => opportunity.playerId));
+  const targetedYouth = actionableProspects
+    .map(target => ({ ...target, observations: observedCounts.get(target.player.id) ?? 0 }))
+    .filter(target => target.observations > 0 || target.source !== "unsigned" || opportunityPlayerIds.has(target.player.id))
+    .sort((left, right) => right.observations - left.observations);
 
   if (targetedYouth.length > 0 || activeProfessionalCaseOpportunities.length > 0) {
     const youthPoolByPlayerId = new Map<string, TargetOption>();
     for (const entry of targetedYouth) {
-      const p = entry.youth.player;
+      const p = entry.player;
       const bestAbility = bestAbilityByPlayerId.get(p.id);
       youthPoolByPlayerId.set(p.id, {
         id: p.id,
@@ -1124,9 +1126,10 @@ export function getAvailableActivities(
       ),
     });
     const latestReports = indexLatestPlayerReports(Object.values(reports ?? {}), scout.id);
+    const unsignedIds = new Set(actionableProspects.filter(target => target.source === "unsigned").map(target => target.player.id));
     const pitchPool = youthPool.filter((target) => {
       const report = latestReports.get(target.id);
-      return report && report.recommendedAction !== "pass";
+      return unsignedIds.has(target.id) && report && !isPrivateScoutingDecision(report);
     });
     if (pitchPool.length > 0) {
       activities.push({
@@ -1139,6 +1142,29 @@ export function getAvailableActivities(
           "writePlacementReport",
         ),
       });
+    }
+  }
+
+  // A completed opening watch can be inconclusive because the scout never
+  // focused. The contact still gives access to this one known lead; a second
+  // live watch earns evidence normally. This does not unlock other activities.
+  const opening = opportunityContext?.openingCase;
+  const recoveryLead = opening?.stage === "report"
+    ? actionableProspects.find((target) => target.player.id === opening.playerId)
+    : undefined;
+  if (scout.primarySpecialization === "youth" && recoveryLead
+    && (observedCounts.get(recoveryLead.player.id) ?? 0) === 0) {
+    const p = recoveryLead.player;
+    const target: TargetOption = { id: p.id, name: `${p.firstName} ${p.lastName}`,
+      age: p.age, position: p.position, observations: 0 };
+    const followUp = activities.find((activity) => activity.type === "followUpSession");
+    if (followUp?.targetPool) {
+      if (!followUp.targetPool.some((candidate) => candidate.id === p.id)) {
+        followUp.targetPool = [...followUp.targetPool, target];
+      }
+    } else if (!followUp) {
+      activities.push({ type: "followUpSession", slots: ACTIVITY_SLOT_COSTS.followUpSession,
+        description: "Take a focused second look at the opening lead", targetPool: [target] });
     }
   }
 

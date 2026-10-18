@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameState, ScoutCueReading } from "@/engine/core/types";
 import { createSession } from "@/engine/observation/session";
 import type { ObservationSession, PlayerMoment } from "@/engine/observation/types";
-import { createRNG } from "@/engine/rng";
+import { createRNG, RNG } from "@/engine/rng";
 import { createObservationActions } from "@/stores/actions/observationActions";
 import { queueGameplayAutosave } from "@/stores/actions/persistGameplayAutosave";
 import type { GameStoreState, SetState } from "@/stores/actions/types";
 
-vi.mock("@/stores/actions/persistGameplayAutosave", () => ({
+vi.mock("@/stores/actions/persistGameplayAutosave", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/stores/actions/persistGameplayAutosave")>(),
   queueGameplayAutosave: vi.fn(),
-  snapshotPersistedGameState: (state: GameState) => state,
 }));
 
 function setup(overrides: Partial<ObservationSession> = {}) {
@@ -47,6 +47,37 @@ function setup(overrides: Partial<ObservationSession> = {}) {
 beforeEach(() => vi.clearAllMocks());
 
 describe("observation decisions queue resumable checkpoints", () => {
+  it("refreshes the displayed and commit-ready instinct when the scout withholds the finding", () => {
+    const trigger = vi.spyOn(RNG.prototype, "chance").mockReturnValue(true);
+    try {
+      const seedSession = setup().current().activeSession!;
+      const moment: PlayerMoment = {
+        id: "moment", playerId: "lead", actionId: "track-mark", momentType: "tacticalDecision",
+        quality: 3, attributesHinted: ["marking"], description: "Ari lost the runner.",
+        vagueDescription: "A passage.", pressureContext: true, isStandout: false,
+      };
+      const { actions, current, savedSession } = setup({
+        state: "reflection", mode: "fullObservation", currentPhaseIndex: 0,
+        phases: seedSession.phases.map((phase, index) => index === 0 ? { ...phase, moments: [moment] } : phase),
+        players: seedSession.players.map((player) => ({ ...player, isFocused: true, focusedPhases: [0],
+          focusHistory: [{ phaseIndex: 0, lens: "tactical" }], currentLens: "tactical" })),
+        cueReadings: [{ id: "cue-1", momentId: "moment", playerId: "lead", clarity: "strong", phaseIndex: 0,
+          actionId: "track-mark", pressureContext: true,
+          score: 0.3, detail: "Ari lost the runner.", attributesHinted: ["marking"],
+          suggestedClassifications: ["defensiveReading", "noConclusion"],
+        }] as unknown as ScoutCueReading[],
+        flaggedMoments: [{ id: "flag", phaseIndex: 0, minute: 12, reaction: "concerning", moment }],
+      });
+      actions.classifySessionEvidence("cue-1", "defensiveReading");
+      expect(current().lastReflectionResult?.gutFeelingCandidate?.narrative).toContain("concern you flagged");
+      actions.classifySessionEvidence("cue-1", "noConclusion");
+      expect(current().lastReflectionResult?.gutFeelingCandidate?.narrative).toContain("saved read remains open");
+      expect(savedSession()?.evidenceDecisions?.["cue-1"]?.classification).toBe("noConclusion");
+    } finally {
+      trigger.mockRestore();
+    }
+  });
+
   it("saves session start, lens, token spend, and phase without requiring unload", () => {
     const { actions, savedSession, current } = setup();
     actions.beginSession();
@@ -83,7 +114,7 @@ describe("observation decisions queue resumable checkpoints", () => {
   });
 
   it("saves reflection interpretation and private notes in the same latest session", () => {
-    const cue = { id: "cue-1", actionId: "short-pass", clarity: "usable", attributesHinted: ["passing"],
+    const cue = { id: "cue-1", actionId: "pass", clarity: "usable", attributesHinted: ["passing"],
       pressureContext: false, suggestedClassifications: ["technicalExecution", "noConclusion"] } as ScoutCueReading;
     const { actions, savedSession } = setup({ state: "reflection", cueReadings: [cue] });
     actions.classifySessionEvidence("cue-1", "technicalExecution");

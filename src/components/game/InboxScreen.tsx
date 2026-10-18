@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { canResolveSeasonEvent, getSeasonEventChoiceOptions } from "@/engine/core/seasonEventEffects";
 import { useGameStore } from "@/stores/gameStore";
 import type { GameScreen } from "@/stores/gameStore";
@@ -574,6 +574,8 @@ function MessageItem({
   return (
     <MessageContainer
       {...collapsedMessageProps}
+      id={`inbox-message-${message.id}`}
+      tabIndex={isExpanded ? -1 : undefined}
       className={`w-full text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-400 ${
         isExpanded
           ? "bg-white/5"
@@ -825,6 +827,7 @@ function MessageItem({
 
 export function InboxScreen() {
   const {
+    pendingInboxMessageId,
     gameState,
     markMessageRead,
     markAllRead,
@@ -841,6 +844,7 @@ export function InboxScreen() {
     startReport,
   } = useGameStore(
     useShallow((state) => ({
+      pendingInboxMessageId: state.pendingInboxMessageId,
       gameState: state.gameState,
       markMessageRead: state.markMessageRead,
       markAllRead: state.markAllRead,
@@ -889,6 +893,22 @@ export function InboxScreen() {
     return visible;
   }, [gameState, liveInboxActionIds]);
   const currentWeek = gameState?.currentWeek ?? 1;
+  useEffect(() => {
+    if (!pendingInboxMessageId || !gameState) return;
+    const message = inbox.find(candidate => candidate.id === pendingInboxMessageId);
+    useGameStore.setState({ pendingInboxMessageId: null });
+    if (!message) return;
+    setFilterCategory("all");
+    setSeasonFilter("all");
+    setExpandedId(message.id);
+    if (!message.read) markMessageRead(message.id);
+  }, [pendingInboxMessageId, gameState, inbox, markMessageRead]);
+  useEffect(() => {
+    if (!expandedId) return;
+    const element = document.getElementById(`inbox-message-${expandedId}`);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView({ block: "nearest" });
+  }, [expandedId]);
   const currentSeason = gameState?.currentSeason ?? 1;
   const seasonLength = gameState
     ? getSeasonLength(gameState.fixtures, currentSeason)
@@ -1037,7 +1057,7 @@ export function InboxScreen() {
             <div className="mb-3 flex items-center gap-2">
               <Zap size={14} className="text-purple-400" aria-hidden="true" />
               <h2 className="text-sm font-semibold text-white">
-                Events Requiring Attention
+                Events and decisions
               </h2>
               <Badge className="text-[10px]">{activeNarrativeEvents.length}</Badge>
             </div>

@@ -1,5 +1,5 @@
 import type { GameState, InboxMessage } from "@/engine/core/types";
-import { addGameWeeks, gameWeeksBetween } from "@/engine/core/gameDate";
+import { addGameWeeks, gameWeeksBetween, createGameCalendarIndex, gameWeeksBetweenWithCalendar } from "@/engine/core/gameDate";
 import type { StoryCandidateV2 } from "@/engine/events/storyDirectorV2";
 import { createNamedRNG } from "@/engine/run";
 import { isAccessAgreementActive } from "./accessAgreements";
@@ -215,9 +215,10 @@ function lastConflictDate(state: GameState): GameDate | undefined {
       .map((record) => record.offeredAt),
   ];
   const now = { week: state.currentWeek, season: state.currentSeason };
+  const calendar = createGameCalendarIndex(state.fixtures);
   return dates.sort((left, right) =>
-    gameWeeksBetween(state.fixtures, left, now)
-    - gameWeeksBetween(state.fixtures, right, now),
+    gameWeeksBetweenWithCalendar(calendar, left, now)
+    - gameWeeksBetweenWithCalendar(calendar, right, now),
   )[0];
 }
 

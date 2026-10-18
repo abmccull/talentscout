@@ -1,3 +1,5 @@
+> Historical implementation/evidence snapshot. Any READY label or pass below applies only to its explicitly recorded prior commit and scope. It is not a release verdict for the reconciled candidate; current full release evidence must be regenerated and independently accepted.
+
 # Quality implementation tracker
 
 Objective: implement the complete quality improvement plan and substantiate ratings as close to 100 as the unchanged rubric supports. No product points are awarded for implementation alone; all six mandatory release gates remain explicit.

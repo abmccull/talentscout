@@ -1,3 +1,4 @@
+import { expandPlayerMovementHistory } from "@/engine/world/movementRowsArchive";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
@@ -40,6 +41,12 @@ describe("unsigned-youth population integrity", () => {
     });
     const initial = useGameStore.getState().gameState!;
     const initialYouthIds = Object.keys(initial.unsignedYouth).sort();
+    expect(initialYouthIds.length).toBeGreaterThan(0);
+    for (const youth of Object.values(initial.unsignedYouth)) {
+      expect(youth.player.clubId).toBe("");
+      expect(youth.player.wage).toBe(0);
+      expect(youth.player.contractExpiry).toBe(0);
+    }
 
     await useGameStore.getState().batchAdvance(8);
 
@@ -126,7 +133,7 @@ describe("unsigned-youth population integrity", () => {
     });
     expect(after.retiredPlayerIds).toContain(youth.player.id);
     expect(after.reports[reportId].playerId).toBe(youth.player.id);
-    expect(after.playerMovementHistory).toContainEqual(expect.objectContaining({
+    expect(expandPlayerMovementHistory(after.playerMovementHistory)).toContainEqual(expect.objectContaining({
       playerId: youth.player.id,
       type: "footballExit",
     }));
@@ -249,7 +256,8 @@ describe("unsigned-youth population integrity", () => {
       clubId: targetClub.id,
       contractClubId: targetClub.id,
     });
-    expect(after.playerMovementHistory).toContainEqual(expect.objectContaining({
+    expect(after.players[youth.player.id].wage).toBeGreaterThan(0);
+    expect(expandPlayerMovementHistory(after.playerMovementHistory)).toContainEqual(expect.objectContaining({
       playerId: youth.player.id,
       type: "youthSigning",
       toClubId: targetClub.id,

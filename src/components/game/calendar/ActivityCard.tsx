@@ -340,7 +340,7 @@ export function ActivityCard({
             <span className="text-xs text-zinc-400">
               {activity.targetPool?.length
                 ? "Choose an open day above, then choose the target."
-                : "Choose any highlighted open day in the sticky itinerary."}
+                : "Choose a highlighted day in your itinerary."}
             </span>
             <div className="flex flex-wrap gap-2">
               <button

@@ -1,5 +1,7 @@
+import { expandPlayerMovementHistory, expandPlayerMovementSummaries } from "@/engine/world/movementRowsArchive";
 import { canResolveSeasonEvent, getSeasonEventChoiceOptions } from "@/engine/core/seasonEventEffects";
 import { canChooseCareerPath } from "@/engine/career/pathChoice";
+import { measureWorldRosterHealth } from "./worldRosterHealth";
 import {
   deriveCareerFingerprintAuthority,
   deriveCareerFingerprintProjection,
@@ -21,6 +23,7 @@ import type { DecisionOption, DecisionRecord } from "@/engine/consequences/types
 import {
   getFreshReportObservationIds,
   indexLatestPlayerReports,
+  isPrivateScoutingDecision,
   selectLatestReportsByCase,
 } from "@/engine/reports/reportAccountability";
 import type { DelegationPolicyId, WeeklyIntentId } from "@/engine/core/weeklyStrategy";
@@ -233,6 +236,9 @@ export interface AutonomousCareerTelemetry {
 export interface AutonomousWorldHealthSnapshot {
   season: number;
   activePlayers: number;
+  clubsBelowTenOutfieldPlayers: number;
+  clubsBelowElevenSeniors: number;
+  clubsWithoutSeniorGoalkeeper: number;
   unsignedYouth: number;
   freeAgents: number;
   freeAgentRatio: number;
@@ -456,7 +462,7 @@ export function chooseAutonomousPlacementDestination(state: GameState, playerId:
     (entry.player.id === playerId || entry.id === playerId) && !entry.placed && !entry.retired);
   if (!youth) return undefined;
   const report = indexLatestPlayerReports(Object.values(state.reports), state.scout.id).get(youth.player.id);
-  if (!report || report.recommendedAction === "pass") return undefined;
+  if (!report || isPrivateScoutingDecision(report)) return undefined;
   const eligible = getEligibleClubsForPlacement(youth, Object.values(state.clubs), state.scout, state.leagues,
     { preferredClubId: report.intendedClubId });
   // A filed audience is a commitment; do not silently retarget it.
@@ -1122,7 +1128,7 @@ export function collectAutonomousCareerPresentationSignals(
   const placementCallbacks = (state.discoveryRecords ?? []).filter((record) =>
     record.placementSeason != null && record.placementWeek != null
   ).length;
-  const movementCallbacks = (state.playerMovementHistory ?? []).filter((movement) =>
+  const movementCallbacks = expandPlayerMovementHistory(state.playerMovementHistory ?? []).filter((movement) =>
     discoveredPlayerIds.has(movement.playerId)
   ).length;
   return {
@@ -1139,16 +1145,20 @@ export function collectAutonomousWorldHealth(
   state: GameState,
   telemetry: AutonomousCareerTelemetry,
 ): AutonomousWorldHealthSnapshot {
-  const activePlayers = Object.keys(state.players).length;
-  const freeAgents = state.freeAgentPool?.agents.length ?? 0;
+  const rosterHealth = measureWorldRosterHealth(state);
+  const { activePlayers, freeAgents } = rosterHealth;
   const activeLoans = state.activeLoans?.length ?? 0;
   const presentation = collectAutonomousCareerPresentationSignals(state);
   return {
     season: state.currentSeason,
     activePlayers,
+    clubsBelowTenOutfieldPlayers: rosterHealth.clubsBelowTenOutfieldPlayers,
+    clubsBelowElevenSeniors: rosterHealth.clubsBelowElevenSeniors,
+    clubsWithoutSeniorGoalkeeper: rosterHealth.clubsWithoutSeniorGoalkeeper,
     unsignedYouth: Object.keys(state.unsignedYouth ?? {}).length,
     freeAgents,
-    freeAgentRatio: round(freeAgents / Math.max(1, activePlayers + freeAgents)),
+    // Free agents are already members of state.players, not an extra population.
+    freeAgentRatio: round(rosterHealth.freeAgentRatio),
     activeLoans,
     activeLoanRatio: round(activeLoans / Math.max(1, activePlayers)),
     reports: Object.keys(state.reports).length,
