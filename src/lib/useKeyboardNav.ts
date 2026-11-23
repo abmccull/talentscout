@@ -64,6 +64,28 @@ function isTypingTarget(el: Element | null): boolean {
   return false;
 }
 
+const INTERACTIVE_ROLES = new Set([
+  "button",
+  "link",
+  "tab",
+  "checkbox",
+  "switch",
+  "radio",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "option",
+]);
+
+export function isInteractiveControl(el: Element | null): boolean {
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  if (tag === "button" || tag === "a" || tag === "summary") return true;
+  const role = el.getAttribute("role");
+  if (role && INTERACTIVE_ROLES.has(role)) return true;
+  return false;
+}
+
 function hasOpenModal(): boolean {
   return document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
 }
@@ -142,6 +164,7 @@ export function useKeyboardNav(): void {
       }
 
       if (key === " " || key === "Spacebar") {
+        if (isInteractiveControl(document.activeElement)) return;
         if (currentScreen === "calendar") {
           const advanceButton = document.querySelector<HTMLButtonElement>(
             '[data-tutorial-id="advance-week"]',

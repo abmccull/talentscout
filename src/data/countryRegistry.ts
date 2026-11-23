@@ -24,3 +24,11 @@ export function getCountryDataSync(key: string): CountryData | undefined {
 export function registerCountryData(key: string, country: CountryData): void {
   syncRegistry[key] = country;
 }
+
+/** Reset the synchronous country cache back to built-in defaults (e.g. after mod reset). */
+export function resetCountryDataRegistry(): void {
+  for (const key of Object.keys(syncRegistry)) {
+    delete syncRegistry[key];
+  }
+  syncRegistry.england = ENGLAND_DATA;
+}

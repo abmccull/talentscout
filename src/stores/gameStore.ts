@@ -1112,7 +1112,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState) return;
     const saved = snapshotPersistedGameState(gameState, activeSession);
     set({ gameState: saved });
-    await flushGameplayAutosave(saved, set);
+    await flushGameplayAutosave(saved, set, { awaitCloudBestEffort: true });
   },
 
   // Persistence (save provider)

@@ -2,8 +2,11 @@
 
 import * as React from "react";
 import { Sparkles, CheckCircle2, Star, Users, BarChart2, TrendingUp } from "lucide-react";
+import type { GameState } from "@/engine/core/types";
 import type { InsightActionResult } from "@/engine/insight/types";
 import { resolveInsightReadingRange } from "@/engine/insight/effects";
+import { resolvePlayerDisplayName } from "@/lib/playerResolution";
+import { useGameStore } from "@/stores/gameStore";
 
 // =============================================================================
 // KEYFRAMES
@@ -97,7 +100,15 @@ function formatAttributeName(attr: string): string {
 // RESULTS RENDERER
 // =============================================================================
 
-function ResultsSection({ result }: { result: InsightActionResult }) {
+function ResultsSection({
+  result,
+  gameState,
+}: {
+  result: InsightActionResult;
+  gameState?: GameState | null;
+}) {
+  const storeGameState = useGameStore((state) => state.gameState);
+  const resolvedState = gameState ?? storeGameState;
   const rows: Array<{ icon: React.ReactNode; label: string; value: string }> = [];
 
   // clarityOfVision / diamondInTheRough — observations
@@ -134,7 +145,9 @@ function ResultsSection({ result }: { result: InsightActionResult }) {
     rows.push({
       icon: <Users size={14} />,
       label: "Prospect discovered",
-      value: result.discoveredPlayerId,
+      value: resolvedState
+        ? resolvePlayerDisplayName(resolvedState, result.discoveredPlayerId)
+        : "Unknown Player",
     });
   }
 
@@ -215,13 +228,14 @@ interface InsightPayoffProps {
   result: InsightActionResult;
   actionName: string;
   onDismiss: () => void;
+  gameState?: GameState | null;
 }
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
-export function InsightPayoff({ result, actionName, onDismiss }: InsightPayoffProps) {
+export function InsightPayoff({ result, actionName, onDismiss, gameState }: InsightPayoffProps) {
   const { success, narrative } = result;
 
   React.useEffect(() => {
@@ -353,7 +367,7 @@ export function InsightPayoff({ result, actionName, onDismiss }: InsightPayoffPr
             </div>
 
             {/* Concrete outcomes */}
-            {success && <ResultsSection result={result} />}
+            {success && <ResultsSection result={result} gameState={gameState} />}
 
             {/* Continue button */}
             <button

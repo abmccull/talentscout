@@ -69,8 +69,41 @@ export function GameTerm({ conceptKey, children }: GameTermProps) {
   const tooltipRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
 
+  const isPlainFallback = !concept || depth >= MAX_NESTING_DEPTH;
+
+  // Escape key dismisses locked tooltip
+  useEffect(() => {
+    if (isPlainFallback || !locked) return;
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLocked(false);
+        setVisible(false);
+      }
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        tooltipRef.current &&
+        !tooltipRef.current.contains(e.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target as Node)
+      ) {
+        setLocked(false);
+        setVisible(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleKey);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isPlainFallback, locked]);
+
   // If nesting depth exceeded or concept not found, render as plain styled text.
-  if (!concept || depth >= MAX_NESTING_DEPTH) {
+  if (isPlainFallback) {
     return (
       <span className="text-blue-400 font-medium">
         {children ?? concept?.label ?? conceptKey}
@@ -100,38 +133,6 @@ export function GameTerm({ conceptKey, children }: GameTermProps) {
       setVisible(true);
     }
   };
-
-  // Escape key dismisses locked tooltip
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!locked) return;
-
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setLocked(false);
-        setVisible(false);
-      }
-    };
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        tooltipRef.current &&
-        !tooltipRef.current.contains(e.target as Node) &&
-        triggerRef.current &&
-        !triggerRef.current.contains(e.target as Node)
-      ) {
-        setLocked(false);
-        setVisible(false);
-      }
-    };
-
-    document.addEventListener("keydown", handleKey);
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("keydown", handleKey);
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [locked]);
 
   return (
     <span className="relative inline">

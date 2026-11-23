@@ -435,35 +435,42 @@ export function Dashboard() {
     }
     const deskStakes = buildYouthDeskStakes(gameState);
     return (
-      <YouthDeskDashboard
-        gameState={gameState}
-        scout={scout}
-        currentWeek={currentWeek}
-        currentSeason={currentSeason}
-        seasonLength={seasonLength}
-        phaseBadgeClassName={phaseBadgeClassName}
-        phaseLabel={phaseLabel}
-        scheduledSlots={scheduledSlots}
-        youthDeskAction={youthDeskAction}
-        activeCaseModel={activeCaseModel}
-        currentCareerEra={currentCareerEra}
-        dashboardWorkspace={dashboardWorkspace}
-        onDashboardAction={openDashboardAction}
-        onMarkReviewed={(item) => markDashboardItemViewed(item.id, item.fingerprint)}
-        onSnooze={(item) => snoozeDashboardItemUntilNextWeek(item.id, item.fingerprint)}
-        onTogglePin={(item) => toggleDashboardItemPinned(item.id, item.fingerprint)}
-        onDismiss={(item) => dismissDashboardItem(item.id, item.fingerprint)}
-        onDismissInsight={dismissDashboardInsight}
-        onPrimaryAction={openYouthDeskAction}
-        setScreen={setScreen}
-        selectPlayer={selectPlayer}
-        stakes={{
-          alumni: deskStakes.alumni,
-          fileMoneyLabel: deskStakes.fileMoney.label,
-          reputationLine: deskStakes.reputationLine,
-          visible: !firstHourDesk && shouldShowYouthDeskStakes(deskStakes),
-        }}
-      />
+      <>
+        <YouthDeskDashboard
+          gameState={gameState}
+          scout={scout}
+          currentWeek={currentWeek}
+          currentSeason={currentSeason}
+          seasonLength={seasonLength}
+          phaseBadgeClassName={phaseBadgeClassName}
+          phaseLabel={phaseLabel}
+          scheduledSlots={scheduledSlots}
+          youthDeskAction={youthDeskAction}
+          activeCaseModel={activeCaseModel}
+          currentCareerEra={currentCareerEra}
+          dashboardWorkspace={dashboardWorkspace}
+          onDashboardAction={openDashboardAction}
+          onMarkReviewed={(item) => markDashboardItemViewed(item.id, item.fingerprint)}
+          onSnooze={(item) => snoozeDashboardItemUntilNextWeek(item.id, item.fingerprint)}
+          onTogglePin={(item) => toggleDashboardItemPinned(item.id, item.fingerprint)}
+          onDismiss={(item) => dismissDashboardItem(item.id, item.fingerprint)}
+          onDismissInsight={dismissDashboardInsight}
+          onPrimaryAction={openYouthDeskAction}
+          setScreen={setScreen}
+          selectPlayer={selectPlayer}
+          stakes={{
+            alumni: deskStakes.alumni,
+            fileMoneyLabel: deskStakes.fileMoney.label,
+            reputationLine: deskStakes.reputationLine,
+            visible: !firstHourDesk && shouldShowYouthDeskStakes(deskStakes),
+          }}
+        />
+        <WeekAdvanceConfirmDialog
+          open={weekAdvancePending}
+          onConfirm={confirmWeekAdvance}
+          onCancel={cancelWeekAdvance}
+        />
+      </>
     );
   }
 

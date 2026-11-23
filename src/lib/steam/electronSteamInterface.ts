@@ -40,11 +40,17 @@ export class ElectronSteamInterface implements SteamInterface {
   /** Cached result of the async steam:getPlayerName IPC call. */
   private _playerName: string | null = null;
 
-  constructor() {
-    if (!hasElectronAPI()) return;
+  /** Resolves once the initial steam:isAvailable IPC check has settled. */
+  private readonly _readyPromise: Promise<void>;
 
-    // Eagerly populate synchronous caches.
-    api()
+  constructor() {
+    if (!hasElectronAPI()) {
+      this._readyPromise = Promise.resolve();
+      return;
+    }
+
+    // Eagerly populate synchronous caches and track readiness for async callers.
+    this._readyPromise = api()
       .steam.isAvailable()
       .then((result: boolean) => {
         this._available = result;
@@ -69,6 +75,10 @@ export class ElectronSteamInterface implements SteamInterface {
 
   isAvailable(): boolean {
     return this._available;
+  }
+
+  waitUntilReady(): Promise<void> {
+    return this._readyPromise;
   }
 
   unlockAchievement(apiName: string): void {
