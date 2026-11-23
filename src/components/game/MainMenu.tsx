@@ -18,7 +18,6 @@ import {
   Trash2,
   Volume2,
   VolumeX,
-  Settings as SettingsIcon,
 } from "lucide-react";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { APP_VERSION } from "@/config/version";
@@ -49,6 +48,10 @@ export function MainMenu() {
     loadFromSlot,
     deleteSlot,
     isLoadingSave,
+    saveConflict,
+    dismissSaveConflict,
+    resolveSaveConflict,
+    isResolvingSaveConflict,
     selectedScenarioId,
     setSelectedScenario,
   } = useGameStore(useShallow((state) => ({
@@ -58,6 +61,10 @@ export function MainMenu() {
     loadFromSlot: state.loadFromSlot,
     deleteSlot: state.deleteSlot,
     isLoadingSave: state.isLoadingSave,
+    saveConflict: state.saveConflict,
+    dismissSaveConflict: state.dismissSaveConflict,
+    resolveSaveConflict: state.resolveSaveConflict,
+    isResolvingSaveConflict: state.isResolvingSaveConflict,
     selectedScenarioId: state.selectedScenarioId,
     setSelectedScenario: state.setSelectedScenario,
   })));
@@ -83,6 +90,7 @@ export function MainMenu() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [deleteConfirmSlot, setDeleteConfirmSlot] = useState<number | null>(null);
   const [deletingSlot, setDeletingSlot] = useState<number | null>(null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const splashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
@@ -113,6 +121,26 @@ export function MainMenu() {
     };
   }, [showSplash]);
 
+  useEffect(() => {
+    if (!saveConflict) {
+      setConflictError(null);
+      return;
+    }
+
+    const handleConflictKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isResolvingSaveConflict) {
+        event.preventDefault();
+        setConflictError(null);
+        dismissSaveConflict();
+      }
+    };
+
+    window.addEventListener("keydown", handleConflictKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleConflictKeyDown);
+    };
+  }, [saveConflict, isResolvingSaveConflict, dismissSaveConflict]);
+
   const compatibleSaveSlots = IS_YOUTH_EARLY_ACCESS
     ? saveSlots.filter(
         (save) => save.specialization === "youth" || Boolean(save.unavailable),
@@ -127,14 +155,33 @@ export function MainMenu() {
 
   const handleContinue = async () => {
     if (continueSave) {
+      setConflictError(null);
       await loadFromSlot(continueSave.slot);
     }
   };
 
   const handleLoad = async (slot: number) => {
     setDeleteConfirmSlot(null);
+    setConflictError(null);
     await loadFromSlot(slot);
-    setShowLoadPicker(false);
+    if (!useGameStore.getState().saveConflict) {
+      setShowLoadPicker(false);
+    }
+  };
+
+  const handleResolveConflict = async (preferredSource: SaveSlotSummary["source"]) => {
+    if (!saveConflict) return;
+    try {
+      setConflictError(null);
+      await resolveSaveConflict(saveConflict.slot, preferredSource);
+      if (!useGameStore.getState().saveConflict) {
+        setShowLoadPicker(false);
+      }
+    } catch (error) {
+      setConflictError(
+        error instanceof Error ? error.message : "Unable to resolve this save conflict.",
+      );
+    }
   };
 
   const handleDelete = async (slot: number) => {
@@ -297,31 +344,20 @@ export function MainMenu() {
             What&apos;s Coming
           </Button>
 
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="lg"
-              className="flex-1 text-base text-zinc-300"
-              onClick={toggleMute}
-              title={volumes.muted ? "Unmute audio" : "Mute audio"}
-            >
-              {volumes.muted ? (
-                <VolumeX size={18} className="mr-2" aria-hidden="true" />
-              ) : (
-                <Volume2 size={18} className="mr-2" aria-hidden="true" />
-              )}
-              {volumes.muted ? "Unmute" : "Mute"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              className="flex-1 text-base text-zinc-300"
-              onClick={() => setScreen("settings")}
-            >
-              <SettingsIcon size={18} className="mr-2" aria-hidden="true" />
-              Settings
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="lg"
+            className="w-full text-base text-zinc-300"
+            onClick={toggleMute}
+            title={volumes.muted ? "Unmute audio" : "Mute audio"}
+          >
+            {volumes.muted ? (
+              <VolumeX size={18} className="mr-2" aria-hidden="true" />
+            ) : (
+              <Volume2 size={18} className="mr-2" aria-hidden="true" />
+            )}
+            {volumes.muted ? "Unmute" : "Mute"}
+          </Button>
 
           {continueSave?.recovery && (
             <div
@@ -523,6 +559,110 @@ export function MainMenu() {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
       />
+
+      {saveConflict && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="main-menu-save-conflict-title"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !isResolvingSaveConflict) {
+              setConflictError(null);
+              dismissSaveConflict();
+            }
+          }}
+        >
+          <div className="w-full max-w-lg space-y-4 rounded-xl border border-amber-500/35 bg-[#121413] p-5 shadow-2xl">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle
+                size={18}
+                className="mt-0.5 shrink-0 text-amber-400"
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <h2
+                  id="main-menu-save-conflict-title"
+                  className="text-base font-semibold text-amber-100"
+                >
+                  Save Conflict Detected
+                </h2>
+                <p className="text-xs leading-relaxed text-amber-200/90">
+                  Local and {getSaveSourceLabel(saveConflict.conflict.cloud.source)} saves diverged for this career. Choose which copy to load — the other version will be kept safely in Recovery.
+                </p>
+              </div>
+            </div>
+
+            {conflictError && (
+              <div
+                className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200"
+                role="alert"
+              >
+                {conflictError}
+              </div>
+            )}
+
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="rounded-lg border border-zinc-800 bg-[#0c0c0c] p-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400">
+                  Local
+                </p>
+                <p className="mt-1.5 text-xs text-zinc-100">
+                  {saveConflict.conflict.local.preview}
+                </p>
+                <p className="mt-1.5 text-xs text-zinc-400">
+                  {formatDate(saveConflict.conflict.local.timestamp)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-[#0c0c0c] p-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400">
+                  {getSaveSourceLabel(saveConflict.conflict.cloud.source)}
+                </p>
+                <p className="mt-1.5 text-xs text-zinc-100">
+                  {saveConflict.conflict.cloud.preview}
+                </p>
+                <p className="mt-1.5 text-xs text-zinc-400">
+                  {formatDate(saveConflict.conflict.cloud.timestamp)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={isResolvingSaveConflict}
+                onClick={() => void handleResolveConflict("local")}
+              >
+                {isResolvingSaveConflict ? (
+                  <Loader2 size={14} className="mr-1.5 animate-spin" aria-hidden="true" />
+                ) : null}
+                Keep Local
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isResolvingSaveConflict}
+                onClick={() => void handleResolveConflict(saveConflict.conflict.cloud.source)}
+              >
+                Use {getSaveSourceLabel(saveConflict.conflict.cloud.source)}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isResolvingSaveConflict}
+                onClick={() => {
+                  setConflictError(null);
+                  dismissSaveConflict();
+                }}
+                className="text-zinc-300 hover:text-white"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

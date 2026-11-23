@@ -3,6 +3,9 @@ export interface SteamInterface {
   /** Returns true if the Steam client is available and initialized. */
   isAvailable(): boolean;
 
+  /** Optional async readiness hook for IPC-backed adapters whose availability resolves asynchronously. */
+  waitUntilReady?(): Promise<void>;
+
   /** Unlock a Steam achievement by its API name. */
   unlockAchievement(apiName: string): void;
 

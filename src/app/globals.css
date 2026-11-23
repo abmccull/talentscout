@@ -157,7 +157,7 @@ html.ui-contrast-high body {
   color: #ffffff;
   background-image: none;
 }
-html.ui-contrast-high [class*="text-zinc-"],
+html.ui-contrast-high [class*="text-zinc-"]:not([class*="text-zinc-950"]):not([class*="text-zinc-900"]):not([class*="text-zinc-800"]),
 html.ui-contrast-high [class*="text-muted"] {
   color: #f4f4f5 !important;
 }
@@ -198,6 +198,8 @@ html.reduced-motion *,
 html.reduced-motion *::before,
 html.reduced-motion *::after {
   animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
   transition-duration: 0.001ms !important;
 }
 

@@ -639,7 +639,7 @@ export function MentorOverlay() {
             <button
               ref={continueRef}
               onClick={handleNext}
-              className={`min-h-11 rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition ${btnClass}`}
+              className={`min-h-11 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${btnClass}`}
             >
               {nextLabel}
             </button>

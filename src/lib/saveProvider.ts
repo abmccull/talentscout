@@ -119,6 +119,11 @@ export interface PersistentCloudSyncStatus {
 
 export interface SaveOptions {
   waitForCloud?: boolean;
+  /**
+   * Wait for queued remote mirrors to finish attempting upload before
+   * resolving, without rejecting a committed local save when offline.
+   */
+  awaitCloudBestEffort?: boolean;
 }
 
 /** Result returned by the structured save boundary before cloud mirroring. */
@@ -487,6 +492,7 @@ class SaveProviderImpl implements SaveProvider {
   ): Promise<void> {
     if (target === "steam") {
       const steam = getSteam();
+      await steam.waitUntilReady?.();
       if (!this.includeSteam || !steam.isAvailable()) {
         throw new Error("Steam Cloud is unavailable. The local save remains queued.");
       }
@@ -510,6 +516,7 @@ class SaveProviderImpl implements SaveProvider {
   private async deleteQueuedRemote(target: SaveSyncTarget, slot: number): Promise<void> {
     if (target === "steam") {
       const steam = getSteam();
+      await steam.waitUntilReady?.();
       if (!this.includeSteam || !steam.isAvailable()) {
         throw new Error("Steam Cloud is unavailable. The deletion remains queued.");
       }
@@ -556,6 +563,7 @@ class SaveProviderImpl implements SaveProvider {
     record: SaveRecord,
     waitForCloud: boolean,
     requestedTargets?: readonly SaveSyncTarget[],
+    awaitCloudBestEffort = false,
   ): Promise<void> {
     const configured = new Set(this.configuredSyncTargets());
     const targets = requestedTargets
@@ -585,6 +593,10 @@ class SaveProviderImpl implements SaveProvider {
 
     if (waitForCloud) {
       await upload();
+    } else if (awaitCloudBestEffort) {
+      await upload().catch((error: unknown) => {
+        console.warn("SaveProvider: remote mirror remains queued:", error);
+      });
     } else {
       void upload().catch((error: unknown) => {
         console.warn("SaveProvider: remote mirror remains queued:", error);
@@ -658,7 +670,12 @@ class SaveProviderImpl implements SaveProvider {
     // When no new revision exists, retry queued work or mirror once to a newly
     // configured target; session acknowledgements suppress duplicate uploads.
     if (commit.wrote || await this.requiresMirror(commit.record)) {
-      await this.mirrorRecord(commit.record, options?.waitForCloud ?? false);
+      await this.mirrorRecord(
+        commit.record,
+        options?.waitForCloud ?? false,
+        undefined,
+        options?.awaitCloudBestEffort ?? false,
+      );
     }
     return commit;
   }
@@ -736,6 +753,7 @@ class SaveProviderImpl implements SaveProvider {
     if (!this.includeSteam) return null;
     if (await this.hasPendingDelete("steam", slot)) return null;
     const steam = getSteam();
+    await steam.waitUntilReady?.();
     if (!steam.isAvailable()) return null;
 
     try {
@@ -834,6 +852,7 @@ class SaveProviderImpl implements SaveProvider {
   private async _listFromSteam(): Promise<SaveEntry[]> {
     if (!this.includeSteam) return [];
     const steam = getSteam();
+    await steam.waitUntilReady?.();
     if (!steam.isAvailable()) return [];
 
     // Steam save reads are intentionally sequential. Each read owns a bounded
@@ -1031,6 +1050,9 @@ class SaveProviderImpl implements SaveProvider {
   }
 
   async retryPendingSync(): Promise<PersistentCloudSyncStatus> {
+    if (this.includeSteam) {
+      await getSteam().waitUntilReady?.();
+    }
     const available = new Set(this.configuredSyncTargets());
     const queue = await listSaveSyncQueue();
     const retryable = queue.filter((task) => available.has(task.target));

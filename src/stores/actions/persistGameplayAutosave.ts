@@ -1,6 +1,6 @@
 import type { GameState } from "@/engine/core/types";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
-import { persistGameState } from "@/lib/saveProvider";
+import { persistGameState, type SaveOptions } from "@/lib/saveProvider";
 import { createAutosaveQueue, scheduleCoalescedGameplayPersist } from "./autosaveQueue";
 import type { SetState } from "./types";
 
@@ -8,6 +8,7 @@ interface AutosaveRequest {
   state: GameState;
   set: SetState;
   generation: number;
+  options?: SaveOptions;
 }
 
 let persistTail = Promise.resolve();
@@ -27,14 +28,14 @@ export function resetGameplayAutosaveWatermark(): boolean {
 }
 
 async function persistAutosaveSnapshot(request: AutosaveRequest): Promise<void> {
-  const { state, generation: requestedGeneration } = request;
+  const { state, generation: requestedGeneration, options } = request;
   const run = persistTail.then(async () => {
     if (requestedGeneration !== generation) return;
     if (state.lastSaved > 0 && state.lastSaved < committedSavedAt) return;
     const provider = await getActiveSaveProvider();
     if (requestedGeneration !== generation) return;
     try {
-      await persistGameState(provider, "autosave", state, "Autosave");
+      await persistGameState(provider, "autosave", state, "Autosave", options);
     } catch (error) {
       // An old career's failed write must not reject the new career's flush.
       if (requestedGeneration === generation) throw error;
@@ -101,8 +102,12 @@ export function queueGameplayAutosave(state: GameState, set: SetState): void {
   autosaveQueue.request({ state: snapshotPersistedGameState(state), set, generation });
 }
 
-export async function flushGameplayAutosave(state: GameState, set: SetState): Promise<void> {
-  autosaveQueue.request({ state, set, generation });
+export async function flushGameplayAutosave(
+  state: GameState,
+  set: SetState,
+  options?: SaveOptions,
+): Promise<void> {
+  autosaveQueue.request({ state, set, generation, options });
   await autosaveQueue.flushNow();
 }
 

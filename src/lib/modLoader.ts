@@ -7,6 +7,10 @@
 
 import { db, type ModRecord } from "@/lib/db";
 import type { CountryData } from "@/data/types";
+import {
+  registerCountryData,
+  resetCountryDataRegistry,
+} from "@/data/countryRegistry";
 
 const MAX_MOD_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_COUNTRIES_PER_IMPORT = 64;
@@ -261,6 +265,7 @@ export async function importGameData(
     try {
       await db.mods.put(record);
       modCache.set(key, value);
+      registerCountryData(key, value);
       imported.push(key);
     } catch {
       errors.push(`Could not store country "${key}"`);
@@ -276,6 +281,7 @@ export async function importGameData(
 export async function resetModData(): Promise<void> {
   await db.mods.clear();
   modCache.clear();
+  resetCountryDataRegistry();
 }
 
 /**

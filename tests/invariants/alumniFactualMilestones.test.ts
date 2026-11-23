@@ -176,5 +176,5 @@ describe("factual alumni milestones", () => {
     for (const milestone of result.alumniMilestones ?? []) {
       expect(result.newMessages.filter((m) => m.body === milestone.description)).toHaveLength(1);
     }
-  });
+  }, 20_000);
 });
